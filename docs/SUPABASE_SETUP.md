@@ -44,7 +44,7 @@ In **Project Settings → API**, copy the publishable/anon key.
 
 The project URL is:
 
-`https://edarvglbzuefveqcjpdt.supabase.co`
+`https://[enter your code here].supabase.co`
 
 Do not use the service-role key in the browser.
 
@@ -52,7 +52,7 @@ Do not use the service-role key in the browser.
 
 In the Netlify site, add:
 
-- `SUPABASE_URL` = `https://edarvglbzuefveqcjpdt.supabase.co`
+- `SUPABASE_URL` = `https://[enter your code here].supabase.co`
 - `SUPABASE_ANON_KEY` = the Supabase publishable/anon key
 
 Trigger a new Netlify deploy after saving them.
