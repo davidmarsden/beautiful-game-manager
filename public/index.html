@@ -11,10 +11,10 @@
     <div class="auth-card">
       <div class="auth-kicker">THE BEAUTIFUL GAME</div>
       <h1>Manager sign in</h1>
-      <p>Enter the email address registered to your TBG manager account. We’ll send a secure one-time login link.</p>
+      <p>Enter the email address registered to your TBG manager account. We’ll send a secure one-time sign-in email.</p>
       <form id="loginForm">
         <label>Email address<input id="loginEmail" type="email" autocomplete="email" required placeholder="manager@example.com"></label>
-        <button class="submit" type="submit">Send login link</button>
+        <button class="submit" type="submit">Send sign-in email</button>
         <p id="loginStatus" aria-live="polite"></p>
       </form>
     </div>
@@ -49,5 +49,6 @@
     </main>
   </div>
   <script type="module" src="./auth-entry.js"></script>
+  <script type="module" src="./otp-login.js"></script>
 </body>
 </html>
