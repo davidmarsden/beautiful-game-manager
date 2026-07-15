@@ -1,24 +1,26 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-async function completeAuthCallback() {
-  const params = new URLSearchParams(window.location.search);
-  const code = params.get("code");
-  const authError = params.get("error_description") || params.get("error");
-
-  if (authError) {
-    sessionStorage.setItem("tbg_auth_callback_error", authError);
-    history.replaceState({}, document.title, window.location.pathname);
-    return;
-  }
-
-  if (!code) return;
-
+async function loadConfig() {
   const response = await fetch("/api/auth-config", { cache: "no-store" });
   const config = await response.json();
   if (!response.ok || !config.configured) {
     throw new Error(config.error || "Supabase is not configured on Netlify yet.");
   }
+  return config;
+}
 
+async function completeAuthCallback() {
+  const query = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const code = query.get("code");
+  const accessToken = hash.get("access_token");
+  const refreshToken = hash.get("refresh_token");
+  const authError = query.get("error_description") || query.get("error") || hash.get("error_description") || hash.get("error");
+
+  if (authError) throw new Error(authError);
+  if (!code && !accessToken) return;
+
+  const config = await loadConfig();
   const client = createClient(config.supabase_url, config.supabase_anon_key, {
     auth: {
       flowType: "pkce",
@@ -28,8 +30,16 @@ async function completeAuthCallback() {
     }
   });
 
-  const { error } = await client.auth.exchangeCodeForSession(code);
-  if (error) throw error;
+  if (code) {
+    const { error } = await client.auth.exchangeCodeForSession(code);
+    if (error) throw error;
+  } else {
+    const { error } = await client.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken || ""
+    });
+    if (error) throw error;
+  }
 
   history.replaceState({}, document.title, window.location.pathname);
 }
