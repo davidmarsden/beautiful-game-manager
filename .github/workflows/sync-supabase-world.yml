@@ -1,0 +1,26 @@
+name: Sync TBG World to Supabase
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out manager portal
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Sync world and clubs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TBG_WORLD_URL: https://raw.githubusercontent.com/davidmarsden/beautiful-game-engine/main/derived/world/world.json
+        run: node scripts/sync-world-to-supabase.mjs
