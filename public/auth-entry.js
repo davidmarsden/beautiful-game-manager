@@ -9,16 +9,21 @@ async function loadConfig() {
   return config;
 }
 
-async function completeAuthCallback() {
+function callbackDetails() {
   const query = new URLSearchParams(window.location.search);
   const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-  const code = query.get("code");
-  const accessToken = hash.get("access_token");
-  const refreshToken = hash.get("refresh_token");
-  const authError = query.get("error_description") || query.get("error") || hash.get("error_description") || hash.get("error");
+  return {
+    code: query.get("code"),
+    accessToken: hash.get("access_token"),
+    refreshToken: hash.get("refresh_token"),
+    authError: query.get("error_description") || query.get("error") || hash.get("error_description") || hash.get("error")
+  };
+}
 
+async function completeAuthCallback() {
+  const { code, accessToken, refreshToken, authError } = callbackDetails();
   if (authError) throw new Error(authError);
-  if (!code && !accessToken) return;
+  if (!code && !accessToken) return false;
 
   const config = await loadConfig();
   const client = createClient(config.supabase_url, config.supabase_anon_key, {
@@ -41,14 +46,23 @@ async function completeAuthCallback() {
     if (error) throw error;
   }
 
+  const { data, error: sessionError } = await client.auth.getSession();
+  if (sessionError) throw sessionError;
+  if (!data.session?.access_token) {
+    throw new Error("Supabase returned from the sign-in link, but no browser session was saved.");
+  }
+
+  sessionStorage.removeItem("tbg_auth_callback_error");
   history.replaceState({}, document.title, window.location.pathname);
+  return true;
 }
 
 try {
   await completeAuthCallback();
 } catch (error) {
-  sessionStorage.setItem("tbg_auth_callback_error", error.message || "Could not complete sign-in.");
-  history.replaceState({}, document.title, window.location.pathname);
+  const message = error?.message || "Could not complete sign-in.";
+  sessionStorage.setItem("tbg_auth_callback_error", message);
+  console.error("TBG authentication callback failed:", error);
 }
 
 await import("./app.js");
