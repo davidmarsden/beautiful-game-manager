@@ -16,6 +16,10 @@ function specificPosition(player) {
   ) || "Unknown";
 }
 
+function loanedOutValue(value) {
+  return value === true || text(value).toLowerCase() === "true";
+}
+
 function loanStatus(player, ownership) {
   const loan = ownership?.loan || player.loan || {};
   const status = text(loan.status || player.loan_status).toLowerCase();
@@ -32,8 +36,11 @@ function loanStatus(player, ownership) {
   return { loaned_out: loanedOut, loan_club_id: loanClubId || null, loan_club_name: loanClubName || null };
 }
 
-function loanedOutValue(value) {
-  return value === true || text(value).toLowerCase() === "true";
+function youthEligibility(player, ownership, contract, seasonStartAge) {
+  const explicit = player.youth_eligible_at_season_start ?? ownership?.youth_eligible_at_season_start;
+  if (explicit !== undefined && explicit !== null) return Boolean(explicit);
+  if (text(contract.squad_registration) === "youth_eligible") return true;
+  return seasonStartAge !== null && seasonStartAge <= 21;
 }
 
 function squadProjection(player, index, ownership) {
@@ -46,12 +53,7 @@ function squadProjection(player, index, ownership) {
     player.season_start_age ?? ownership?.season_start_age ?? contract.season_start_age,
     currentAge
   );
-  const youthEligible = Boolean(
-    player.youth_eligible_at_season_start ??
-    ownership?.youth_eligible_at_season_start ??
-    contract.squad_registration === "youth_eligible" ??
-    (seasonStartAge !== null && seasonStartAge <= 21)
-  );
+  const youthEligible = youthEligibility(player, ownership, contract, seasonStartAge);
   const loan = loanStatus(player, ownership);
   return {
     ...player,
