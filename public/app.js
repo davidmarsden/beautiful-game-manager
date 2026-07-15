@@ -204,18 +204,36 @@ async function submitDecision(event) {
 }
 
 async function initialiseAuth() {
-  const configResponse = await fetch("/api/auth-config");
+  const configResponse = await fetch("/api/auth-config", { cache: "no-store" });
   const config = await configResponse.json();
   if (!config.configured) {
     $("loginStatus").className = "error";
     $("loginStatus").textContent = "Supabase is not configured on Netlify yet.";
     return;
   }
-  supabase = createClient(config.supabase_url, config.supabase_anon_key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-  const { data } = await supabase.auth.getSession();
+
+  supabase = createClient(config.supabase_url, config.supabase_anon_key, {
+    auth: {
+      flowType: "pkce",
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: false
+    }
+  });
+
+  const callbackError = sessionStorage.getItem("tbg_auth_callback_error");
+  if (callbackError) {
+    sessionStorage.removeItem("tbg_auth_callback_error");
+    $("loginStatus").className = "error";
+    $("loginStatus").textContent = `Sign-in failed: ${callbackError}`;
+  }
+
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
   session = data.session;
   setAuthView(Boolean(session));
-  if (session) await loadPortal().catch((error) => { $("portal").innerHTML = `<div class="fatal-error">${error.message}</div>`; });
+  if (session) await loadPortal().catch((portalError) => { $("portal").innerHTML = `<div class="fatal-error">${portalError.message}</div>`; });
+
   supabase.auth.onAuthStateChange(async (_event, nextSession) => {
     session = nextSession;
     setAuthView(Boolean(session));
@@ -228,7 +246,12 @@ $("loginForm").addEventListener("submit", async (event) => {
   $("loginStatus").className = "";
   $("loginStatus").textContent = "Sending secure login link…";
   const email = $("loginEmail").value.trim();
-  const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: `${window.location.origin}/`
+    }
+  });
   $("loginStatus").className = error ? "error" : "ok";
   $("loginStatus").textContent = error ? error.message : "Check your email for the TBG sign-in link.";
 });
