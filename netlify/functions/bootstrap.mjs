@@ -16,11 +16,45 @@ function specificPosition(player) {
   ) || "Unknown";
 }
 
+function loanedOutValue(value) {
+  return value === true || text(value).toLowerCase() === "true";
+}
+
+function loanStatus(player, ownership) {
+  const loan = ownership?.loan || player.loan || {};
+  const status = text(loan.status || player.loan_status).toLowerCase();
+  const loanClubId = text(loan.club_id || player.loan_club_id);
+  const loanClubName = text(loan.club_name || player.loan_club_name);
+  const loanedOut = Boolean(
+    loanedOutValue(player.loaned_out) ||
+    loanedOutValue(ownership?.loaned_out) ||
+    status === "loaned_out" ||
+    status === "out" ||
+    loanClubId ||
+    loanClubName
+  );
+  return { loaned_out: loanedOut, loan_club_id: loanClubId || null, loan_club_name: loanClubName || null };
+}
+
+function youthEligibility(player, ownership, contract, seasonStartAge) {
+  const explicit = player.youth_eligible_at_season_start ?? ownership?.youth_eligible_at_season_start;
+  if (explicit !== undefined && explicit !== null) return Boolean(explicit);
+  if (text(contract.squad_registration) === "youth_eligible") return true;
+  return seasonStartAge !== null && seasonStartAge <= 21;
+}
+
 function squadProjection(player, index, ownership) {
   const contract = ownership?.contract || player.contract || {};
   const condition = player.condition || {};
   const transfer = player.transfer || {};
   const id = player.tbg_player_id || player.transfermarkt_id;
+  const currentAge = number(player.age, null);
+  const seasonStartAge = number(
+    player.season_start_age ?? ownership?.season_start_age ?? contract.season_start_age,
+    currentAge
+  );
+  const youthEligible = youthEligibility(player, ownership, contract, seasonStartAge);
+  const loan = loanStatus(player, ownership);
   return {
     ...player,
     squad_number: number(player.squad_number, index + 1),
@@ -31,6 +65,10 @@ function squadProjection(player, index, ownership) {
     contract_expiry: text(contract.expires_on || contract.expiry_date || contract.expires_season_id) || "Open-ended",
     transfer_listed: Boolean(transfer.listed ?? player.transfer_listed),
     loan_listed: Boolean(transfer.loan_listed ?? player.loan_listed),
+    season_start_age: seasonStartAge,
+    youth_eligible_at_season_start: youthEligible,
+    squad_registration: youthEligible ? "youth" : "first_team",
+    ...loan,
     profile_url: `${PINK_FINAL_PLAYER_URL}?id=${encodeURIComponent(id)}`
   };
 }
@@ -53,6 +91,13 @@ export default async (request) => {
       manager: { manager_id: "manager-demo", manager_name: "Demo Manager", manager_type: "human" },
       club,
       squad,
+      squad_rules: {
+        first_team_capacity: club.squad?.first_team_capacity ?? 25,
+        youth_team_capacity: club.squad?.youth_team_capacity ?? 20,
+        launch_first_team_cap: club.squad?.launch_first_team_cap ?? 20,
+        launch_youth_team_cap: club.squad?.launch_youth_team_cap ?? 10,
+        youth_age_rule: "Aged 21 or younger on the first day of the season"
+      },
       next_fixture: { fixture_id: `fixture-demo-${club.tbg_club_id}`, competition: club.division_id ? club.division_id.replace("division-", "Division ") : "Pre-season", opponent_name: opponent?.canonical_name || "Opponent TBC", venue: "home", status: "team_selection_open" },
       navigation: ["Dashboard","Squad","Tactics","Schedule","Finances","Facilities","History","Transfers","Competitions","World"]
     }), { status: 200, headers: { "content-type": "application/json", "cache-control": "no-store" } });
