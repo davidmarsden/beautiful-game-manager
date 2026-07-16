@@ -8,6 +8,9 @@
 [functions."lock-fixtures"]
   schedule = "*/5 * * * *"
 
+[functions."run-fixtures"]
+  schedule = "*/5 * * * *"
+
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
