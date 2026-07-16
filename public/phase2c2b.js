@@ -92,10 +92,8 @@ function reorderSelector(containerId, zone, orderedIds) {
   const container = $(containerId);
   if (!container) return [];
   const labels = [...container.querySelectorAll('.player-pick')];
-  const byPlayerId = new Map(labels.map((label) => {
-    const input = label.querySelector(`input[data-zone="${zone}"]`);
-    return [String(input?.value ?? ''), label];
-  }));
+  const idForLabel = (label) => String(label.querySelector(`input[data-zone="${zone}"]`)?.value ?? '');
+  const byPlayerId = new Map(labels.map((label) => [idForLabel(label), label]));
   const selected = new Set(orderedIds);
 
   labels.forEach((label) => {
@@ -103,13 +101,22 @@ function reorderSelector(containerId, zone, orderedIds) {
     if (input) input.checked = selected.has(String(input.value));
   });
 
-  orderedIds.forEach((playerId) => {
-    const label = byPlayerId.get(playerId);
-    if (label) container.appendChild(label);
-  });
-  labels
-    .filter((label) => !selected.has(String(label.querySelector(`input[data-zone="${zone}"]`)?.value ?? '')))
-    .forEach((label) => container.appendChild(label));
+  const desiredOrder = [
+    ...orderedIds.filter((playerId) => byPlayerId.has(playerId)),
+    ...labels.map(idForLabel).filter((playerId) => !selected.has(playerId))
+  ];
+  const currentOrder = labels.map(idForLabel);
+  const orderChanged = desiredOrder.length !== currentOrder.length
+    || desiredOrder.some((playerId, index) => playerId !== currentOrder[index]);
+
+  // appendChild emits a childList mutation even when moving a node to the same
+  // place. Only reorder when necessary so the submission observer settles.
+  if (orderChanged) {
+    desiredOrder.forEach((playerId) => {
+      const label = byPlayerId.get(playerId);
+      if (label) container.appendChild(label);
+    });
+  }
 
   return [...container.querySelectorAll(`input[data-zone="${zone}"]`)];
 }
