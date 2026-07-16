@@ -5,8 +5,10 @@ const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 function hashUnit(seed) {
+  // Thirteen hexadecimal digits contain 52 bits. Divide by the matching
+  // 52-bit range so the deterministic value spans [0, 1) without a 0.5 bias.
   const hex = createHash('sha256').update(seed).digest('hex').slice(0, 13);
-  return parseInt(hex, 16) / 0x1fffffffffffff;
+  return parseInt(hex, 16) / 0x10000000000000;
 }
 
 function rating(player) {
