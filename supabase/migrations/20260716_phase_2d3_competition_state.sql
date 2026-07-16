@@ -163,6 +163,30 @@ begin
 end;
 $$;
 
+-- Populate tables immediately for matches completed before this migration.
+do $$
+declare
+  competition record;
+begin
+  for competition in
+    select distinct world_id, season_id, competition_id
+    from public.fixtures
+    where status = 'played'
+      and home_score is not null
+      and away_score is not null
+      and world_id is not null
+      and season_id is not null
+      and competition_id is not null
+  loop
+    perform public.rebuild_competition_standings(
+      competition.world_id,
+      competition.season_id,
+      competition.competition_id
+    );
+  end loop;
+end;
+$$;
+
 revoke all on function public.rebuild_competition_standings(text, text, text) from public, anon, authenticated;
 revoke all on function public.finalise_match_and_competition_state(text, integer, integer, jsonb, timestamptz) from public, anon, authenticated;
 grant execute on function public.rebuild_competition_standings(text, text, text) to service_role;
