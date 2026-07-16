@@ -5,6 +5,8 @@ let client;
 let currentSession;
 let latestState;
 let countdownTimer;
+let teamFormObserver;
+let applyingSubmission = false;
 
 async function config() {
   const response = await fetch('/api/auth-config', { cache: 'no-store' });
@@ -86,26 +88,47 @@ function renderDeadline(state) {
   countdownTimer = setInterval(update, 60000);
 }
 
-function applySubmissionToRenderedForm(submission, attempt = 0) {
+function applySubmissionToRenderedForm(submission) {
+  if (!submission || applyingSubmission) return false;
   const xiInputs = [...document.querySelectorAll('input[data-zone="xi"]')];
   const benchInputs = [...document.querySelectorAll('input[data-zone="bench"]')];
+  if (!xiInputs.length || !benchInputs.length) return false;
 
-  // app.js builds these controls asynchronously after its own bootstrap call.
-  // Do not apply the saved submission until both lists actually exist.
-  if ((!xiInputs.length || !benchInputs.length) && attempt < 40) {
-    setTimeout(() => applySubmissionToRenderedForm(submission, attempt + 1), 150);
-    return;
+  applyingSubmission = true;
+  try {
+    const xi = new Set((submission.starting_xi || []).map(String));
+    const bench = new Set((submission.bench || []).map(String));
+    xiInputs.forEach((input) => { input.checked = xi.has(String(input.value)); });
+    benchInputs.forEach((input) => { input.checked = bench.has(String(input.value)); });
+
+    // Rebuild captain choices from the restored XI before selecting the saved captain.
+    xiInputs[0]?.dispatchEvent(new Event('change'));
+    if (submission.captain_id) $('captain').value = String(submission.captain_id);
+    return true;
+  } finally {
+    applyingSubmission = false;
   }
-  if (!xiInputs.length || !benchInputs.length) return;
+}
 
-  const xi = new Set(submission.starting_xi || []);
-  const bench = new Set(submission.bench || []);
-  xiInputs.forEach((input) => { input.checked = xi.has(input.value); });
-  benchInputs.forEach((input) => { input.checked = bench.has(input.value); });
+function observeTeamForm(submission) {
+  teamFormObserver?.disconnect();
+  const startingXi = $('startingXi');
+  const bench = $('bench');
+  if (!startingXi || !bench || !submission) return;
 
-  // Rebuild the captain list from the restored XI, then restore the captain.
-  xiInputs[0]?.dispatchEvent(new Event('change'));
-  if (submission.captain_id) $('captain').value = submission.captain_id;
+  const reapply = () => queueMicrotask(() => applySubmissionToRenderedForm(submission));
+  teamFormObserver = new MutationObserver(reapply);
+  teamFormObserver.observe(startingXi, { childList: true, subtree: true });
+  teamFormObserver.observe(bench, { childList: true, subtree: true });
+
+  // Cover both the initial portal render and Supabase's later INITIAL_SESSION rerender.
+  let attempts = 0;
+  const retry = () => {
+    if (applySubmissionToRenderedForm(submission)) return;
+    attempts += 1;
+    if (attempts < 80) setTimeout(retry, 100);
+  };
+  retry();
 }
 
 function renderSubmission(state) {
@@ -126,7 +149,7 @@ function renderSubmission(state) {
   if (tactics.width) $('width').value = tactics.width;
   if (tactics.defensive_line) $('defensiveLine').value = tactics.defensive_line;
 
-  applySubmissionToRenderedForm(submission);
+  observeTeamForm(submission);
 }
 
 async function refreshEnhancements() {
