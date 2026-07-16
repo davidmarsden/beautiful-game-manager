@@ -100,7 +100,6 @@ async function persistManagerMessages(fixture, result) {
   for (const appointment of managers) {
     const existing = await rest(`/rest/v1/manager_messages?recipient_manager_id=eq.${encodeURIComponent(appointment.manager_id)}&related_fixture_id=eq.${encodeURIComponent(fixture.id)}&message_type=eq.match_result&select=id&limit=1`);
     if (existing.length) continue;
-
     const own = appointment.club_id === fixture.home_club_id ? result.score.home : result.score.away;
     const opp = appointment.club_id === fixture.home_club_id ? result.score.away : result.score.home;
     await rest('/rest/v1/manager_messages', {
@@ -121,9 +120,6 @@ async function persistManagerMessages(fixture, result) {
 
 async function persistResult(fixture, run, result) {
   const now = new Date().toISOString();
-
-  // Store the deterministic result first, but keep the run retryable until all
-  // dependent rows and manager notifications have been written successfully.
   await rest(`/rest/v1/match_runs?fixture_id=eq.${encodeURIComponent(fixture.id)}`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json', prefer: 'return=minimal' },
@@ -142,28 +138,18 @@ async function persistResult(fixture, run, result) {
   await persistEvents(fixture, result);
   await persistManagerMessages(fixture, result);
 
-  // The fixture is the final completion marker. Until this succeeds it remains
-  // scheduled, so the claim function can safely retry any interrupted run.
-  await rest(`/rest/v1/fixtures?id=eq.${encodeURIComponent(fixture.id)}`, {
-    method: 'PATCH',
-    headers: { 'content-type': 'application/json', prefer: 'return=minimal' },
+  // One database transaction now marks the fixture and run complete and rebuilds
+  // the affected competition table. A failure leaves the scheduled fixture retryable.
+  await rest('/rest/v1/rpc/finalise_match_and_competition_state', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      status: 'played',
-      home_score: result.score.home,
-      away_score: result.score.away,
-      played_at: result.played_at || now,
-      result_payload: result,
-      engine_run_status: 'completed',
-      engine_processing_started_at: null,
-      engine_completed_at: now,
-      engine_run_error: null
+      fixture_key: fixture.id,
+      home_goals: result.score.home,
+      away_goals: result.score.away,
+      result_json: result,
+      played_timestamp: result.played_at || now
     })
-  });
-
-  await rest(`/rest/v1/match_runs?fixture_id=eq.${encodeURIComponent(fixture.id)}`, {
-    method: 'PATCH',
-    headers: { 'content-type': 'application/json', prefer: 'return=minimal' },
-    body: JSON.stringify({ status: 'completed', completed_at: now, updated_at: now, last_error: null })
   });
 }
 
