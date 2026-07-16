@@ -7,25 +7,15 @@ export function loadFixtureSubmissions(fixture, submissions) {
   const away = byClub.get(text(fixture.away_club_id));
 
   if (!home || !away) {
-    const missing = [
-      !home ? fixture.home_club_id : null,
-      !away ? fixture.away_club_id : null
-    ].filter(Boolean);
+    const missing = [!home ? fixture.home_club_id : null, !away ? fixture.away_club_id : null].filter(Boolean);
     throw new Error(`Locked submission missing for club${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}`);
   }
 
   for (const submission of [home, away]) {
-    if (submission.status !== 'locked') {
-      throw new Error(`Submission ${submission.id || submission.club_id} is not locked`);
-    }
-    if (!Array.isArray(submission.starting_xi) || submission.starting_xi.length !== 11) {
-      throw new Error(`Submission for ${submission.club_id} does not contain exactly 11 starters`);
-    }
-    if (!Array.isArray(submission.bench)) {
-      throw new Error(`Submission for ${submission.club_id} has an invalid bench`);
-    }
+    if (submission.status !== 'locked') throw new Error(`Submission ${submission.id || submission.club_id} is not locked`);
+    if (!Array.isArray(submission.starting_xi) || submission.starting_xi.length !== 11) throw new Error(`Submission for ${submission.club_id} does not contain exactly 11 starters`);
+    if (!Array.isArray(submission.bench)) throw new Error(`Submission for ${submission.club_id} has an invalid bench`);
   }
-
   return { home, away };
 }
 
@@ -49,15 +39,17 @@ function teamContract(side, clubId, submission) {
 export function buildEngineMatchContract({ fixture, submissions, world }) {
   const { home, away } = loadFixtureSubmissions(fixture, submissions);
   const worldId = text(fixture.world_id || world?.world_id);
+  const seasonId = text(fixture.season_id || world?.active_season_id);
   if (!worldId) throw new Error('Fixture/world does not provide a world_id');
+  if (!seasonId) throw new Error('Fixture/world does not provide a season_id');
 
   return {
-    contract_version: '2d1-v1',
+    contract_version: '2d2-v1',
     run_key: `${worldId}:${fixture.id}`,
     fixture: {
       fixture_id: fixture.id,
       world_id: worldId,
-      season_id: fixture.season_id || world?.active_season_id || null,
+      season_id: seasonId,
       competition_id: fixture.competition_id || null,
       matchday: fixture.matchday ?? null,
       kickoff_at: fixture.kickoff_at,
@@ -69,8 +61,10 @@ export function buildEngineMatchContract({ fixture, submissions, world }) {
       away: teamContract('away', fixture.away_club_id, away)
     },
     world_snapshot: {
-      world_id: world?.world_id || worldId,
-      season_id: world?.active_season_id || fixture.season_id || null,
+      world_id: worldId,
+      season_id: seasonId,
+      source_world_id: world?.world_id || null,
+      source_season_id: world?.active_season_id || null,
       build_id: world?.build_id || world?.generated_at || null,
       source: 'tbg-world-json'
     },
