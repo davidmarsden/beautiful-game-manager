@@ -61,16 +61,49 @@ export default async (request) => {
     const world = await worldResponse.json();
     const club = world.clubs.find((row) => row.tbg_club_id === appointment.club_id);
     if (!club) return json({ error: `Assigned club ${appointment.club_id} is not present in the current world build` }, 409);
+    const clubsById = new Map(world.clubs.map((row) => [row.tbg_club_id, row]));
     const playersById = new Map(world.players.map((player) => [player.tbg_player_id, player]));
     const ownershipById = new Map((world.player_ownership || []).map((row) => [row.tbg_player_id, row]));
     const squad = (club.squad?.player_ids || []).map((id) => playersById.get(id)).filter(Boolean).map((player, index) => squadProjection(player, index, ownershipById.get(player.tbg_player_id)));
-    const fixtures = await supabase(`/rest/v1/fixtures?or=(home_club_id.eq.${encodeURIComponent(club.tbg_club_id)},away_club_id.eq.${encodeURIComponent(club.tbg_club_id)})&status=eq.scheduled&select=id,season_id,competition_id,home_club_id,away_club_id,matchday,kickoff_at,submission_deadline_at,status&order=kickoff_at.asc&limit=1`, token).catch(() => []);
-    const fixture = fixtures[0] || null;
-    const opponentId = fixture ? (fixture.home_club_id === club.tbg_club_id ? fixture.away_club_id : fixture.home_club_id) : null;
-    const opponent = opponentId ? world.clubs.find((candidate) => candidate.tbg_club_id === opponentId) : null;
-    const submissions = fixture ? await supabase(`/rest/v1/manager_submissions?fixture_id=eq.${encodeURIComponent(fixture.id)}&club_id=eq.${encodeURIComponent(club.tbg_club_id)}&select=*&limit=1`, token).catch(() => []) : [];
 
-    return json({ authenticated: true, user: { id: user.id, email: user.email }, manager, onboarding_required: !manager.profile_completed, appointment, world: { world_id: world.world_id, season_id: world.active_season_id, status: world.status }, club, squad, squad_rules: { first_team_capacity: club.squad?.first_team_capacity ?? 25, youth_team_capacity: club.squad?.youth_team_capacity ?? 20, launch_first_team_cap: club.squad?.launch_first_team_cap ?? 20, launch_youth_team_cap: club.squad?.launch_youth_team_cap ?? 10, youth_age_rule: 'Aged 21 or younger on the first day of the season' }, messages, unread_count, current_submission: submissions[0] || null, next_fixture: fixture ? { fixture_id: fixture.id, competition: fixture.competition_id || club.division_id?.replace('division-', 'Division ') || 'TBG', opponent_name: opponent?.canonical_name || 'Opponent TBC', venue: fixture.home_club_id === club.tbg_club_id ? 'home' : 'away', status: fixture.status, kickoff_at: fixture.kickoff_at, submission_deadline_at: fixture.submission_deadline_at, matchday: fixture.matchday, locked: Boolean(fixture.submission_deadline_at && Date.now() >= new Date(fixture.submission_deadline_at).getTime()) } : null, navigation: ['Dashboard','Squad','Tactics','Schedule','Finances','Facilities','History','Transfers','Competitions','World'] });
+    const fixtureSelect = 'id,world_id,season_id,competition_id,home_club_id,away_club_id,matchday,kickoff_at,submission_deadline_at,status,home_score,away_score,played_at';
+    const clubFixtureFilter = `or=(home_club_id.eq.${encodeURIComponent(club.tbg_club_id)},away_club_id.eq.${encodeURIComponent(club.tbg_club_id)})`;
+    const nextFixtures = await supabase(`/rest/v1/fixtures?${clubFixtureFilter}&status=eq.scheduled&select=${fixtureSelect}&order=kickoff_at.asc&limit=1`, token).catch(() => []);
+    const fixture = nextFixtures[0] || null;
+    const playedFixtures = await supabase(`/rest/v1/fixtures?${clubFixtureFilter}&status=eq.played&select=${fixtureSelect}&order=played_at.desc&limit=10`, token).catch(() => []);
+    const competitionId = fixture?.competition_id || playedFixtures[0]?.competition_id || club.division_id || null;
+    const seasonId = fixture?.season_id || playedFixtures[0]?.season_id || 'season-1';
+    const standings = competitionId ? await supabase(`/rest/v1/competition_standings?world_id=eq.${encodeURIComponent(appointment.world_id)}&season_id=eq.${encodeURIComponent(seasonId)}&competition_id=eq.${encodeURIComponent(competitionId)}&select=*&order=position.asc`, token).catch(() => []) : [];
+
+    const decorateFixture = (row) => {
+      const opponentId = row.home_club_id === club.tbg_club_id ? row.away_club_id : row.home_club_id;
+      const opponent = clubsById.get(opponentId);
+      return { ...row, fixture_id: row.id, opponent_name: opponent?.canonical_name || 'Opponent TBC', venue: row.home_club_id === club.tbg_club_id ? 'home' : 'away', own_score: row.home_club_id === club.tbg_club_id ? row.home_score : row.away_score, opponent_score: row.home_club_id === club.tbg_club_id ? row.away_score : row.home_score };
+    };
+    const nextFixture = fixture ? decorateFixture(fixture) : null;
+    const history = playedFixtures.map(decorateFixture);
+    const submissionRows = fixture ? await supabase(`/rest/v1/manager_submissions?fixture_id=eq.${encodeURIComponent(fixture.id)}&club_id=eq.${encodeURIComponent(club.tbg_club_id)}&select=*&limit=1`, token).catch(() => []) : [];
+    const table = standings.map((row) => ({ ...row, club_name: clubsById.get(row.club_id)?.canonical_name || row.club_id, is_managed_club: row.club_id === club.tbg_club_id }));
+
+    return json({
+      authenticated: true,
+      user: { id: user.id, email: user.email },
+      manager,
+      onboarding_required: !manager.profile_completed,
+      appointment,
+      world: { world_id: world.world_id, season_id: world.active_season_id, status: world.status },
+      club,
+      squad,
+      squad_rules: { first_team_capacity: club.squad?.first_team_capacity ?? 25, youth_team_capacity: club.squad?.youth_team_capacity ?? 20, launch_first_team_cap: club.squad?.launch_first_team_cap ?? 20, launch_youth_team_cap: club.squad?.launch_youth_team_cap ?? 10, youth_age_rule: 'Aged 21 or younger on the first day of the season' },
+      messages,
+      unread_count,
+      current_submission: submissionRows[0] || null,
+      next_fixture: nextFixture ? { ...nextFixture, competition: nextFixture.competition_id || club.division_id?.replace('division-', 'Division ') || 'TBG', locked: Boolean(nextFixture.submission_deadline_at && Date.now() >= new Date(nextFixture.submission_deadline_at).getTime()) } : null,
+      last_fixture: history[0] || null,
+      fixture_history: history,
+      competition: { competition_id: competitionId, season_id: seasonId, standings: table },
+      navigation: ['Dashboard','Squad','Tactics','Schedule','Finances','Facilities','History','Transfers','Competitions','World']
+    });
   } catch (error) {
     return json({ error: error.message }, 503);
   }
