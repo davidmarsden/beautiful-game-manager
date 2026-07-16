@@ -171,12 +171,11 @@ async function processFixture(fixture, world, clubsById) {
 
     const club = clubsById.get(clubId);
     if (!club) throw new Error(`Club ${clubId} is missing from the current world build`);
-    if (!managerId) throw new Error(`Club ${clubId} has no active manager appointment for AI fallback ownership`);
 
     const fallback = buildFallback(club, world);
     await createFallbackSubmission({ fixture, clubId, managerId, fallback });
     await sendMessage(managerId, clubId, fixture.id, 'Deadline missed — AI team selected', `No valid team was submitted before the deadline for fixture ${fixture.id}. The assistant manager selected and locked a balanced 4-3-3 team.`, 'high');
-    outcomes.push({ club_id: clubId, source: 'ai_fallback' });
+    outcomes.push({ club_id: clubId, source: 'ai_fallback', managed: Boolean(managerId) });
   }
 
   await completeFixture(fixture.id);
