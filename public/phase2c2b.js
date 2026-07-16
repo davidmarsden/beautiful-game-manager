@@ -88,6 +88,32 @@ function renderDeadline(state) {
   countdownTimer = setInterval(update, 60000);
 }
 
+function reorderSelector(containerId, zone, orderedIds) {
+  const container = $(containerId);
+  if (!container) return [];
+  const labels = [...container.querySelectorAll('.player-pick')];
+  const byPlayerId = new Map(labels.map((label) => {
+    const input = label.querySelector(`input[data-zone="${zone}"]`);
+    return [String(input?.value ?? ''), label];
+  }));
+  const selected = new Set(orderedIds);
+
+  labels.forEach((label) => {
+    const input = label.querySelector(`input[data-zone="${zone}"]`);
+    if (input) input.checked = selected.has(String(input.value));
+  });
+
+  orderedIds.forEach((playerId) => {
+    const label = byPlayerId.get(playerId);
+    if (label) container.appendChild(label);
+  });
+  labels
+    .filter((label) => !selected.has(String(label.querySelector(`input[data-zone="${zone}"]`)?.value ?? '')))
+    .forEach((label) => container.appendChild(label));
+
+  return [...container.querySelectorAll(`input[data-zone="${zone}"]`)];
+}
+
 function applySubmissionToRenderedForm(submission) {
   if (!submission || applyingSubmission) return false;
   const xiInputs = [...document.querySelectorAll('input[data-zone="xi"]')];
@@ -96,13 +122,16 @@ function applySubmissionToRenderedForm(submission) {
 
   applyingSubmission = true;
   try {
-    const xi = new Set((submission.starting_xi || []).map(String));
-    const bench = new Set((submission.bench || []).map(String));
-    xiInputs.forEach((input) => { input.checked = xi.has(String(input.value)); });
-    benchInputs.forEach((input) => { input.checked = bench.has(String(input.value)); });
+    const orderedXi = (submission.starting_xi || []).map(String);
+    const orderedBench = (submission.bench || []).map(String);
 
-    // Rebuild captain choices from the restored XI before selecting the saved captain.
-    xiInputs[0]?.dispatchEvent(new Event('change'));
+    // The formation board derives slot positions from DOM order, not merely from
+    // which checkboxes are checked. Restore both the selected players and their
+    // persisted order before its MutationObserver rebuilds the pitch.
+    const restoredXiInputs = reorderSelector('startingXi', 'xi', orderedXi);
+    reorderSelector('bench', 'bench', orderedBench);
+
+    restoredXiInputs[0]?.dispatchEvent(new Event('change', { bubbles: true }));
     if (submission.captain_id) $('captain').value = String(submission.captain_id);
     return true;
   } finally {
