@@ -31,7 +31,8 @@ let selected = null;
 let assignments = [];
 let benchAssignments = [];
 let players = [];
-let renderTimer;
+let refreshTimer;
+let syncingLegacy = false;
 
 const byId = (id) => document.getElementById(id);
 const norm = (value) => String(value ?? '');
@@ -138,6 +139,7 @@ function clickSlot(zone,index) {
 }
 
 function syncLegacyInputs() {
+  syncingLegacy = true;
   document.querySelectorAll('input[data-zone="xi"]').forEach((input) => { input.checked = assignments.includes(norm(input.value)); });
   document.querySelectorAll('input[data-zone="bench"]').forEach((input) => { input.checked = benchAssignments.includes(norm(input.value)); });
 
@@ -158,6 +160,7 @@ function syncLegacyInputs() {
   });
   benchLabels.filter((label) => !benchAssignments.includes(norm(label.querySelector('input')?.value))).forEach((label) => benchContainer.appendChild(label));
   document.querySelector('input[data-zone="xi"]')?.dispatchEvent(new Event('change'));
+  setTimeout(() => { syncingLegacy = false; }, 0);
 }
 
 function buildBoard() {
@@ -165,14 +168,18 @@ function buildBoard() {
   initialiseAssignments();
   const legacyXi = byId('startingXi');
   const legacyBench = byId('bench');
-  legacyXi.parentElement?.classList.add('legacy-team-selectors');
-  legacyBench.parentElement?.classList.add('legacy-team-selectors');
+  const xiHeading = legacyXi.previousElementSibling;
+  const benchHeading = legacyBench.previousElementSibling;
+  legacyXi.classList.add('legacy-team-selectors');
+  legacyBench.classList.add('legacy-team-selectors');
+  xiHeading?.classList.add('legacy-team-selectors');
+  benchHeading?.classList.add('legacy-team-selectors');
 
   board = document.createElement('section');
   board.id='interactiveFormationBoard';
   board.className='formation-board-shell';
   board.innerHTML=`<div class="pitch-panel"><div class="pitch-toolbar"><div><strong>Interactive formation</strong><div class="pitch-help">Drag players, or tap a player then tap a slot. Tap two occupied slots to swap.</div></div><div class="selection-counts"><span id="xiCount"></span><span id="benchCount"></span></div></div><div id="formationPitch" class="football-pitch"></div><h3>Substitutes</h3><div id="formationBench" class="bench-board"></div><div id="formationValidation" class="formation-validation"></div><div class="board-actions"><button id="clearFormation" type="button">Clear team</button><button id="autoPickFormation" type="button">Auto-pick strongest XI</button></div></div><aside class="squad-tray-panel"><h3>Squad</h3><div class="pitch-help">Selected players are faded. Tap any player to move them.</div><div id="formationSquadTray" class="squad-tray"></div></aside>`;
-  legacyXi.parentElement?.parentElement?.insertBefore(board, legacyXi.parentElement);
+  legacyXi.parentElement.insertBefore(board, xiHeading || legacyXi);
   renderBoard();
 
   board.addEventListener('click',(event)=>{
@@ -186,18 +193,30 @@ function buildBoard() {
   board.addEventListener('drop',(event)=>{ const slot=event.target.closest('[data-zone][data-index]'); if(!slot)return; event.preventDefault(); placePlayer(event.dataTransfer.getData('text/plain'),slot.dataset.zone,Number(slot.dataset.index)); });
   byId('clearFormation').addEventListener('click',()=>{assignments=Array(11).fill(null);benchAssignments=Array(7).fill(null);selected=null;renderBoard();});
   byId('autoPickFormation').addEventListener('click',()=>{ const sorted=[...players].sort((a,b)=>Number(b.rating)-Number(a.rating)); const gk=sorted.find((p)=>p.position==='Goalkeeper'); const rest=sorted.filter((p)=>p.id!==gk?.id); assignments=[gk?.id||null,...rest.slice(0,10).map((p)=>p.id)]; benchAssignments=rest.slice(10,17).map((p)=>p.id); while(benchAssignments.length<7)benchAssignments.push(null);renderBoard(); });
+
+  const scheduleRefresh = () => {
+    if (syncingLegacy) return;
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(refreshFromPersistedInputs, 180);
+  };
+  new MutationObserver(scheduleRefresh).observe(legacyXi,{childList:true,subtree:true});
+  new MutationObserver(scheduleRefresh).observe(legacyBench,{childList:true,subtree:true});
 }
 
 function refreshFromPersistedInputs() {
-  if (!board || !collectPlayers()) return;
+  if (!board || syncingLegacy || !collectPlayers()) return;
   const checkedXi=currentChecked('xi');
   const checkedBench=currentChecked('bench');
-  if (checkedXi.length) assignments=FORMATIONS[byId('formation')?.value || '4-3-3-wide'].map((_,index)=>checkedXi[index]||null);
-  if (checkedBench.length) benchAssignments=Array.from({length:7},(_,index)=>checkedBench[index]||null);
+  assignments=FORMATIONS[byId('formation')?.value || '4-3-3-wide'].map((_,index)=>checkedXi[index]||null);
+  benchAssignments=Array.from({length:7},(_,index)=>checkedBench[index]||null);
   renderBoard();
 }
 
-const observer=new MutationObserver(()=>{ clearTimeout(renderTimer); renderTimer=setTimeout(()=>{ if(!board) buildBoard(); else refreshFromPersistedInputs(); },120); });
-window.addEventListener('load',()=>{ observer.observe(document.body,{childList:true,subtree:true}); setTimeout(buildBoard,700); });
+function waitForTeamLists(attempt=0) {
+  if (buildBoard() !== false && board) return;
+  if (attempt < 60) setTimeout(() => waitForTeamLists(attempt+1), 150);
+}
+
+window.addEventListener('load',()=>setTimeout(waitForTeamLists,500));
 byId('formation')?.addEventListener('change',()=>{ const next=FORMATIONS[byId('formation').value]||FORMATIONS['4-3-3-wide']; assignments=next.map((_,index)=>assignments[index]||null); renderBoard(); });
 document.addEventListener('submit',(event)=>{ if(event.target?.id==='decisionForm'){ syncLegacyInputs(); if(!validateBoard()){ event.preventDefault(); event.stopImmediatePropagation(); } } },true);
