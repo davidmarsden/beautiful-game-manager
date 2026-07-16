@@ -1,4 +1,5 @@
 import { buildEngineMatchContract } from '../../src/engineBridge.js';
+import { simulateMatch } from '../../src/matchSimulation.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -59,9 +60,7 @@ async function upsertPreparedRun(fixture, contract) {
   return saved[0] || row;
 }
 
-async function submitToEngine(run, contract) {
-  if (!ENGINE_RUNNER_URL) return { mode: 'prepared_only', run };
-
+async function remoteResult(contract) {
   const response = await fetch(ENGINE_RUNNER_URL, {
     method: 'POST',
     headers: {
@@ -73,24 +72,99 @@ async function submitToEngine(run, contract) {
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error || body.message || `Engine runner returned ${response.status}`);
+  const result = body.result || body;
+  if (result.status !== 'completed' || !result.score) throw new Error('Engine runner did not return a completed result');
+  return result;
+}
 
-  const completed = body.status === 'completed' || Boolean(body.result);
-  const status = completed ? 'completed' : 'submitted';
+async function persistEvents(fixture, result) {
+  if (!Array.isArray(result.events) || !result.events.length) return;
+  await rest('/rest/v1/match_events?on_conflict=event_id', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', prefer: 'resolution=ignore-duplicates,return=minimal' },
+    body: JSON.stringify(result.events.map((event) => ({
+      event_id: event.event_id,
+      fixture_id: fixture.id,
+      event_type: event.type,
+      side: event.side,
+      minute: event.minute,
+      player_id: event.player_id || null,
+      assist_player_id: event.assist_player_id || null,
+      payload: event
+    })))
+  });
+}
+
+async function persistManagerMessages(fixture, result) {
+  const managers = await rest(`/rest/v1/manager_appointments?world_id=eq.${encodeURIComponent(fixture.world_id)}&club_id=in.(${encodeURIComponent(fixture.home_club_id)},${encodeURIComponent(fixture.away_club_id)})&status=eq.active&select=manager_id,club_id`);
+  for (const appointment of managers) {
+    const existing = await rest(`/rest/v1/manager_messages?recipient_manager_id=eq.${encodeURIComponent(appointment.manager_id)}&related_fixture_id=eq.${encodeURIComponent(fixture.id)}&message_type=eq.match_result&select=id&limit=1`);
+    if (existing.length) continue;
+
+    const own = appointment.club_id === fixture.home_club_id ? result.score.home : result.score.away;
+    const opp = appointment.club_id === fixture.home_club_id ? result.score.away : result.score.home;
+    await rest('/rest/v1/manager_messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', prefer: 'return=minimal' },
+      body: JSON.stringify({
+        recipient_manager_id: appointment.manager_id,
+        club_id: appointment.club_id,
+        related_fixture_id: fixture.id,
+        message_type: 'match_result',
+        priority: 'high',
+        subject: `Full time: ${result.score.home}-${result.score.away}`,
+        body: `Your fixture ${fixture.id} finished ${own}-${opp}. The full result and match events have been recorded.`
+      })
+    });
+  }
+}
+
+async function persistResult(fixture, run, result) {
   const now = new Date().toISOString();
-  const updated = await rest(`/rest/v1/match_runs?fixture_id=eq.${encodeURIComponent(contract.fixture.fixture_id)}`, {
+
+  // Store the deterministic result first, but keep the run retryable until all
+  // dependent rows and manager notifications have been written successfully.
+  await rest(`/rest/v1/match_runs?fixture_id=eq.${encodeURIComponent(fixture.id)}`, {
     method: 'PATCH',
-    headers: { 'content-type': 'application/json', prefer: 'return=representation' },
+    headers: { 'content-type': 'application/json', prefer: 'return=minimal' },
     body: JSON.stringify({
-      status,
-      engine_response: body,
+      status: 'prepared',
+      engine_response: result,
+      result_payload: result,
       attempt_count: Number(run.attempt_count || 0) + 1,
       submitted_at: now,
-      completed_at: completed ? now : null,
+      completed_at: null,
       updated_at: now,
       last_error: null
     })
   });
-  return { mode: 'remote_engine', status, run: updated[0], engine_response: body };
+
+  await persistEvents(fixture, result);
+  await persistManagerMessages(fixture, result);
+
+  // The fixture is the final completion marker. Until this succeeds it remains
+  // scheduled, so the claim function can safely retry any interrupted run.
+  await rest(`/rest/v1/fixtures?id=eq.${encodeURIComponent(fixture.id)}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json', prefer: 'return=minimal' },
+    body: JSON.stringify({
+      status: 'played',
+      home_score: result.score.home,
+      away_score: result.score.away,
+      played_at: result.played_at || now,
+      result_payload: result,
+      engine_run_status: 'completed',
+      engine_processing_started_at: null,
+      engine_completed_at: now,
+      engine_run_error: null
+    })
+  });
+
+  await rest(`/rest/v1/match_runs?fixture_id=eq.${encodeURIComponent(fixture.id)}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json', prefer: 'return=minimal' },
+    body: JSON.stringify({ status: 'completed', completed_at: now, updated_at: now, last_error: null })
+  });
 }
 
 async function markRunError(fixtureId, message) {
@@ -112,7 +186,6 @@ export default async () => {
     const worldResponse = await fetch(WORLD_URL, { headers: { accept: 'application/json' } });
     if (!worldResponse.ok) throw new Error(`World source returned ${worldResponse.status}`);
     const world = await worldResponse.json();
-
     const fixtures = await rest('/rest/v1/rpc/claim_fixtures_for_engine', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -126,15 +199,20 @@ export default async () => {
         const contract = buildEngineMatchContract({ fixture, submissions, world });
         const run = await upsertPreparedRun(fixture, contract);
         await finishFixture(fixture.id, 'prepared');
-        const bridge = await submitToEngine(run, contract);
-        if (bridge.mode === 'remote_engine') await finishFixture(fixture.id, bridge.status);
-        processed.push({ fixture_id: fixture.id, contract_version: contract.contract_version, ...bridge });
+        const result = ENGINE_RUNNER_URL ? await remoteResult(contract) : simulateMatch(contract, world);
+        await persistResult(fixture, run, result);
+        processed.push({
+          fixture_id: fixture.id,
+          contract_version: contract.contract_version,
+          result_version: result.result_version,
+          score: result.score,
+          mode: ENGINE_RUNNER_URL ? 'remote_engine' : 'built_in_simulator'
+        });
       } catch (error) {
         await markRunError(fixture.id, error.message);
         processed.push({ fixture_id: fixture.id, error: error.message });
       }
     }
-
     return json({ claimed: fixtures.length, engine_configured: Boolean(ENGINE_RUNNER_URL), processed });
   } catch (error) {
     return json({ error: error.message }, 500);
