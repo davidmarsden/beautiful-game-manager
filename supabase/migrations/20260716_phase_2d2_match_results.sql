@@ -28,7 +28,21 @@ alter table public.match_events enable row level security;
 
 drop policy if exists "authenticated managers can read match events" on public.match_events;
 create policy "authenticated managers can read match events"
-  on public.match_events for select to authenticated using (true);
+  on public.match_events
+  for select
+  to authenticated
+  using (
+    exists (
+      select 1
+      from public.fixtures f
+      join public.manager_appointments ma
+        on ma.world_id = f.world_id
+       and ma.club_id in (f.home_club_id, f.away_club_id)
+       and ma.status = 'active'
+      where f.id = match_events.fixture_id
+        and ma.manager_id = auth.uid()
+    )
+  );
 
 create or replace function public.claim_fixtures_for_engine(batch_size integer default 10)
 returns setof public.fixtures
