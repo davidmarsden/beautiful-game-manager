@@ -41,6 +41,14 @@ security definer
 set search_path = public
 as $$
 begin
+  -- Only one transaction may rebuild a given competition table at a time.
+  perform pg_advisory_xact_lock(
+    hashtextextended(
+      concat_ws('|', target_world_id, target_season_id, target_competition_id),
+      0
+    )
+  );
+
   delete from public.competition_standings
   where world_id = target_world_id
     and season_id = target_season_id
@@ -51,13 +59,22 @@ begin
     position, played, won, drawn, lost,
     goals_for, goals_against, goal_difference, points, form, updated_at
   )
-  with played_fixtures as (
+  with competition_fixtures as (
     select *
     from public.fixtures
     where world_id = target_world_id
       and season_id = target_season_id
       and competition_id = target_competition_id
-      and status = 'played'
+  ),
+  member_clubs as (
+    select home_club_id as club_id from competition_fixtures
+    union
+    select away_club_id as club_id from competition_fixtures
+  ),
+  played_fixtures as (
+    select *
+    from competition_fixtures
+    where status = 'played'
       and home_score is not null
       and away_score is not null
   ),
@@ -73,17 +90,21 @@ begin
     from played_fixtures
   ),
   totals as (
-    select club_id,
-           count(*)::integer as played,
-           count(*) filter (where outcome = 'W')::integer as won,
-           count(*) filter (where outcome = 'D')::integer as drawn,
-           count(*) filter (where outcome = 'L')::integer as lost,
-           sum(goals_for)::integer as goals_for,
-           sum(goals_against)::integer as goals_against,
-           (sum(goals_for) - sum(goals_against))::integer as goal_difference,
-           (count(*) filter (where outcome = 'W') * 3 + count(*) filter (where outcome = 'D'))::integer as points
-    from club_results
-    group by club_id
+    select members.club_id,
+           count(results.fixture_id)::integer as played,
+           count(results.fixture_id) filter (where results.outcome = 'W')::integer as won,
+           count(results.fixture_id) filter (where results.outcome = 'D')::integer as drawn,
+           count(results.fixture_id) filter (where results.outcome = 'L')::integer as lost,
+           coalesce(sum(results.goals_for), 0)::integer as goals_for,
+           coalesce(sum(results.goals_against), 0)::integer as goals_against,
+           (coalesce(sum(results.goals_for), 0) - coalesce(sum(results.goals_against), 0))::integer as goal_difference,
+           (
+             count(results.fixture_id) filter (where results.outcome = 'W') * 3
+             + count(results.fixture_id) filter (where results.outcome = 'D')
+           )::integer as points
+    from member_clubs members
+    left join club_results results using (club_id)
+    group by members.club_id
   ),
   recent_form as (
     select club_id,
@@ -92,7 +113,7 @@ begin
       select club_id, fixture_id, played_at, outcome,
              row_number() over (partition by club_id order by played_at desc, fixture_id desc) as recent_rank
       from club_results
-    ) ranked
+    ) ranked_results
     where recent_rank <= 5
     group by club_id
   ),
@@ -163,7 +184,7 @@ begin
 end;
 $$;
 
--- Populate tables immediately for matches completed before this migration.
+-- Populate every scheduled competition immediately, including clubs on P=0.
 do $$
 declare
   competition record;
@@ -171,10 +192,7 @@ begin
   for competition in
     select distinct world_id, season_id, competition_id
     from public.fixtures
-    where status = 'played'
-      and home_score is not null
-      and away_score is not null
-      and world_id is not null
+    where world_id is not null
       and season_id is not null
       and competition_id is not null
   loop
