@@ -37,17 +37,30 @@ const position = (player) => text(
 );
 const playerId = (player) => text(player.tbg_player_id || player.transfermarkt_id || player.id);
 const isGoalkeeper = (player) => position(player).toLowerCase().includes('goalkeeper');
-const unavailable = (player) => {
+
+function loanedOut(player, ownership = {}) {
+  const loan = ownership.loan || player.loan || {};
+  const status = text(loan.status || ownership.loan_status || player.loan_status).toLowerCase();
+  return Boolean(
+    player.loaned_out || ownership.loaned_out ||
+    status === 'loaned_out' || status === 'out' ||
+    text(loan.club_id || ownership.loan_club_id || player.loan_club_id) ||
+    text(loan.club_name || ownership.loan_club_name || player.loan_club_name)
+  );
+}
+
+const unavailable = (player, ownership) => {
   const status = text(player.condition?.injury_status || player.injury_status).toLowerCase();
-  return Boolean(player.loaned_out || ['injured','suspended','unavailable'].includes(status));
+  return Boolean(loanedOut(player, ownership) || ['injured','suspended','unavailable'].includes(status));
 };
 
 function buildFallback(club, world) {
   const playersById = new Map((world.players || []).map((player) => [playerId(player), player]));
+  const ownershipById = new Map((world.player_ownership || []).map((row) => [text(row.tbg_player_id), row]));
   const squad = (club.squad?.player_ids || [])
     .map((id) => playersById.get(text(id)))
     .filter(Boolean)
-    .filter((player) => !unavailable(player));
+    .filter((player) => !unavailable(player, ownershipById.get(playerId(player))));
 
   const sorted = [...squad].sort((a, b) => rating(b) - rating(a) || playerId(a).localeCompare(playerId(b)));
   const goalkeeper = sorted.find(isGoalkeeper);
