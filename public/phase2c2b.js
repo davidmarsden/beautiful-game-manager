@@ -86,6 +86,28 @@ function renderDeadline(state) {
   countdownTimer = setInterval(update, 60000);
 }
 
+function applySubmissionToRenderedForm(submission, attempt = 0) {
+  const xiInputs = [...document.querySelectorAll('input[data-zone="xi"]')];
+  const benchInputs = [...document.querySelectorAll('input[data-zone="bench"]')];
+
+  // app.js builds these controls asynchronously after its own bootstrap call.
+  // Do not apply the saved submission until both lists actually exist.
+  if ((!xiInputs.length || !benchInputs.length) && attempt < 40) {
+    setTimeout(() => applySubmissionToRenderedForm(submission, attempt + 1), 150);
+    return;
+  }
+  if (!xiInputs.length || !benchInputs.length) return;
+
+  const xi = new Set(submission.starting_xi || []);
+  const bench = new Set(submission.bench || []);
+  xiInputs.forEach((input) => { input.checked = xi.has(input.value); });
+  benchInputs.forEach((input) => { input.checked = bench.has(input.value); });
+
+  // Rebuild the captain list from the restored XI, then restore the captain.
+  xiInputs[0]?.dispatchEvent(new Event('change'));
+  if (submission.captain_id) $('captain').value = submission.captain_id;
+}
+
 function renderSubmission(state) {
   const submission = state?.current_submission;
   const summary = $('submissionSummary');
@@ -104,12 +126,7 @@ function renderSubmission(state) {
   if (tactics.width) $('width').value = tactics.width;
   if (tactics.defensive_line) $('defensiveLine').value = tactics.defensive_line;
 
-  const xi = new Set(submission.starting_xi || []);
-  const bench = new Set(submission.bench || []);
-  document.querySelectorAll('input[data-zone="xi"]').forEach((input) => { input.checked = xi.has(input.value); });
-  document.querySelectorAll('input[data-zone="bench"]').forEach((input) => { input.checked = bench.has(input.value); });
-  document.querySelectorAll('input[data-zone="xi"]')[0]?.dispatchEvent(new Event('change'));
-  if (submission.captain_id) $('captain').value = submission.captain_id;
+  applySubmissionToRenderedForm(submission);
 }
 
 async function refreshEnhancements() {
@@ -118,7 +135,7 @@ async function refreshEnhancements() {
   showOnboarding(state);
   renderInboxMeta(state);
   renderDeadline(state);
-  setTimeout(() => renderSubmission(state), 250);
+  renderSubmission(state);
 }
 
 $('onboardingForm')?.addEventListener('submit', async (event) => {
