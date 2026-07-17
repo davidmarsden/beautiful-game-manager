@@ -29,7 +29,7 @@ test('produces a deterministic completed result contract', () => {
   assert.deepEqual(first.score, second.score);
   assert.deepEqual(first.events.map(({ played_at, ...event }) => event), second.events.map(({ played_at, ...event }) => event));
   assert.equal(first.status, 'completed');
-  assert.equal(first.result_version, '2d2-v1');
+  assert.equal(first.result_version, '2d5-v1');
   assert.ok(Number.isInteger(first.score.home));
   assert.ok(Number.isInteger(first.score.away));
 });
