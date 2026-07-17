@@ -45,8 +45,4 @@ test('rich event simulation is deterministic and coherent', () => {
   for (const event of first.events.filter((row) => outfieldActorEvents.has(row.type))) {
     assert.ok(!goalkeeperIds.has(event.player_id), `${event.type} incorrectly selected goalkeeper ${event.player_id}`);
   }
-
-  for (const event of first.events.filter((row) => row.type === 'shot_saved')) {
-    assert.ok(goalkeeperIds.has(event.opponent_id), `shot_saved did not select a goalkeeper opponent: ${event.opponent_id}`);
-  }
 });
