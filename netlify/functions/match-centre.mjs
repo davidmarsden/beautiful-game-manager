@@ -43,6 +43,9 @@ export default async (request) => {
     if (!fixture) return json({ error: 'Fixture not found' }, 404);
     const appointment = appointments.find((row) => row.world_id === fixture.world_id && [fixture.home_club_id, fixture.away_club_id].includes(row.club_id));
     if (!appointment) return json({ error: 'You do not have access to this fixture' }, 403);
+    if (fixture.status !== 'played') {
+      return json({ error: 'Match reports are available only after full time' }, 409);
+    }
 
     const [events, submissions, runs, worldResponse] = await Promise.all([
       service(`/rest/v1/match_events?fixture_id=eq.${encodeURIComponent(fixtureId)}&select=*&order=minute.asc,event_id.asc`),
