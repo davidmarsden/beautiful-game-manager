@@ -22,12 +22,17 @@ export default async (request) => {
     const url = new URL(request.url);
     const clubId = String(url.searchParams.get('club_id') || '').trim();
     const fixtureId = String(url.searchParams.get('fixture_id') || '').trim();
-    if (!clubId || !fixtureId) return json({ error: 'club_id and fixture_id are required' }, 400);
+    if (!clubId) return json({ error: 'club_id is required' }, 400);
     const appointments = await rest(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&club_id=eq.${encodeURIComponent(clubId)}&status=eq.active&select=id&limit=1`, token);
     if (!appointments[0]) return json({ error: 'You are not appointed to this club' }, 403);
-    const current = await rest(`/rest/v1/manager_submissions?fixture_id=eq.${encodeURIComponent(fixtureId)}&club_id=eq.${encodeURIComponent(clubId)}&select=*&limit=1`, token).catch(() => []);
-    if (current[0]) return json({ source: 'current_submission', submission: current[0] });
-    const previous = await rest(`/rest/v1/manager_submissions?club_id=eq.${encodeURIComponent(clubId)}&fixture_id=neq.${encodeURIComponent(fixtureId)}&status=in.(submitted,locked)&select=*&order=updated_at.desc&limit=1`, token).catch(() => []);
+
+    if (fixtureId) {
+      const current = await rest(`/rest/v1/manager_submissions?fixture_id=eq.${encodeURIComponent(fixtureId)}&club_id=eq.${encodeURIComponent(clubId)}&select=*&limit=1`, token).catch(() => []);
+      if (current[0]) return json({ source: 'current_submission', submission: current[0] });
+    }
+
+    const fixtureFilter = fixtureId ? `&fixture_id=neq.${encodeURIComponent(fixtureId)}` : '';
+    const previous = await rest(`/rest/v1/manager_submissions?club_id=eq.${encodeURIComponent(clubId)}${fixtureFilter}&status=in.(submitted,locked)&select=*&order=updated_at.desc&limit=1`, token).catch(() => []);
     return json({ source: previous[0] ? 'last_team' : 'none', submission: previous[0] || null });
   } catch (error) {
     return json({ error: error.message }, 500);
