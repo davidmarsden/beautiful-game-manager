@@ -2,10 +2,13 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const $ = (id) => document.getElementById(id);
 let client;
-let session;
 let bootstrapState;
 let presets = [];
+let previousSheets = [];
 let seedAppliedForContext = null;
+let restoreObserver = null;
+let activeRestoredSheet = null;
+let applyingSheet = false;
 
 async function auth() {
   if (!client) {
@@ -15,8 +18,7 @@ async function auth() {
   }
   const { data, error } = await client.auth.getSession();
   if (error) throw error;
-  session = data.session;
-  return session;
+  return data.session;
 }
 
 async function api(path, options = {}) {
@@ -28,15 +30,16 @@ async function api(path, options = {}) {
   return body;
 }
 
+const selectedIds = (zone) => [...document.querySelectorAll(`input[data-zone="${zone}"]:checked`)].map((input) => String(input.value));
+const sameIds = (left = [], right = []) => left.length === right.length && left.every((value, index) => String(value) === String(right[index]));
+
 function captureSheet(name = '') {
-  const startingXi = [...document.querySelectorAll('input[data-zone="xi"]:checked')].map((input) => input.value);
-  const bench = [...document.querySelectorAll('input[data-zone="bench"]:checked')].map((input) => input.value);
   return {
     name,
     club_id: bootstrapState.club.tbg_club_id,
     formation: $('formation').value,
-    starting_xi: startingXi,
-    bench,
+    starting_xi: selectedIds('xi'),
+    bench: selectedIds('bench'),
     captain_id: $('captain').value || null,
     set_piece_takers: { penalties: $('captain').value, free_kicks: $('captain').value, corners_left: $('captain').value, corners_right: $('captain').value },
     tactics: {
@@ -53,33 +56,87 @@ function reorder(containerId, zone, orderedIds) {
   const container = $(containerId);
   if (!container) return;
   const labels = [...container.querySelectorAll('.player-pick')];
-  const byId = new Map(labels.map((label) => [String(label.querySelector(`input[data-zone="${zone}"]`)?.value || ''), label]));
-  const selected = new Set((orderedIds || []).map(String));
+  const idOf = (label) => String(label.querySelector(`input[data-zone="${zone}"]`)?.value || '');
+  const byId = new Map(labels.map((label) => [idOf(label), label]));
+  const ordered = (orderedIds || []).map(String).filter((id) => byId.has(id));
+  const selected = new Set(ordered);
+
   labels.forEach((label) => {
     const input = label.querySelector(`input[data-zone="${zone}"]`);
     if (input) input.checked = selected.has(String(input.value));
   });
-  [...selected].forEach((id) => { const label = byId.get(id); if (label) container.appendChild(label); });
-  labels.forEach((label) => { const id = String(label.querySelector(`input[data-zone="${zone}"]`)?.value || ''); if (!selected.has(id)) container.appendChild(label); });
+
+  const desired = [...ordered, ...labels.map(idOf).filter((id) => !selected.has(id))];
+  const current = labels.map(idOf);
+  if (!sameIds(desired, current)) desired.forEach((id) => { const label = byId.get(id); if (label) container.appendChild(label); });
+}
+
+function sheetIsApplied(sheet) {
+  return sameIds(selectedIds('xi'), (sheet.starting_xi || []).map(String).filter((id) => document.querySelector(`input[data-zone="xi"][value="${CSS.escape(id)}"]`)))
+    && sameIds(selectedIds('bench'), (sheet.bench || []).map(String).filter((id) => document.querySelector(`input[data-zone="bench"][value="${CSS.escape(id)}"]`)));
 }
 
 function applySheet(sheet, sourceLabel = '') {
-  if (!sheet) return false;
+  if (!sheet || applyingSheet) return false;
   if (!$('startingXi')?.querySelector('input') || !$('bench')?.querySelector('input')) return false;
-  if (sheet.formation) $('formation').value = sheet.formation;
-  const tactics = sheet.tactics || {};
-  if (tactics.mentality) $('mentality').value = tactics.mentality;
-  if (tactics.pressing) $('pressing').value = tactics.pressing;
-  if (tactics.tempo) $('tempo').value = tactics.tempo;
-  if (tactics.width) $('width').value = tactics.width;
-  if (tactics.defensive_line) $('defensiveLine').value = tactics.defensive_line;
-  reorder('startingXi', 'xi', sheet.starting_xi || []);
-  reorder('bench', 'bench', sheet.bench || []);
-  $('startingXi').querySelector('input')?.dispatchEvent(new Event('change', { bubbles: true }));
-  queueMicrotask(() => { if (sheet.captain_id && [...$('captain').options].some((option) => option.value === String(sheet.captain_id))) $('captain').value = String(sheet.captain_id); });
-  const status = $('presetStatus');
-  if (status && sourceLabel) { status.className = 'preset-status ok'; status.textContent = sourceLabel; }
+  applyingSheet = true;
+  try {
+    if (sheet.formation) $('formation').value = sheet.formation;
+    const tactics = sheet.tactics || {};
+    if (tactics.mentality) $('mentality').value = tactics.mentality;
+    if (tactics.pressing) $('pressing').value = tactics.pressing;
+    if (tactics.tempo) $('tempo').value = tactics.tempo;
+    if (tactics.width) $('width').value = tactics.width;
+    if (tactics.defensive_line) $('defensiveLine').value = tactics.defensive_line;
+    reorder('startingXi', 'xi', sheet.starting_xi || []);
+    reorder('bench', 'bench', sheet.bench || []);
+    $('startingXi').querySelector('input')?.dispatchEvent(new Event('change', { bubbles: true }));
+    queueMicrotask(() => {
+      if (sheet.captain_id && [...$('captain').options].some((option) => option.value === String(sheet.captain_id))) $('captain').value = String(sheet.captain_id);
+    });
+    if (sourceLabel) setStatus(sourceLabel);
+    return true;
+  } finally {
+    applyingSheet = false;
+  }
+}
+
+function protectRestoredSheet(sheet) {
+  activeRestoredSheet = sheet;
+  restoreObserver?.disconnect();
+  const xi = $('startingXi');
+  const bench = $('bench');
+  if (!xi || !bench) return;
+  const restore = () => {
+    if (!activeRestoredSheet || applyingSheet || sheetIsApplied(activeRestoredSheet)) return;
+    queueMicrotask(() => applySheet(activeRestoredSheet));
+  };
+  restoreObserver = new MutationObserver(restore);
+  restoreObserver.observe(xi, { childList: true, subtree: true, attributes: true, attributeFilter: ['checked'] });
+  restoreObserver.observe(bench, { childList: true, subtree: true, attributes: true, attributeFilter: ['checked'] });
+
+  const release = (event) => {
+    if (!event.isTrusted) return;
+    activeRestoredSheet = null;
+    restoreObserver?.disconnect();
+    xi.removeEventListener('change', release, true);
+    bench.removeEventListener('change', release, true);
+  };
+  xi.addEventListener('change', release, true);
+  bench.addEventListener('change', release, true);
+}
+
+function applyAndProtect(sheet, label) {
+  if (!applySheet(sheet, label)) return false;
+  protectRestoredSheet(sheet);
   return true;
+}
+
+function setStatus(message, error = false) {
+  const status = $('presetStatus');
+  if (!status) return;
+  status.className = `preset-status ${error ? 'error' : 'ok'}`;
+  status.textContent = message;
 }
 
 function renderPresetOptions() {
@@ -89,6 +146,19 @@ function renderPresetOptions() {
   $('deletePreset').disabled = !select.value;
 }
 
+function historyLabel(sheet) {
+  const when = sheet.updated_at || sheet.submitted_at;
+  const date = when ? new Date(when).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : 'previous match';
+  return `${date} · ${sheet.fixture_id} · ${sheet.formation}`;
+}
+
+function renderPreviousOptions() {
+  const select = $('previousMatchSelect');
+  if (!select) return;
+  select.innerHTML = '<option value="">Load team from previous match…</option>' + previousSheets.map((sheet, index) => `<option value="${index}">${historyLabel(sheet)}</option>`).join('');
+  $('loadPreviousMatch').disabled = !select.value;
+}
+
 function installControls() {
   const form = $('decisionForm');
   if (!form || $('teamPresetPanel')) return;
@@ -96,7 +166,11 @@ function installControls() {
   panel.id = 'teamPresetPanel';
   panel.className = 'team-preset-panel';
   panel.innerHTML = `
-    <div class="preset-heading"><div><strong>Team sheets</strong><small>Carry forward your last selection or save named presets.</small></div><span id="selectionSeedBadge" class="seed-badge" hidden></span></div>
+    <div class="preset-heading"><div><strong>Team sheets</strong><small>Carry forward your last selection, load a previous match, or save named presets.</small></div><span id="selectionSeedBadge" class="seed-badge" hidden></span></div>
+    <div class="preset-controls previous-match-controls">
+      <select id="previousMatchSelect" aria-label="Previous match teams"><option value="">Load team from previous match…</option></select>
+      <button id="loadPreviousMatch" type="button" disabled>Load previous match</button>
+    </div>
     <div class="preset-controls">
       <select id="teamPresetSelect" aria-label="Saved team sheets"><option value="">Choose saved team sheet…</option></select>
       <button id="loadPreset" type="button">Load</button>
@@ -106,24 +180,28 @@ function installControls() {
     </div>
     <p id="presetStatus" class="preset-status" aria-live="polite"></p>`;
   form.before(panel);
+
+  $('previousMatchSelect').addEventListener('change', () => { $('loadPreviousMatch').disabled = $('previousMatchSelect').value === ''; });
+  $('loadPreviousMatch').addEventListener('click', () => {
+    const sheet = previousSheets[Number($('previousMatchSelect').value)];
+    if (!sheet) return setStatus('Choose a previous match first.', true);
+    applyAndProtect(sheet, `Loaded team and tactics from ${historyLabel(sheet)}.`);
+    const badge = $('selectionSeedBadge');
+    badge.hidden = false;
+    badge.textContent = 'PREVIOUS MATCH';
+  });
+
   $('teamPresetSelect').addEventListener('change', () => { $('deletePreset').disabled = !$('teamPresetSelect').value; $('updatePreset').disabled = !$('teamPresetSelect').value; });
   $('loadPreset').addEventListener('click', () => {
     const preset = presets.find((row) => row.id === $('teamPresetSelect').value);
     if (!preset) return setStatus('Choose a saved team sheet first.', true);
-    applySheet(preset, `Loaded “${preset.name}”. Changes affect this fixture only until you save.`);
+    applyAndProtect(preset, `Loaded “${preset.name}”. Changes affect this fixture only until you save.`);
   });
   $('savePreset').addEventListener('click', () => savePreset(false));
   $('updatePreset').addEventListener('click', () => savePreset(true));
   $('deletePreset').addEventListener('click', deletePreset);
   $('updatePreset').disabled = true;
   $('deletePreset').disabled = true;
-}
-
-function setStatus(message, error = false) {
-  const status = $('presetStatus');
-  if (!status) return;
-  status.className = `preset-status ${error ? 'error' : 'ok'}`;
-  status.textContent = message;
 }
 
 async function loadPresets() {
@@ -146,8 +224,7 @@ async function savePreset(updateExisting) {
       if (!name) return;
     }
     setStatus('Saving team sheet…');
-    const sheet = captureSheet(name);
-    const body = await api('/api/team-presets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(sheet) });
+    const body = await api('/api/team-presets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(captureSheet(name)) });
     await loadPresets();
     $('teamPresetSelect').value = body.preset.id;
     $('teamPresetSelect').dispatchEvent(new Event('change'));
@@ -172,9 +249,10 @@ async function carryForward() {
   if (!club) return;
   const contextKey = fixture?.fixture_id || `${club.tbg_club_id}:no-fixture`;
   if (seedAppliedForContext === contextKey) return;
-
   const fixtureQuery = fixture?.fixture_id ? `&fixture_id=${encodeURIComponent(fixture.fixture_id)}` : '';
   const body = await api(`/api/team-seed?club_id=${encodeURIComponent(club.tbg_club_id)}${fixtureQuery}`);
+  previousSheets = body.history || [];
+  renderPreviousOptions();
   if (!body.submission) return;
 
   let attempts = 0;
@@ -182,17 +260,15 @@ async function carryForward() {
     const sourceLabel = body.source === 'last_team'
       ? (fixture ? 'Last submitted team carried forward. Review availability before saving.' : 'Last submitted team restored. It will carry into the next fixture automatically.')
       : 'Current fixture submission restored.';
-    if (applySheet(body.submission, sourceLabel)) {
+    if (applyAndProtect(body.submission, sourceLabel)) {
       seedAppliedForContext = contextKey;
       const badge = $('selectionSeedBadge');
-      if (badge) {
-        badge.hidden = false;
-        badge.textContent = body.source === 'last_team' ? (fixture ? 'CARRIED FORWARD' : 'LAST TEAM') : 'CURRENT SUBMISSION';
-      }
+      badge.hidden = false;
+      badge.textContent = body.source === 'last_team' ? (fixture ? 'CARRIED FORWARD' : 'LAST TEAM') : 'CURRENT SUBMISSION';
       return;
     }
     attempts += 1;
-    if (attempts < 80) setTimeout(tryApply, 100);
+    if (attempts < 100) setTimeout(tryApply, 100);
   };
   tryApply();
 }
