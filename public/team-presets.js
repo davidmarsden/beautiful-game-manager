@@ -5,7 +5,7 @@ let client;
 let session;
 let bootstrapState;
 let presets = [];
-let seedAppliedForFixture = null;
+let seedAppliedForContext = null;
 
 async function auth() {
   if (!client) {
@@ -167,17 +167,28 @@ async function deletePreset() {
 }
 
 async function carryForward() {
-  const fixture = bootstrapState?.next_fixture;
+  const fixture = bootstrapState?.next_fixture || null;
   const club = bootstrapState?.club;
-  if (!fixture || !club || seedAppliedForFixture === fixture.fixture_id) return;
-  const body = await api(`/api/team-seed?club_id=${encodeURIComponent(club.tbg_club_id)}&fixture_id=${encodeURIComponent(fixture.fixture_id)}`);
+  if (!club) return;
+  const contextKey = fixture?.fixture_id || `${club.tbg_club_id}:no-fixture`;
+  if (seedAppliedForContext === contextKey) return;
+
+  const fixtureQuery = fixture?.fixture_id ? `&fixture_id=${encodeURIComponent(fixture.fixture_id)}` : '';
+  const body = await api(`/api/team-seed?club_id=${encodeURIComponent(club.tbg_club_id)}${fixtureQuery}`);
   if (!body.submission) return;
+
   let attempts = 0;
   const tryApply = () => {
-    if (applySheet(body.submission, body.source === 'last_team' ? 'Last submitted team carried forward. Review availability before saving.' : 'Current fixture submission restored.')) {
-      seedAppliedForFixture = fixture.fixture_id;
+    const sourceLabel = body.source === 'last_team'
+      ? (fixture ? 'Last submitted team carried forward. Review availability before saving.' : 'Last submitted team restored. It will carry into the next fixture automatically.')
+      : 'Current fixture submission restored.';
+    if (applySheet(body.submission, sourceLabel)) {
+      seedAppliedForContext = contextKey;
       const badge = $('selectionSeedBadge');
-      if (badge) { badge.hidden = false; badge.textContent = body.source === 'last_team' ? 'CARRIED FORWARD' : 'CURRENT SUBMISSION'; }
+      if (badge) {
+        badge.hidden = false;
+        badge.textContent = body.source === 'last_team' ? (fixture ? 'CARRIED FORWARD' : 'LAST TEAM') : 'CURRENT SUBMISSION';
+      }
       return;
     }
     attempts += 1;
