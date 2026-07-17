@@ -8,15 +8,8 @@ const bearer = (request) => {
   const value = request.headers.get('authorization') || '';
   return value.toLowerCase().startsWith('bearer ') ? value.slice(7).trim() : '';
 };
-
 async function service(path) {
-  const response = await fetch(`${SUPABASE_URL}${path}`, {
-    headers: {
-      apikey: SUPABASE_SERVICE_ROLE_KEY,
-      authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      accept: 'application/json'
-    }
-  });
+  const response = await fetch(`${SUPABASE_URL}${path}`, { headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, accept: 'application/json' } });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.message || body.error || `Supabase returned ${response.status}`);
   return body;
@@ -30,8 +23,7 @@ export default async (request) => {
     const userResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SUPABASE_ANON_KEY, authorization: `Bearer ${token}` } });
     if (!userResponse.ok) return json({ error: 'Session is invalid or expired' }, 401);
     const user = await userResponse.json();
-    const url = new URL(request.url);
-    const fixtureId = String(url.searchParams.get('fixture_id') || '').trim();
+    const fixtureId = String(new URL(request.url).searchParams.get('fixture_id') || '').trim();
     if (!fixtureId) return json({ error: 'fixture_id is required' }, 400);
 
     const profiles = await service(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id&limit=1`);
@@ -43,13 +35,12 @@ export default async (request) => {
     if (!fixture) return json({ error: 'Fixture not found' }, 404);
     const appointment = appointments.find((row) => row.world_id === fixture.world_id && [fixture.home_club_id, fixture.away_club_id].includes(row.club_id));
     if (!appointment) return json({ error: 'You do not have access to this fixture' }, 403);
-    if (fixture.status !== 'played') {
-      return json({ error: 'Match reports are available only after full time' }, 409);
-    }
+    if (fixture.status !== 'played') return json({ error: 'Match reports are available only after full time' }, 409);
 
-    const [events, submissions, runs, worldResponse] = await Promise.all([
+    const views = await service(`/rest/v1/manager_match_views?manager_id=eq.${encodeURIComponent(manager.id)}&fixture_id=eq.${encodeURIComponent(fixtureId)}&select=revealed_at,reveal_method,replay_completed&limit=1`).catch(() => []);
+    const revealed = Boolean(views[0]?.revealed_at);
+    const [events, runs, worldResponse] = await Promise.all([
       service(`/rest/v1/match_events?fixture_id=eq.${encodeURIComponent(fixtureId)}&select=*&order=minute.asc,event_id.asc`),
-      service(`/rest/v1/manager_submissions?fixture_id=eq.${encodeURIComponent(fixtureId)}&select=club_id,formation,starting_xi,bench,captain_id,tactics,set_piece_takers,submission_source,version`),
       service(`/rest/v1/match_runs?fixture_id=eq.${encodeURIComponent(fixtureId)}&select=result_payload,request_payload&limit=1`),
       fetch(WORLD_URL, { headers: { accept: 'application/json' } })
     ]);
@@ -61,25 +52,26 @@ export default async (request) => {
       const player = players.get(id);
       return player?.display_name || player?.player_name || player?.canonical_name || id || null;
     };
-    const decorateSubmission = (submission) => ({
-      ...submission,
-      starting_xi: (submission.starting_xi || []).map((id) => ({ id, name: playerName(id) })),
-      bench: (submission.bench || []).map((id) => ({ id, name: playerName(id) })),
-      captain_name: playerName(submission.captain_id)
-    });
+    const decoratedEvents = events.map((event) => ({ ...event, player_name: playerName(event.player_id), assist_player_name: playerName(event.assist_player_id) }));
+    const publicFixture = {
+      id: fixture.id,
+      world_id: fixture.world_id,
+      competition_id: fixture.competition_id,
+      matchday: fixture.matchday,
+      played_at: fixture.played_at,
+      home_club_id: fixture.home_club_id,
+      away_club_id: fixture.away_club_id,
+      home_club_name: clubs.get(fixture.home_club_id)?.canonical_name || fixture.home_club_id,
+      away_club_name: clubs.get(fixture.away_club_id)?.canonical_name || fixture.away_club_id,
+      managed_club_id: appointment.club_id,
+      ...(revealed ? { home_score: fixture.home_score, away_score: fixture.away_score } : {})
+    };
+    if (!revealed) return json({ fixture: publicFixture, events: decoratedEvents, revealed: false, reveal: null });
+
+    const submissions = await service(`/rest/v1/manager_submissions?fixture_id=eq.${encodeURIComponent(fixtureId)}&select=club_id,formation,starting_xi,bench,captain_id,tactics,set_piece_takers,submission_source,version`);
+    const decorateSubmission = (submission) => ({ ...submission, starting_xi: (submission.starting_xi || []).map((id) => ({ id, name: playerName(id) })), bench: (submission.bench || []).map((id) => ({ id, name: playerName(id) })), captain_name: playerName(submission.captain_id) });
     const run = runs[0] || {};
-    return json({
-      fixture: {
-        ...fixture,
-        home_club_name: clubs.get(fixture.home_club_id)?.canonical_name || fixture.home_club_id,
-        away_club_name: clubs.get(fixture.away_club_id)?.canonical_name || fixture.away_club_id,
-        managed_club_id: appointment.club_id
-      },
-      events: events.map((event) => ({ ...event, player_name: playerName(event.player_id), assist_player_name: playerName(event.assist_player_id) })),
-      submissions: submissions.map(decorateSubmission),
-      result: run.result_payload || fixture.result_payload || {},
-      engine_contract: run.request_payload || null
-    });
+    return json({ fixture: publicFixture, events: decoratedEvents, submissions: submissions.map(decorateSubmission), result: run.result_payload || fixture.result_payload || {}, engine_contract: run.request_payload || null, revealed: true, reveal: views[0] });
   } catch (error) {
     return json({ error: error.message }, 500);
   }
