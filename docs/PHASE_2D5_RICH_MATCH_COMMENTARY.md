@@ -19,6 +19,16 @@ Events include:
 
 Every event is deterministic for the fixture run key and carries engine-authored commentary in its payload. The Match Centre displays that saved commentary during replay and in the permanent report. It does not invent new action in the browser.
 
+## Deployment
+
+Run this migration before processing a new fixture:
+
+```text
+supabase/migrations/20260717_phase_2d5_neutral_match_events.sql
+```
+
+It extends `match_events.side` to allow `neutral` for half-time, full-time and other match-wide events.
+
 ## Important testing note
 
 Previously completed fixtures retain their original saved event stream. This is intentional: historical match records must not silently change after a simulator upgrade.
@@ -27,23 +37,25 @@ To test PR #26, use a newly processed fixture after deploying the preview. Lock 
 
 ## Preview verification
 
-1. Process a new fixture with the built-in simulator.
-2. Confirm `match_runs.result_payload->>'result_version'` is `2d5-v1`.
-3. Confirm the fixture has substantially more than goal events:
+1. Run the Phase 2D.5 migration.
+2. Process a new fixture with the built-in simulator.
+3. Confirm `match_runs.result_payload->>'result_version'` is `2d5-v1`.
+4. Confirm the fixture has substantially more than goal events:
 
 ```sql
-select event_type, count(*)
+select event_type, side, count(*)
 from public.match_events
 where fixture_id = '<NEW FIXTURE ID>'
-group by event_type
-order by event_type;
+group by event_type, side
+order by event_type, side;
 ```
 
-4. Open the spoiler-safe replay.
-5. Confirm quiet passages, attacks, shots, saves, tackles, fouls, offsides, cards and crowd reactions appear at their saved minutes.
-6. Confirm the score changes only on goal events.
-7. Confirm half-time appears at 45' and full-time at 90'.
-8. Reveal the result and confirm the report contains the same chronological commentary.
+5. Confirm `half_time` and `full_time` are stored with `side = 'neutral'`.
+6. Open the spoiler-safe replay.
+7. Confirm quiet passages, attacks, shots, saves, tackles, fouls, offsides, cards and crowd reactions appear at their saved minutes.
+8. Confirm the score changes only on goal events.
+9. Confirm half-time appears at 45' and full-time at 90'.
+10. Reveal the result and confirm the report contains the same chronological commentary.
 
 ## Contract
 
