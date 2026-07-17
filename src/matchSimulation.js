@@ -38,14 +38,32 @@ function poisson(lambda, seed) {
   return count - 1;
 }
 
+function positionText(player) {
+  return text(player?.position || player?.primary_position || player?.position_group).toLowerCase();
+}
+
+function isGoalkeeper(player) {
+  const position = positionText(player);
+  return position === 'gk' || position.includes('goalkeeper') || position.includes('keeper');
+}
+
 function choosePlayer(team, playersById, seed, role = 'any') {
-  const candidates = team.starting_xi.map((id, index) => {
-    const player = playersById.get(id);
-    const position = text(player?.position || player?.primary_position || player?.position_group).toLowerCase();
+  const squad = team.starting_xi.map((id, index) => ({ id, index, player: playersById.get(id) }));
+  let eligible = squad;
+
+  // Goalkeepers may only be selected for goalkeeper-specific events. This avoids
+  // implausible commentary such as a goalkeeper shooting, being offside or leading
+  // a normal attack. Fall back to the full XI only for malformed team data.
+  if (role === 'keeper') eligible = squad.filter(({ player }) => isGoalkeeper(player));
+  else if (role === 'attacker' || role === 'defender') eligible = squad.filter(({ player }) => !isGoalkeeper(player));
+  if (!eligible.length) eligible = squad;
+
+  const candidates = eligible.map(({ id, index, player }) => {
+    const position = positionText(player);
     let multiplier = 1;
     if (role === 'attacker') multiplier = position.includes('forward') || position.includes('wing') || position.includes('attack') ? 1.55 : position.includes('mid') ? 1.05 : 0.45;
-    if (role === 'defender') multiplier = position.includes('back') || position.includes('defen') || position.includes('keeper') ? 1.5 : position.includes('mid') ? 1 : 0.55;
-    if (role === 'keeper') multiplier = position.includes('keeper') || position === 'gk' ? 8 : 0.05;
+    if (role === 'defender') multiplier = position.includes('back') || position.includes('defen') ? 1.5 : position.includes('mid') ? 1 : 0.55;
+    if (role === 'keeper') multiplier = 1;
     return { id, weight: Math.max(1, rating(player) * multiplier), index };
   });
   const total = candidates.reduce((sum, row) => sum + row.weight, 0);
