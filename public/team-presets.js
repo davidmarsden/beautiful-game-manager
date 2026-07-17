@@ -9,6 +9,7 @@ let seedAppliedForContext = null;
 let restoreObserver = null;
 let activeRestoredSheet = null;
 let applyingSheet = false;
+let releaseRestoreListeners = null;
 
 async function auth() {
   if (!client) {
@@ -104,9 +105,11 @@ function applySheet(sheet, sourceLabel = '') {
 function protectRestoredSheet(sheet) {
   activeRestoredSheet = sheet;
   restoreObserver?.disconnect();
+  releaseRestoreListeners?.();
   const xi = $('startingXi');
   const bench = $('bench');
   if (!xi || !bench) return;
+
   const restore = () => {
     if (!activeRestoredSheet || applyingSheet || sheetIsApplied(activeRestoredSheet)) return;
     queueMicrotask(() => applySheet(activeRestoredSheet));
@@ -117,13 +120,28 @@ function protectRestoredSheet(sheet) {
 
   const release = (event) => {
     if (!event.isTrusted) return;
+    const target = event.target instanceof Element ? event.target : null;
+    const visibleBoardEdit = target?.closest('#interactiveFormationBoard');
+    const legacyEdit = target?.closest('#startingXi, #bench');
+    if (!visibleBoardEdit && !legacyEdit) return;
     activeRestoredSheet = null;
     restoreObserver?.disconnect();
-    xi.removeEventListener('change', release, true);
-    bench.removeEventListener('change', release, true);
+    releaseRestoreListeners?.();
   };
+
+  document.addEventListener('pointerdown', release, true);
+  document.addEventListener('drop', release, true);
+  document.addEventListener('keydown', release, true);
   xi.addEventListener('change', release, true);
   bench.addEventListener('change', release, true);
+  releaseRestoreListeners = () => {
+    document.removeEventListener('pointerdown', release, true);
+    document.removeEventListener('drop', release, true);
+    document.removeEventListener('keydown', release, true);
+    xi.removeEventListener('change', release, true);
+    bench.removeEventListener('change', release, true);
+    releaseRestoreListeners = null;
+  };
 }
 
 function applyAndProtect(sheet, label) {
