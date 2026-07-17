@@ -20,6 +20,9 @@ const contract = {
 
 const world = { players };
 
+const goalkeeperIds = new Set(players.filter((player) => player.position === 'Goalkeeper').map((player) => player.tbg_player_id));
+const outfieldActorEvents = new Set(['goal', 'shot_saved', 'shot_missed', 'shot_blocked', 'corner', 'foul', 'yellow_card', 'red_card', 'offside', 'tackle', 'dangerous_attack']);
+
 test('rich event simulation is deterministic and coherent', () => {
   const first = simulateMatch(contract, world);
   const second = simulateMatch(contract, world);
@@ -38,4 +41,12 @@ test('rich event simulation is deterministic and coherent', () => {
   assert.equal(first.events.filter((event) => event.type === 'goal' && event.side === 'home').length, first.score.home);
   assert.equal(first.events.filter((event) => event.type === 'goal' && event.side === 'away').length, first.score.away);
   assert.deepEqual([...first.events].sort((a, b) => a.minute - b.minute), first.events);
+
+  for (const event of first.events.filter((row) => outfieldActorEvents.has(row.type))) {
+    assert.ok(!goalkeeperIds.has(event.player_id), `${event.type} incorrectly selected goalkeeper ${event.player_id}`);
+  }
+
+  for (const event of first.events.filter((row) => row.type === 'shot_saved')) {
+    assert.ok(goalkeeperIds.has(event.opponent_id), `shot_saved did not select a goalkeeper opponent: ${event.opponent_id}`);
+  }
 });
