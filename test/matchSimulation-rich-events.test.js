@@ -2,12 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { simulateMatch } from '../src/matchSimulation.js';
 
-const players = Array.from({ length: 22 }, (_, index) => ({
-  tbg_player_id: `p${index + 1}`,
-  display_name: `Player ${index + 1}`,
-  underlying_ability_rating: 88 + (index % 6),
-  position: index % 11 === 0 ? 'Goalkeeper' : index % 4 === 0 ? 'Centre-Forward' : index % 3 === 0 ? 'Central Midfield' : 'Centre-Back'
-}));
+const players = Array.from({ length: 22 }, (_, index) => {
+  const player = {
+    tbg_player_id: `p${index + 1}`,
+    display_name: `Player ${index + 1}`,
+    underlying_ability_rating: 88 + (index % 6)
+  };
+
+  if (index === 0) player.position_name = 'Goalkeeper';
+  else if (index === 11) player.canonical_position = 'GK';
+  else player.position = index % 4 === 0 ? 'Centre-Forward' : index % 3 === 0 ? 'Central Midfield' : 'Centre-Back';
+
+  return player;
+});
 
 const contract = {
   run_key: 'world:fixture-rich-events-test',
@@ -20,7 +27,7 @@ const contract = {
 
 const world = { players };
 
-const goalkeeperIds = new Set(players.filter((player) => player.position === 'Goalkeeper').map((player) => player.tbg_player_id));
+const goalkeeperIds = new Set(['p1', 'p12']);
 const outfieldActorEvents = new Set(['goal', 'shot_saved', 'shot_missed', 'shot_blocked', 'corner', 'foul', 'yellow_card', 'red_card', 'offside', 'tackle', 'dangerous_attack']);
 
 test('rich event simulation is deterministic and coherent', () => {
