@@ -39,7 +39,15 @@ function poisson(lambda, seed) {
 }
 
 function positionText(player) {
-  return text(player?.position || player?.primary_position || player?.position_group).toLowerCase();
+  return text(
+    player?.position ||
+    player?.primary_position ||
+    player?.position_group ||
+    player?.position_name ||
+    player?.position_detail ||
+    player?.transfermarkt_position ||
+    player?.canonical_position
+  ).toLowerCase();
 }
 
 function isGoalkeeper(player) {
