@@ -60,6 +60,23 @@ async function upsertPreparedRun(fixture, contract) {
   return saved[0] || row;
 }
 
+async function recordRunAttempt(fixtureId, run) {
+  const now = new Date().toISOString();
+  const attemptCount = Number(run.attempt_count || 0) + 1;
+  await rest(`/rest/v1/match_runs?fixture_id=eq.${encodeURIComponent(fixtureId)}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json', prefer: 'return=minimal' },
+    body: JSON.stringify({
+      status: 'submitted',
+      attempt_count: attemptCount,
+      submitted_at: now,
+      updated_at: now,
+      last_error: null
+    })
+  });
+  return attemptCount;
+}
+
 async function remoteResult(contract) {
   const response = await fetch(ENGINE_RUNNER_URL, {
     method: 'POST',
@@ -118,7 +135,7 @@ async function persistManagerMessages(fixture, result) {
   }
 }
 
-async function persistResult(fixture, run, result) {
+async function persistResult(fixture, attemptCount, result) {
   const now = new Date().toISOString();
   await rest(`/rest/v1/match_runs?fixture_id=eq.${encodeURIComponent(fixture.id)}`, {
     method: 'PATCH',
@@ -127,7 +144,7 @@ async function persistResult(fixture, run, result) {
       status: 'prepared',
       engine_response: result,
       result_payload: result,
-      attempt_count: Number(run.attempt_count || 0) + 1,
+      attempt_count: attemptCount,
       submitted_at: now,
       completed_at: null,
       updated_at: now,
@@ -138,8 +155,6 @@ async function persistResult(fixture, run, result) {
   await persistEvents(fixture, result);
   await persistManagerMessages(fixture, result);
 
-  // One database transaction now marks the fixture and run complete and rebuilds
-  // the affected competition table. A failure leaves the scheduled fixture retryable.
   await rest('/rest/v1/rpc/finalise_match_and_competition_state', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -185,8 +200,9 @@ export default async () => {
         const contract = buildEngineMatchContract({ fixture, submissions, world });
         const run = await upsertPreparedRun(fixture, contract);
         await finishFixture(fixture.id, 'prepared');
+        const attemptCount = await recordRunAttempt(fixture.id, run);
         const result = ENGINE_RUNNER_URL ? await remoteResult(contract) : simulateMatch(contract, world);
-        await persistResult(fixture, run, result);
+        await persistResult(fixture, attemptCount, result);
         processed.push({
           fixture_id: fixture.id,
           contract_version: contract.contract_version,
