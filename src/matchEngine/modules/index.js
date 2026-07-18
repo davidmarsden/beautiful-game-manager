@@ -1,5 +1,6 @@
 import { createEngineModule, validateEngineModules } from '../EngineModule.js';
 import { executeTacticalResolution } from './TacticalResolution.js';
+import { executePlayerQuality } from './PlayerQuality.js';
 
 const noOp = (context) => context;
 
@@ -15,8 +16,8 @@ export const MODULE_B_TEAM_QUALITY = createEngineModule({
   id: 'module-b-team-quality',
   name: 'Module B — Team Quality',
   order: 2,
-  constitution: 'Match Engine Constitution v0.3; Appendix B; Player Rating Constitution v1.1',
-  execute: noOp
+  constitution: 'Match Engine Constitution v0.3; Player Rating Constitution v1.1',
+  execute: executePlayerQuality
 });
 
 export const MODULE_C_FATIGUE_CONTEXT = createEngineModule({
