@@ -163,23 +163,6 @@ async function persistManagerMessages(fixture, result) {
   }
 }
 
-async function persistMatchState(fixture, contract, result) {
-  if (!result.state_changes?.fitness?.length) return false;
-  const application = buildMatchStateApplication({ fixture, result, runKey: contract.run_key });
-  return rest('/rest/v1/rpc/apply_match_state_changes', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      run_key: application.run_key,
-      fixture_key: application.fixture_id,
-      world_key: application.world_id,
-      season_key: application.season_id,
-      played_timestamp: application.played_at,
-      changes_json: application
-    })
-  });
-}
-
 async function persistResult(fixture, contract, attemptCount, result) {
   const now = new Date().toISOString();
   await rest(`/rest/v1/match_runs?fixture_id=eq.${encodeURIComponent(fixture.id)}`, {
@@ -199,9 +182,12 @@ async function persistResult(fixture, contract, attemptCount, result) {
 
   await persistEvents(fixture, result);
   await persistManagerMessages(fixture, result);
-  const stateApplied = await persistMatchState(fixture, contract, result);
 
-  await rest('/rest/v1/rpc/finalise_match_and_competition_state', {
+  const application = result.state_changes?.fitness?.length
+    ? buildMatchStateApplication({ fixture, result, runKey: contract.run_key })
+    : null;
+
+  const stateApplied = await rest('/rest/v1/rpc/finalise_match_with_state', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -209,9 +195,12 @@ async function persistResult(fixture, contract, attemptCount, result) {
       home_goals: result.score.home,
       away_goals: result.score.away,
       result_json: result,
-      played_timestamp: result.played_at || now
+      played_timestamp: result.played_at || now,
+      state_run_key: application?.run_key || null,
+      state_changes_json: application
     })
   });
+
   return stateApplied;
 }
 
