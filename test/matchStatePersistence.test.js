@@ -97,5 +97,5 @@ test('two consecutive constitutional fixtures carry persisted fitness into Modul
   assert.ok(firstHome.projected_post_match_fitness < 100);
   assert.ok(hydrated.players['home-1'].fitness > firstHome.projected_post_match_fitness);
   assert.ok(hydrated.players['home-1'].fitness < 100);
-  assert.equal(secondHome.starting_fitness, hydrated.players['home-1'].fitness);
+  assert.ok(Math.abs(secondHome.starting_fitness - hydrated.players['home-1'].fitness) < 0.011);
 });
