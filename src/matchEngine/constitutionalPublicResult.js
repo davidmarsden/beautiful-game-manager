@@ -3,7 +3,7 @@ const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(
 const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 
 export const CONSTITUTIONAL_PUBLIC_RESULT_VERSION = '2d5-v1';
-export const CONSTITUTIONAL_PUBLIC_ADAPTER_VERSION = 'tbg-constitutional-public-adapter-v0.1';
+export const CONSTITUTIONAL_PUBLIC_ADAPTER_VERSION = 'tbg-constitutional-public-adapter-v0.2';
 
 function commentaryByEvent(report = {}) {
   return new Map((report.commentary || []).map((row) => [String(row.event_id), row.text]));
@@ -24,12 +24,28 @@ function fallbackCommentary(event, sideName) {
   }
 }
 
+function eventNamespace(contract = {}) {
+  const runKey = text(contract.run_key);
+  if (runKey) return runKey;
+  const fixtureId = text(contract.fixture?.fixture_id || contract.fixture?.id);
+  if (fixtureId) return fixtureId;
+  throw new Error('Constitutional public adapter requires run_key or fixture_id for globally unique event IDs');
+}
+
+export function publicEventId(contract, internalEventId) {
+  const internalId = text(internalEventId);
+  if (!internalId) throw new Error('Constitutional public adapter event is missing event_id');
+  return `${eventNamespace(contract)}:${internalId}`;
+}
+
 function publicEvent(event, report, contract) {
-  const commentary = commentaryByEvent(report).get(String(event.event_id));
+  const internalEventId = text(event.event_id);
+  const commentary = commentaryByEvent(report).get(internalEventId);
   const team = contract.teams?.[event.side] || {};
   const sideName = text(team.club_name || team.name || team.display_name || team.club_id) || (event.side === 'home' ? 'Home' : 'Away');
   return {
-    event_id: event.event_id,
+    event_id: publicEventId(contract, internalEventId),
+    internal_event_id: internalEventId,
     type: event.type,
     subtype: event.subtype || null,
     side: event.side,
