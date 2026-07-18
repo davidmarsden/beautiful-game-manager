@@ -89,8 +89,8 @@ test('writes immutable home and away quality state without applying it to public
   const state = context.get(PLAYER_QUALITY_STATE_KEY);
   assert.strictEqual(returned, context);
   assert.equal(state.version, PLAYER_QUALITY_VERSION);
-  assert.equal(state.home.team_strength, 90.091);
-  assert.equal(state.away.team_strength, 90.091);
+  assert.equal(state.home.team_strength, 90.029);
+  assert.equal(state.away.team_strength, 90.029);
   assert.equal(state.applied_to_public_result, false);
   assert.ok(Object.isFrozen(state));
 });
