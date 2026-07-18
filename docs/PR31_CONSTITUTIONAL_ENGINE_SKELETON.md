@@ -87,3 +87,48 @@ Dedicated context tests verify:
 - preservation of the existing incomplete-contract validation error.
 
 No database migration or deployment action is required.
+
+---
+
+## Milestone 31.3 — Module interfaces
+
+This milestone defines the internal contracts for the six constitutional match-engine modules without yet routing simulation through them.
+
+### Shared module interface
+
+Every module now has a frozen, versioned descriptor containing:
+
+- a stable module ID;
+- a human-readable name;
+- a unique positive execution order;
+- its related constitution or appendix;
+- an `execute(context)` function receiving the shared `EngineContext`.
+
+Modules may place intermediate calculations in `context.state`, but they do not own the public result payload. That mapping remains the responsibility of the future orchestrator.
+
+### Constitutional module sequence
+
+1. Module A — Tactical Resolution
+2. Module B — Team Quality
+3. Module C — Fatigue & Context
+4. Module D — Event Generation
+5. Module E — Match Resolution
+6. Module F — Commentary & Report
+
+The current implementations are deliberate no-op placeholders. They return the same context and write nothing, so milestone 31.3 cannot alter scores, events, statistics, commentary or persistence.
+
+### Validation
+
+The module registry rejects:
+
+- missing IDs, names or execute functions;
+- invalid execution orders;
+- unsupported interface versions;
+- duplicate module IDs;
+- duplicate execution orders.
+
+Dedicated tests protect the six-module identity and sequence, frozen descriptors, placeholder behaviour and validation failures.
+
+The bootstrap simulator is not yet invoked through this registry. That is milestone 31.4: the A–F orchestrator and compatibility path.
+
+No database migration or deployment action is required.
