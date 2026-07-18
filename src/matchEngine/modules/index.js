@@ -1,4 +1,5 @@
 import { createEngineModule, validateEngineModules } from '../EngineModule.js';
+import { executeTacticalResolution } from './TacticalResolution.js';
 
 const noOp = (context) => context;
 
@@ -6,8 +7,8 @@ export const MODULE_A_TACTICAL_RESOLUTION = createEngineModule({
   id: 'module-a-tactical-resolution',
   name: 'Module A — Tactical Resolution',
   order: 1,
-  constitution: 'Match Engine Constitution v0.3; Appendix A',
-  execute: noOp
+  constitution: 'Match Engine Constitution v0.3; Appendix A v0.3',
+  execute: executeTacticalResolution
 });
 
 export const MODULE_B_TEAM_QUALITY = createEngineModule({
