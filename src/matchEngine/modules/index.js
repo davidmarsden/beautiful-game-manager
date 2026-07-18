@@ -1,6 +1,7 @@
 import { createEngineModule, validateEngineModules } from '../EngineModule.js';
 import { executeTacticalResolution } from './TacticalResolution.js';
 import { executePlayerQuality } from './PlayerQuality.js';
+import { executeFatigueContext } from './FatigueContext.js';
 
 const noOp = (context) => context;
 
@@ -24,8 +25,8 @@ export const MODULE_C_FATIGUE_CONTEXT = createEngineModule({
   id: 'module-c-fatigue-context',
   name: 'Module C — Fatigue & Context',
   order: 3,
-  constitution: 'Match Engine Constitution v0.3; Appendix C',
-  execute: noOp
+  constitution: 'Match Engine Constitution v0.3; Appendix C v0.1',
+  execute: executeFatigueContext
 });
 
 export const MODULE_D_EVENT_GENERATION = createEngineModule({
