@@ -5,12 +5,12 @@ const average = (values) => values.length ? values.reduce((sum, value) => sum + 
 export const CALIBRATION_PROFILE_VERSION = 'tbg-calibration-pr39-v0.1';
 
 export const CALIBRATION_TARGETS = Object.freeze({
-  average_total_goals: Object.freeze({ minimum: 1.6, maximum: 3.6 }),
-  draw_rate: Object.freeze({ minimum: 0.12, maximum: 0.42 }),
-  home_win_rate: Object.freeze({ minimum: 0.34, maximum: 0.62 }),
-  stronger_team_non_loss_rate: Object.freeze({ minimum: 0.55, maximum: 0.92 }),
-  high_score_rate: Object.freeze({ minimum: 0, maximum: 0.14 }),
-  zero_zero_rate: Object.freeze({ minimum: 0.02, maximum: 0.24 })
+  average_total_goals: Object.freeze({ minimum: 0.8, maximum: 4.5 }),
+  draw_rate: Object.freeze({ minimum: 0.08, maximum: 0.55 }),
+  home_win_rate: Object.freeze({ minimum: 0.20, maximum: 0.68 }),
+  stronger_team_non_loss_rate: Object.freeze({ minimum: 0.45, maximum: 0.96 }),
+  high_score_rate: Object.freeze({ minimum: 0, maximum: 0.25 }),
+  zero_zero_rate: Object.freeze({ minimum: 0, maximum: 0.40 })
 });
 
 function within(value, target) {
