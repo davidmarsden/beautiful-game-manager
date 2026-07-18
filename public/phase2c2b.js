@@ -109,8 +109,6 @@ function reorderSelector(containerId, zone, orderedIds) {
   const orderChanged = desiredOrder.length !== currentOrder.length
     || desiredOrder.some((playerId, index) => playerId !== currentOrder[index]);
 
-  // appendChild emits a childList mutation even when moving a node to the same
-  // place. Only reorder when necessary so the submission observer settles.
   if (orderChanged) {
     desiredOrder.forEach((playerId) => {
       const label = byPlayerId.get(playerId);
@@ -131,13 +129,8 @@ function applySubmissionToRenderedForm(submission) {
   try {
     const orderedXi = (submission.starting_xi || []).map(String);
     const orderedBench = (submission.bench || []).map(String);
-
-    // The formation board derives slot positions from DOM order, not merely from
-    // which checkboxes are checked. Restore both the selected players and their
-    // persisted order before its MutationObserver rebuilds the pitch.
     const restoredXiInputs = reorderSelector('startingXi', 'xi', orderedXi);
     reorderSelector('bench', 'bench', orderedBench);
-
     restoredXiInputs[0]?.dispatchEvent(new Event('change', { bubbles: true }));
     if (submission.captain_id) $('captain').value = String(submission.captain_id);
     return true;
@@ -146,8 +139,13 @@ function applySubmissionToRenderedForm(submission) {
   }
 }
 
-function observeTeamForm(submission) {
+function stopSubmissionProtection() {
   teamFormObserver?.disconnect();
+  teamFormObserver = null;
+}
+
+function observeTeamForm(submission) {
+  stopSubmissionProtection();
   const startingXi = $('startingXi');
   const bench = $('bench');
   if (!startingXi || !bench || !submission) return;
@@ -157,7 +155,6 @@ function observeTeamForm(submission) {
   teamFormObserver.observe(startingXi, { childList: true, subtree: true });
   teamFormObserver.observe(bench, { childList: true, subtree: true });
 
-  // Cover both the initial portal render and Supabase's later INITIAL_SESSION rerender.
   let attempts = 0;
   const retry = () => {
     if (applySubmissionToRenderedForm(submission)) return;
@@ -166,6 +163,13 @@ function observeTeamForm(submission) {
   };
   retry();
 }
+
+// Explicit preset/previous-team loads are manager actions, not startup churn.
+// Release the current-submission guard before those handlers mutate the board.
+document.addEventListener('click', (event) => {
+  if (event.target?.closest('#loadPreset, #loadPreviousMatch')) stopSubmissionProtection();
+}, true);
+document.addEventListener('tbg:team-sheet-override', stopSubmissionProtection);
 
 function renderSubmission(state) {
   const submission = state?.current_submission;

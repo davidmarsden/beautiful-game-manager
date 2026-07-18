@@ -39,14 +39,12 @@ function closeMatchCentre() {
   const modal = document.getElementById('matchCentreModal'); if (modal) modal.hidden = true;
   if (matchRevealChanged) window.location.reload();
 }
-
 function replayMarkup(data) {
   const fixture = data.fixture;
   return `<section class="teletext-scoreboard spoiler-safe"><div><span>HOME</span><strong>${mcEscape(fixture.home_club_name)}</strong></div><div class="teletext-score"><span id="replayStatus">READY</span><b id="headerReplayScore">0-0</b></div><div><span>AWAY</span><strong>${mcEscape(fixture.away_club_name)}</strong></div></section>
   <section class="spoiler-notice"><strong>RESULT HIDDEN</strong><span>Watch the replay or choose SKIP TO FULL TIME to reveal it.</span></section>
   <section class="match-tab active"><div class="replay-console"><div class="replay-clock" id="replayClock">00'</div><div class="replay-score"><span>${mcEscape(fixture.home_club_name)}</span><b id="replayScore">0-0</b><span>${mcEscape(fixture.away_club_name)}</span></div><div id="replayFeed" class="replay-feed"><p>The result is hidden. Press START when you are ready.</p></div><div class="replay-controls"><button id="replayStart" type="button">START</button><button id="replayPause" type="button">PAUSE</button><button id="replaySkip" type="button">SKIP TO FULL TIME</button><label>Speed<select id="replaySpeed"><option value="900">1×</option><option value="450">2×</option><option value="180">5×</option></select></label></div></div></section>`;
 }
-
 function renderMatchCentre(data) {
   const modal = ensureMatchCentre();
   const content = modal.querySelector('#matchCentreContent');
@@ -72,7 +70,6 @@ function renderMatchCentre(data) {
   content.querySelectorAll('[data-match-tab]').forEach((button) => button.addEventListener('click', () => { content.querySelectorAll('[data-match-tab]').forEach((item) => item.classList.toggle('active', item === button)); content.querySelectorAll('.match-tab').forEach((section) => section.classList.toggle('active', section.id === `matchTab${button.dataset.matchTab[0].toUpperCase()}${button.dataset.matchTab.slice(1)}`)); }));
   setupReplay(data, false);
 }
-
 async function revealMatch(data, method) {
   const response = await fetch('/api/reveal-match', { method: 'POST', headers: { authorization: matchCentreAuth, 'content-type': 'application/json' }, body: JSON.stringify({ fixture_id: data.fixture.id, method }) });
   if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.error || 'Could not reveal match'); }
@@ -82,7 +79,6 @@ async function revealMatch(data, method) {
   if (!refreshed.ok) throw new Error(fullData.error || 'Could not load revealed match');
   renderMatchCentre(fullData);
 }
-
 function setupReplay(data, revealRequired) {
   const events = [...(data.events || [])].sort((a, b) => Number(a.minute) - Number(b.minute));
   replayState = { minute: 0, home: 0, away: 0, events, nextEvent: 0, data, revealing: false };
@@ -91,7 +87,7 @@ function setupReplay(data, revealRequired) {
     replayState.revealing = true;
     try { await revealMatch(data, method); } catch (error) { document.getElementById('replayFeed')?.insertAdjacentHTML('afterbegin', `<p class="replay-error">${mcEscape(error.message)}</p>`); replayState.revealing = false; }
   };
-  const tick = () => {
+  const tick = ({ autoFinish = true } = {}) => {
     if (!replayState) return;
     replayState.minute += 1;
     while (replayState.nextEvent < events.length && Number(events[replayState.nextEvent].minute) <= replayState.minute) {
@@ -103,14 +99,17 @@ function setupReplay(data, revealRequired) {
     document.getElementById('replayClock').textContent = `${String(minute).padStart(2, '0')}'`;
     document.getElementById('replayScore').textContent = `${replayState.home}-${replayState.away}`;
     const headerScore = document.getElementById('headerReplayScore'); if (headerScore) headerScore.textContent = `${replayState.home}-${replayState.away}`;
-    if (replayState.minute >= 90) { clearInterval(replayTimer); replayTimer = null; if (!events.some((event) => event.event_type === 'full_time')) document.getElementById('replayFeed')?.insertAdjacentHTML('afterbegin', '<p class="full-time">90\' FULL TIME</p>'); finish('replay_completed'); }
+    if (replayState.minute >= 90) {
+      clearInterval(replayTimer); replayTimer = null;
+      if (!events.some((event) => event.event_type === 'full_time')) document.getElementById('replayFeed')?.insertAdjacentHTML('afterbegin', '<p class="full-time">90\' FULL TIME</p>');
+      if (autoFinish) finish('replay_completed');
+    }
   };
   document.getElementById('replayStart').addEventListener('click', () => { if (replayTimer) return; if (replayState.minute >= 90) { replayState.minute = 0; replayState.home = 0; replayState.away = 0; replayState.nextEvent = 0; document.getElementById('replayFeed').innerHTML = ''; } replayTimer = setInterval(tick, Number(document.getElementById('replaySpeed').value)); });
   document.getElementById('replayPause').addEventListener('click', () => { clearInterval(replayTimer); replayTimer = null; });
-  document.getElementById('replaySkip').addEventListener('click', async () => { clearInterval(replayTimer); replayTimer = null; while (replayState.minute < 90) tick(); if (revealRequired) await finish('skip_to_full_time'); });
+  document.getElementById('replaySkip').addEventListener('click', async () => { clearInterval(replayTimer); replayTimer = null; while (replayState.minute < 90) tick({ autoFinish: false }); if (revealRequired) await finish('skip_to_full_time'); });
   document.getElementById('replaySpeed').addEventListener('change', () => { if (replayTimer) { clearInterval(replayTimer); replayTimer = setInterval(tick, Number(document.getElementById('replaySpeed').value)); } });
 }
-
 async function openMatchCentre(fixtureId) {
   const modal = ensureMatchCentre(); modal.hidden = false;
   modal.querySelector('#matchCentreContent').innerHTML = '<div class="match-centre-loading">CONNECTING TO MATCH ARCHIVE…</div>';

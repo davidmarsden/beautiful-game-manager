@@ -47,17 +47,25 @@ function writeOrderedSelectors(containerId, zone, orderedIds) {
 
 function persistRenderedBoard() {
   const board = document.getElementById('interactiveFormationBoard');
-  if (!board) return;
+  if (!board) return false;
 
   const xi = orderedBoardIds('xi');
   const bench = orderedBoardIds('bench');
   writeOrderedSelectors('startingXi', 'xi', xi);
   writeOrderedSelectors('bench', 'bench', bench);
 
-  // Rebuild captain choices from the final XI before app.js reads the form.
   document.querySelector('input[data-zone="xi"]')?.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
 }
+
+window.tbgPersistRenderedBoard = persistRenderedBoard;
 
 document.addEventListener('submit', (event) => {
   if (event.target?.id === 'decisionForm') persistRenderedBoard();
+}, true);
+
+// Preset controls read the hidden selectors directly. Synchronise those selectors
+// from the visible board before their click handlers capture a new or updated preset.
+document.addEventListener('click', (event) => {
+  if (event.target?.closest('#savePreset, #updatePreset')) persistRenderedBoard();
 }, true);
