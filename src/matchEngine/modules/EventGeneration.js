@@ -4,7 +4,7 @@ const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, v
 const round = (value, places = 4) => Number(Number(value).toFixed(places));
 const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 
-export const EVENT_GENERATION_VERSION = 'tbg-event-generation-v0.1';
+export const EVENT_GENERATION_VERSION = 'tbg-event-generation-v0.2';
 export const EVENT_GENERATION_STATE_KEY = 'module_d_event_generation';
 
 export const EVENT_DIALS = Object.freeze({
@@ -17,13 +17,16 @@ export const EVENT_DIALS = Object.freeze({
   minimum_expected_goals: 0.15,
   maximum_expected_goals: 3.80,
   card_base_rate: 1.55,
+  foul_base_rate: 10.4,
+  penalty_foul_share: 0.018,
+  penalty_xg: 0.76,
   set_piece_share: 0.24,
   shot_on_target_share: 0.34,
   commentary_hook_limit: 12
 });
 
 const TEMPO_FACTOR = Object.freeze({ slow: EVENT_DIALS.tempo_slow, normal: EVENT_DIALS.tempo_normal, fast: EVENT_DIALS.tempo_fast });
-const EVENT_PRIORITY = Object.freeze({ goal: 5, red_card: 4, injury: 4, penalty: 3, big_chance: 2, yellow_card: 1, set_piece: 1, shot: 0 });
+const EVENT_PRIORITY = Object.freeze({ goal: 6, red_card: 5, injury: 5, penalty: 4, foul: 3, big_chance: 2, yellow_card: 1, set_piece: 1, shot: 0 });
 
 function deepFreeze(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
@@ -109,7 +112,9 @@ function expectedSide(side, inputs) {
   const homeFactor = side === 'home' ? EVENT_DIALS.home_factor : 1;
   const expectedGoals = clamp(expectedChances * conversion * homeFactor, EVENT_DIALS.minimum_expected_goals, EVENT_DIALS.maximum_expected_goals);
   const setPieces = expectedChances * EVENT_DIALS.set_piece_share;
-  const cards = EVENT_DIALS.card_base_rate * (0.85 + number(own.context?.team?.average_workload, 1) * 0.15);
+  const workload = number(own.context?.team?.average_workload, 1);
+  const cards = EVENT_DIALS.card_base_rate * (0.85 + workload * 0.15);
+  const fouls = EVENT_DIALS.foul_base_rate * (0.88 + workload * 0.12) * (0.94 + tempo * 0.06);
 
   return deepFreeze({
     side,
@@ -122,7 +127,8 @@ function expectedSide(side, inputs) {
     expected_goals: round(expectedGoals, 3),
     conversion_rate: round(conversion, 4),
     expected_set_pieces: round(setPieces, 3),
-    expected_cards: round(cards, 3)
+    expected_cards: round(cards, 3),
+    expected_fouls: round(fouls, 3)
   });
 }
 
@@ -150,12 +156,41 @@ function sampleCount(mean, random, maximum = 30) {
   return Math.min(maximum, whole + (random() < remainder ? 1 : 0));
 }
 
-function buildSideEvents(side, expected, quality, context, random) {
+export function buildPenaltyIncident({ attackingSide, defendingSide, minute, index, taker, offender, random }) {
+  const root = `${attackingSide}-penalty-${index}`;
+  const outcomeRoll = random();
+  const outcome = outcomeRoll < 0.76 ? 'goal' : outcomeRoll < 0.91 ? 'saved' : 'missed';
+  return [
+    {
+      event_id: `${root}-foul`, minute, side: defendingSide, against_side: attackingSide,
+      type: 'foul', subtype: 'penalty_foul', player_id: offender?.player_id || null,
+      linked_event_id: `${root}-awarded`, provisional: true, commentary_hook: 'penalty_foul'
+    },
+    {
+      event_id: `${root}-awarded`, minute, side: attackingSide, against_side: defendingSide,
+      type: 'penalty', subtype: 'penalty_awarded', source_event_id: `${root}-foul`,
+      linked_event_id: `${root}-attempt`, provisional: true, commentary_hook: 'penalty_awarded'
+    },
+    {
+      event_id: `${root}-attempt`, minute: Math.min(120, minute + 1), side: attackingSide, against_side: defendingSide,
+      type: 'penalty', subtype: 'penalty_attempt', player_id: taker?.player_id || null,
+      parent_event_id: `${root}-awarded`, source_event_id: `${root}-foul`, xg: EVENT_DIALS.penalty_xg,
+      on_target: outcome !== 'missed', outcome, provisional: true,
+      commentary_hook: outcome === 'goal' ? 'penalty_scored' : outcome === 'saved' ? 'penalty_saved' : 'penalty_missed'
+    }
+  ];
+}
+
+function buildSideEvents(side, expected, quality, context, opponentQuality, random) {
   const events = [];
+  const opponentSide = side === 'home' ? 'away' : 'home';
   const chanceCount = sampleCount(expected.expected_chances, random, 24);
   const cardCount = sampleCount(expected.expected_cards, random, 6);
+  const foulCount = sampleCount(expected.expected_fouls, random, 20);
   const setPieceCount = sampleCount(expected.expected_set_pieces, random, 8);
   const players = quality?.starters || [];
+  const opponents = opponentQuality?.starters || [];
+  let penaltyIndex = 0;
 
   for (let index = 0; index < chanceCount; index += 1) {
     const minute = 1 + Math.floor(random() * 90);
@@ -163,61 +198,35 @@ function buildSideEvents(side, expected, quality, context, random) {
     const chanceQuality = clamp(0.035 + random() * 0.22 + (expected.conversion_rate - 0.10) * 0.35, 0.025, 0.38);
     const onTarget = random() < clamp(EVENT_DIALS.shot_on_target_share + chanceQuality * 0.45, 0.22, 0.62);
     const goal = onTarget && random() < clamp(chanceQuality * 1.55, 0.04, 0.58);
-    events.push({
-      event_id: `${side}-chance-${index + 1}`,
-      minute,
-      side,
-      type: goal ? 'goal' : chanceQuality >= 0.22 ? 'big_chance' : 'shot',
-      player_id: actor?.player_id || null,
-      xg: round(chanceQuality, 3),
-      on_target: onTarget,
-      outcome: goal ? 'goal' : onTarget ? 'saved' : 'missed',
-      provisional: true,
-      commentary_hook: goal ? 'goal' : chanceQuality >= 0.22 ? 'big_chance' : onTarget ? 'shot_on_target' : 'shot'
-    });
+    events.push({ event_id: `${side}-chance-${index + 1}`, minute, side, type: goal ? 'goal' : chanceQuality >= 0.22 ? 'big_chance' : 'shot', player_id: actor?.player_id || null, xg: round(chanceQuality, 3), on_target: onTarget, outcome: goal ? 'goal' : onTarget ? 'saved' : 'missed', provisional: true, commentary_hook: goal ? 'goal' : chanceQuality >= 0.22 ? 'big_chance' : onTarget ? 'shot_on_target' : 'shot' });
   }
 
   for (let index = 0; index < setPieceCount; index += 1) {
+    events.push({ event_id: `${side}-set-piece-${index + 1}`, minute: 1 + Math.floor(random() * 90), side, type: 'set_piece', subtype: random() < 0.72 ? 'corner' : 'free_kick', provisional: true, commentary_hook: 'set_piece' });
+  }
+
+  for (let index = 0; index < foulCount; index += 1) {
     const minute = 1 + Math.floor(random() * 90);
-    const penalty = random() < 0.055;
-    events.push({
-      event_id: `${side}-set-piece-${index + 1}`,
-      minute,
-      side,
-      type: penalty ? 'penalty' : 'set_piece',
-      subtype: penalty ? 'penalty_awarded' : random() < 0.72 ? 'corner' : 'free_kick',
-      provisional: true,
-      commentary_hook: penalty ? 'penalty_awarded' : 'set_piece'
-    });
+    const offender = weightedPlayer(players, random() < 0.7 ? 'defence' : 'midfield', random);
+    if (random() < EVENT_DIALS.penalty_foul_share) {
+      penaltyIndex += 1;
+      const taker = weightedPlayer(opponents, 'attack', random);
+      events.push(...buildPenaltyIncident({ attackingSide: opponentSide, defendingSide: side, minute, index: penaltyIndex, taker, offender, random }));
+    } else {
+      events.push({ event_id: `${side}-foul-${index + 1}`, minute, side, against_side: opponentSide, type: 'foul', subtype: random() < 0.18 ? 'dangerous_foul' : 'ordinary_foul', player_id: offender?.player_id || null, provisional: true, commentary_hook: 'foul' });
+    }
   }
 
   for (let index = 0; index < cardCount; index += 1) {
-    const minute = 5 + Math.floor(random() * 84);
-    const red = random() < 0.055;
     const actor = weightedPlayer(players, random() < 0.7 ? 'defence' : 'midfield', random);
-    events.push({
-      event_id: `${side}-card-${index + 1}`,
-      minute,
-      side,
-      type: red ? 'red_card' : 'yellow_card',
-      player_id: actor?.player_id || null,
-      provisional: true,
-      commentary_hook: red ? 'sending_off' : 'booking'
-    });
+    const red = random() < 0.055;
+    events.push({ event_id: `${side}-card-${index + 1}`, minute: 5 + Math.floor(random() * 84), side, type: red ? 'red_card' : 'yellow_card', player_id: actor?.player_id || null, provisional: true, commentary_hook: red ? 'sending_off' : 'booking' });
   }
 
   const injuryProbability = clamp(number(context?.team?.average_injury_risk_90, 0), 0, 0.08) * 11;
   if (random() < injuryProbability) {
     const actor = players[Math.floor(random() * Math.max(1, players.length))] || null;
-    events.push({
-      event_id: `${side}-injury-1`,
-      minute: 8 + Math.floor(random() * 80),
-      side,
-      type: 'injury',
-      player_id: actor?.player_id || null,
-      provisional: true,
-      commentary_hook: 'injury'
-    });
+    events.push({ event_id: `${side}-injury-1`, minute: 8 + Math.floor(random() * 80), side, type: 'injury', player_id: actor?.player_id || null, provisional: true, commentary_hook: 'injury' });
   }
 
   return events;
@@ -228,11 +237,7 @@ function orderEvents(events) {
 }
 
 function commentaryHooks(events) {
-  return events
-    .filter((event) => event.commentary_hook)
-    .sort((left, right) => (EVENT_PRIORITY[right.type] || 0) - (EVENT_PRIORITY[left.type] || 0) || left.minute - right.minute)
-    .slice(0, EVENT_DIALS.commentary_hook_limit)
-    .map((event) => deepFreeze({ minute: event.minute, side: event.side, hook: event.commentary_hook, event_id: event.event_id }));
+  return events.filter((event) => event.commentary_hook).sort((left, right) => (EVENT_PRIORITY[right.type] || 0) - (EVENT_PRIORITY[left.type] || 0) || left.minute - right.minute).slice(0, EVENT_DIALS.commentary_hook_limit).map((event) => deepFreeze({ minute: event.minute, side: event.side, hook: event.commentary_hook, event_id: event.event_id }));
 }
 
 export function resolveEventGeneration(contract, tactical, quality, fatigue) {
@@ -250,12 +255,12 @@ export function resolveEventGeneration(contract, tactical, quality, fatigue) {
   const seed = fixtureSeed(contract);
   const random = seededRandom(seed);
   const events = orderEvents([
-    ...buildSideEvents('home', home, quality.home, fatigue.home, random),
-    ...buildSideEvents('away', away, quality.away, fatigue.away, random)
+    ...buildSideEvents('home', home, quality.home, fatigue.home, quality.away, random),
+    ...buildSideEvents('away', away, quality.away, fatigue.away, quality.home, random)
   ]);
 
   const provisionalScore = events.reduce((score, event) => {
-    if (event.type === 'goal') score[event.side] += 1;
+    if (event.type === 'goal' || (event.type === 'penalty' && event.subtype === 'penalty_attempt' && event.outcome === 'goal')) score[event.side] += 1;
     return score;
   }, { home: 0, away: 0 });
 
@@ -268,10 +273,12 @@ export function resolveEventGeneration(contract, tactical, quality, fatigue) {
     commentary_hooks: commentaryHooks(events),
     event_counts: {
       total: events.length,
-      chances: events.filter((event) => ['shot', 'big_chance', 'goal'].includes(event.type)).length,
-      goals: events.filter((event) => event.type === 'goal').length,
+      chances: events.filter((event) => ['shot', 'big_chance', 'goal'].includes(event.type) || (event.type === 'penalty' && event.subtype === 'penalty_attempt')).length,
+      goals: events.filter((event) => event.type === 'goal' || (event.type === 'penalty' && event.subtype === 'penalty_attempt' && event.outcome === 'goal')).length,
+      fouls: events.filter((event) => event.type === 'foul').length,
+      penalties: events.filter((event) => event.type === 'penalty' && event.subtype === 'penalty_awarded').length,
       cards: events.filter((event) => ['yellow_card', 'red_card'].includes(event.type)).length,
-      set_pieces: events.filter((event) => ['set_piece', 'penalty'].includes(event.type)).length,
+      set_pieces: events.filter((event) => event.type === 'set_piece').length,
       injuries: events.filter((event) => event.type === 'injury').length
     },
     score_resolution_pending: true,
@@ -281,12 +288,7 @@ export function resolveEventGeneration(contract, tactical, quality, fatigue) {
 }
 
 export function executeEventGeneration(context) {
-  const result = resolveEventGeneration(
-    context.contract,
-    context.get('module_a_tactical_resolution'),
-    context.get('module_b_player_quality'),
-    context.get('module_c_fatigue_context')
-  );
+  const result = resolveEventGeneration(context.contract, context.get('module_a_tactical_resolution'), context.get('module_b_player_quality'), context.get('module_c_fatigue_context'));
   context.set(EVENT_GENERATION_STATE_KEY, result);
   return context;
 }
