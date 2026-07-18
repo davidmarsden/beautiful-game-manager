@@ -15,18 +15,34 @@ function resultRunner(contract = {}) {
     : runBootstrapCompatibility;
 }
 
+function effectiveWorld(contract, world = {}) {
+  if (!contract?.match_state) return world;
+  return {
+    ...world,
+    match_state: {
+      ...(world.match_state || {}),
+      ...contract.match_state,
+      players: {
+        ...(world.match_state?.players || {}),
+        ...(contract.match_state.players || {})
+      }
+    }
+  };
+}
+
 /**
  * Public match entry point.
  *
  * Both modes execute the complete A–F constitutional module chain. The default
  * remains the established compatibility result while calibration is reviewed;
  * callers may opt into `constitutional-v1` without changing the 2d5-v1 public
- * envelope. This gives fixture runners a reversible, explicit cutover path.
+ * envelope. Persisted match-layer state may travel with the contract so local
+ * and remote runners resolve the same recovered Fitness and context.
  */
 export function simulateMatch(contract, world) {
   return runEnginePipeline({
     contract,
-    world,
+    world: effectiveWorld(contract, world),
     modules: CONSTITUTIONAL_ENGINE_MODULES,
     compatibilityRunner: resultRunner(contract)
   });
