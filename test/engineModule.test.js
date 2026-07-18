@@ -8,23 +8,23 @@ import {
 import { createEngineContext } from '../src/matchEngine/EngineContext.js';
 import { CONSTITUTIONAL_ENGINE_MODULES } from '../src/matchEngine/modules/index.js';
 import { TACTICAL_RESOLUTION_STATE_KEY } from '../src/matchEngine/modules/TacticalResolution.js';
+import { PLAYER_QUALITY_STATE_KEY } from '../src/matchEngine/modules/PlayerQuality.js';
+
+const positions = ['Goalkeeper','Right-Back','Centre-Back','Centre-Back','Left-Back','Defensive Midfield','Central Midfield','Central Midfield','Right Winger','Centre-Forward','Left Winger'];
+const ids = (prefix) => positions.map((_, index) => `${prefix}-${index + 1}`);
+const homeIds = ids('home');
+const awayIds = ids('away');
 
 const contract = {
   run_key: 'module-interface-test',
   fixture: { fixture_id: 'fixture-module-interface' },
   teams: {
     home: {
-      side: 'home',
-      club_id: 'home-club',
-      formation: '4-3-3-wide',
-      starting_xi: ['home-1'],
+      side: 'home', club_id: 'home-club', formation: '4-3-3-wide', starting_xi: homeIds, bench: [],
       tactics: { mentality: 'balanced', pressing: 'mid', tempo: 'normal' }
     },
     away: {
-      side: 'away',
-      club_id: 'away-club',
-      formation: '4-2-3-1',
-      starting_xi: ['away-1'],
+      side: 'away', club_id: 'away-club', formation: '4-3-3-wide', starting_xi: awayIds, bench: [],
       tactics: { mentality: 'cautious', pressing: 'low', tempo: 'slow' }
     }
   }
@@ -32,8 +32,8 @@ const contract = {
 
 const world = {
   players: [
-    { tbg_player_id: 'home-1', display_name: 'Home Player' },
-    { tbg_player_id: 'away-1', display_name: 'Away Player' }
+    ...homeIds.map((id, index) => ({ tbg_player_id: id, display_name: id, position: positions[index], underlying_ability_rating: 90 })),
+    ...awayIds.map((id, index) => ({ tbg_player_id: id, display_name: id, position: positions[index], underlying_ability_rating: 88 }))
   ]
 };
 
@@ -52,16 +52,15 @@ test('defines six ordered constitutional module interfaces', () => {
   assert.ok(CONSTITUTIONAL_ENGINE_MODULES.every((module) => Object.isFrozen(module)));
 });
 
-test('modules preserve the shared EngineContext while live modules may write internal state', () => {
+test('modules preserve the shared EngineContext while live modules write internal state', () => {
   const context = createEngineContext({ contract, world });
 
-  for (const module of CONSTITUTIONAL_ENGINE_MODULES) {
-    assert.equal(module.execute(context), context);
-  }
+  for (const module of CONSTITUTIONAL_ENGINE_MODULES) assert.equal(module.execute(context), context);
 
-  assert.deepEqual(Object.keys(context.state), [TACTICAL_RESOLUTION_STATE_KEY]);
+  assert.deepEqual(Object.keys(context.state), [TACTICAL_RESOLUTION_STATE_KEY, PLAYER_QUALITY_STATE_KEY]);
   assert.equal(context.get(TACTICAL_RESOLUTION_STATE_KEY).home.formation, '4-3-3-wide');
-  assert.equal(context.get(TACTICAL_RESOLUTION_STATE_KEY).away.formation, '4-2-3-1');
+  assert.equal(context.get(PLAYER_QUALITY_STATE_KEY).home.team_strength, 90);
+  assert.equal(context.get(PLAYER_QUALITY_STATE_KEY).away.team_strength, 88);
 });
 
 test('module factory rejects incomplete descriptors', () => {
