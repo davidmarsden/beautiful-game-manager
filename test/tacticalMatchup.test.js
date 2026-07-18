@@ -36,7 +36,7 @@ test('resolves five legible tactical matchup axes and a bounded net advantage', 
   ]);
   assert.ok(matchup.home.advantage >= -0.15 && matchup.home.advantage <= 0.15);
   assert.ok(matchup.away.advantage >= -0.15 && matchup.away.advantage <= 0.15);
-  assert.equal(matchup.net.away_advantage, -matchup.net.home_advantage);
+  assert.equal(matchup.net.home_advantage + matchup.net.away_advantage, 0);
   assert.equal(matchup.applied_to_public_result, false);
   assert.ok(Object.isFrozen(matchup));
   assert.ok(Object.isFrozen(matchup.home.axes));
@@ -108,7 +108,7 @@ test('no supported tactical combination escapes the constitutional bounds', () =
                 resolved({ formation: awayFormation, style: awayStyle, route: awayRoute })
               );
               assert.ok(Math.abs(matchup.net.home_advantage) <= 0.15);
-              assert.equal(matchup.net.home_advantage, -matchup.net.away_advantage);
+              assert.equal(matchup.net.home_advantage + matchup.net.away_advantage, 0);
             }
           }
         }
