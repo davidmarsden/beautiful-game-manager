@@ -1,11 +1,16 @@
 import { buildEngineMatchContract } from '../../src/engineBridge.js';
 import { simulateMatch } from '../../src/matchSimulation.js';
+import {
+  buildMatchStateApplication,
+  hydrateMatchState
+} from '../../src/matchEngine/MatchStatePersistence.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const WORLD_URL = process.env.TBG_WORLD_URL || 'https://raw.githubusercontent.com/davidmarsden/beautiful-game-engine/main/derived/world/world.json';
 const ENGINE_RUNNER_URL = process.env.TBG_ENGINE_RUNNER_URL || '';
 const ENGINE_RUNNER_TOKEN = process.env.TBG_ENGINE_RUNNER_TOKEN || '';
+const MATCH_ENGINE_MODE = process.env.TBG_MATCH_ENGINE_MODE || 'compatibility';
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -37,6 +42,29 @@ async function finishFixture(fixtureId, status, error = null) {
 
 async function loadSubmissions(fixtureId) {
   return rest(`/rest/v1/manager_submissions?fixture_id=eq.${encodeURIComponent(fixtureId)}&status=eq.locked&select=*&order=club_id.asc`);
+}
+
+function contractPlayerIds(contract) {
+  return [...new Set([
+    ...(contract.teams?.home?.starting_xi || []),
+    ...(contract.teams?.home?.bench || []),
+    ...(contract.teams?.away?.starting_xi || []),
+    ...(contract.teams?.away?.bench || [])
+  ].map(String).filter(Boolean))];
+}
+
+function postgrestIn(values) {
+  return values.map((value) => `"${String(value).replaceAll('"', '\\"')}"`).join(',');
+}
+
+async function loadPersistedMatchState(contract) {
+  const playerIds = contractPlayerIds(contract);
+  if (!playerIds.length) return hydrateMatchState({ rows: [], playerIds: [], fixture: contract.fixture });
+  const rows = await rest(
+    `/rest/v1/player_match_state?world_id=eq.${encodeURIComponent(contract.fixture.world_id)}`
+    + `&player_id=in.(${encodeURIComponent(postgrestIn(playerIds))})&select=*`
+  );
+  return hydrateMatchState({ rows, playerIds, fixture: contract.fixture });
 }
 
 async function upsertPreparedRun(fixture, contract) {
@@ -135,7 +163,24 @@ async function persistManagerMessages(fixture, result) {
   }
 }
 
-async function persistResult(fixture, attemptCount, result) {
+async function persistMatchState(fixture, contract, result) {
+  if (!result.state_changes?.fitness?.length) return false;
+  const application = buildMatchStateApplication({ fixture, result, runKey: contract.run_key });
+  return rest('/rest/v1/rpc/apply_match_state_changes', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      run_key: application.run_key,
+      fixture_key: application.fixture_id,
+      world_key: application.world_id,
+      season_key: application.season_id,
+      played_timestamp: application.played_at,
+      changes_json: application
+    })
+  });
+}
+
+async function persistResult(fixture, contract, attemptCount, result) {
   const now = new Date().toISOString();
   await rest(`/rest/v1/match_runs?fixture_id=eq.${encodeURIComponent(fixture.id)}`, {
     method: 'PATCH',
@@ -154,6 +199,7 @@ async function persistResult(fixture, attemptCount, result) {
 
   await persistEvents(fixture, result);
   await persistManagerMessages(fixture, result);
+  const stateApplied = await persistMatchState(fixture, contract, result);
 
   await rest('/rest/v1/rpc/finalise_match_and_competition_state', {
     method: 'POST',
@@ -166,6 +212,7 @@ async function persistResult(fixture, attemptCount, result) {
       played_timestamp: result.played_at || now
     })
   });
+  return stateApplied;
 }
 
 async function markRunError(fixtureId, message) {
@@ -197,17 +244,21 @@ export default async () => {
     for (const fixture of fixtures) {
       try {
         const submissions = await loadSubmissions(fixture.id);
-        const contract = buildEngineMatchContract({ fixture, submissions, world });
+        const baseContract = buildEngineMatchContract({ fixture, submissions, world });
+        const matchState = await loadPersistedMatchState(baseContract);
+        const contract = { ...baseContract, engine_mode: MATCH_ENGINE_MODE, match_state: matchState };
         const run = await upsertPreparedRun(fixture, contract);
         await finishFixture(fixture.id, 'prepared');
         const attemptCount = await recordRunAttempt(fixture.id, run);
         const result = ENGINE_RUNNER_URL ? await remoteResult(contract) : simulateMatch(contract, world);
-        await persistResult(fixture, attemptCount, result);
+        const stateApplied = await persistResult(fixture, contract, attemptCount, result);
         processed.push({
           fixture_id: fixture.id,
           contract_version: contract.contract_version,
           result_version: result.result_version,
           score: result.score,
+          state_applied: Boolean(stateApplied),
+          engine_mode: MATCH_ENGINE_MODE,
           mode: ENGINE_RUNNER_URL ? 'remote_engine' : 'built_in_simulator'
         });
       } catch (error) {
@@ -215,7 +266,7 @@ export default async () => {
         processed.push({ fixture_id: fixture.id, error: error.message });
       }
     }
-    return json({ claimed: fixtures.length, engine_configured: Boolean(ENGINE_RUNNER_URL), processed });
+    return json({ claimed: fixtures.length, engine_configured: Boolean(ENGINE_RUNNER_URL), engine_mode: MATCH_ENGINE_MODE, processed });
   } catch (error) {
     return json({ error: error.message }, 500);
   }
