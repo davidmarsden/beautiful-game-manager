@@ -47,16 +47,21 @@ function writeOrderedSelectors(containerId, zone, orderedIds) {
 
 function persistRenderedBoard() {
   const board = document.getElementById('interactiveFormationBoard');
-  if (!board) return;
+  if (!board) return false;
 
   const xi = orderedBoardIds('xi');
   const bench = orderedBoardIds('bench');
   writeOrderedSelectors('startingXi', 'xi', xi);
   writeOrderedSelectors('bench', 'bench', bench);
 
-  // Rebuild captain choices from the final XI before app.js reads the form.
+  // Rebuild captain choices from the final XI before another feature reads the form.
   document.querySelector('input[data-zone="xi"]')?.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
 }
+
+// Presets and other team-sheet features must be able to capture the visible board
+// without duplicating its ordering rules.
+window.tbgPersistRenderedBoard = persistRenderedBoard;
 
 document.addEventListener('submit', (event) => {
   if (event.target?.id === 'decisionForm') persistRenderedBoard();
