@@ -7,13 +7,26 @@ import {
 } from '../src/matchEngine/EngineModule.js';
 import { createEngineContext } from '../src/matchEngine/EngineContext.js';
 import { CONSTITUTIONAL_ENGINE_MODULES } from '../src/matchEngine/modules/index.js';
+import { TACTICAL_RESOLUTION_STATE_KEY } from '../src/matchEngine/modules/TacticalResolution.js';
 
 const contract = {
   run_key: 'module-interface-test',
   fixture: { fixture_id: 'fixture-module-interface' },
   teams: {
-    home: { starting_xi: ['home-1'] },
-    away: { starting_xi: ['away-1'] }
+    home: {
+      side: 'home',
+      club_id: 'home-club',
+      formation: '4-3-3-wide',
+      starting_xi: ['home-1'],
+      tactics: { mentality: 'balanced', pressing: 'mid', tempo: 'normal' }
+    },
+    away: {
+      side: 'away',
+      club_id: 'away-club',
+      formation: '4-2-3-1',
+      starting_xi: ['away-1'],
+      tactics: { mentality: 'cautious', pressing: 'low', tempo: 'slow' }
+    }
   }
 };
 
@@ -39,14 +52,16 @@ test('defines six ordered constitutional module interfaces', () => {
   assert.ok(CONSTITUTIONAL_ENGINE_MODULES.every((module) => Object.isFrozen(module)));
 });
 
-test('placeholder modules accept and return the shared EngineContext without mutation', () => {
+test('modules preserve the shared EngineContext while live modules may write internal state', () => {
   const context = createEngineContext({ contract, world });
 
   for (const module of CONSTITUTIONAL_ENGINE_MODULES) {
     assert.equal(module.execute(context), context);
   }
 
-  assert.deepEqual(Object.keys(context.state), []);
+  assert.deepEqual(Object.keys(context.state), [TACTICAL_RESOLUTION_STATE_KEY]);
+  assert.equal(context.get(TACTICAL_RESOLUTION_STATE_KEY).home.formation, '4-3-3-wide');
+  assert.equal(context.get(TACTICAL_RESOLUTION_STATE_KEY).away.formation, '4-2-3-1');
 });
 
 test('module factory rejects incomplete descriptors', () => {
