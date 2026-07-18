@@ -1,7 +1,7 @@
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
-export const COMMENTARY_REPORT_VERSION = 'tbg-commentary-report-v0.2';
+export const COMMENTARY_REPORT_VERSION = 'tbg-commentary-report-v0.3';
 export const COMMENTARY_REPORT_STATE_KEY = 'module_f_commentary_report';
 
 function deepFreeze(value) {
@@ -23,14 +23,15 @@ function eventSentence(event, names, clubs) {
   const club = clubs[event.side];
   const player = event.player_id ? names.get(String(event.player_id)) || 'A player' : club;
   switch (event.type) {
-    case 'goal': return `${player} scores for ${club}.`;
+    case 'goal': return event.subtype === 'penalty_goal' ? `${player} scores from the penalty spot for ${club}.` : `${player} scores for ${club}.`;
     case 'big_chance': return `${player} has a major chance for ${club}, but it does not go in.`;
     case 'shot': return event.on_target ? `${player} tests the goalkeeper for ${club}.` : `${player} sends an effort off target for ${club}.`;
     case 'foul': return event.subtype === 'penalty_foul' ? `${player} concedes a penalty for ${club}.` : `${player} commits a foul for ${club}.`;
     case 'penalty':
       if (event.subtype === 'penalty_attempt') {
-        if (event.outcome === 'goal') return `${player} scores the penalty for ${club}.`;
+        if (event.outcome === 'goal') return `${player} converts the penalty for ${club}.`;
         if (event.outcome === 'saved') return `${player}'s penalty is saved.`;
+        if (event.outcome === 'retake') return `${player}'s penalty must be retaken.`;
         return `${player} misses the penalty for ${club}.`;
       }
       return `${club} are awarded a penalty.`;
@@ -56,6 +57,7 @@ function summary(resolution, clubs) {
   parts.push(dominant ? `${dominant} produced the greater shot volume.` : 'The shot count was level.');
   if (xgLeader) parts.push(`${xgLeader} also led the expected-goals measure.`);
   if (home.penalties_awarded + away.penalties_awarded > 0) parts.push('A penalty incident shaped the contest.');
+  if (home.penalty_retakes + away.penalty_retakes > 0) parts.push('The referee also ordered a penalty retake.');
   if (home.red_cards + away.red_cards > 0) parts.push('A sending-off changed the shape of the contest.');
   if (home.injuries + away.injuries > 0) parts.push('The match also contained an injury concern.');
   return parts.join(' ');
