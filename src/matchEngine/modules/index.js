@@ -2,6 +2,7 @@ import { createEngineModule, validateEngineModules } from '../EngineModule.js';
 import { executeTacticalResolution } from './TacticalResolution.js';
 import { executePlayerQuality } from './PlayerQuality.js';
 import { executeFatigueContext } from './FatigueContext.js';
+import { executeEventGeneration } from './EventGeneration.js';
 
 const noOp = (context) => context;
 
@@ -33,8 +34,8 @@ export const MODULE_D_EVENT_GENERATION = createEngineModule({
   id: 'module-d-event-generation',
   name: 'Module D — Event Generation',
   order: 4,
-  constitution: 'Match Engine Constitution v0.3; Appendix D',
-  execute: noOp
+  constitution: 'Match Engine Constitution v0.3; Appendix D v0.4',
+  execute: executeEventGeneration
 });
 
 export const MODULE_E_MATCH_RESOLUTION = createEngineModule({
