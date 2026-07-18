@@ -63,8 +63,12 @@ export default async (request) => {
     const nextFixtures = await supabase(`/rest/v1/fixtures?${clubFixtureFilter}&status=eq.scheduled&select=${fixtureSelect}&order=kickoff_at.asc&limit=1`, token).catch(() => []);
     const fixture = nextFixtures[0] || null;
     const playedFixtures = await supabase(`/rest/v1/fixtures?${clubFixtureFilter}&status=eq.played&select=${fixtureSelect}&order=played_at.desc&limit=10`, token).catch(() => []);
-    const viewRows = playedFixtures.length ? await supabase(`/rest/v1/manager_match_views?manager_id=eq.${encodeURIComponent(manager.id)}&fixture_id=in.(${playedFixtures.map((row) => encodeURIComponent(row.id)).join(',')})&select=fixture_id,revealed_at,reveal_method,replay_completed`, token).catch(() => []) : [];
-    const revealByFixture = new Map(viewRows.map((row) => [row.fixture_id, row]));
+    const resultMessageFixtureIds = rawMessages
+      .filter((message) => message.message_type === 'match_result' && message.related_fixture_id)
+      .map((message) => String(message.related_fixture_id));
+    const viewFixtureIds = [...new Set([...playedFixtures.map((row) => String(row.id)), ...resultMessageFixtureIds])];
+    const viewRows = viewFixtureIds.length ? await supabase(`/rest/v1/manager_match_views?manager_id=eq.${encodeURIComponent(manager.id)}&fixture_id=in.(${viewFixtureIds.map(encodeURIComponent).join(',')})&select=fixture_id,revealed_at,reveal_method,replay_completed`, token).catch(() => []) : [];
+    const revealByFixture = new Map(viewRows.map((row) => [String(row.fixture_id), row]));
     const competitionId = fixture?.competition_id || playedFixtures[0]?.competition_id || club.division_id || null;
     const seasonId = fixture?.season_id || playedFixtures[0]?.season_id || 'season-1';
     const standings = competitionId ? await supabase(`/rest/v1/competition_standings?world_id=eq.${encodeURIComponent(appointment.world_id)}&season_id=eq.${encodeURIComponent(seasonId)}&competition_id=eq.${encodeURIComponent(competitionId)}&select=*&order=position.asc`, token).catch(() => []) : [];
@@ -72,14 +76,31 @@ export default async (request) => {
     const decorateFixture = (row) => {
       const opponentId = row.home_club_id === club.tbg_club_id ? row.away_club_id : row.home_club_id;
       const opponent = clubsById.get(opponentId);
-      const reveal = revealByFixture.get(row.id);
+      const reveal = revealByFixture.get(String(row.id));
       const revealed = Boolean(reveal?.revealed_at);
-      return { ...row, fixture_id: row.id, opponent_name: opponent?.canonical_name || 'Opponent TBC', venue: row.home_club_id === club.tbg_club_id ? 'home' : 'away', result_revealed: revealed, reveal_method: reveal?.reveal_method || null, own_score: revealed ? (row.home_club_id === club.tbg_club_id ? row.home_score : row.away_score) : null, opponent_score: revealed ? (row.home_club_id === club.tbg_club_id ? row.away_score : row.home_score) : null };
+      const { home_score: homeScore, away_score: awayScore, ...safeRow } = row;
+      return {
+        ...safeRow,
+        ...(revealed ? { home_score: homeScore, away_score: awayScore } : {}),
+        fixture_id: row.id,
+        opponent_name: opponent?.canonical_name || 'Opponent TBC',
+        venue: row.home_club_id === club.tbg_club_id ? 'home' : 'away',
+        result_revealed: revealed,
+        reveal_method: reveal?.reveal_method || null,
+        own_score: revealed ? (row.home_club_id === club.tbg_club_id ? homeScore : awayScore) : null,
+        opponent_score: revealed ? (row.home_club_id === club.tbg_club_id ? awayScore : homeScore) : null
+      };
     };
     const nextFixture = fixture ? decorateFixture(fixture) : null;
     const history = playedFixtures.map(decorateFixture);
-    const hiddenFixtureIds = new Set(history.filter((row) => !row.result_revealed).map((row) => row.fixture_id));
-    const messages = rawMessages.map((message) => message.message_type === 'match_result' && hiddenFixtureIds.has(message.related_fixture_id) ? { ...message, subject: 'Your match is ready', body: 'The final whistle has gone. Watch the saved replay or skip to full time to reveal the result.', priority: 'high', result_hidden: true } : message);
+    const messages = rawMessages.map((message) => {
+      const hiddenResult = message.message_type === 'match_result'
+        && message.related_fixture_id
+        && !revealByFixture.get(String(message.related_fixture_id))?.revealed_at;
+      return hiddenResult
+        ? { ...message, subject: 'Your match is ready', body: 'The final whistle has gone. Watch the saved replay or skip to full time to reveal the result.', priority: 'high', result_hidden: true }
+        : message;
+    });
     const submissionRows = fixture ? await supabase(`/rest/v1/manager_submissions?fixture_id=eq.${encodeURIComponent(fixture.id)}&club_id=eq.${encodeURIComponent(club.tbg_club_id)}&select=*&limit=1`, token).catch(() => []) : [];
     const table = standings.map((row) => ({ ...row, club_name: clubsById.get(row.club_id)?.canonical_name || row.club_id, is_managed_club: row.club_id === club.tbg_club_id }));
 
