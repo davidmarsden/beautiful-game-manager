@@ -4,7 +4,7 @@ const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, v
 const round = (value, places = 4) => Number(Number(value).toFixed(places));
 const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 
-export const EVENT_GENERATION_VERSION = 'tbg-event-generation-v0.2';
+export const EVENT_GENERATION_VERSION = 'tbg-event-generation-v0.3';
 export const EVENT_GENERATION_STATE_KEY = 'module_d_event_generation';
 
 export const EVENT_DIALS = Object.freeze({
@@ -20,13 +20,15 @@ export const EVENT_DIALS = Object.freeze({
   foul_base_rate: 10.4,
   penalty_foul_share: 0.018,
   penalty_xg: 0.76,
+  penalty_retake_share: 0.015,
+  maximum_penalty_retakes: 2,
   set_piece_share: 0.24,
   shot_on_target_share: 0.34,
   commentary_hook_limit: 12
 });
 
 const TEMPO_FACTOR = Object.freeze({ slow: EVENT_DIALS.tempo_slow, normal: EVENT_DIALS.tempo_normal, fast: EVENT_DIALS.tempo_fast });
-const EVENT_PRIORITY = Object.freeze({ goal: 6, red_card: 5, injury: 5, penalty: 4, foul: 3, big_chance: 2, yellow_card: 1, set_piece: 1, shot: 0 });
+const EVENT_PRIORITY = Object.freeze({ goal: 7, red_card: 6, injury: 5, penalty: 4, foul: 3, big_chance: 2, yellow_card: 1, set_piece: 1, shot: 0 });
 
 function deepFreeze(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
@@ -156,11 +158,16 @@ function sampleCount(mean, random, maximum = 30) {
   return Math.min(maximum, whole + (random() < remainder ? 1 : 0));
 }
 
+function penaltyOutcome(random, retakeCount) {
+  const roll = random();
+  if (retakeCount < EVENT_DIALS.maximum_penalty_retakes && roll < EVENT_DIALS.penalty_retake_share) return 'retake';
+  const adjusted = retakeCount < EVENT_DIALS.maximum_penalty_retakes ? (roll - EVENT_DIALS.penalty_retake_share) / (1 - EVENT_DIALS.penalty_retake_share) : roll;
+  return adjusted < 0.76 ? 'goal' : adjusted < 0.91 ? 'saved' : 'missed';
+}
+
 export function buildPenaltyIncident({ attackingSide, defendingSide, minute, index, taker, offender, random }) {
   const root = `${attackingSide}-penalty-${index}`;
-  const outcomeRoll = random();
-  const outcome = outcomeRoll < 0.76 ? 'goal' : outcomeRoll < 0.91 ? 'saved' : 'missed';
-  return [
+  const events = [
     {
       event_id: `${root}-foul`, minute, side: defendingSide, against_side: attackingSide,
       type: 'foul', subtype: 'penalty_foul', player_id: offender?.player_id || null,
@@ -169,16 +176,59 @@ export function buildPenaltyIncident({ attackingSide, defendingSide, minute, ind
     {
       event_id: `${root}-awarded`, minute, side: attackingSide, against_side: defendingSide,
       type: 'penalty', subtype: 'penalty_awarded', source_event_id: `${root}-foul`,
-      linked_event_id: `${root}-attempt`, provisional: true, commentary_hook: 'penalty_awarded'
-    },
-    {
-      event_id: `${root}-attempt`, minute: Math.min(120, minute + 1), side: attackingSide, against_side: defendingSide,
-      type: 'penalty', subtype: 'penalty_attempt', player_id: taker?.player_id || null,
-      parent_event_id: `${root}-awarded`, source_event_id: `${root}-foul`, xg: EVENT_DIALS.penalty_xg,
-      on_target: outcome !== 'missed', outcome, provisional: true,
-      commentary_hook: outcome === 'goal' ? 'penalty_scored' : outcome === 'saved' ? 'penalty_saved' : 'penalty_missed'
+      linked_event_id: `${root}-attempt-1`, provisional: true, commentary_hook: 'penalty_awarded'
     }
   ];
+
+  let attemptNumber = 1;
+  let parentEventId = `${root}-awarded`;
+  while (attemptNumber <= EVENT_DIALS.maximum_penalty_retakes + 1) {
+    const attemptId = `${root}-attempt-${attemptNumber}`;
+    const outcome = penaltyOutcome(random, attemptNumber - 1);
+    const attemptMinute = Math.min(120, minute + attemptNumber);
+    const nextAttemptId = `${root}-attempt-${attemptNumber + 1}`;
+    const goalEventId = `${root}-goal`;
+    events.push({
+      event_id: attemptId,
+      minute: attemptMinute,
+      side: attackingSide,
+      against_side: defendingSide,
+      type: 'penalty',
+      subtype: 'penalty_attempt',
+      player_id: taker?.player_id || null,
+      parent_event_id: parentEventId,
+      source_event_id: `${root}-foul`,
+      linked_event_id: outcome === 'goal' ? goalEventId : outcome === 'retake' ? nextAttemptId : null,
+      attempt_number: attemptNumber,
+      xg: outcome === 'retake' ? 0 : EVENT_DIALS.penalty_xg,
+      on_target: outcome === 'goal' || outcome === 'saved',
+      outcome,
+      provisional: true,
+      commentary_hook: outcome === 'goal' ? 'penalty_scored' : outcome === 'saved' ? 'penalty_saved' : outcome === 'retake' ? 'penalty_retake' : 'penalty_missed'
+    });
+    if (outcome === 'goal') {
+      events.push({
+        event_id: goalEventId,
+        minute: attemptMinute,
+        side: attackingSide,
+        against_side: defendingSide,
+        type: 'goal',
+        subtype: 'penalty_goal',
+        player_id: taker?.player_id || null,
+        source_event_id: attemptId,
+        parent_event_id: attemptId,
+        on_target: true,
+        outcome: 'goal',
+        provisional: true,
+        commentary_hook: 'goal'
+      });
+      break;
+    }
+    if (outcome !== 'retake') break;
+    parentEventId = attemptId;
+    attemptNumber += 1;
+  }
+  return events;
 }
 
 function buildSideEvents(side, expected, quality, context, opponentQuality, random) {
@@ -260,7 +310,7 @@ export function resolveEventGeneration(contract, tactical, quality, fatigue) {
   ]);
 
   const provisionalScore = events.reduce((score, event) => {
-    if (event.type === 'goal' || (event.type === 'penalty' && event.subtype === 'penalty_attempt' && event.outcome === 'goal')) score[event.side] += 1;
+    if (event.type === 'goal') score[event.side] += 1;
     return score;
   }, { home: 0, away: 0 });
 
@@ -273,10 +323,11 @@ export function resolveEventGeneration(contract, tactical, quality, fatigue) {
     commentary_hooks: commentaryHooks(events),
     event_counts: {
       total: events.length,
-      chances: events.filter((event) => ['shot', 'big_chance', 'goal'].includes(event.type) || (event.type === 'penalty' && event.subtype === 'penalty_attempt')).length,
-      goals: events.filter((event) => event.type === 'goal' || (event.type === 'penalty' && event.subtype === 'penalty_attempt' && event.outcome === 'goal')).length,
+      chances: events.filter((event) => ['shot', 'big_chance', 'goal'].includes(event.type) || (event.type === 'penalty' && event.subtype === 'penalty_attempt' && event.outcome !== 'retake')).length,
+      goals: events.filter((event) => event.type === 'goal').length,
       fouls: events.filter((event) => event.type === 'foul').length,
       penalties: events.filter((event) => event.type === 'penalty' && event.subtype === 'penalty_awarded').length,
+      penalty_retakes: events.filter((event) => event.type === 'penalty' && event.subtype === 'penalty_attempt' && event.outcome === 'retake').length,
       cards: events.filter((event) => ['yellow_card', 'red_card'].includes(event.type)).length,
       set_pieces: events.filter((event) => event.type === 'set_piece').length,
       injuries: events.filter((event) => event.type === 'injury').length
