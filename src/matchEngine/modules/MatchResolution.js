@@ -2,7 +2,7 @@ const text = (value) => String(value ?? '').trim().toLowerCase();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const round = (value, places = 4) => Number(Number(value).toFixed(places));
 
-export const MATCH_RESOLUTION_VERSION = 'tbg-match-resolution-v0.1';
+export const MATCH_RESOLUTION_VERSION = 'tbg-match-resolution-v0.2';
 export const MATCH_RESOLUTION_STATE_KEY = 'module_e_match_resolution';
 
 const ALLOWED_EVENT_TYPES = new Set([
@@ -50,30 +50,57 @@ function orderEvents(events) {
   return events.sort((left, right) => left.minute - right.minute || left.event_id.localeCompare(right.event_id));
 }
 
+function dismissalStatistics(events) {
+  const explicitRedCards = events.filter((event) => event.type === 'red_card');
+  const explicitlyDismissedPlayers = new Set(
+    explicitRedCards.filter((event) => event.player_id).map((event) => String(event.player_id))
+  );
+  const yellowCardsByPlayer = new Map();
+
+  for (const event of events.filter((row) => row.type === 'yellow_card' && row.player_id)) {
+    const playerId = String(event.player_id);
+    yellowCardsByPlayer.set(playerId, (yellowCardsByPlayer.get(playerId) || 0) + 1);
+  }
+
+  const secondYellowDismissals = [...yellowCardsByPlayer.entries()]
+    .filter(([playerId, count]) => count >= 2 && !explicitlyDismissedPlayers.has(playerId))
+    .length;
+
+  return deepFreeze({
+    red_cards: explicitRedCards.length + secondYellowDismissals,
+    straight_red_cards: explicitRedCards.length,
+    second_yellow_dismissals: secondYellowDismissals
+  });
+}
+
 function sideStatistics(side, events, expected) {
   const own = events.filter((event) => event.side === side);
   const shots = own.filter((event) => ['shot', 'big_chance', 'goal'].includes(event.type));
   const onTarget = shots.filter((event) => event.on_target === true || event.type === 'goal');
   const goals = own.filter((event) => event.type === 'goal');
   const yellowCards = own.filter((event) => event.type === 'yellow_card');
-  const redCards = own.filter((event) => event.type === 'red_card');
+  const dismissals = dismissalStatistics(own);
   const corners = own.filter((event) => event.type === 'set_piece' && event.subtype === 'corner');
   const freeKicks = own.filter((event) => event.type === 'set_piece' && event.subtype === 'free_kick');
   const penalties = own.filter((event) => event.type === 'penalty');
   const injuries = own.filter((event) => event.type === 'injury');
+  const generatedXg = shots.reduce((sum, event) => sum + number(event.xg, 0), 0);
 
   return deepFreeze({
     goals: goals.length,
     shots: shots.length,
     shots_on_target: onTarget.length,
     big_chances: own.filter((event) => event.type === 'big_chance' || (event.type === 'goal' && number(event.xg, 0) >= 0.22)).length,
-    expected_goals: round(number(expected?.expected_goals, shots.reduce((sum, event) => sum + number(event.xg, 0), 0)), 3),
-    generated_xg: round(shots.reduce((sum, event) => sum + number(event.xg, 0), 0), 3),
+    expected_goals: round(generatedXg, 3),
+    model_expected_goals: round(number(expected?.expected_goals, generatedXg), 3),
+    generated_xg: round(generatedXg, 3),
     corners: corners.length,
     free_kicks: freeKicks.length,
     penalties_awarded: penalties.length,
     yellow_cards: yellowCards.length,
-    red_cards: redCards.length,
+    red_cards: dismissals.red_cards,
+    straight_red_cards: dismissals.straight_red_cards,
+    second_yellow_dismissals: dismissals.second_yellow_dismissals,
     injuries: injuries.length
   });
 }
@@ -89,7 +116,8 @@ function disciplinaryState(events) {
   }
   return [...byPlayer.values()].map((row) => deepFreeze({
     ...row,
-    sent_off: row.red_cards > 0 || row.yellow_cards >= 2
+    sent_off: row.red_cards > 0 || row.yellow_cards >= 2,
+    dismissal_type: row.red_cards > 0 ? 'straight_red' : row.yellow_cards >= 2 ? 'second_yellow' : null
   }));
 }
 
@@ -149,7 +177,9 @@ export function resolveMatch(eventGeneration, fatigue = {}) {
       unique_event_ids: true,
       chronological_events: true,
       score_matches_goals: true,
-      statistics_reconciled: true
+      statistics_reconciled: true,
+      expected_goals_derived_from_official_shots: true,
+      dismissals_reconciled: true
     },
     resolution_complete: true,
     applied_to_public_result: false
