@@ -49,21 +49,21 @@ export default async (request) => {
     const world = await worldResponse.json();
     const accepted = acceptManagerDecision(payload, world);
 
-    const existing = await rest(`/rest/v1/manager_submissions?fixture_id=eq.${encodeURIComponent(payload.fixture_id)}&club_id=eq.${encodeURIComponent(payload.club_id)}&select=id,version&limit=1`, token).catch(() => []);
+    const existing = await rest(`/rest/v1/manager_submissions?fixture_id=eq.${encodeURIComponent(accepted.fixture_id)}&club_id=eq.${encodeURIComponent(accepted.club_id)}&select=id,version&limit=1`, token).catch(() => []);
     const row = {
-      fixture_id: payload.fixture_id,
-      club_id: payload.club_id,
-      manager_id: manager.id,
-      formation: payload.formation,
-      starting_xi: payload.starting_xi,
-      bench: payload.bench || [],
-      captain_id: payload.captain_id || null,
-      set_piece_takers: payload.set_piece_takers || {},
-      tactics: payload.tactics || {},
+      fixture_id: accepted.fixture_id,
+      club_id: accepted.club_id,
+      manager_id: accepted.manager_id,
+      formation: accepted.formation,
+      starting_xi: accepted.starting_xi,
+      bench: accepted.bench,
+      captain_id: accepted.captain_id,
+      set_piece_takers: accepted.set_piece_takers,
+      tactics: accepted.tactics,
       version: (existing[0]?.version || 0) + 1,
       status: 'submitted',
-      submitted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      submitted_at: accepted.submitted_at,
+      updated_at: accepted.submitted_at
     };
 
     const saved = await rest('/rest/v1/manager_submissions?on_conflict=fixture_id,club_id', token, {
@@ -77,11 +77,11 @@ export default async (request) => {
       headers: { 'content-type': 'application/json', prefer: 'return=minimal' },
       body: JSON.stringify({
         recipient_manager_id: manager.id,
-        club_id: payload.club_id,
+        club_id: accepted.club_id,
         message_type: 'submission_confirmation',
         subject: 'Team submission received',
-        body: `Your team and tactics have been saved for fixture ${payload.fixture_id}. Version ${row.version}.`,
-        related_fixture_id: payload.fixture_id,
+        body: `Your team and tactics have been saved for fixture ${accepted.fixture_id}. Version ${row.version}.`,
+        related_fixture_id: accepted.fixture_id,
         priority: 'normal'
       })
     }).catch(() => null);
