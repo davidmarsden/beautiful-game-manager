@@ -3,8 +3,8 @@ import { executeTacticalResolution } from './TacticalResolution.js';
 import { executePlayerQuality } from './PlayerQuality.js';
 import { executeFatigueContext } from './FatigueContext.js';
 import { executeEventGeneration } from './EventGeneration.js';
-
-const noOp = (context) => context;
+import { executeMatchResolution } from './MatchResolution.js';
+import { executeCommentaryReport } from './CommentaryReport.js';
 
 export const MODULE_A_TACTICAL_RESOLUTION = createEngineModule({
   id: 'module-a-tactical-resolution',
@@ -43,7 +43,7 @@ export const MODULE_E_MATCH_RESOLUTION = createEngineModule({
   name: 'Module E — Match Resolution',
   order: 5,
   constitution: 'Match Engine Constitution v0.3',
-  execute: noOp
+  execute: executeMatchResolution
 });
 
 export const MODULE_F_COMMENTARY_REPORT = createEngineModule({
@@ -51,7 +51,7 @@ export const MODULE_F_COMMENTARY_REPORT = createEngineModule({
   name: 'Module F — Commentary & Report',
   order: 6,
   constitution: 'Match Engine Constitution v0.3; Information, Media & Communication Constitution v1.2',
-  execute: noOp
+  execute: executeCommentaryReport
 });
 
 export const CONSTITUTIONAL_ENGINE_MODULES = Object.freeze(validateEngineModules([
