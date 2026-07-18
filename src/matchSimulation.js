@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { createEngineContext } from './matchEngine/EngineContext.js';
 
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -173,8 +174,8 @@ function buildRichEvents({ contract, playersById, homeGoals, awayGoals, homeShot
 }
 
 export function simulateMatch(contract, world) {
-  if (!contract?.fixture || !contract?.teams?.home || !contract?.teams?.away) throw new Error('A complete engine contract is required');
-  const playersById = new Map((world?.players || []).map((player) => [text(player.tbg_player_id), player]));
+  const context = createEngineContext({ contract, world });
+  const { playersById } = context;
   const homeStrength = teamStrength(contract.teams.home, playersById);
   const awayStrength = teamStrength(contract.teams.away, playersById);
   const qualityGap = clamp((homeStrength.average - awayStrength.average) / 14, -1.2, 1.2);
