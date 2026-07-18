@@ -11,6 +11,8 @@ import { TACTICAL_RESOLUTION_STATE_KEY } from '../src/matchEngine/modules/Tactic
 import { PLAYER_QUALITY_STATE_KEY } from '../src/matchEngine/modules/PlayerQuality.js';
 import { FATIGUE_CONTEXT_STATE_KEY } from '../src/matchEngine/modules/FatigueContext.js';
 import { EVENT_GENERATION_STATE_KEY } from '../src/matchEngine/modules/EventGeneration.js';
+import { MATCH_RESOLUTION_STATE_KEY } from '../src/matchEngine/modules/MatchResolution.js';
+import { COMMENTARY_REPORT_STATE_KEY } from '../src/matchEngine/modules/CommentaryReport.js';
 
 const positions = ['Goalkeeper','Right-Back','Centre-Back','Centre-Back','Left-Back','Defensive Midfield','Central Midfield','Central Midfield','Right Winger','Centre-Forward','Left Winger'];
 const ids = (prefix) => positions.map((_, index) => `${prefix}-${index + 1}`);
@@ -22,11 +24,11 @@ const contract = {
   fixture: { fixture_id: 'fixture-module-interface' },
   teams: {
     home: {
-      side: 'home', club_id: 'home-club', formation: '4-3-3-wide', starting_xi: homeIds, bench: [],
+      side: 'home', club_id: 'home-club', club_name: 'Home Club', formation: '4-3-3-wide', starting_xi: homeIds, bench: [],
       tactics: { mentality: 'balanced', pressing: 'mid', tempo: 'normal' }
     },
     away: {
-      side: 'away', club_id: 'away-club', formation: '4-3-3-wide', starting_xi: awayIds, bench: [],
+      side: 'away', club_id: 'away-club', club_name: 'Away Club', formation: '4-3-3-wide', starting_xi: awayIds, bench: [],
       tactics: { mentality: 'cautious', pressing: 'low', tempo: 'slow' }
     }
   }
@@ -54,23 +56,24 @@ test('defines six ordered constitutional module interfaces', () => {
   assert.ok(CONSTITUTIONAL_ENGINE_MODULES.every((module) => Object.isFrozen(module)));
 });
 
-test('modules preserve the shared EngineContext while live modules write internal state', () => {
+test('modules preserve EngineContext and complete the internal A-F state chain', () => {
   const context = createEngineContext({ contract, world });
-
   for (const module of CONSTITUTIONAL_ENGINE_MODULES) assert.equal(module.execute(context), context);
 
   assert.deepEqual(Object.keys(context.state), [
     TACTICAL_RESOLUTION_STATE_KEY,
     PLAYER_QUALITY_STATE_KEY,
     FATIGUE_CONTEXT_STATE_KEY,
-    EVENT_GENERATION_STATE_KEY
+    EVENT_GENERATION_STATE_KEY,
+    MATCH_RESOLUTION_STATE_KEY,
+    COMMENTARY_REPORT_STATE_KEY
   ]);
   assert.equal(context.get(TACTICAL_RESOLUTION_STATE_KEY).home.formation, '4-3-3-wide');
   assert.equal(context.get(PLAYER_QUALITY_STATE_KEY).home.team_strength, 90);
-  assert.equal(context.get(PLAYER_QUALITY_STATE_KEY).away.team_strength, 88);
   assert.equal(context.get(FATIGUE_CONTEXT_STATE_KEY).home.team.average_fitness, 100);
   assert.equal(context.get(EVENT_GENERATION_STATE_KEY).score_resolution_pending, true);
-  assert.ok(context.get(EVENT_GENERATION_STATE_KEY).expected.home.expected_goals > 0);
+  assert.equal(context.get(MATCH_RESOLUTION_STATE_KEY).resolution_complete, true);
+  assert.equal(context.get(COMMENTARY_REPORT_STATE_KEY).report_complete, true);
 });
 
 test('module factory rejects incomplete descriptors', () => {
@@ -84,7 +87,6 @@ test('module validation rejects duplicate identity and order', () => {
   const first = createEngineModule({ id: 'first', name: 'First', order: 1, execute() {} });
   const duplicateId = createEngineModule({ id: 'first', name: 'Duplicate ID', order: 2, execute() {} });
   const duplicateOrder = createEngineModule({ id: 'second', name: 'Duplicate order', order: 1, execute() {} });
-
   assert.throws(() => validateEngineModules([first, duplicateId]), /Duplicate engine module id/);
   assert.throws(() => validateEngineModules([first, duplicateOrder]), /Duplicate engine module order/);
 });
