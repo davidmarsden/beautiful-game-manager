@@ -10,6 +10,7 @@ import { CONSTITUTIONAL_ENGINE_MODULES } from '../src/matchEngine/modules/index.
 import { TACTICAL_RESOLUTION_STATE_KEY } from '../src/matchEngine/modules/TacticalResolution.js';
 import { PLAYER_QUALITY_STATE_KEY } from '../src/matchEngine/modules/PlayerQuality.js';
 import { FATIGUE_CONTEXT_STATE_KEY } from '../src/matchEngine/modules/FatigueContext.js';
+import { EVENT_GENERATION_STATE_KEY } from '../src/matchEngine/modules/EventGeneration.js';
 
 const positions = ['Goalkeeper','Right-Back','Centre-Back','Centre-Back','Left-Back','Defensive Midfield','Central Midfield','Central Midfield','Right Winger','Centre-Forward','Left Winger'];
 const ids = (prefix) => positions.map((_, index) => `${prefix}-${index + 1}`);
@@ -58,11 +59,18 @@ test('modules preserve the shared EngineContext while live modules write interna
 
   for (const module of CONSTITUTIONAL_ENGINE_MODULES) assert.equal(module.execute(context), context);
 
-  assert.deepEqual(Object.keys(context.state), [TACTICAL_RESOLUTION_STATE_KEY, PLAYER_QUALITY_STATE_KEY, FATIGUE_CONTEXT_STATE_KEY]);
+  assert.deepEqual(Object.keys(context.state), [
+    TACTICAL_RESOLUTION_STATE_KEY,
+    PLAYER_QUALITY_STATE_KEY,
+    FATIGUE_CONTEXT_STATE_KEY,
+    EVENT_GENERATION_STATE_KEY
+  ]);
   assert.equal(context.get(TACTICAL_RESOLUTION_STATE_KEY).home.formation, '4-3-3-wide');
   assert.equal(context.get(PLAYER_QUALITY_STATE_KEY).home.team_strength, 90);
   assert.equal(context.get(PLAYER_QUALITY_STATE_KEY).away.team_strength, 88);
   assert.equal(context.get(FATIGUE_CONTEXT_STATE_KEY).home.team.average_fitness, 100);
+  assert.equal(context.get(EVENT_GENERATION_STATE_KEY).score_resolution_pending, true);
+  assert.ok(context.get(EVENT_GENERATION_STATE_KEY).expected.home.expected_goals > 0);
 });
 
 test('module factory rejects incomplete descriptors', () => {
