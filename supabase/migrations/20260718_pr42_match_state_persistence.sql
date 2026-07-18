@@ -157,10 +157,6 @@ begin
   end loop;
 
   return true;
-exception
-  when others then
-    delete from public.match_state_applications where match_state_applications.run_key = apply_match_state_changes.run_key;
-    raise;
 end;
 $$;
 
