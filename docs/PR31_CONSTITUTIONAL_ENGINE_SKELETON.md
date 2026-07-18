@@ -45,3 +45,45 @@ A changed fingerprint is a blocking failure by default. Golden fingerprints must
 During the remaining PR #31 refactor, every extraction into `EngineContext`, the orchestrator or Modules A–F must leave these tests green.
 
 No production code, database schema, replay UI, reports, inbox, standings or persistence behaviour changes in milestone 31.1.
+
+---
+
+## Milestone 31.2 — Introduce EngineContext
+
+The bootstrap simulator now begins each run by creating a versioned `EngineContext`.
+
+### Context responsibilities
+
+`EngineContext` owns the internal working references needed by future constitutional modules:
+
+- the unchanged match contract;
+- the unchanged world snapshot;
+- run, fixture and team references;
+- a player lookup indexed by stable TBG player ID;
+- isolated per-match working state for intermediate module calculations.
+
+The context is deliberately internal. Its version and working state are not added to the public result payload, persisted match event rows or Match Centre contract.
+
+### Compatibility boundary
+
+Milestone 31.2 only moves construction of the player index and contract validation behind `EngineContext`. The existing simulator still performs every strength, score, event, commentary and statistics calculation exactly as before.
+
+The 31.1 golden fingerprints therefore remain unchanged. A green golden suite proves that introducing the context has not changed:
+
+- scores or outcomes;
+- event selection, order, minutes or commentary;
+- match statistics;
+- model metadata;
+- replay/report or persistence contracts.
+
+### Tests
+
+Dedicated context tests verify:
+
+- stable context versioning;
+- unchanged input references;
+- player lookup construction;
+- isolated working state between match runs;
+- preservation of the existing incomplete-contract validation error.
+
+No database migration or deployment action is required.
