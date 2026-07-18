@@ -1,0 +1,26 @@
+{
+  "normalisation": {
+    "excluded_fields": ["played_at"],
+    "reason": "The bootstrap simulator stamps completion with the live clock. All deterministic replay, report and persistence fields remain protected."
+  },
+  "cases": {
+    "balanced-peers": {
+      "sha256": "885461470c3872733da9f478974733abe046b539d606783090761bb5136096c0",
+      "score": { "home": 1, "away": 0 },
+      "outcome": "home_win",
+      "event_count": 38
+    },
+    "home-attacking-edge": {
+      "sha256": "5ee300e111916c9d5ea823a59a317ba230b871edc1ae032f5ee350a18f3cf0ee",
+      "score": { "home": 1, "away": 0 },
+      "outcome": "home_win",
+      "event_count": 41
+    },
+    "away-positive-edge": {
+      "sha256": "382a1965a4051b47052002f53d8c451149c4e430ad58acf2fb2ac083dbad93eb",
+      "score": { "home": 1, "away": 2 },
+      "outcome": "away_win",
+      "event_count": 42
+    }
+  }
+}
