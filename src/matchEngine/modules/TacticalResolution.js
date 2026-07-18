@@ -195,9 +195,10 @@ function routeFit(formation, route) {
 }
 
 export function resolveTeamTactics(team, side = team?.side) {
-  const formationId = text(team?.formation);
+  const submittedFormation = text(team?.formation);
+  const formationId = submittedFormation || '4-3-3-wide';
   const formation = FORMATION_PROFILES[formationId];
-  if (!formation) throw new Error(`Unsupported Module A formation: ${formationId || 'blank'}`);
+  if (!formation) throw new Error(`Unsupported Module A formation: ${formationId}`);
 
   const styleResolution = inferStyle(team?.tactics);
   const style = STYLE_PROFILES[styleResolution.style];
@@ -212,6 +213,7 @@ export function resolveTeamTactics(team, side = team?.side) {
     side: text(side),
     club_id: String(team?.club_id ?? '').trim() || null,
     formation: formationId,
+    formation_source: submittedFormation ? 'manager_instruction' : 'compatibility_default',
     families: {
       defensive_base: formation.defensive_base,
       midfield_base: formation.midfield_base,
