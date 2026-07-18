@@ -164,9 +164,11 @@ function observeTeamForm(submission) {
   retry();
 }
 
-// A manager deliberately loading a preset or previous team sheet must release
-// the startup restoration guard, otherwise its observer immediately restores the
-// old submitted XI over the manager's explicit choice.
+// Explicit preset/previous-team loads are manager actions, not startup churn.
+// Release the current-submission guard before those handlers mutate the board.
+document.addEventListener('click', (event) => {
+  if (event.target?.closest('#loadPreset, #loadPreviousMatch')) stopSubmissionProtection();
+}, true);
 document.addEventListener('tbg:team-sheet-override', stopSubmissionProtection);
 
 function renderSubmission(state) {
