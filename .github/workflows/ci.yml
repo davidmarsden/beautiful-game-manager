@@ -14,7 +14,6 @@ jobs:
         with:
           node-version: 20
       - run: npm run calibration:report
-        continue-on-error: true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
