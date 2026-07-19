@@ -115,17 +115,21 @@ function available(playerId, state, matchday) {
 }
 
 function selectTeam(club, state, matchday, side) {
-  const eligible = club.players.filter((player) => available(player.tbg_player_id, state, matchday));
-  const fallback = club.players.filter((player) => !eligible.includes(player));
-  const ranked = [...eligible, ...fallback].sort((left, right) => {
-    const leftScore = left.underlying_ability_rating + state.players[left.tbg_player_id].fitness / 20;
-    const rightScore = right.underlying_ability_rating + state.players[right.tbg_player_id].fitness / 20;
-    return rightScore - leftScore || left.tbg_player_id.localeCompare(right.tbg_player_id);
-  });
+  const ranked = club.players
+    .filter((player) => available(player.tbg_player_id, state, matchday))
+    .sort((left, right) => {
+      const leftScore = left.underlying_ability_rating + state.players[left.tbg_player_id].fitness / 20;
+      const rightScore = right.underlying_ability_rating + state.players[right.tbg_player_id].fitness / 20;
+      return rightScore - leftScore || left.tbg_player_id.localeCompare(right.tbg_player_id);
+    });
+  if (ranked.length < 11) {
+    throw new Error(`Season harness found only ${ranked.length} eligible players for ${club.club_id} on matchday ${matchday}`);
+  }
   const goalkeeper = ranked.find((player) => player.position === 'Goalkeeper');
+  if (!goalkeeper) throw new Error(`Season harness could not select an eligible goalkeeper for ${club.club_id} on matchday ${matchday}`);
   const outfield = ranked.filter((player) => player !== goalkeeper);
-  const starters = [goalkeeper, ...outfield.slice(0, 10)].filter(Boolean);
-  if (starters.length !== 11) throw new Error(`Season harness could not select 11 players for ${club.club_id}`);
+  const starters = [goalkeeper, ...outfield.slice(0, 10)];
+  if (starters.length !== 11) throw new Error(`Season harness could not select 11 eligible players for ${club.club_id} on matchday ${matchday}`);
   const starterIds = starters.map((player) => player.tbg_player_id);
   const bench = ranked.filter((player) => !starterIds.includes(player.tbg_player_id)).slice(0, 7).map((player) => player.tbg_player_id);
   return {
@@ -190,6 +194,7 @@ export function simulateStatefulSeason({ clubs = syntheticSeasonClubs(), seasonI
   const table = blankTable(clubs);
   const results = [];
   const eventIds = new Set();
+  let totalEventCount = 0;
 
   for (const fixture of fixtures) {
     const homeClub = clubMap.get(fixture.home_club_id);
@@ -210,8 +215,11 @@ export function simulateStatefulSeason({ clubs = syntheticSeasonClubs(), seasonI
     if (!unique(teams.home.starting_xi) || !unique(teams.away.starting_xi)) throw new Error(`Season harness produced duplicate starters: ${fixture.fixture_id}`);
     if (teams.home.starting_xi.some((id) => teams.home.bench.includes(id)) || teams.away.starting_xi.some((id) => teams.away.bench.includes(id))) throw new Error(`Season harness produced XI/bench overlap: ${fixture.fixture_id}`);
     for (const event of result.events || []) {
-      if (eventIds.has(event.event_id)) throw new Error(`Season harness found duplicate public event ID: ${event.event_id}`);
-      eventIds.add(event.event_id);
+      totalEventCount += 1;
+      const eventId = text(event.event_id);
+      if (!eventId) throw new Error(`Season harness found an event without a public event ID: ${fixture.fixture_id}`);
+      if (eventIds.has(eventId)) throw new Error(`Season harness found duplicate public event ID: ${eventId}`);
+      eventIds.add(eventId);
     }
     applyStateChanges(state, result, fixture);
     state.clubs[homeClub.club_id].previous_starting_xi = teams.home.starting_xi;
@@ -231,7 +239,7 @@ export function simulateStatefulSeason({ clubs = syntheticSeasonClubs(), seasonI
     goals_for_equals_goals_against: standings.reduce((sum, row) => sum + row.gf, 0) === standings.reduce((sum, row) => sum + row.ga, 0),
     points_reconcile: standings.every((row) => row.points === row.won * 3 + row.drawn),
     records_reconcile: standings.every((row) => row.played === row.won + row.drawn + row.lost),
-    globally_unique_event_ids: eventIds.size === results.reduce((sum, row) => sum + ((row.statistics?.home || row.statistics?.away) ? 0 : 0), 0) || eventIds.size >= 0,
+    globally_unique_event_ids: eventIds.size === totalEventCount,
     fitness_stays_bounded: allStateRows.every((row) => row.fitness >= 0 && row.fitness <= 100),
     no_duplicate_state_application: state.applied_run_keys.size === results.length
   });
