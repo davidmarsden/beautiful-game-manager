@@ -38,13 +38,17 @@ test('report renders reproducible JSON-compatible, CSV and Markdown artifacts', 
   assert.match(csv, /release_gate/);
   assert.match(markdown, /TBG Constitutional Engine Calibration Report/);
   assert.match(markdown, /hold_for_shadow_comparison/);
+  assert.match(markdown, /technical calibration gate passes/i);
 });
 
 test('baseline comparison blocks a material metric regression', () => {
   const impossibleBaseline = structuredClone(baseline);
   impossibleBaseline.metric_thresholds['match.average_total_goals'] = { minimum: 99, maximum: 100 };
   const blocked = runCalibrationReport({ dataset, baseline: impossibleBaseline });
+  const markdown = calibrationReportMarkdown(blocked);
   assert.equal(blocked.baseline_comparison.metric_checks['match.average_total_goals'], false);
   assert.equal(blocked.accepted, false);
   assert.equal(blocked.release_gate.decision, 'blocked_by_calibration');
+  assert.match(markdown, /technical calibration gate has failed/i);
+  assert.doesNotMatch(markdown, /technical calibration gate passes/i);
 });
