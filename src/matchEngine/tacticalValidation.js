@@ -4,7 +4,8 @@ import { simulateMatch, MATCH_ENGINE_MODES } from '../matchSimulation.js';
 const round = (value, places = 4) => Number(Number(value).toFixed(places));
 const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 
-export const TACTICAL_VALIDATION_VERSION = 'tbg-tactical-validation-v1.0';
+export const TACTICAL_VALIDATION_VERSION = 'tbg-tactical-validation-v1.1';
+export const UPSET_CURVE_STEP_TOLERANCE = 0.01;
 
 export const TACTICAL_DIMENSIONS = Object.freeze({
   formations: Object.freeze(['4-4-2', '4-3-3-wide', '4-2-3-1', '4-1-4-1', '3-5-2', '3-4-3', '5-3-2']),
@@ -138,12 +139,26 @@ function outcomeForStrongSide(score, strongerSide) {
   return strong > weak ? 'win' : strong === weak ? 'draw' : 'loss';
 }
 
+function adjacentCurveSteps(rows) {
+  return rows.slice(1).map((row, index) => Object.freeze({
+    from_gap: rows[index].rating_gap,
+    to_gap: row.rating_gap,
+    stronger_win_rate_change: round(row.stronger_win_rate - rows[index].stronger_win_rate),
+    upset_rate_change: round(row.upset_rate - rows[index].upset_rate),
+    stronger_win_rate_non_decreasing: row.stronger_win_rate + UPSET_CURVE_STEP_TOLERANCE >= rows[index].stronger_win_rate,
+    upset_rate_non_increasing: row.upset_rate <= rows[index].upset_rate + UPSET_CURVE_STEP_TOLERANCE
+  }));
+}
+
 export function validateUpsetCurve({ gaps = [2, 4, 6, 10], matchesPerGap = 120, simulator = simulateMatch } = {}) {
   if (!Array.isArray(gaps) || gaps.length < 2) throw new Error('Upset validation requires at least two rating gaps');
   if (matchesPerGap < 40) throw new Error('Upset validation requires at least 40 matches per rating gap');
+  const orderedGaps = [...gaps].map(Number).sort((left, right) => left - right);
+  if (orderedGaps.some((gap) => !Number.isFinite(gap) || gap <= 0)) throw new Error('Upset validation rating gaps must be positive numbers');
+  if (new Set(orderedGaps).size !== orderedGaps.length) throw new Error('Upset validation rating gaps must be unique');
   const rows = [];
 
-  for (const gap of gaps) {
+  for (const gap of orderedGaps) {
     const outcomes = [];
     for (let index = 0; index < matchesPerGap; index += 1) {
       const strongerSide = index % 2 === 0 ? 'home' : 'away';
@@ -171,13 +186,12 @@ export function validateUpsetCurve({ gaps = [2, 4, 6, 10], matchesPerGap = 120, 
     }));
   }
 
-  const first = rows[0];
-  const last = rows[rows.length - 1];
+  const steps = adjacentCurveSteps(rows);
   const checks = Object.freeze({
     every_gap_retains_upset_possibility: rows.every((row) => row.upset_rate > 0),
     stronger_teams_are_never_certain: rows.every((row) => row.stronger_win_rate < 1),
-    larger_gap_improves_stronger_team_win_rate: last.stronger_win_rate > first.stronger_win_rate,
-    larger_gap_reduces_upset_rate: last.upset_rate < first.upset_rate,
+    every_gap_step_preserves_stronger_team_trend: steps.every((step) => step.stronger_win_rate_non_decreasing),
+    every_gap_step_preserves_upset_trend: steps.every((step) => step.upset_rate_non_increasing),
     probability_mass_reconciles: rows.every((row) => Math.abs(row.stronger_win_rate + row.draw_rate + row.upset_rate - 1) < 0.001)
   });
 
@@ -185,7 +199,9 @@ export function validateUpsetCurve({ gaps = [2, 4, 6, 10], matchesPerGap = 120, 
     version: TACTICAL_VALIDATION_VERSION,
     matches_per_gap: matchesPerGap,
     total_matches: matchesPerGap * rows.length,
+    curve_step_tolerance: UPSET_CURVE_STEP_TOLERANCE,
     curves: Object.freeze(rows),
+    adjacent_steps: Object.freeze(steps),
     average_upset_rate: round(average(rows.map((row) => row.upset_rate))),
     checks,
     accepted: Object.values(checks).every(Boolean)
