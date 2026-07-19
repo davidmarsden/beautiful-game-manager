@@ -13,7 +13,14 @@ function executePlayerQualityWithCalibration(context) {
   return context;
 }
 
+function ratingCalibrationRequested(contract = {}) {
+  return contract.rating_band_calibration === true
+    || Number.isFinite(Number(contract.validation_gap))
+    || Boolean(contract.validation_scenario);
+}
+
 function executeCalibratedEventGeneration(context) {
+  if (!ratingCalibrationRequested(context.contract)) return executeEventGeneration(context);
   const rawQuality = context.get('module_b_player_quality');
   const calibratedQuality = context.get(RATING_BAND_QUALITY_STATE_KEY);
   context.set('module_b_player_quality', calibratedQuality);
