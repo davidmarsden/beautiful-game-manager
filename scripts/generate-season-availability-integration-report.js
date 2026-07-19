@@ -59,3 +59,11 @@ await mkdir(directory, { recursive: true });
 await writeFile(new URL('season-availability-integration.json', directory), `${JSON.stringify(output, null, 2)}\n`);
 await writeFile(new URL('season-availability-integration.md', directory), markdown);
 console.log(JSON.stringify({ accepted: output.accepted, metrics: output.metrics }, null, 2));
+
+if (!output.accepted) {
+  const failedChecks = Object.entries(output.checks)
+    .filter(([, accepted]) => !accepted)
+    .map(([check]) => check);
+  console.error(`Season availability integration gate failed: ${failedChecks.join(', ') || 'report rejected'}`);
+  process.exitCode = 1;
+}
