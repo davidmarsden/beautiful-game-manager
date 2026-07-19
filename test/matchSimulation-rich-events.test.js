@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { simulateMatch } from '../src/matchSimulation.js';
+import { simulateMatch, MATCH_ENGINE_MODES } from '../src/matchSimulation.js';
 
 const players = Array.from({ length: 22 }, (_, index) => {
   const player = {
@@ -18,6 +18,7 @@ const players = Array.from({ length: 22 }, (_, index) => {
 
 const contract = {
   run_key: 'world:fixture-rich-events-test',
+  engine_mode: MATCH_ENGINE_MODES.compatibility,
   fixture: { fixture_id: 'fixture-rich-events-test' },
   teams: {
     home: { starting_xi: players.slice(0, 11).map((p) => p.tbg_player_id), tactics: { mentality: 'balanced', pressing: 'mid', tempo: 'normal' } },
@@ -30,7 +31,7 @@ const world = { players };
 const goalkeeperIds = new Set(['p1', 'p12']);
 const outfieldActorEvents = new Set(['goal', 'shot_saved', 'shot_missed', 'shot_blocked', 'corner', 'foul', 'yellow_card', 'red_card', 'offside', 'tackle', 'dangerous_attack']);
 
-test('rich event simulation is deterministic and coherent', () => {
+test('compatibility rich event simulation is deterministic and coherent', () => {
   const first = simulateMatch(contract, world);
   const second = simulateMatch(contract, world);
   assert.deepEqual(first.score, second.score);
