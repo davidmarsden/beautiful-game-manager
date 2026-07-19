@@ -11,7 +11,8 @@
     "calibration:league-structure": "node scripts/generate-league-structure-report.js",
     "calibration:rollover": "node scripts/generate-season-rollover-report.js",
     "calibration:availability": "node scripts/generate-squad-availability-report.js",
-    "calibration:gate": "npm test && npm run calibration:report && npm run calibration:shadow && npm run calibration:league-structure && npm run calibration:rollover && npm run calibration:availability"
+    "calibration:season-availability": "node scripts/generate-season-availability-integration-report.js",
+    "calibration:gate": "npm test && npm run calibration:report && npm run calibration:shadow && npm run calibration:league-structure && npm run calibration:rollover && npm run calibration:availability && npm run calibration:season-availability"
   },
   "engines": {
     "node": ">=20"
