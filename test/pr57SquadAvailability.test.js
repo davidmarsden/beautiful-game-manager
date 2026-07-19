@@ -59,3 +59,22 @@ test('calendar rejects duplicate player identities and unknown players stay inel
   const calendar = createSquadAvailability(['p1']);
   assert.deepEqual(availabilityForPlayer(calendar, 'missing', 1), { available: false, reason: 'unknown_player' });
 });
+
+test('prototype-like identities cannot bypass unknown-player guards or mutate calendar state', () => {
+  const calendar = createSquadAvailability(['p1']);
+  assert.equal(Object.getPrototypeOf(calendar.players), null);
+  assert.deepEqual(availabilityForPlayer(calendar, 'toString', 1), { available: false, reason: 'unknown_player' });
+  assert.deepEqual(availabilityForPlayer(calendar, '__proto__', 1), { available: false, reason: 'unknown_player' });
+  assert.deepEqual(eligiblePlayerIds(calendar, ['p1', 'toString', '__proto__'], 1), ['p1']);
+
+  const changes = applyAvailabilityChanges(calendar, {
+    state_changes: {
+      injuries: [{ player_id: '__proto__', matches_out: 9 }],
+      discipline: [{ player_id: 'toString', sent_off: true }]
+    }
+  }, { matchday: 2 });
+
+  assert.deepEqual(changes, []);
+  assert.equal(Object.getPrototypeOf(calendar.players), null);
+  assert.equal(availabilityForPlayer(calendar, 'p1', 3).available, true);
+});
