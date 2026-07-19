@@ -2,6 +2,7 @@ const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 
+const MAXIMUM_SUBSTITUTIONS = 5;
 const EVENT_PRIORITY = Object.freeze({ injury: 9, red_card: 8, yellow_card: 7, substitution: 6, goal: 5, penalty: 4, foul: 3, set_piece: 2, big_chance: 1, shot: 0 });
 
 function deepFreeze(value) {
@@ -45,15 +46,40 @@ function substitutionEvent(side, index, minute, playerOutId, playerInId, reason,
   };
 }
 
+function disciplinaryTimeline(side, baseEvents) {
+  return orderEvents(baseEvents
+    .filter((event) => event.side === side && ['yellow_card', 'red_card'].includes(event.type) && event.player_id)
+    .map((event) => ({ ...event })));
+}
+
 function buildSideSubstitutions(side, baseEvents, contract, quality) {
   const { starters, bench } = sideInputs(side, contract, quality);
   const active = new Set(starters.map((player) => player.player_id));
   const unusedBench = [...bench];
   const substitutions = [];
+  const discipline = disciplinaryTimeline(side, baseEvents);
+  const yellows = new Map();
+  let disciplineIndex = 0;
   let index = 0;
+
+  const applyDisciplineThrough = (minute) => {
+    while (disciplineIndex < discipline.length && discipline[disciplineIndex].minute <= minute) {
+      const event = discipline[disciplineIndex];
+      const playerId = text(event.player_id);
+      if (event.type === 'red_card') active.delete(playerId);
+      if (event.type === 'yellow_card') {
+        const count = (yellows.get(playerId) || 0) + 1;
+        yellows.set(playerId, count);
+        if (count >= 2) active.delete(playerId);
+      }
+      disciplineIndex += 1;
+    }
+  };
 
   const injuries = orderEvents(baseEvents.filter((event) => event.side === side && event.type === 'injury' && event.player_id).map((event) => ({ ...event })));
   for (const injury of injuries) {
+    applyDisciplineThrough(injury.minute);
+    if (substitutions.length >= MAXIMUM_SUBSTITUTIONS) break;
     const playerOutId = text(injury.player_id);
     if (!active.has(playerOutId)) continue;
     const replacement = unusedBench.shift();
@@ -66,7 +92,8 @@ function buildSideSubstitutions(side, baseEvents, contract, quality) {
 
   const tacticalMinutes = [60, 70, 80];
   for (const minute of tacticalMinutes) {
-    if (!unusedBench.length || substitutions.length >= 5) break;
+    applyDisciplineThrough(minute);
+    if (!unusedBench.length || substitutions.length >= MAXIMUM_SUBSTITUTIONS) break;
     const candidates = starters
       .filter((player) => active.has(player.player_id) && player.required_role !== 'gk')
       .sort((left, right) => left.effective_quality - right.effective_quality || left.player_id.localeCompare(right.player_id));
