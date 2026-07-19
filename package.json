@@ -7,7 +7,8 @@
     "test": "node --test",
     "calibration:report": "node scripts/generate-calibration-report.js",
     "calibration:rating-bands": "node scripts/investigate-rating-bands.js",
-    "calibration:gate": "npm test && npm run calibration:report"
+    "calibration:shadow": "node scripts/generate-shadow-comparison.js",
+    "calibration:gate": "npm test && npm run calibration:report && npm run calibration:shadow"
   },
   "engines": {
     "node": ">=20"
