@@ -1,0 +1,32 @@
+{
+  "baseline_id": "tbg-calibration-release-baseline-v1",
+  "description": "Accepted deterministic thresholds for the constitutional-v1 release gate after PR #49.",
+  "required_sections": ["match", "stress_tests", "tactical", "upsets", "season", "rating_bands"],
+  "required_acceptance": {
+    "match": true,
+    "stress_tests": true,
+    "tactical": true,
+    "upsets": true,
+    "season": true,
+    "rating_bands": true
+  },
+  "metric_thresholds": {
+    "match.average_total_goals": { "minimum": 0.8, "maximum": 4.5 },
+    "match.draw_rate": { "minimum": 0.08, "maximum": 0.55 },
+    "match.home_win_rate": { "minimum": 0.2, "maximum": 0.68 },
+    "match.stronger_team_non_loss_rate": { "minimum": 0.45, "maximum": 0.96 },
+    "season.average_goals_per_match": { "minimum": 0.8, "maximum": 4.5 },
+    "season.minimum_final_fitness": { "minimum": 0, "maximum": 100 },
+    "upsets.average_upset_rate": { "minimum": 0.01, "maximum": 0.49 },
+    "rating_bands.d1_elite_v_d1_standard_win_rate": { "minimum": 0.43, "maximum": 0.89 },
+    "rating_bands.d1_elite_v_lower_floor_win_rate": { "minimum": 0.43, "maximum": 0.89 }
+  },
+  "cutover_requirements": {
+    "automatic_artifacts": true,
+    "baseline_comparison": true,
+    "material_regression_gate": true,
+    "public_contract_unchanged": true,
+    "shadow_comparison_complete": false,
+    "compatibility_fallback_confirmed": true
+  }
+}
