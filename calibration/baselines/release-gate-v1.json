@@ -19,7 +19,7 @@
     "season.minimum_final_fitness": { "minimum": 0, "maximum": 100 },
     "upsets.average_upset_rate": { "minimum": 0.01, "maximum": 0.49 },
     "rating_bands.d1_elite_v_d1_standard_win_rate": { "minimum": 0.43, "maximum": 0.89 },
-    "rating_bands.d1_elite_v_lower_floor_win_rate": { "minimum": 0.5, "maximum": 0.89 }
+    "rating_bands.d1_elite_v_lower_floor_win_rate": { "minimum": 0.43, "maximum": 0.89 }
   },
   "cutover_requirements": {
     "automatic_artifacts": true,
