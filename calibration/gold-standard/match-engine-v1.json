@@ -1,0 +1,134 @@
+{
+  "dataset_version": "tbg-match-engine-gold-standard-v1.0",
+  "source": "TBG constitutional Stress Tests 1-3",
+  "status": "directional_gold_standard",
+  "notes": [
+    "This dataset records constitutional expectations rather than historical scorelines.",
+    "Numeric engine dials remain subject to later PRs for anti-dominance, season and elite-tail calibration."
+  ],
+  "squads": {
+    "southall": {
+      "club_id": "southall-town",
+      "identity": "wide",
+      "players": [
+        { "id": "southall-gk", "position": "Goalkeeper", "ability": 72 },
+        { "id": "southall-rb", "position": "Right-Back", "ability": 79 },
+        { "id": "southall-cb1", "position": "Centre-Back", "ability": 74 },
+        { "id": "southall-cb2", "position": "Centre-Back", "ability": 73 },
+        { "id": "southall-lb", "position": "Left-Back", "ability": 78 },
+        { "id": "southall-dm", "position": "Defensive Midfield", "ability": 76 },
+        { "id": "southall-cm1", "position": "Central Midfield", "ability": 72 },
+        { "id": "southall-cm2", "position": "Central Midfield", "ability": 71 },
+        { "id": "southall-rw", "position": "Right Winger", "ability": 81 },
+        { "id": "southall-st", "position": "Centre-Forward", "ability": 80 },
+        { "id": "southall-lw", "position": "Left Winger", "ability": 77 },
+        { "id": "southall-cb3", "position": "Centre-Back", "ability": 70 },
+        { "id": "southall-st2", "position": "Centre-Forward", "ability": 71 },
+        { "id": "southall-am", "position": "Attacking Midfield", "ability": 69 },
+        { "id": "southall-fb2", "position": "Right-Back", "ability": 72 },
+        { "id": "southall-wing2", "position": "Left Winger", "ability": 73 }
+      ],
+      "setups": {
+        "wide_433": {
+          "formation": "4-3-3-wide",
+          "style": "possession",
+          "route_to_goal": "wide",
+          "pressing": "mid",
+          "tempo": "normal",
+          "starting_xi": ["southall-gk","southall-rb","southall-cb1","southall-cb2","southall-lb","southall-dm","southall-cm1","southall-cm2","southall-rw","southall-st","southall-lw"]
+        },
+        "wide_352": {
+          "formation": "3-5-2",
+          "style": "balanced",
+          "route_to_goal": "wide",
+          "pressing": "mid",
+          "tempo": "normal",
+          "starting_xi": ["southall-gk","southall-cb1","southall-cb2","southall-cb3","southall-rb","southall-cm1","southall-dm","southall-cm2","southall-lb","southall-st","southall-lw"]
+        },
+        "direct_442": {
+          "formation": "4-4-2",
+          "style": "direct",
+          "route_to_goal": "wide",
+          "pressing": "mid",
+          "tempo": "fast",
+          "starting_xi": ["southall-gk","southall-rb","southall-cb1","southall-cb2","southall-lb","southall-rw","southall-cm1","southall-cm2","southall-lw","southall-st","southall-st2"]
+        },
+        "central_4231": {
+          "formation": "4-2-3-1",
+          "style": "possession",
+          "route_to_goal": "central",
+          "pressing": "mid",
+          "tempo": "normal",
+          "starting_xi": ["southall-gk","southall-rb","southall-cb1","southall-cb2","southall-lb","southall-dm","southall-cm1","southall-rw","southall-am","southall-lw","southall-st"]
+        }
+      }
+    },
+    "northfield": {
+      "club_id": "northfield",
+      "identity": "central",
+      "players": [
+        { "id": "north-gk", "position": "Goalkeeper", "ability": 74 },
+        { "id": "north-rb", "position": "Right-Back", "ability": 71 },
+        { "id": "north-cb1", "position": "Centre-Back", "ability": 76 },
+        { "id": "north-cb2", "position": "Centre-Back", "ability": 75 },
+        { "id": "north-lb", "position": "Left-Back", "ability": 70 },
+        { "id": "north-dm", "position": "Defensive Midfield", "ability": 78 },
+        { "id": "north-cm", "position": "Central Midfield", "ability": 80 },
+        { "id": "north-am", "position": "Attacking Midfield", "ability": 85 },
+        { "id": "north-rw", "position": "Right Winger", "ability": 72 },
+        { "id": "north-st", "position": "Centre-Forward", "ability": 81 },
+        { "id": "north-lw", "position": "Left Winger", "ability": 71 },
+        { "id": "north-dm2", "position": "Defensive Midfield", "ability": 76 },
+        { "id": "north-cm2", "position": "Central Midfield", "ability": 78 }
+      ],
+      "setups": {
+        "wide_433": {
+          "formation": "4-3-3-wide",
+          "style": "possession",
+          "route_to_goal": "wide",
+          "pressing": "mid",
+          "tempo": "normal",
+          "starting_xi": ["north-gk","north-rb","north-cb1","north-cb2","north-lb","north-dm","north-cm","north-cm2","north-rw","north-st","north-lw"]
+        },
+        "central_4231": {
+          "formation": "4-2-3-1",
+          "style": "possession",
+          "route_to_goal": "central",
+          "pressing": "mid",
+          "tempo": "normal",
+          "starting_xi": ["north-gk","north-rb","north-cb1","north-cb2","north-lb","north-dm","north-dm2","north-rw","north-am","north-lw","north-st"]
+        }
+      }
+    }
+  },
+  "stress_tests": {
+    "st1": {
+      "name": "One Squad, Many Shapes",
+      "expectations": [
+        "southall_wide_433_beats_central_4231",
+        "northfield_central_4231_beats_wide_433",
+        "best_setup_diverges_by_squad",
+        "no_universal_4231_meta"
+      ]
+    },
+    "st2": {
+      "name": "Congestion, Rotation and Depth",
+      "fixture_days": [0,3,6,10,14,18],
+      "expectations": [
+        "rigid_selection_accumulates_more_fatigue",
+        "rotation_preserves_more_squad_fitness",
+        "high_familiarity_reduces_dispersion",
+        "thin_depth_has_a_real_quality_cost"
+      ]
+    },
+    "st3": {
+      "name": "Holding an Identity Under Congestion",
+      "expectations": [
+        "wide_identity_survives_rotation",
+        "rotated_identity_loses_mean_quality_not_familiarity",
+        "wing_backs_have_higher_workload_than_full_backs",
+        "managed_identity_beats_rigid_burnout_on_availability"
+      ]
+    }
+  }
+}
