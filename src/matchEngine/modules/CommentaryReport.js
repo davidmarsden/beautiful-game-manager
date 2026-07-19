@@ -1,7 +1,7 @@
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
-export const COMMENTARY_REPORT_VERSION = 'tbg-commentary-report-v0.3';
+export const COMMENTARY_REPORT_VERSION = 'tbg-commentary-report-v0.4';
 export const COMMENTARY_REPORT_STATE_KEY = 'module_f_commentary_report';
 
 function deepFreeze(value) {
@@ -15,7 +15,10 @@ function clubName(team, fallback) { return text(team?.club_name || team?.name ||
 
 function playerLookup(quality = {}) {
   const lookup = new Map();
-  for (const side of ['home', 'away']) for (const player of quality?.[side]?.starters || []) lookup.set(String(player.player_id), player.display_name || player.player_id);
+  for (const side of ['home', 'away']) {
+    for (const player of quality?.[side]?.starters || []) lookup.set(String(player.player_id), player.display_name || player.player_id);
+    for (const player of quality?.[side]?.bench?.players || []) lookup.set(String(player.player_id), player.display_name || player.player_id);
+  }
   return lookup;
 }
 
@@ -35,9 +38,16 @@ function eventSentence(event, names, clubs) {
         return `${player} misses the penalty for ${club}.`;
       }
       return `${club} are awarded a penalty.`;
+    case 'substitution': {
+      const playerOut = names.get(String(event.player_out_id)) || event.player_out_id || 'a player';
+      const playerIn = names.get(String(event.player_in_id)) || event.player_in_id || 'a replacement';
+      return event.reason === 'injury'
+        ? `${playerIn} replaces the injured ${playerOut} for ${club}.`
+        : `${club} replace ${playerOut} with ${playerIn}.`;
+    }
     case 'red_card': return `${player} is sent off for ${club}.`;
     case 'yellow_card': return `${player} is booked for ${club}.`;
-    case 'injury': return `${player} is forced off with an injury concern for ${club}.`;
+    case 'injury': return `${player} suffers an injury concern for ${club}.`;
     case 'set_piece': return event.subtype === 'corner' ? `${club} win a corner.` : `${club} win a dangerous free kick.`;
     default: return `${club} create an important moment.`;
   }
@@ -60,6 +70,7 @@ function summary(resolution, clubs) {
   if (home.penalty_retakes + away.penalty_retakes > 0) parts.push('The referee also ordered a penalty retake.');
   if (home.red_cards + away.red_cards > 0) parts.push('A sending-off changed the shape of the contest.');
   if (home.injuries + away.injuries > 0) parts.push('The match also contained an injury concern.');
+  if (home.injury_substitutions + away.injury_substitutions > 0) parts.push('At least one injury forced a change of personnel.');
   return parts.join(' ');
 }
 
@@ -76,8 +87,8 @@ function talkingPoints(resolution, tactical = {}, quality = {}) {
 }
 
 function keyEvents(events) {
-  const priority = { goal: 7, red_card: 6, penalty: 5, injury: 4, foul: 3, big_chance: 3, yellow_card: 2, set_piece: 1, shot: 0 };
-  return [...events].sort((left, right) => (priority[right.type] || 0) - (priority[left.type] || 0) || left.minute - right.minute).slice(0, 12).sort((left, right) => left.minute - right.minute);
+  const priority = { goal: 8, red_card: 7, penalty: 6, injury: 5, substitution: 5, foul: 3, big_chance: 3, yellow_card: 2, set_piece: 1, shot: 0 };
+  return [...events].sort((left, right) => (priority[right.type] || 0) - (priority[left.type] || 0) || left.minute - right.minute).slice(0, 14).sort((left, right) => left.minute - right.minute);
 }
 
 export function resolveCommentaryReport(contract, resolution, tactical = {}, quality = {}, fatigue = {}) {
@@ -89,7 +100,7 @@ export function resolveCommentaryReport(contract, resolution, tactical = {}, qua
     version: COMMENTARY_REPORT_VERSION,
     fixture_id: contract?.fixture?.fixture_id || contract?.fixture?.id || null,
     headline: headline(resolution.score, clubs), summary: summary(resolution, clubs), score: resolution.score, clubs, commentary,
-    talking_points: talkingPoints(resolution, tactical, quality), statistics: resolution.statistics,
+    talking_points: talkingPoints(resolution, tactical, quality), statistics: resolution.statistics, lineup_state: resolution.lineup_state,
     tactical_context: {
       home: tactical?.home ? { formation: tactical.home.formation, style: tactical.home.style, route_to_goal: tactical.home.route_to_goal } : null,
       away: tactical?.away ? { formation: tactical.away.formation, style: tactical.away.style, route_to_goal: tactical.away.route_to_goal } : null
