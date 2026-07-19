@@ -17,6 +17,33 @@ test('both result producers preserve the established public result envelope', ()
   assert.equal(report.checks.public_contract_compatible, true);
 });
 
+test('shadow gate rejects malformed published event records', () => {
+  const malformedSimulator = (contract) => ({
+    result_version: '2d5-v1',
+    run_key: contract.run_key,
+    fixture_id: contract.fixture.fixture_id,
+    status: 'completed',
+    score: { home: 0, away: 0 },
+    outcome: 'draw',
+    events: [{ type: 'goal', side: 'home', minute: 12, commentary: 'A goal without a public ID.' }],
+    statistics: {
+      home: { shots: 1, shots_on_target: 1, possession: 50 },
+      away: { shots: 1, shots_on_target: 1, possession: 50 }
+    },
+    model: { simulator: 'malformed-test-double' }
+  });
+
+  const report = runShadowComparison({ matchesPerScenario: 80, simulator: malformedSimulator });
+  assert.equal(report.public_contract.compatible, false);
+  assert.equal(report.checks.public_contract_compatible, false);
+  assert.equal(report.accepted, false);
+  assert.equal(report.recommendation, 'hold_for_shadow_review');
+  assert.match(
+    JSON.stringify(report.public_contract.errors),
+    /events\[0\]\.event_id must be a non-empty string/
+  );
+});
+
 test('shadow comparison publishes explicit bounded acceptance checks', () => {
   const report = runShadowComparison({ matchesPerScenario: 80 });
   assert.deepEqual(report.thresholds, SHADOW_ACCEPTANCE);
