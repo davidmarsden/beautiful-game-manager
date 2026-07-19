@@ -18,6 +18,7 @@ jobs:
       - run: npm run calibration:shadow
       - run: npm run calibration:league-structure
       - run: npm run calibration:rollover
+      - run: npm run calibration:availability
       - uses: actions/upload-artifact@v4
         if: always()
         with:
