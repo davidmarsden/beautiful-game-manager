@@ -9,7 +9,8 @@
     "calibration:rating-bands": "node scripts/investigate-rating-bands.js",
     "calibration:shadow": "node scripts/generate-shadow-comparison.js",
     "calibration:league-structure": "node scripts/generate-league-structure-report.js",
-    "calibration:gate": "npm test && npm run calibration:report && npm run calibration:shadow && npm run calibration:league-structure"
+    "calibration:rollover": "node scripts/generate-season-rollover-report.js",
+    "calibration:gate": "npm test && npm run calibration:report && npm run calibration:shadow && npm run calibration:league-structure && npm run calibration:rollover"
   },
   "engines": {
     "node": ">=20"
