@@ -25,16 +25,31 @@ function playersById(squad) {
   return new Map(squadPlayers(squad).map((player) => [player.tbg_player_id, player]));
 }
 
-function teamFromSetup(squad, setupKey, overrides = {}) {
+function validateSelection(squad, startingXi, bench) {
+  const squadIds = new Set(squad.players.map((row) => row.id));
+  const uniqueXi = new Set(startingXi);
+  const uniqueBench = new Set(bench);
+  if (startingXi.length !== 11 || uniqueXi.size !== 11) throw new Error('Gold-standard starting XI must contain 11 unique players');
+  for (const playerId of [...startingXi, ...bench]) {
+    if (!squadIds.has(playerId)) throw new Error(`Gold-standard selected player not found in squad: ${playerId}`);
+  }
+  for (const playerId of uniqueXi) {
+    if (uniqueBench.has(playerId)) throw new Error(`Gold-standard player selected in both starting XI and bench: ${playerId}`);
+  }
+}
+
+export function teamFromSetup(squad, setupKey, overrides = {}) {
   const setup = squad.setups[setupKey];
   if (!setup) throw new Error(`Gold-standard setup not found: ${setupKey}`);
-  const bench = squad.players.map((row) => row.id).filter((id) => !setup.starting_xi.includes(id));
+  const startingXi = [...(overrides.starting_xi || setup.starting_xi)];
+  const bench = squad.players.map((row) => row.id).filter((id) => !startingXi.includes(id));
+  validateSelection(squad, startingXi, bench);
   return {
     side: overrides.side || 'home',
     club_id: squad.club_id,
     club_name: squad.club_id,
     formation: setup.formation,
-    starting_xi: overrides.starting_xi || setup.starting_xi,
+    starting_xi: startingXi,
     bench,
     previous_starting_xi: overrides.previous_starting_xi,
     cohesion: overrides.cohesion ?? 75,
@@ -118,7 +133,7 @@ function fixtureBlock(squad, fixtureDays, rotate) {
     const world = { match_state: { players: Object.fromEntries(Object.entries(state).map(([id, fitness]) => [id, { fitness, sharpness: 100, morale: 50 }])) } };
     const context = resolveTeamContext(team, map, world, { formation: team.formation, style: 'possession', route_to_goal: 'wide' }, q);
     for (const player of context.players) state[player.player_id] = player.projected_post_match_fitness_90;
-    reports.push({ day, xi, quality: q.team_strength, context });
+    reports.push({ day, xi, bench: team.bench, quality: q.team_strength, context });
     previous.ids = xi;
     previous.day = day;
   });
