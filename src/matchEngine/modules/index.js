@@ -1,15 +1,24 @@
 import { createEngineModule, validateEngineModules } from '../EngineModule.js';
 import { executeTacticalResolution } from './TacticalResolution.js';
 import { executePlayerQuality } from './PlayerQuality.js';
-import { executeRatingBandCalibration } from './RatingBandCalibration.js';
+import { executeRatingBandCalibration, RATING_BAND_QUALITY_STATE_KEY } from './RatingBandCalibration.js';
 import { executeFatigueContext } from './FatigueContext.js';
 import { executeEventGeneration } from './EventGeneration.js';
 import { executeMatchResolution } from './MatchResolution.js';
 import { executeCommentaryReport } from './CommentaryReport.js';
 
-function executeCalibratedPlayerQuality(context) {
+function executePlayerQualityWithCalibration(context) {
   executePlayerQuality(context);
   executeRatingBandCalibration(context);
+  return context;
+}
+
+function executeCalibratedEventGeneration(context) {
+  const rawQuality = context.get('module_b_player_quality');
+  const calibratedQuality = context.get(RATING_BAND_QUALITY_STATE_KEY);
+  context.set('module_b_player_quality', calibratedQuality);
+  executeEventGeneration(context);
+  context.set('module_b_player_quality', rawQuality);
   return context;
 }
 
@@ -26,7 +35,7 @@ export const MODULE_B_TEAM_QUALITY = createEngineModule({
   name: 'Module B — Team Quality',
   order: 2,
   constitution: 'Match Engine Constitution v0.3; Player Rating Constitution v1.1',
-  execute: executeCalibratedPlayerQuality
+  execute: executePlayerQualityWithCalibration
 });
 
 export const MODULE_C_FATIGUE_CONTEXT = createEngineModule({
@@ -42,7 +51,7 @@ export const MODULE_D_EVENT_GENERATION = createEngineModule({
   name: 'Module D — Event Generation',
   order: 4,
   constitution: 'Match Engine Constitution v0.3; Appendix D v0.4',
-  execute: executeEventGeneration
+  execute: executeCalibratedEventGeneration
 });
 
 export const MODULE_E_MATCH_RESOLUTION = createEngineModule({
