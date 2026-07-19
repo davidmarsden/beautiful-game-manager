@@ -1,8 +1,9 @@
 import { simulateMatch, MATCH_ENGINE_MODES } from '../matchSimulation.js';
 
 const round = (value, places = 4) => Number(Number(value).toFixed(places));
+const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 
-export const RATING_BAND_VALIDATION_VERSION = 'tbg-rating-band-validation-v1.1';
+export const RATING_BAND_VALIDATION_VERSION = 'tbg-rating-band-validation-v1.2';
 
 export const TBG_RATING_BANDS = Object.freeze({
   d1_elite: Object.freeze({ rating: 95, description: 'D1 elite-tail side' }),
@@ -18,6 +19,12 @@ const POSITIONS = Object.freeze([
   'Defensive Midfield', 'Central Midfield', 'Central Midfield',
   'Right Winger', 'Centre-Forward', 'Left Winger'
 ]);
+
+const OUTCOME_COUNT_KEYS = Object.freeze({
+  win: 'wins',
+  draw: 'draws',
+  loss: 'losses'
+});
 
 function players(prefix, rating) {
   return POSITIONS.map((position, index) => ({
@@ -50,6 +57,21 @@ function strongerOutcome(score, strongerSide) {
   return stronger > weaker ? 'win' : stronger === weaker ? 'draw' : 'loss';
 }
 
+function fixtureProfile(band, prefix) {
+  const rows = players(prefix, TBG_RATING_BANDS[band].rating);
+  return Object.freeze({
+    band,
+    description: TBG_RATING_BANDS[band].description,
+    player_count: rows.length,
+    average_rating: round(average(rows.map((row) => row.underlying_ability_rating)), 3),
+    players: Object.freeze(rows.map((row) => Object.freeze({
+      player_id: row.tbg_player_id,
+      position: row.position,
+      rating: row.underlying_ability_rating
+    })))
+  });
+}
+
 export function validateRatingPair({
   strongerBand,
   weakerBand,
@@ -63,9 +85,16 @@ export function validateRatingPair({
   const weakerRating = TBG_RATING_BANDS[weakerBand].rating;
   if (strongerRating <= weakerRating) throw new Error(`Stronger rating band must exceed weaker band: ${scenarioId}`);
 
+  const strongerFixture = fixtureProfile(strongerBand, `${scenarioId}-stronger`);
+  const weakerFixture = fixtureProfile(weakerBand, `${scenarioId}-weaker`);
   const outcomes = [];
   let strongerGoals = 0;
   let weakerGoals = 0;
+  const sideSplits = {
+    home: { matches: 0, wins: 0, draws: 0, losses: 0, goals_for: 0, goals_against: 0 },
+    away: { matches: 0, wins: 0, draws: 0, losses: 0, goals_for: 0, goals_against: 0 }
+  };
+
   for (let index = 0; index < matches; index += 1) {
     const strongerSide = index % 2 === 0 ? 'home' : 'away';
     const homeRating = strongerSide === 'home' ? strongerRating : weakerRating;
@@ -87,27 +116,76 @@ export function validateRatingPair({
     };
     const world = { players: [...players(homePrefix, homeRating), ...players(awayPrefix, awayRating)] };
     const result = simulator(contract, world);
-    outcomes.push(strongerOutcome(result.score, strongerSide));
-    strongerGoals += strongerSide === 'home' ? result.score.home : result.score.away;
-    weakerGoals += strongerSide === 'home' ? result.score.away : result.score.home;
+    const outcome = strongerOutcome(result.score, strongerSide);
+    const strongerMatchGoals = strongerSide === 'home' ? result.score.home : result.score.away;
+    const weakerMatchGoals = strongerSide === 'home' ? result.score.away : result.score.home;
+    outcomes.push(outcome);
+    strongerGoals += strongerMatchGoals;
+    weakerGoals += weakerMatchGoals;
+    const split = sideSplits[strongerSide];
+    split.matches += 1;
+    split[OUTCOME_COUNT_KEYS[outcome]] += 1;
+    split.goals_for += strongerMatchGoals;
+    split.goals_against += weakerMatchGoals;
   }
 
   const wins = outcomes.filter((outcome) => outcome === 'win').length;
   const draws = outcomes.filter((outcome) => outcome === 'draw').length;
   const losses = outcomes.filter((outcome) => outcome === 'loss').length;
+  const splitReport = Object.fromEntries(Object.entries(sideSplits).map(([side, row]) => [side, Object.freeze({
+    ...row,
+    win_rate: round(row.wins / row.matches),
+    draw_rate: round(row.draws / row.matches),
+    loss_rate: round(row.losses / row.matches),
+    goal_difference: row.goals_for - row.goals_against,
+    goal_difference_per_match: round((row.goals_for - row.goals_against) / row.matches, 3)
+  })]));
+
   return Object.freeze({
     scenario_id: scenarioId,
     stronger_band: strongerBand,
     weaker_band: weakerBand,
+    stronger_fixture: strongerFixture,
+    weaker_fixture: weakerFixture,
+    stronger_average_rating: strongerFixture.average_rating,
+    weaker_average_rating: weakerFixture.average_rating,
+    expected_average_rating_gap: round(strongerFixture.average_rating - weakerFixture.average_rating, 3),
     rating_gap: strongerRating - weakerRating,
     sample_size: matches,
+    outcome_counts: Object.freeze({ wins, draws, losses }),
     stronger_win_rate: round(wins / matches),
     draw_rate: round(draws / matches),
     upset_rate: round(losses / matches),
     stronger_non_loss_rate: round((wins + draws) / matches),
+    stronger_goals: strongerGoals,
+    weaker_goals: weakerGoals,
+    total_goal_difference: strongerGoals - weakerGoals,
     stronger_goals_per_match: round(strongerGoals / matches, 3),
     weaker_goals_per_match: round(weakerGoals / matches, 3),
-    goal_difference_per_match: round((strongerGoals - weakerGoals) / matches, 3)
+    goal_difference_per_match: round((strongerGoals - weakerGoals) / matches, 3),
+    stronger_side_splits: Object.freeze(splitReport)
+  });
+}
+
+export function runRatingBandInvestigation({ matchesPerPair = 1000, simulator = simulateMatch } = {}) {
+  const scenarios = Object.freeze([
+    validateRatingPair({ strongerBand: 'd1_elite', weakerBand: 'd1_standard', matches: matchesPerPair, simulator, scenarioId: 'd1-elite-v-d1-standard' }),
+    validateRatingPair({ strongerBand: 'd1_elite', weakerBand: 'lower_division_floor', matches: matchesPerPair, simulator, scenarioId: 'd1-elite-v-lower-floor' })
+  ]);
+  const [standard, floor] = scenarios;
+  return Object.freeze({
+    version: 'tbg-rating-band-investigation-v1.0',
+    matches_per_pair: matchesPerPair,
+    total_matches: matchesPerPair * scenarios.length,
+    common_random_numbers: true,
+    scenarios,
+    comparison: Object.freeze({
+      expected_gap_difference: floor.expected_average_rating_gap - standard.expected_average_rating_gap,
+      stronger_win_rate_difference: round(floor.stronger_win_rate - standard.stronger_win_rate),
+      stronger_non_loss_rate_difference: round(floor.stronger_non_loss_rate - standard.stronger_non_loss_rate),
+      goal_difference_per_match_difference: round(floor.goal_difference_per_match - standard.goal_difference_per_match, 3),
+      equality_persists: floor.stronger_win_rate === standard.stronger_win_rate
+    })
   });
 }
 
@@ -131,6 +209,7 @@ export function runRatingBandValidation({ matchesPerPair = 240, simulator = simu
       && TBG_RATING_BANDS.d1_standard.rating > TBG_RATING_BANDS.d2_standard.rating
       && TBG_RATING_BANDS.d2_standard.rating > TBG_RATING_BANDS.lower_division_floor.rating,
     youth_progression_is_preserved: TBG_RATING_BANDS.youth_19_21.rating > TBG_RATING_BANDS.youth_15_18.rating,
+    fixture_average_gaps_match_declared_bands: scenarios.every((row) => row.expected_average_rating_gap === row.rating_gap),
     every_stronger_band_has_positive_goal_edge: scenarios.every((row) => row.goal_difference_per_match > 0),
     every_stronger_band_wins_more_than_it_loses: scenarios.every((row) => row.stronger_win_rate > row.upset_rate),
     senior_non_loss_rate_rises_with_gap: seniorLadder.slice(1).every((row, index) => row.stronger_non_loss_rate + 0.01 >= seniorLadder[index].stronger_non_loss_rate),

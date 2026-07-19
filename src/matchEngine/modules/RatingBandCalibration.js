@@ -2,14 +2,18 @@ const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(
 const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 const round = (value, places = 4) => Number(Number(value).toFixed(places));
 
-export const RATING_BAND_CALIBRATION_VERSION = 'tbg-rating-band-calibration-v1.0';
+export const RATING_BAND_CALIBRATION_VERSION = 'tbg-rating-band-calibration-v1.1';
 export const RATING_BAND_CALIBRATION_STATE_KEY = 'module_b_rating_band_calibration';
 export const RATING_BAND_QUALITY_STATE_KEY = 'module_b_rating_band_quality';
 
 export const RATING_BAND_DIALS = Object.freeze({
-  quality_gap_multiplier_per_point: 0.0125,
-  maximum_side_multiplier: 1.12,
-  minimum_side_multiplier: 0.88
+  // PR #51 calibration: the previous 1.25% per raw rating point compressed
+  // a ten-point 95-v-85 gap into an unrealistically soft match advantage.
+  // Two percentage points per rating point preserves uncertainty for close
+  // elite fixtures while creating a material separation across divisions.
+  quality_gap_multiplier_per_point: 0.02,
+  maximum_side_multiplier: 1.2,
+  minimum_side_multiplier: 0.8
 });
 
 function deepFreeze(value) {

@@ -6,6 +6,7 @@
   "scripts": {
     "test": "node --test",
     "calibration:report": "node scripts/generate-calibration-report.js",
+    "calibration:rating-bands": "node scripts/investigate-rating-bands.js",
     "calibration:gate": "npm test && npm run calibration:report"
   },
   "engines": {
