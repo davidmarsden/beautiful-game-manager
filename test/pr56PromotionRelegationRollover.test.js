@@ -22,6 +22,7 @@ test('promotion and relegation produce a complete balanced next-season structure
   assert.equal(rollover.divisions.length, 5);
   assert.equal(rollover.movements.length, 8);
   assert.ok(rollover.divisions.every((division) => division.club_count === 4));
+  assert.equal(rollover.checks.canonical_division_levels_preserved, true);
 
   const originalIds = divisions.flatMap((division) => division.clubs.map((club) => club.club_id)).sort();
   const nextIds = rollover.divisions.flatMap((division) => division.clubs.map((club) => club.club_id)).sort();
@@ -53,5 +54,19 @@ test('season rollover refuses incomplete or unaccepted structures', () => {
   assert.throws(
     () => rollOverPlayableLeague({ divisions, completedReport: { ...report, accepted: false } }),
     /accepted completed league report/
+  );
+});
+
+test('season rollover refuses non-canonical division levels', () => {
+  const { divisions, report } = completedSeason();
+  const invalidLevels = divisions.map((division) => {
+    if (division.division_id === 'd2') return { ...division, level: 3 };
+    if (division.division_id === 'd3') return { ...division, level: 2 };
+    return division;
+  });
+
+  assert.throws(
+    () => rollOverPlayableLeague({ divisions: invalidLevels, completedReport: report }),
+    /canonical division levels: d1=1 through d5=5/
   );
 });
