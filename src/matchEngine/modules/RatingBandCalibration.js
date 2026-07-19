@@ -4,6 +4,7 @@ const round = (value, places = 4) => Number(Number(value).toFixed(places));
 
 export const RATING_BAND_CALIBRATION_VERSION = 'tbg-rating-band-calibration-v1.0';
 export const RATING_BAND_CALIBRATION_STATE_KEY = 'module_b_rating_band_calibration';
+export const RATING_BAND_QUALITY_STATE_KEY = 'module_b_rating_band_quality';
 
 export const RATING_BAND_DIALS = Object.freeze({
   quality_gap_multiplier_per_point: 0.0125,
@@ -62,7 +63,7 @@ export function calibrateRatingBandQuality(quality) {
 
 export function executeRatingBandCalibration(context) {
   const calibrated = calibrateRatingBandQuality(context.get('module_b_player_quality'));
-  context.set('module_b_player_quality', calibrated);
+  context.set(RATING_BAND_QUALITY_STATE_KEY, calibrated);
   context.set(RATING_BAND_CALIBRATION_STATE_KEY, calibrated.rating_band_calibration);
   return context;
 }
