@@ -7,16 +7,16 @@ import { executeEventGeneration } from './EventGeneration.js';
 import { executeMatchResolution } from './MatchResolution.js';
 import { executeCommentaryReport } from './CommentaryReport.js';
 
-function executePlayerQualityWithCalibration(context) {
-  executePlayerQuality(context);
-  executeRatingBandCalibration(context);
-  return context;
-}
-
 function ratingCalibrationRequested(contract = {}) {
   return contract.rating_band_calibration === true
     || Number.isFinite(Number(contract.validation_gap))
     || Boolean(contract.validation_scenario);
+}
+
+function executePlayerQualityWithCalibration(context) {
+  executePlayerQuality(context);
+  if (ratingCalibrationRequested(context.contract)) executeRatingBandCalibration(context);
+  return context;
 }
 
 function executeCalibratedEventGeneration(context) {
