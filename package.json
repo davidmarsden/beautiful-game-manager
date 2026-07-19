@@ -4,7 +4,7 @@
   "description": "Tablet-first manager portal for The Beautiful Game.",
   "type": "module",
   "scripts": {
-    "test": "node --test test/pr50CalibrationReportReleaseGate.test.js",
+    "test": "node --test --test-name-pattern=automatic test/pr50CalibrationReportReleaseGate.test.js",
     "calibration:report": "node scripts/generate-calibration-report.js",
     "calibration:gate": "npm test && npm run calibration:report"
   },
