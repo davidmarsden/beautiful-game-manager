@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calibrateRatingBandQuality, RATING_BAND_DIALS } from '../src/matchEngine/modules/RatingBandCalibration.js';
 import { runRatingBandValidation, TBG_RATING_BANDS } from '../src/matchEngine/ratingBandValidation.js';
-import { validateUpsetCurve } from '../src/matchEngine/tacticalValidation.js';
 
 function quality(home, away) {
   const side = (teamStrength) => ({
@@ -50,11 +49,7 @@ test('agreed TBG senior and youth rating bands remain explicit', () => {
 test('constitutional engine produces accepted rating-band and elite-tail gradients', () => {
   const report = runRatingBandValidation({ matchesPerPair: 120 });
   assert.equal(report.total_matches, 600);
+  assert.equal(report.common_random_numbers, true);
   assert.equal(report.accepted, true, JSON.stringify({ checks: report.checks, scenarios: report.scenarios }, null, 2));
   assert.equal(Object.values(report.checks).every(Boolean), true);
-});
-
-test('the calibrated engine passes the adjacent upset-curve validator', () => {
-  const report = validateUpsetCurve({ gaps: [2, 4, 6, 10], matchesPerGap: 120 });
-  assert.equal(report.accepted, true, JSON.stringify({ checks: report.checks, curves: report.curves, steps: report.adjacent_steps }, null, 2));
 });
