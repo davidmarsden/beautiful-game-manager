@@ -1,10 +1,17 @@
 import { createEngineModule, validateEngineModules } from '../EngineModule.js';
 import { executeTacticalResolution } from './TacticalResolution.js';
 import { executePlayerQuality } from './PlayerQuality.js';
+import { executeRatingBandCalibration } from './RatingBandCalibration.js';
 import { executeFatigueContext } from './FatigueContext.js';
 import { executeEventGeneration } from './EventGeneration.js';
 import { executeMatchResolution } from './MatchResolution.js';
 import { executeCommentaryReport } from './CommentaryReport.js';
+
+function executeCalibratedPlayerQuality(context) {
+  executePlayerQuality(context);
+  executeRatingBandCalibration(context);
+  return context;
+}
 
 export const MODULE_A_TACTICAL_RESOLUTION = createEngineModule({
   id: 'module-a-tactical-resolution',
@@ -19,7 +26,7 @@ export const MODULE_B_TEAM_QUALITY = createEngineModule({
   name: 'Module B — Team Quality',
   order: 2,
   constitution: 'Match Engine Constitution v0.3; Player Rating Constitution v1.1',
-  execute: executePlayerQuality
+  execute: executeCalibratedPlayerQuality
 });
 
 export const MODULE_C_FATIGUE_CONTEXT = createEngineModule({
