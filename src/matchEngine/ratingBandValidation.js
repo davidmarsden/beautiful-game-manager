@@ -20,6 +20,12 @@ const POSITIONS = Object.freeze([
   'Right Winger', 'Centre-Forward', 'Left Winger'
 ]);
 
+const OUTCOME_COUNT_KEYS = Object.freeze({
+  win: 'wins',
+  draw: 'draws',
+  loss: 'losses'
+});
+
 function players(prefix, rating) {
   return POSITIONS.map((position, index) => ({
     tbg_player_id: `${prefix}-${index + 1}`,
@@ -118,7 +124,7 @@ export function validateRatingPair({
     weakerGoals += weakerMatchGoals;
     const split = sideSplits[strongerSide];
     split.matches += 1;
-    split[`${outcome}s`] += 1;
+    split[OUTCOME_COUNT_KEYS[outcome]] += 1;
     split.goals_for += strongerMatchGoals;
     split.goals_against += weakerMatchGoals;
   }
