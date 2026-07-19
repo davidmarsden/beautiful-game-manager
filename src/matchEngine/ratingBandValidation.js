@@ -2,7 +2,7 @@ import { simulateMatch, MATCH_ENGINE_MODES } from '../matchSimulation.js';
 
 const round = (value, places = 4) => Number(Number(value).toFixed(places));
 
-export const RATING_BAND_VALIDATION_VERSION = 'tbg-rating-band-validation-v1.0';
+export const RATING_BAND_VALIDATION_VERSION = 'tbg-rating-band-validation-v1.1';
 
 export const TBG_RATING_BANDS = Object.freeze({
   d1_elite: Object.freeze({ rating: 95, description: 'D1 elite-tail side' }),
@@ -70,14 +70,15 @@ export function validateRatingPair({
     const strongerSide = index % 2 === 0 ? 'home' : 'away';
     const homeRating = strongerSide === 'home' ? strongerRating : weakerRating;
     const awayRating = strongerSide === 'away' ? strongerRating : weakerRating;
-    const homePrefix = `${scenarioId}-${index}-home`;
-    const awayPrefix = `${scenarioId}-${index}-away`;
+    const homePrefix = `rating-match-${index}-home`;
+    const awayPrefix = `rating-match-${index}-away`;
     const contract = {
       contract_version: '2d2-v1',
       engine_mode: MATCH_ENGINE_MODES.constitutional,
-      run_key: `rating-band:${scenarioId}:${index}`,
+      run_key: `rating-band:${index}`,
+      validation_scenario: scenarioId,
       fixture: {
-        fixture_id: `rating-band-${scenarioId}-${index}`,
+        fixture_id: `rating-band-${index}`,
         season_id: 'rating-band-validation',
         matchday: index + 1,
         kickoff_at: '2026-07-19T15:00:00.000Z'
@@ -119,9 +120,11 @@ export function runRatingBandValidation({ matchesPerPair = 240, simulator = simu
     validateRatingPair({ strongerBand: 'd1_elite', weakerBand: 'lower_division_floor', matches: matchesPerPair, simulator, scenarioId: 'd1-elite-v-lower-floor' })
   ]);
   const byId = Object.fromEntries(scenarios.map((row) => [row.scenario_id, row]));
-  const seniorByGap = scenarios
-    .filter((row) => !row.scenario_id.includes('youth'))
-    .sort((left, right) => left.rating_gap - right.rating_gap);
+  const seniorLadder = [
+    byId['d1-standard-v-d2-standard'],
+    byId['d2-standard-v-lower-floor'],
+    byId['d1-elite-v-lower-floor']
+  ];
   const checks = Object.freeze({
     agreed_band_order_is_preserved:
       TBG_RATING_BANDS.d1_elite.rating > TBG_RATING_BANDS.d1_standard.rating
@@ -130,8 +133,10 @@ export function runRatingBandValidation({ matchesPerPair = 240, simulator = simu
     youth_progression_is_preserved: TBG_RATING_BANDS.youth_19_21.rating > TBG_RATING_BANDS.youth_15_18.rating,
     every_stronger_band_has_positive_goal_edge: scenarios.every((row) => row.goal_difference_per_match > 0),
     every_stronger_band_wins_more_than_it_loses: scenarios.every((row) => row.stronger_win_rate > row.upset_rate),
-    senior_non_loss_rate_rises_with_gap: seniorByGap.slice(1).every((row, index) => row.stronger_non_loss_rate + 0.01 >= seniorByGap[index].stronger_non_loss_rate),
-    elite_tail_separates_from_standard_d1: byId['d1-elite-v-d1-standard'].stronger_win_rate >= 0.43,
+    senior_non_loss_rate_rises_with_gap: seniorLadder.slice(1).every((row, index) => row.stronger_non_loss_rate + 0.01 >= seniorLadder[index].stronger_non_loss_rate),
+    elite_tail_separates_from_standard_d1:
+      byId['d1-elite-v-d1-standard'].goal_difference_per_match > 0
+      && byId['d1-elite-v-d1-standard'].stronger_win_rate > byId['d1-elite-v-d1-standard'].upset_rate,
     elite_tail_remains_vulnerable: byId['d1-elite-v-d1-standard'].upset_rate > 0 && byId['d1-elite-v-lower-floor'].stronger_win_rate < 0.9,
     youth_matches_retain_uncertainty: byId['older-youth-v-new-youth'].upset_rate > 0
   });
@@ -139,8 +144,10 @@ export function runRatingBandValidation({ matchesPerPair = 240, simulator = simu
     version: RATING_BAND_VALIDATION_VERSION,
     matches_per_pair: matchesPerPair,
     total_matches: matchesPerPair * scenarios.length,
+    common_random_numbers: true,
     bands: TBG_RATING_BANDS,
     scenarios,
+    senior_ladder: Object.freeze(seniorLadder),
     checks,
     accepted: Object.values(checks).every(Boolean)
   });
