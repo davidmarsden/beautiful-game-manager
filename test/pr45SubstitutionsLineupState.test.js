@@ -8,7 +8,7 @@ const starters = (side) => Array.from({ length: 11 }, (_, index) => ({
   required_role: index === 0 ? 'gk' : index < 5 ? 'cb' : index < 9 ? 'cm' : 'st',
   effective_quality: 90 - index
 }));
-const bench = (side) => Array.from({ length: 5 }, (_, index) => ({ player_id: `${side}-bench-${index + 1}`, effective_quality: 82 - index }));
+const bench = (side, count = 5) => Array.from({ length: count }, (_, index) => ({ player_id: `${side}-bench-${index + 1}`, effective_quality: 82 - index }));
 const quality = {
   home: { starters: starters('home'), bench: { players: bench('home') } },
   away: { starters: starters('away'), bench: { players: bench('away') } }
@@ -56,6 +56,52 @@ test('second yellow dismissal removes the player without introducing a replaceme
   ]), contract, quality);
   assert.equal(result.lineups.home.final_on_pitch.includes('home-4'), false);
   assert.equal(result.lineups.home.final_on_pitch.length, 10);
+});
+
+test('dismissed players are excluded from later tactical substitution candidates', () => {
+  const result = resolveLineupEvents(eventGeneration([
+    { event_id: 'home-red-1', minute: 35, side: 'home', type: 'red_card', player_id: 'home-11' }
+  ]), contract, quality);
+  const tactical = result.events.find((event) => event.type === 'substitution' && event.reason === 'tactical');
+  assert.ok(tactical);
+  assert.notEqual(tactical.player_out_id, 'home-11');
+  assert.equal(result.lineups.home.final_on_pitch.includes('home-11'), false);
+});
+
+test('second-yellow dismissals are excluded from later tactical substitution candidates', () => {
+  const result = resolveLineupEvents(eventGeneration([
+    { event_id: 'home-yellow-1', minute: 20, side: 'home', type: 'yellow_card', player_id: 'home-11' },
+    { event_id: 'home-yellow-2', minute: 50, side: 'home', type: 'yellow_card', player_id: 'home-11' }
+  ]), contract, quality);
+  const tactical = result.events.find((event) => event.type === 'substitution' && event.reason === 'tactical');
+  assert.ok(tactical);
+  assert.notEqual(tactical.player_out_id, 'home-11');
+});
+
+test('injury substitutions share the global five-substitution cap', () => {
+  const largeBench = bench('home', 9);
+  const expandedQuality = {
+    ...quality,
+    home: { starters: starters('home'), bench: { players: largeBench } }
+  };
+  const expandedContract = {
+    ...contract,
+    teams: {
+      ...contract.teams,
+      home: { starting_xi: starters('home').map((player) => player.player_id), bench: largeBench.map((player) => player.player_id) }
+    }
+  };
+  const injuries = Array.from({ length: 6 }, (_, index) => ({
+    event_id: `home-injury-${index + 1}`,
+    minute: 10 + index * 5,
+    side: 'home',
+    type: 'injury',
+    player_id: `home-${index + 2}`
+  }));
+  const result = resolveLineupEvents(eventGeneration(injuries), expandedContract, expandedQuality);
+  const substitutions = result.events.filter((event) => event.type === 'substitution' && event.side === 'home');
+  assert.equal(substitutions.length, 5);
+  assert.equal(substitutions.every((event) => event.reason === 'injury'), true);
 });
 
 test('Module E reconciles substitutions, lineup state and minutes-based fitness', () => {
