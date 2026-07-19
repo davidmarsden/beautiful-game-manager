@@ -22,15 +22,46 @@ test('full tactical matrix is bounded, countervailing and anti-dominant', () => 
   assert.ok(report.champion.worst_matchup < 0);
 });
 
-test('upset validation retains uncertainty while responding to rating gaps', () => {
-  const report = validateUpsetCurve({ gaps: [2, 4, 6, 10], matchesPerGap: 120 });
-  assert.equal(report.total_matches, 480);
+test('upset validation checks every adjacent rating-gap step', () => {
+  const report = validateUpsetCurve({ gaps: [2, 4, 6, 10], matchesPerGap: 600 });
+  assert.equal(report.total_matches, 2400);
   assert.equal(report.accepted, true, JSON.stringify(report, null, 2));
   assert.equal(report.curves.length, 4);
+  assert.equal(report.adjacent_steps.length, 3);
   for (const row of report.curves) {
     assert.ok(row.upset_rate > 0);
     assert.ok(row.stronger_win_rate < 1);
   }
+  for (const step of report.adjacent_steps) {
+    assert.equal(step.stronger_win_rate_non_decreasing, true, JSON.stringify(step));
+    assert.equal(step.upset_rate_non_increasing, true, JSON.stringify(step));
+  }
+});
+
+test('upset validation rejects an intermediate regression even when endpoints improve', () => {
+  const scriptedRates = new Map([
+    [2, { wins: 35, draws: 30 }],
+    [4, { wins: 39, draws: 30 }],
+    [6, { wins: 44, draws: 30 }],
+    [10, { wins: 40, draws: 30 }]
+  ]);
+  const counters = new Map();
+  const simulator = (contract) => {
+    const gap = Number(String(contract.run_key).split(':')[1]);
+    const index = counters.get(gap) || 0;
+    counters.set(gap, index + 1);
+    const rates = scriptedRates.get(gap);
+    const outcome = index < rates.wins ? 'win' : index < rates.wins + rates.draws ? 'draw' : 'loss';
+    const strongerHome = index % 2 === 0;
+    if (outcome === 'draw') return { score: { home: 1, away: 1 } };
+    if (outcome === 'win') return { score: strongerHome ? { home: 1, away: 0 } : { home: 0, away: 1 } };
+    return { score: strongerHome ? { home: 0, away: 1 } : { home: 1, away: 0 } };
+  };
+
+  const report = validateUpsetCurve({ gaps: [2, 4, 6, 10], matchesPerGap: 100, simulator });
+  assert.equal(report.curves[3].stronger_win_rate > report.curves[0].stronger_win_rate, true);
+  assert.equal(report.checks.every_gap_step_preserves_stronger_team_trend, false);
+  assert.equal(report.accepted, false);
 });
 
 test('upset validation rejects undersized samples', () => {
