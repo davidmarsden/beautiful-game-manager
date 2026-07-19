@@ -41,7 +41,7 @@ test('constitutional public results are deterministic for the same fixture input
   assert.equal(first.model.seed_commitment, second.model.seed_commitment);
 });
 
-test('compatibility remains the default during staged cutover', () => {
+test('constitutional mode is the default after cutover', () => {
   const result = simulateMatch(goldenCases[0].contract, goldenWorld);
-  assert.equal(result.model.simulator, 'tbg-deterministic-bootstrap-rich-events');
+  assert.equal(result.model.simulator, 'tbg-constitutional-engine-a-f');
 });

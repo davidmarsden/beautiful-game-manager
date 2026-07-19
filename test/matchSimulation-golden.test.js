@@ -2,11 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { simulateMatch } from '../src/matchSimulation.js';
+import { simulateMatch, MATCH_ENGINE_MODES } from '../src/matchSimulation.js';
 import { goldenCases, goldenWorld } from './fixtures/matchSimulation-golden-cases.js';
 
 const goldenPath = new URL('./fixtures/matchSimulation-golden-results.json', import.meta.url);
 const golden = JSON.parse(await readFile(goldenPath, 'utf8'));
+
+function compatibilityContract(contract) {
+  return { ...contract, engine_mode: MATCH_ENGINE_MODES.compatibility };
+}
 
 function normaliseResult(result) {
   const { played_at, ...deterministic } = result;
@@ -31,16 +35,17 @@ function persistenceProjection(event, fixtureId) {
   };
 }
 
-test('golden fixtures protect the complete deterministic result contract', async (t) => {
+test('golden fixtures protect the complete deterministic compatibility result contract', async (t) => {
   assert.deepEqual(golden.normalisation.excluded_fields, ['played_at']);
 
   for (const fixture of goldenCases) {
     await t.test(fixture.id, () => {
       const expected = golden.cases[fixture.id];
       assert.ok(expected, `Missing golden result for ${fixture.id}`);
+      const contract = compatibilityContract(fixture.contract);
 
-      const first = simulateMatch(fixture.contract, goldenWorld);
-      const second = simulateMatch(fixture.contract, goldenWorld);
+      const first = simulateMatch(contract, goldenWorld);
+      const second = simulateMatch(contract, goldenWorld);
       const normalised = normaliseResult(first);
 
       assert.deepEqual(normalised, normaliseResult(second), 'The same run key must produce the same deterministic result');
@@ -52,9 +57,9 @@ test('golden fixtures protect the complete deterministic result contract', async
   }
 });
 
-test('golden output preserves the replay and report contract', () => {
+test('golden compatibility output preserves the replay and report contract', () => {
   for (const fixture of goldenCases) {
-    const result = simulateMatch(fixture.contract, goldenWorld);
+    const result = simulateMatch(compatibilityContract(fixture.contract), goldenWorld);
 
     assert.deepEqual(Object.keys(normaliseResult(result)), [
       'result_version',
@@ -96,9 +101,9 @@ test('golden output preserves the replay and report contract', () => {
   }
 });
 
-test('golden events retain the current persistence mapping', () => {
+test('golden compatibility events retain the current persistence mapping', () => {
   for (const fixture of goldenCases) {
-    const result = simulateMatch(fixture.contract, goldenWorld);
+    const result = simulateMatch(compatibilityContract(fixture.contract), goldenWorld);
     const rows = result.events.map((event) => persistenceProjection(event, fixture.id));
 
     assert.equal(rows.length, result.events.length);
