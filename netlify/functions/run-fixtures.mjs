@@ -1,5 +1,5 @@
 import { buildEngineMatchContract } from '../../src/engineBridge.js';
-import { simulateMatch } from '../../src/matchSimulation.js';
+import { simulateMatch, DEFAULT_MATCH_ENGINE_MODE } from '../../src/matchSimulation.js';
 import {
   buildMatchStateApplication,
   hydrateMatchState
@@ -10,7 +10,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const WORLD_URL = process.env.TBG_WORLD_URL || 'https://raw.githubusercontent.com/davidmarsden/beautiful-game-engine/main/derived/world/world.json';
 const ENGINE_RUNNER_URL = process.env.TBG_ENGINE_RUNNER_URL || '';
 const ENGINE_RUNNER_TOKEN = process.env.TBG_ENGINE_RUNNER_TOKEN || '';
-const MATCH_ENGINE_MODE = process.env.TBG_MATCH_ENGINE_MODE || 'compatibility';
+const MATCH_ENGINE_MODE = process.env.TBG_MATCH_ENGINE_MODE || DEFAULT_MATCH_ENGINE_MODE;
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
