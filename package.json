@@ -4,7 +4,7 @@
   "description": "Tablet-first manager portal for The Beautiful Game.",
   "type": "module",
   "scripts": {
-    "test": "node --test test/pr47TacticalDiversityUpsets.test.js"
+    "test": "node --test"
   },
   "engines": {
     "node": ">=20"
