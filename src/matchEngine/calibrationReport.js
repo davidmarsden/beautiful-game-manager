@@ -163,6 +163,16 @@ export function calibrationReportCsv(report) {
   return `${rows.map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n')}\n`;
 }
 
+function cutoverBoundaryText(releaseGate) {
+  if (releaseGate.constitutional_default_allowed) {
+    return 'The release gate permits constitutional-v1 to become the default.';
+  }
+  if (releaseGate.technical_gate_passed) {
+    return 'The technical calibration gate passes, but constitutional-v1 must remain opt-in until shadow comparison is complete.';
+  }
+  return 'The technical calibration gate has failed. Constitutional-v1 must remain opt-in until the reported calibration regressions are resolved.';
+}
+
 export function calibrationReportMarkdown(report) {
   const lines = [
     '# TBG Constitutional Engine Calibration Report',
@@ -182,8 +192,6 @@ export function calibrationReportMarkdown(report) {
     for (const [metric, value] of Object.entries(metrics)) lines.push(`- ${metric}: ${round(value, 4)}`);
     lines.push('');
   }
-  lines.push('## Cutover boundary', '', report.release_gate.constitutional_default_allowed
-    ? 'The release gate permits constitutional-v1 to become the default.'
-    : 'The technical calibration gate passes, but constitutional-v1 must remain opt-in until shadow comparison is complete.', '');
+  lines.push('## Cutover boundary', '', cutoverBoundaryText(report.release_gate), '');
   return `${lines.join('\n')}\n`;
 }
