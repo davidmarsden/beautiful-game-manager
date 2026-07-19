@@ -37,7 +37,7 @@ test('report renders reproducible JSON-compatible, CSV and Markdown artifacts', 
   assert.deepEqual(first, second);
   const csv = calibrationReportCsv(first);
   const markdown = calibrationReportMarkdown(first);
-  assert.match(csv, /section,.*metric/);
+  assert.match(csv, /"section","metric","value","accepted"/);
   assert.match(csv, /release_gate/);
   assert.match(markdown, /TBG Constitutional Engine Calibration Report/);
   assert.match(markdown, /hold_for_shadow_comparison/);
