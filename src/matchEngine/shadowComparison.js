@@ -7,7 +7,7 @@ const POSITIONS = Object.freeze([
   'Right Winger', 'Centre-Forward', 'Left Winger'
 ]);
 
-export const SHADOW_COMPARISON_VERSION = 'tbg-shadow-comparison-v1.0';
+export const SHADOW_COMPARISON_VERSION = 'tbg-shadow-comparison-v1.1';
 export const SHADOW_ACCEPTANCE = Object.freeze({
   average_total_goals_delta_maximum: 0.75,
   draw_rate_delta_maximum: 0.12,
@@ -81,17 +81,40 @@ function outcome(result) {
   return 'draw';
 }
 
+function nonEmptyString(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function validatePublicEvent(event, index, require) {
+  const prefix = `events[${index}]`;
+  require(event && typeof event === 'object' && !Array.isArray(event), `${prefix} must be an object`);
+  if (!event || typeof event !== 'object' || Array.isArray(event)) return;
+
+  require(nonEmptyString(event.event_id), `${prefix}.event_id must be a non-empty string`);
+  require(nonEmptyString(event.type), `${prefix}.type must be a non-empty string`);
+  require(Number.isInteger(event.minute) && event.minute >= 0 && event.minute <= 120, `${prefix}.minute must be an integer from 0 to 120`);
+  require(['home', 'away', 'neutral'].includes(event.side), `${prefix}.side must use the public enum`);
+  require(nonEmptyString(event.commentary), `${prefix}.commentary must be a non-empty string`);
+
+  for (const field of ['source_event_id', 'parent_event_id', 'linked_event_id']) {
+    require(event[field] == null || nonEmptyString(event[field]), `${prefix}.${field} must be null or a non-empty string`);
+  }
+}
+
 function publicContract(result) {
   const errors = [];
   const require = (condition, message) => { if (!condition) errors.push(message); };
   require(result?.result_version === '2d5-v1', 'result_version must be 2d5-v1');
-  require(typeof result?.run_key === 'string' && result.run_key.length > 0, 'run_key must be a non-empty string');
-  require(typeof result?.fixture_id === 'string' && result.fixture_id.length > 0, 'fixture_id must be a non-empty string');
+  require(nonEmptyString(result?.run_key), 'run_key must be a non-empty string');
+  require(nonEmptyString(result?.fixture_id), 'fixture_id must be a non-empty string');
   require(result?.status === 'completed', 'status must be completed');
   require(Number.isInteger(result?.score?.home) && result.score.home >= 0, 'score.home must be a non-negative integer');
   require(Number.isInteger(result?.score?.away) && result.score.away >= 0, 'score.away must be a non-negative integer');
   require(['home_win', 'away_win', 'draw'].includes(result?.outcome), 'outcome must use the public enum');
   require(Array.isArray(result?.events), 'events must be an array');
+  if (Array.isArray(result?.events)) {
+    result.events.forEach((event, index) => validatePublicEvent(event, index, require));
+  }
   for (const side of ['home', 'away']) {
     require(Number.isFinite(result?.statistics?.[side]?.shots), `statistics.${side}.shots must be numeric`);
     require(Number.isFinite(result?.statistics?.[side]?.shots_on_target), `statistics.${side}.shots_on_target must be numeric`);
