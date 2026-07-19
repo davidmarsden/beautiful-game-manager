@@ -6,6 +6,19 @@ import {
   simulateStatefulSeason
 } from '../src/matchEngine/seasonSimulation.js';
 
+function stubResult(contract, { events = [], injuries = [] } = {}) {
+  return {
+    fixture_id: contract.fixture.fixture_id,
+    run_key: contract.run_key,
+    score: { home: 0, away: 0 },
+    outcome: 'draw',
+    statistics: {},
+    lineup_state: {},
+    events,
+    state_changes: { fitness: [], injuries, discipline: [] }
+  };
+}
+
 test('double round robin schedules every ordered home-and-away pairing once', () => {
   const clubs = ['a', 'b', 'c', 'd', 'e', 'f'];
   const fixtures = buildDoubleRoundRobin(clubs, { seasonId: 'schedule-test' });
@@ -45,4 +58,32 @@ test('congested seasons carry state between fixtures rather than resetting fitne
   assert.ok(report.metrics.minimum_final_fitness < 100);
   assert.equal(report.checks.no_duplicate_state_application, true);
   assert.equal(report.checks.fitness_stays_bounded, true);
+});
+
+test('depleted squads fail instead of selecting injured or suspended players', () => {
+  const clubs = syntheticSeasonClubs({ clubCount: 4 }).map((club) => (
+    club.club_id === 'club-1' ? { ...club, players: club.players.slice(0, 11) } : club
+  ));
+  let injured = false;
+  const simulator = (contract) => {
+    const clubOneTeam = contract.teams.home.club_id === 'club-1' ? contract.teams.home : contract.teams.away.club_id === 'club-1' ? contract.teams.away : null;
+    const injuries = !injured && clubOneTeam
+      ? [{ player_id: clubOneTeam.starting_xi[0] }]
+      : [];
+    if (injuries.length) injured = true;
+    return stubResult(contract, { events: [{ event_id: `${contract.fixture.fixture_id}:event-1` }], injuries });
+  };
+
+  assert.throws(
+    () => simulateStatefulSeason({ clubs, seasonId: 'depleted-squad', simulator }),
+    /only 10 eligible players for club-1 on matchday 2/
+  );
+});
+
+test('events without a non-empty public event ID are rejected', () => {
+  const simulator = (contract) => stubResult(contract, { events: [{}] });
+  assert.throws(
+    () => simulateStatefulSeason({ clubs: syntheticSeasonClubs({ clubCount: 4 }), seasonId: 'missing-event-id', simulator }),
+    /event without a public event ID/
+  );
 });
