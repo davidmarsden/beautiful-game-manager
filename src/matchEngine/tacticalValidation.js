@@ -4,7 +4,7 @@ import { simulateMatch, MATCH_ENGINE_MODES } from '../matchSimulation.js';
 const round = (value, places = 4) => Number(Number(value).toFixed(places));
 const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 
-export const TACTICAL_VALIDATION_VERSION = 'tbg-tactical-validation-v1.1';
+export const TACTICAL_VALIDATION_VERSION = 'tbg-tactical-validation-v1.2';
 export const UPSET_CURVE_STEP_TOLERANCE = 0.01;
 
 export const TACTICAL_DIMENSIONS = Object.freeze({
@@ -164,14 +164,15 @@ export function validateUpsetCurve({ gaps = [2, 4, 6, 10], matchesPerGap = 120, 
       const strongerSide = index % 2 === 0 ? 'home' : 'away';
       const homeRating = strongerSide === 'home' ? 90 : 90 - gap;
       const awayRating = strongerSide === 'away' ? 90 : 90 - gap;
-      const homePrefix = `gap-${gap}-match-${index}-home`;
-      const awayPrefix = `gap-${gap}-match-${index}-away`;
+      const homePrefix = `curve-match-${index}-home`;
+      const awayPrefix = `curve-match-${index}-away`;
       const world = { players: [...players(homePrefix, homeRating), ...players(awayPrefix, awayRating)] };
       const contract = {
         contract_version: '2d2-v1',
         engine_mode: MATCH_ENGINE_MODES.constitutional,
-        run_key: `upset-validation:${gap}:${index}`,
-        fixture: { fixture_id: `upset-${gap}-${index}`, season_id: 'upset-validation', matchday: index + 1, kickoff_at: '2026-07-19T15:00:00.000Z' },
+        run_key: `upset-validation:${index}`,
+        validation_gap: gap,
+        fixture: { fixture_id: `upset-${index}`, season_id: 'upset-validation', matchday: index + 1, kickoff_at: '2026-07-19T15:00:00.000Z' },
         teams: { home: team('home', homePrefix), away: team('away', awayPrefix) }
       };
       const result = simulator(contract, world);
@@ -200,6 +201,7 @@ export function validateUpsetCurve({ gaps = [2, 4, 6, 10], matchesPerGap = 120, 
     matches_per_gap: matchesPerGap,
     total_matches: matchesPerGap * rows.length,
     curve_step_tolerance: UPSET_CURVE_STEP_TOLERANCE,
+    common_random_numbers: true,
     curves: Object.freeze(rows),
     adjacent_steps: Object.freeze(steps),
     average_upset_rate: round(average(rows.map((row) => row.upset_rate))),
