@@ -22,7 +22,7 @@ test('full tactical matrix is bounded, countervailing and anti-dominant', () => 
   assert.ok(report.champion.worst_matchup < 0);
 });
 
-test('live upset curve records the pre-PR49 calibration finding without weakening the validator', () => {
+test('live upset curve passes after PR49 rating-band calibration', () => {
   const report = validateUpsetCurve({ gaps: [2, 4, 6, 10], matchesPerGap: 600 });
   assert.equal(report.total_matches, 2400);
   assert.equal(report.curves.length, 4);
@@ -31,12 +31,9 @@ test('live upset curve records the pre-PR49 calibration finding without weakenin
     assert.ok(row.upset_rate > 0);
     assert.ok(row.stronger_win_rate < 1);
   }
-  assert.equal(report.accepted, false, 'PR #49 must tune the live engine until every adjacent rating-gap step passes');
-  assert.equal(
-    report.checks.every_gap_step_preserves_stronger_team_trend && report.checks.every_gap_step_preserves_upset_trend,
-    false,
-    JSON.stringify(report, null, 2)
-  );
+  assert.equal(report.accepted, true, JSON.stringify(report, null, 2));
+  assert.equal(report.checks.every_gap_step_preserves_stronger_team_trend, true);
+  assert.equal(report.checks.every_gap_step_preserves_upset_trend, true);
 });
 
 test('upset validation rejects an intermediate regression even when endpoints improve', () => {
