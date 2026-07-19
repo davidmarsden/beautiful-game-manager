@@ -1,7 +1,21 @@
 const integer = (value, fallback = 0) => Number.isInteger(Number(value)) ? Number(value) : fallback;
 const text = (value) => String(value ?? '').trim();
+const hasOwn = (value, key) => Boolean(value) && Object.prototype.hasOwnProperty.call(value, key);
 
-export const SQUAD_AVAILABILITY_VERSION = 'tbg-squad-availability-v1.0';
+export const SQUAD_AVAILABILITY_VERSION = 'tbg-squad-availability-v1.1';
+
+function playerRows(ids) {
+  const players = Object.create(null);
+  for (const playerId of ids) {
+    players[playerId] = {
+      injury_until_matchday: 0,
+      suspension_until_matchday: 0,
+      injury_reason: null,
+      suspension_reason: null
+    };
+  }
+  return players;
+}
 
 export function createSquadAvailability(playerIds = []) {
   if (!Array.isArray(playerIds)) throw new Error('playerIds must be an array');
@@ -9,18 +23,14 @@ export function createSquadAvailability(playerIds = []) {
   if (new Set(ids).size !== ids.length) throw new Error('playerIds must be unique');
   return {
     version: SQUAD_AVAILABILITY_VERSION,
-    players: Object.fromEntries(ids.map((playerId) => [playerId, {
-      injury_until_matchday: 0,
-      suspension_until_matchday: 0,
-      injury_reason: null,
-      suspension_reason: null
-    }]))
+    players: playerRows(ids)
   };
 }
 
 export function availabilityForPlayer(calendar, playerId, matchday) {
-  const row = calendar?.players?.[text(playerId)];
-  if (!row) return Object.freeze({ available: false, reason: 'unknown_player' });
+  const id = text(playerId);
+  if (!hasOwn(calendar?.players, id)) return Object.freeze({ available: false, reason: 'unknown_player' });
+  const row = calendar.players[id];
   const day = integer(matchday);
   if (row.injury_until_matchday >= day) return Object.freeze({ available: false, reason: 'injured', until_matchday: row.injury_until_matchday });
   if (row.suspension_until_matchday >= day) return Object.freeze({ available: false, reason: 'suspended', until_matchday: row.suspension_until_matchday });
@@ -42,8 +52,8 @@ export function applyAvailabilityChanges(calendar, result, fixture) {
 
   for (const injury of result?.state_changes?.injuries || []) {
     const playerId = text(injury.player_id);
+    if (!hasOwn(calendar?.players, playerId)) continue;
     const row = calendar.players[playerId];
-    if (!row) continue;
     const matchesOut = absenceLength(injury, ['matches_out', 'absence_matchdays', 'recovery_matchdays'], 1);
     row.injury_until_matchday = Math.max(row.injury_until_matchday, matchday + matchesOut);
     row.injury_reason = text(injury.injury_type || injury.type || injury.severity) || 'match_injury';
@@ -52,8 +62,8 @@ export function applyAvailabilityChanges(calendar, result, fixture) {
 
   for (const discipline of result?.state_changes?.discipline || []) {
     const playerId = text(discipline.player_id);
+    if (!hasOwn(calendar?.players, playerId)) continue;
     const row = calendar.players[playerId];
-    if (!row) continue;
     const explicit = absenceLength(discipline, ['suspension_matches', 'matches_suspended'], 0);
     const matchesOut = explicit || (discipline.sent_off ? 1 : 0);
     if (!matchesOut) continue;
