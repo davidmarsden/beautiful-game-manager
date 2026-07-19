@@ -3,8 +3,11 @@ import { simulateStatefulSeason, syntheticSeasonClubs } from './seasonSimulation
 const round = (value, places = 4) => Number(Number(value).toFixed(places));
 const unique = (values) => new Set(values).size === values.length;
 
-export const LEAGUE_STRUCTURE_SIMULATION_VERSION = 'tbg-complete-league-structure-harness-v1.0';
+export const LEAGUE_STRUCTURE_SIMULATION_VERSION = 'tbg-complete-league-structure-harness-v1.1';
 export const DEFAULT_PLAYABLE_DIVISION_COUNT = 5;
+export const DEFAULT_PLAYABLE_DIVISION_IDS = Object.freeze(
+  Array.from({ length: DEFAULT_PLAYABLE_DIVISION_COUNT }, (_, index) => `d${index + 1}`)
+);
 
 function namespaceClub(club, divisionId) {
   const playerIdMap = new Map(club.players.map((player) => [
@@ -70,6 +73,13 @@ function structureIdentityChecks(divisions) {
   };
 }
 
+function completePlayableDivisionSet(reports) {
+  const reportedIds = reports.map((report) => report.division_id);
+  return reportedIds.length === DEFAULT_PLAYABLE_DIVISION_IDS.length
+    && unique(reportedIds)
+    && DEFAULT_PLAYABLE_DIVISION_IDS.every((divisionId) => reportedIds.includes(divisionId));
+}
+
 export function simulateCompleteLeagueStructure({
   divisions = syntheticPlayableLeagueStructure(),
   seasonId = 'complete-league-season',
@@ -111,7 +121,7 @@ export function simulateCompleteLeagueStructure({
     every_division_has_a_full_table: reports.every((report) => report.standings.length === report.club_count),
     fixture_ids_are_globally_unique: unique(allFixtureIds),
     fixture_totals_reconcile: totalFixtures === reports.reduce((sum, report) => sum + report.results.length, 0),
-    all_playable_divisions_present: reports.length === divisions.length,
+    all_playable_divisions_present: completePlayableDivisionSet(reports),
     public_events_exist_across_structure: allEventCount > 0
   });
 
