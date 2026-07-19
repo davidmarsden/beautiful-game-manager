@@ -30,19 +30,18 @@ function sideInputs(side, contract = {}, quality = {}) {
 }
 
 function substitutionEvent(side, index, minute, playerOutId, playerInId, reason, sourceEventId = null) {
-  const withdrawal = !playerInId;
   return {
     event_id: `${side}-substitution-${index}`,
     minute: clamp(Math.trunc(minute), 1, 120),
     side,
     type: 'substitution',
-    subtype: withdrawal ? 'injury_withdrawal' : reason === 'injury' ? 'injury_substitution' : 'tactical_substitution',
+    subtype: reason === 'injury' ? 'injury_substitution' : 'tactical_substitution',
     player_out_id: playerOutId,
-    player_in_id: playerInId || null,
-    reason: withdrawal ? 'injury_unreplaced' : reason,
+    player_in_id: playerInId,
+    reason,
     source_event_id: sourceEventId,
     provisional: true,
-    commentary_hook: withdrawal ? 'injury_withdrawal' : reason === 'injury' ? 'injury_substitution' : 'substitution'
+    commentary_hook: reason === 'injury' ? 'injury_substitution' : 'substitution'
   };
 }
 
@@ -57,16 +56,17 @@ function buildSideSubstitutions(side, baseEvents, contract, quality) {
   for (const injury of injuries) {
     const playerOutId = text(injury.player_id);
     if (!active.has(playerOutId)) continue;
+    const replacement = unusedBench.shift();
+    if (!replacement) continue;
     active.delete(playerOutId);
-    const replacement = unusedBench.shift() || null;
-    if (replacement) active.add(replacement.player_id);
+    active.add(replacement.player_id);
     index += 1;
-    substitutions.push(substitutionEvent(side, index, injury.minute + 1, playerOutId, replacement?.player_id || null, 'injury', injury.event_id));
+    substitutions.push(substitutionEvent(side, index, injury.minute + 1, playerOutId, replacement.player_id, 'injury', injury.event_id));
   }
 
   const tacticalMinutes = [60, 70, 80];
   for (const minute of tacticalMinutes) {
-    if (!unusedBench.length || substitutions.filter((event) => event.player_in_id).length >= 5) break;
+    if (!unusedBench.length || substitutions.length >= 5) break;
     const candidates = starters
       .filter((player) => active.has(player.player_id) && player.required_role !== 'gk')
       .sort((left, right) => left.effective_quality - right.effective_quality || left.player_id.localeCompare(right.player_id));
@@ -105,15 +105,13 @@ function applyLineupTimeline(side, events, initial, bench) {
       const outId = text(event.player_out_id);
       const inId = text(event.player_in_id);
       if (!active.has(outId)) throw new Error(`Module E substitution removes inactive player: ${event.event_id}`);
+      if (!availableBench.has(inId) || usedPlayers.has(inId)) throw new Error(`Module E substitution introduces unavailable player: ${event.event_id}`);
       removeActivePlayer(active, removed, minutes, outId, event.minute);
-      if (inId) {
-        if (!availableBench.has(inId) || usedPlayers.has(inId)) throw new Error(`Module E substitution introduces unavailable player: ${event.event_id}`);
-        active.add(inId);
-        availableBench.delete(inId);
-        usedPlayers.add(inId);
-        minutes.set(inId, { entered: event.minute, left: 90 });
-      }
-      substitutions.push({ event_id: event.event_id, minute: event.minute, player_out_id: outId, player_in_id: inId || null, reason: event.reason || 'tactical' });
+      active.add(inId);
+      availableBench.delete(inId);
+      usedPlayers.add(inId);
+      minutes.set(inId, { entered: event.minute, left: 90 });
+      substitutions.push({ event_id: event.event_id, minute: event.minute, player_out_id: outId, player_in_id: inId, reason: event.reason || 'tactical' });
       continue;
     }
     if (event.type === 'yellow_card' && event.player_id) {
@@ -140,11 +138,11 @@ function reassignInactiveActors(events, lineupBySide) {
     if (!active[side]) return event;
     if (event.type === 'substitution') {
       active[side].delete(text(event.player_out_id));
-      if (event.player_in_id) active[side].add(text(event.player_in_id));
+      active[side].add(text(event.player_in_id));
       return event;
     }
     let updated = event;
-    if (event.player_id && !active[side].has(text(event.player_id)) && !['injury'].includes(event.type)) {
+    if (event.player_id && !active[side].has(text(event.player_id)) && event.type !== 'injury') {
       updated = { ...event, player_id: replacement(side), reassigned_from_player_id: text(event.player_id) };
     }
     if (updated.type === 'yellow_card' && updated.player_id) {
