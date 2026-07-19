@@ -13,10 +13,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm test
       - run: npm run calibration:report
+        continue-on-error: true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: calibration-report
           path: calibration/generated/
+      - run: npm test
