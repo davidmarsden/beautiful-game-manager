@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { runGoldStandardStressTests } from '../src/matchEngine/goldStandardStressTests.js';
+import { runGoldStandardStressTests, teamFromSetup } from '../src/matchEngine/goldStandardStressTests.js';
 
 async function dataset() {
   const url = new URL('../calibration/gold-standard/match-engine-v1.json', import.meta.url);
@@ -24,6 +24,30 @@ test('Stress Tests 1-3 pass against the executable constitutional engine modules
     assert.equal(row.accepted, true, `${row.id} failed: ${JSON.stringify(row, null, 2)}`);
     assert.equal(Object.values(row.checks).every(Boolean), true);
   }
+});
+
+test('managed rotation rebuilds the bench from the final overridden XI', async () => {
+  const gold = await dataset();
+  const squad = gold.squads.southall;
+  const firstChoice = squad.setups.wide_433.starting_xi;
+  const rotatedXi = firstChoice.map((id) => id === 'southall-rb' ? 'southall-fb2' : id === 'southall-lw' ? 'southall-wing2' : id);
+  const team = teamFromSetup(squad, 'wide_433', { starting_xi: rotatedXi });
+
+  assert.equal(team.starting_xi.length, 11);
+  assert.equal(new Set(team.starting_xi).size, 11);
+  assert.equal(team.bench.includes('southall-fb2'), false);
+  assert.equal(team.bench.includes('southall-wing2'), false);
+  assert.equal(team.bench.includes('southall-rb'), true);
+  assert.equal(team.bench.includes('southall-lw'), true);
+  assert.deepEqual(team.starting_xi.filter((id) => team.bench.includes(id)), []);
+});
+
+test('gold-standard setup rejects duplicate or unknown selections', async () => {
+  const gold = await dataset();
+  const squad = gold.squads.southall;
+  const base = squad.setups.wide_433.starting_xi;
+  assert.throws(() => teamFromSetup(squad, 'wide_433', { starting_xi: [...base.slice(0, 10), base[0]] }), /11 unique players/);
+  assert.throws(() => teamFromSetup(squad, 'wide_433', { starting_xi: [...base.slice(0, 10), 'missing-player'] }), /not found in squad/);
 });
 
 test('gold-standard harness rejects an unversioned dataset', () => {
