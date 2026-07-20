@@ -22,6 +22,7 @@ jobs:
       - run: npm run calibration:season-availability
       - run: npm run calibration:manager-decisions
       - run: npm run calibration:ai-season
+      - run: npm run calibration:multi-season
       - uses: actions/upload-artifact@v4
         if: always()
         with:
