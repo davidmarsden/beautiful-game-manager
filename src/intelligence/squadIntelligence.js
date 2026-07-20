@@ -1,7 +1,7 @@
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
-export const SQUAD_INTELLIGENCE_VERSION = 'tbg-squad-intelligence-v1.0';
+export const SQUAD_INTELLIGENCE_VERSION = 'tbg-squad-intelligence-v1.1';
 export const DEFAULT_HARD_MINIMUM_SQUAD = 18;
 export const DEFAULT_PREFERRED_MINIMUM_SQUAD = 22;
 
@@ -12,8 +12,20 @@ const GROUP_REQUIREMENTS = Object.freeze({
   attacker: 3
 });
 
+const DAY = 86400000;
+
 function playerId(player) {
   return text(player?.tbg_player_id || player?.player_id || player?.id);
+}
+
+function playerPosition(player) {
+  return text(
+    player?.position ||
+    player?.primary_position ||
+    player?.position_group ||
+    player?.position_name ||
+    player?.canonical_position
+  );
 }
 
 function positionGroup(position) {
@@ -35,9 +47,22 @@ function contractFor(state, player) {
   return state.contracts?.[player.contract_id] || null;
 }
 
-function yearsUntil(endAt, at) {
-  if (!endAt) return null;
-  return (new Date(endAt).getTime() - new Date(at).getTime()) / (365 * 86400000);
+function addDays(value, days) {
+  return new Date(new Date(value).getTime() + days * DAY).toISOString();
+}
+
+function contractHorizon(state, endAt, at) {
+  if (!endAt) return 'unknown';
+  const end = new Date(endAt).getTime();
+  const now = new Date(at).getTime();
+  if (Number.isNaN(end) || Number.isNaN(now)) return 'unknown';
+
+  const currentSeasonEnd = new Date(state.calendar?.season_end || at).getTime();
+  if (end <= currentSeasonEnd) return 'expiring_this_season';
+
+  const nextSeasonEnd = new Date(addDays(state.calendar?.season_end || at, 365)).getTime();
+  if (end <= nextSeasonEnd) return 'expiring_next_season';
+  return 'secure';
 }
 
 function roleFor({ rank, seniorCount, age, registered }) {
@@ -74,22 +99,22 @@ export function analyseSquad(state, {
 
   const rows = players.map((player) => {
     const id = playerId(player);
+    const position = playerPosition(player);
     const registered = registeredIds.has(id);
     const availabilityRow = availabilityFor(availability, id);
     const contract = contractFor(state, player);
-    const years = yearsUntil(contract?.end_at, at);
     return Object.freeze({
       player_id: id,
       display_name: text(player.display_name || player.name || id),
       age: number(player.age, 24),
-      position: text(player.position),
-      position_group: positionGroup(player.position),
+      position,
+      position_group: positionGroup(position),
       rating: number(player.underlying_ability_rating ?? player.rating),
       registered,
       available: registered && availabilityRow.available,
       unavailable_reason: registered && !availabilityRow.available ? availabilityRow.reason : null,
       contract_end_at: contract?.end_at || null,
-      contract_horizon: years === null ? 'unknown' : years <= 0.5 ? 'expiring_this_season' : years <= 1.5 ? 'expiring_next_season' : 'secure',
+      contract_horizon: contractHorizon(state, contract?.end_at, at),
       squad_role: roleFor({ rank: rankById.get(id) ?? ranked.length, seniorCount: ranked.length, age: number(player.age, 24), registered })
     });
   });
