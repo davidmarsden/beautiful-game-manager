@@ -16,7 +16,8 @@
     "calibration:ai-season": "node scripts/generate-ai-season-integration-report.js",
     "calibration:multi-season": "node scripts/generate-multi-season-soak-report.js",
     "calibration:final-outcomes": "node scripts/generate-final-outcome-calibration-report.js",
-    "calibration:gate": "npm test && npm run calibration:report && npm run calibration:shadow && npm run calibration:league-structure && npm run calibration:rollover && npm run calibration:availability && npm run calibration:season-availability && npm run calibration:manager-decisions && npm run calibration:ai-season && npm run calibration:multi-season && npm run calibration:final-outcomes"
+    "release-candidate:constitutional": "node scripts/generate-constitutional-release-candidate.js",
+    "calibration:gate": "npm test && npm run calibration:report && npm run calibration:shadow && npm run calibration:league-structure && npm run calibration:rollover && npm run calibration:availability && npm run calibration:season-availability && npm run calibration:manager-decisions && npm run calibration:ai-season && npm run calibration:multi-season && npm run calibration:final-outcomes && npm run release-candidate:constitutional"
   },
   "engines": {
     "node": ">=20"
