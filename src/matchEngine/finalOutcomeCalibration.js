@@ -3,7 +3,7 @@ import { simulateMatch, MATCH_ENGINE_MODES } from '../matchSimulation.js';
 const round = (value, places = 4) => Number(Number(value).toFixed(places));
 const inRange = (value, minimum, maximum) => value >= minimum && value <= maximum;
 
-export const FINAL_OUTCOME_CALIBRATION_VERSION = 'tbg-final-outcome-calibration-v1.0';
+export const FINAL_OUTCOME_CALIBRATION_VERSION = 'tbg-final-outcome-calibration-v1.1';
 
 export const FINAL_OUTCOME_THRESHOLDS = Object.freeze({
   average_goals_per_match: Object.freeze({ minimum: 1.8, maximum: 3.2 }),
@@ -11,9 +11,9 @@ export const FINAL_OUTCOME_THRESHOLDS = Object.freeze({
   equal_team_home_win_rate: Object.freeze({ minimum: 0.32, maximum: 0.48 }),
   home_win_advantage: Object.freeze({ minimum: -0.02, maximum: 0.12 }),
   rating_gaps: Object.freeze({
-    2: Object.freeze({ stronger_non_loss_minimum: 0.57, upset_minimum: 0.20, upset_maximum: 0.43 }),
-    4: Object.freeze({ stronger_non_loss_minimum: 0.62, upset_minimum: 0.16, upset_maximum: 0.38 }),
-    10: Object.freeze({ stronger_non_loss_minimum: 0.66, upset_minimum: 0.08, upset_maximum: 0.34 })
+    2: Object.freeze({ stronger_win_minimum: 0.30, stronger_non_loss_minimum: 0.57, upset_minimum: 0.20, upset_maximum: 0.43 }),
+    4: Object.freeze({ stronger_win_minimum: 0.34, stronger_non_loss_minimum: 0.62, upset_minimum: 0.16, upset_maximum: 0.38 }),
+    10: Object.freeze({ stronger_win_minimum: 0.38, stronger_non_loss_minimum: 0.66, upset_minimum: 0.08, upset_maximum: 0.34 })
   }),
   maximum_non_loss_regression_between_gaps: 0.03,
   maximum_upset_increase_between_gaps: 0.03
@@ -137,7 +137,9 @@ export function runFinalOutcomeCalibration({ matchesPerScenario = 1000, simulato
   const gapChecks = Object.fromEntries(ladder.map((scenario) => {
     const target = thresholds.rating_gaps[scenario.rating_gap];
     return [`gap_${scenario.rating_gap}_within_frequency_bands`,
-      scenario.stronger_non_loss_rate >= target.stronger_non_loss_minimum
+      scenario.stronger_win_rate >= target.stronger_win_minimum
+      && scenario.stronger_win_rate > scenario.upset_rate
+      && scenario.stronger_non_loss_rate >= target.stronger_non_loss_minimum
       && inRange(scenario.upset_rate, target.upset_minimum, target.upset_maximum)];
   }));
   const checks = Object.freeze({
@@ -150,6 +152,7 @@ export function runFinalOutcomeCalibration({ matchesPerScenario = 1000, simulato
     equal_team_home_win_rate_within_band: inRange(equal.home_win_rate, thresholds.equal_team_home_win_rate.minimum, thresholds.equal_team_home_win_rate.maximum),
     home_advantage_is_bounded: inRange(equal.home_win_advantage, thresholds.home_win_advantage.minimum, thresholds.home_win_advantage.maximum),
     ...gapChecks,
+    stronger_sides_outwin_upsets_at_every_gap: ladder.every((scenario) => scenario.stronger_win_rate > scenario.upset_rate),
     stronger_non_loss_rises_with_rating_gap: ladder.slice(1).every((scenario, index) => (
       scenario.stronger_non_loss_rate + thresholds.maximum_non_loss_regression_between_gaps >= ladder[index].stronger_non_loss_rate
     )),
