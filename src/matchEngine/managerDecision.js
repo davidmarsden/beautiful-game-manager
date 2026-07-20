@@ -42,7 +42,9 @@ function scorePlayer(player, playerState, previousStartingXi, policy) {
 
 function chooseFormation(club, eligible, policy) {
   const preferred = text(club?.formation);
-  const candidates = [preferred, ...(policy.allowed_formations || [])].filter((value, index, rows) => FORMATIONS[value] && rows.indexOf(value) === index);
+  const candidates = FORMATIONS[preferred]
+    ? [preferred]
+    : (policy.allowed_formations || []).filter((value, index, rows) => FORMATIONS[value] && rows.indexOf(value) === index);
   for (const formation of candidates) {
     const shape = FORMATIONS[formation];
     const counts = Object.fromEntries(Object.keys(shape).map((group) => [group, eligible.filter((player) => positionGroup(player) === group).length]));
