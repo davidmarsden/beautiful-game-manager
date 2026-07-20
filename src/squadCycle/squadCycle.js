@@ -3,7 +3,7 @@ const integer = (value, fallback = 0) => Number.isInteger(Number(value)) ? Numbe
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
 
-export const SQUAD_CYCLE_VERSION = 'tbg-squad-cycle-v1.0';
+export const SQUAD_CYCLE_VERSION = 'tbg-squad-cycle-v1.1';
 export const DEFAULT_REGISTRATION_LIMIT = 25;
 export const DEFAULT_YOUTH_INTAKE_SIZE = 3;
 
@@ -86,6 +86,29 @@ function isWithin(date, start, end) {
   return value >= new Date(start).getTime() && value <= new Date(end).getTime();
 }
 
+function buildReplacementContract({ player, clubId, atIso, endAt, wage, oldContract }) {
+  const endIso = iso(endAt);
+  if (new Date(endIso) <= new Date(atIso)) throw new Error('Contract end must be after contract start');
+  return {
+    contract_id: `${player.tbg_player_id}:${clubId}:${atIso}`,
+    player_id: player.tbg_player_id,
+    club_id: text(clubId),
+    start_at: atIso,
+    end_at: endIso,
+    wage: Math.max(0, integer(wage, oldContract?.wage || 1000)),
+    status: 'active'
+  };
+}
+
+function assertRegistrationPossible(state, target, atIso, playerIdValue) {
+  if (!registrationOpen(state, atIso)) throw new Error(`Registration is closed at ${atIso}`);
+  const existing = state.registrations[playerIdValue];
+  const alreadyRegisteredHere = existing?.registered && existing.club_id === target.club_id;
+  if (!alreadyRegisteredHere && target.registered_player_ids.length >= state.registration_limit) {
+    throw new Error(`${target.club_id} registration limit reached`);
+  }
+}
+
 export function defaultSquadCycleCalendar({ seasonId = 'season', seasonStart = '2026-08-01T00:00:00.000Z', seasonEnd = '2027-06-30T23:59:59.000Z' } = {}) {
   const start = iso(seasonStart);
   const end = iso(seasonEnd);
@@ -106,13 +129,7 @@ export function defaultSquadCycleCalendar({ seasonId = 'season', seasonStart = '
   });
 }
 
-export function createSquadCycleState({
-  clubs = [],
-  seasonId = 'season',
-  seasonStart,
-  seasonEnd,
-  registrationLimit = DEFAULT_REGISTRATION_LIMIT
-} = {}) {
+export function createSquadCycleState({ clubs = [], seasonId = 'season', seasonStart, seasonEnd, registrationLimit = DEFAULT_REGISTRATION_LIMIT } = {}) {
   if (!Array.isArray(clubs) || clubs.length < 2) throw new Error('Squad cycle requires at least two clubs');
   const calendar = defaultSquadCycleCalendar({ seasonId, seasonStart, seasonEnd });
   const state = {
@@ -130,12 +147,7 @@ export function createSquadCycleState({
   for (const sourceClub of clubs) {
     const clubId = text(sourceClub.club_id);
     if (!clubId || state.clubs[clubId]) throw new Error(`Invalid or duplicate club ID: ${clubId}`);
-    state.clubs[clubId] = {
-      club_id: clubId,
-      club_name: text(sourceClub.club_name || clubId),
-      player_ids: [],
-      registered_player_ids: []
-    };
+    state.clubs[clubId] = { club_id: clubId, club_name: text(sourceClub.club_name || clubId), player_ids: [], registered_player_ids: [] };
     for (const sourcePlayer of sourceClub.players || []) {
       const player = clonePlayer(sourcePlayer);
       if (state.players[player.tbg_player_id]) throw new Error(`Duplicate player ID: ${player.tbg_player_id}`);
@@ -163,8 +175,7 @@ export function activeTransferWindow(state, at) {
 
 export function registrationOpen(state, at) {
   const value = new Date(at).getTime();
-  const nextDeadline = state.calendar.registration_deadlines.find((row) => value <= new Date(row.closes_at).getTime());
-  return Boolean(nextDeadline);
+  return state.calendar.registration_deadlines.some((row) => value <= new Date(row.closes_at).getTime());
 }
 
 export function registerPlayer(state, { clubId, playerId: idValue, at } = {}) {
@@ -172,16 +183,10 @@ export function registerPlayer(state, { clubId, playerId: idValue, at } = {}) {
   const target = club(state, clubId);
   const player = ownedPlayer(state, idValue);
   if (player.club_id !== target.club_id) throw new Error(`${player.tbg_player_id} is not owned by ${target.club_id}`);
-  if (!registrationOpen(state, atIso)) throw new Error(`Registration is closed at ${atIso}`);
   const existing = state.registrations[player.tbg_player_id];
   if (existing?.registered && existing.club_id === target.club_id) return existing;
-  if (target.registered_player_ids.length >= state.registration_limit) throw new Error(`${target.club_id} registration limit reached`);
-  state.registrations[player.tbg_player_id] = {
-    player_id: player.tbg_player_id,
-    club_id: target.club_id,
-    registered: true,
-    registered_at: atIso
-  };
+  assertRegistrationPossible(state, target, atIso, player.tbg_player_id);
+  state.registrations[player.tbg_player_id] = { player_id: player.tbg_player_id, club_id: target.club_id, registered: true, registered_at: atIso };
   if (!target.registered_player_ids.includes(player.tbg_player_id)) target.registered_player_ids.push(player.tbg_player_id);
   event(state, 'player_registered', atIso, { club_id: target.club_id, player_id: player.tbg_player_id });
   return state.registrations[player.tbg_player_id];
@@ -208,32 +213,16 @@ export function renewContract(state, { playerId: idValue, clubId, at, endAt, wag
   const player = ownedPlayer(state, idValue);
   if (player.club_id !== text(clubId)) throw new Error(`${player.tbg_player_id} is not owned by ${clubId}`);
   const oldContract = state.contracts[player.contract_id];
+  const contract = buildReplacementContract({ player, clubId, atIso, endAt, wage, oldContract });
+
   if (oldContract) oldContract.status = 'renewed';
-  const contract = {
-    contract_id: `${player.tbg_player_id}:${clubId}:${atIso}`,
-    player_id: player.tbg_player_id,
-    club_id: text(clubId),
-    start_at: atIso,
-    end_at: iso(endAt),
-    wage: Math.max(0, integer(wage, oldContract?.wage || 1000)),
-    status: 'active'
-  };
-  if (new Date(contract.end_at) <= new Date(contract.start_at)) throw new Error('Contract end must be after contract start');
   state.contracts[contract.contract_id] = contract;
   player.contract_id = contract.contract_id;
   event(state, 'contract_renewed', atIso, { club_id: contract.club_id, player_id: player.tbg_player_id, contract_id: contract.contract_id, end_at: contract.end_at });
   return contract;
 }
 
-export function transferPlayer(state, {
-  playerId: idValue,
-  fromClubId,
-  toClubId,
-  at,
-  fee = 0,
-  contractEndAt,
-  wage
-} = {}) {
+export function transferPlayer(state, { playerId: idValue, fromClubId, toClubId, at, fee = 0, contractEndAt, wage } = {}) {
   const atIso = iso(at);
   const window = activeTransferWindow(state, atIso);
   if (!window) throw new Error(`Transfer window is closed at ${atIso}`);
@@ -242,18 +231,27 @@ export function transferPlayer(state, {
   const to = club(state, toClubId);
   if (from.club_id === to.club_id) throw new Error('Transfer requires two different clubs');
   if (player.club_id !== from.club_id || !from.player_ids.includes(player.tbg_player_id)) throw new Error(`${player.tbg_player_id} is not owned by ${from.club_id}`);
+  if (to.player_ids.includes(player.tbg_player_id)) throw new Error(`${player.tbg_player_id} already belongs to ${to.club_id}`);
+
+  const oldContract = state.contracts[player.contract_id];
+  const nextContract = buildReplacementContract({
+    player,
+    clubId: to.club_id,
+    atIso,
+    endAt: contractEndAt || addDays(state.calendar.season_end, 365 * 3),
+    wage,
+    oldContract
+  });
+  assertRegistrationPossible(state, to, atIso, player.tbg_player_id);
 
   unregisterPlayer(state, { clubId: from.club_id, playerId: player.tbg_player_id, at: atIso, reason: 'transferred' });
   from.player_ids = from.player_ids.filter((id) => id !== player.tbg_player_id);
   to.player_ids.push(player.tbg_player_id);
   player.club_id = to.club_id;
-  renewContract(state, {
-    playerId: player.tbg_player_id,
-    clubId: to.club_id,
-    at: atIso,
-    endAt: contractEndAt || addDays(state.calendar.season_end, 365 * 3),
-    wage
-  });
+  if (oldContract) oldContract.status = 'renewed';
+  state.contracts[nextContract.contract_id] = nextContract;
+  player.contract_id = nextContract.contract_id;
+  event(state, 'contract_renewed', atIso, { club_id: nextContract.club_id, player_id: player.tbg_player_id, contract_id: nextContract.contract_id, end_at: nextContract.end_at });
   registerPlayer(state, { clubId: to.club_id, playerId: player.tbg_player_id, at: atIso });
   event(state, 'player_transferred', atIso, {
     player_id: player.tbg_player_id,
@@ -283,11 +281,7 @@ export function processContractExpiries(state, { at = state.calendar.contract_ex
   return Object.freeze(released);
 }
 
-export function generateYouthIntake(state, {
-  clubId,
-  at = state.calendar.youth_intake_at,
-  count = DEFAULT_YOUTH_INTAKE_SIZE
-} = {}) {
+export function generateYouthIntake(state, { clubId, at = state.calendar.youth_intake_at, count = DEFAULT_YOUTH_INTAKE_SIZE } = {}) {
   const atIso = iso(at);
   const target = club(state, clubId);
   const positions = ['Goalkeeper', 'Centre-Back', 'Central Midfield', 'Right Winger', 'Centre-Forward', 'Left-Back'];
