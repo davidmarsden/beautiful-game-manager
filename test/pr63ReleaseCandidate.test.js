@@ -10,7 +10,13 @@ import { DEFAULT_MATCH_ENGINE_MODE, MATCH_ENGINE_MODES } from '../src/matchSimul
 
 function acceptedEvidence() {
   return Object.fromEntries(REQUIRED_RELEASE_EVIDENCE.map((requirement) => {
-    if (requirement.key === 'calibration') return [requirement.key, { version: 'calibration', sections: { match: { accepted: true }, stress: { accepted: true } } }];
+    if (requirement.key === 'calibration') {
+      return [requirement.key, {
+        version: 'calibration',
+        accepted: true,
+        sections: { match: { accepted: true }, stress: { accepted: true } }
+      }];
+    }
     if (requirement.key === 'multi_season') return [requirement.key, { version: 'soak', metrics: { seasons_completed: 50 }, checks: { completed: true, preserved: true } }];
     return [requirement.key, { version: requirement.key, accepted: true }];
   }));
@@ -42,6 +48,26 @@ test('missing or failed evidence blocks release candidate acceptance', () => {
   const failedReport = buildConstitutionalReleaseCandidate({ evidence: failed });
   assert.equal(failedReport.accepted, false);
   assert.equal(failedReport.checks.every_required_artifact_accepted, false);
+});
+
+test('failed top-level calibration verdict cannot be outvoted by passing sections', () => {
+  const evidence = acceptedEvidence();
+  evidence.calibration = {
+    version: 'failed-calibration',
+    accepted: false,
+    sections: {
+      match: { accepted: true },
+      stress_tests: { accepted: true },
+      tactical: { accepted: true }
+    },
+    baseline_comparison: { accepted: false }
+  };
+
+  const report = buildConstitutionalReleaseCandidate({ evidence });
+  const calibration = report.artifacts.find((artifact) => artifact.key === 'calibration');
+  assert.equal(calibration.accepted, false);
+  assert.equal(report.checks.every_required_artifact_accepted, false);
+  assert.equal(report.accepted, false);
 });
 
 test('monitoring contract gives hard invariants zero tolerance', () => {
