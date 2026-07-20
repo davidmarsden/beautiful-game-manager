@@ -19,7 +19,7 @@ const DEFAULT_POSITIONS = Object.freeze([
   'Defensive Midfield', 'Central Midfield', 'Central Midfield',
   'Right Winger', 'Centre-Forward', 'Left Winger',
   'Goalkeeper', 'Centre-Back', 'Left-Back', 'Central Midfield',
-  'Attacking Midfield', 'Right Winger', 'Centre-Forward'
+  'Attacking Midfield', 'Right Winger', 'Centre-Forward', 'Central Midfield'
 ]);
 
 function addDays(iso, days) {
