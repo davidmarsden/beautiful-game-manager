@@ -52,6 +52,38 @@ test('resolves supported position aliases before deriving coverage groups', () =
   assert.equal(report.coverage.find((item) => item.group === 'goalkeeper').registered, 2);
 });
 
+test('maps canonical TM and legacy API-Football abbreviations into planning groups', () => {
+  const state = intelligenceState();
+  const codes = [
+    ['GK', 'goalkeeper'],
+    ['CB', 'defender'],
+    ['RB', 'defender'],
+    ['LB', 'defender'],
+    ['DM', 'midfielder'],
+    ['CM', 'midfielder'],
+    ['AM', 'midfielder'],
+    ['LW', 'attacker'],
+    ['RW', 'attacker'],
+    ['SS', 'attacker'],
+    ['CF', 'attacker'],
+    ['DEF', 'defender'],
+    ['MID', 'midfielder'],
+    ['ATT', 'attacker']
+  ];
+
+  codes.forEach(([code], index) => {
+    state.players[state.clubs['club-1'].player_ids[index]].position = code;
+  });
+
+  const report = analyseSquad(state, { clubId: 'club-1', at: '2026-08-01T00:00:00.000Z' });
+  codes.forEach(([code, expectedGroup], index) => {
+    const playerId = state.clubs['club-1'].player_ids[index];
+    const row = report.players.find((item) => item.player_id === playerId);
+    assert.equal(row.position, code);
+    assert.equal(row.position_group, expectedGroup, `${code} should map to ${expectedGroup}`);
+  });
+});
+
 test('distinguishes structural registration gaps from temporary availability gaps', () => {
   const state = intelligenceState();
   const defenderId = state.clubs['club-1'].registered_player_ids.find((id) => state.players[id].position === 'Centre-Back');
