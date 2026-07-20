@@ -2,7 +2,7 @@ const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
-export const MANAGER_DECISION_VERSION = 'tbg-manager-decision-v1.0';
+export const MANAGER_DECISION_VERSION = 'tbg-manager-decision-v1.1';
 
 const FORMATIONS = Object.freeze({
   '4-3-3-wide': Object.freeze({ goalkeeper: 1, defender: 4, midfielder: 3, attacker: 3 }),
@@ -13,7 +13,8 @@ const FORMATIONS = Object.freeze({
 function positionGroup(player) {
   const position = text(player?.position || player?.primary_position || player?.position_group).toLowerCase();
   if (position.includes('goalkeeper') || position === 'gk' || position.includes('keeper')) return 'goalkeeper';
-  if (position.includes('back') || position.includes('defen')) return 'defender';
+  if (position.includes('midfield') || position === 'dm' || position === 'cm' || position === 'am') return 'midfielder';
+  if (position.includes('back') || position.includes('centre-back') || position.includes('center-back') || position === 'cb' || position === 'lb' || position === 'rb' || position.includes('defender')) return 'defender';
   if (position.includes('forward') || position.includes('striker') || position.includes('wing')) return 'attacker';
   return 'midfielder';
 }
@@ -79,6 +80,11 @@ function tacticalPlan({ club, opponent, side, starters, playerState, policy }) {
   });
 }
 
+function isAvailable(result) {
+  if (typeof result === 'boolean') return result;
+  return Boolean(result?.available);
+}
+
 export const DEFAULT_MANAGER_POLICY = Object.freeze({
   allowed_formations: Object.freeze(['4-3-3-wide', '4-2-3-1', '4-4-2']),
   rotation_fitness_threshold: 82,
@@ -97,7 +103,7 @@ export function makeManagerDecision({ club, opponent = {}, side = 'home', matchd
   const eligible = club.players.filter((player) => {
     const id = playerId(player);
     if (!id) return false;
-    return availability ? availability(id, matchday) : true;
+    return availability ? isAvailable(availability(id, matchday)) : true;
   });
   if (eligible.length < 11) throw new Error(`Manager decision found only ${eligible.length} eligible players for ${text(club.club_id) || 'club'}`);
   const formation = chooseFormation(club, eligible, policy);
