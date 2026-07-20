@@ -1,7 +1,7 @@
 import { simulateMatch } from '../matchSimulation.js';
 import { buildDoubleRoundRobin, simulateStatefulSeason, syntheticSeasonClubs } from './seasonSimulation.js';
 
-export const HUMAN_MANAGER_SEASON_VERSION = 'tbg-human-manager-season-v1.0';
+export const HUMAN_MANAGER_SEASON_VERSION = 'tbg-human-manager-season-v1.1';
 
 const SUPPORTED_FORMATIONS = new Set(['4-3-3-wide', '4-2-3-1', '4-4-2', '4-1-4-1', '3-5-2', '3-4-3', '5-3-2']);
 const ALLOWED_TACTICS = Object.freeze({
@@ -56,13 +56,53 @@ function instructionForMatchday(defaultInstruction, instructionsByMatchday, matc
   });
 }
 
-function applyHumanInstruction(team, instruction) {
-  const availableMatchdaySquad = [...team.starting_xi, ...team.bench];
+function eligibleRegisteredPlayers(team, club) {
+  const registeredIds = club.players.map((player) => player.tbg_player_id);
+  const registeredSet = new Set(registeredIds);
+  const provisionalIds = [...team.starting_xi, ...team.bench].filter((id) => registeredSet.has(id));
+  const eligibleCount = Number(team.manager_decision?.eligible_count ?? provisionalIds.length);
+
+  if (eligibleCount >= registeredIds.length) return registeredIds;
+  if (eligibleCount <= provisionalIds.length) return provisionalIds.slice(0, eligibleCount);
+
+  const inferred = [...provisionalIds];
+  for (const id of registeredIds) {
+    if (inferred.length >= eligibleCount) break;
+    if (!inferred.includes(id)) inferred.push(id);
+  }
+  return inferred;
+}
+
+function ensureSelectedPlayerState(matchState, club, playerIds) {
+  if (!matchState?.players) return;
+  const playerMap = new Map(club.players.map((player) => [player.tbg_player_id, player]));
+  for (const id of playerIds) {
+    if (matchState.players[id]) continue;
+    const player = playerMap.get(id);
+    if (!player) continue;
+    matchState.players[id] = {
+      fitness: Number(player.fitness ?? 100),
+      sharpness: Number(player.sharpness ?? 100),
+      morale: Number(player.morale ?? 50),
+      unavailable_until_matchday: 0,
+      suspension_until_matchday: 0
+    };
+  }
+}
+
+function applyHumanInstruction(team, instruction, club, matchState) {
+  const eligibleIds = eligibleRegisteredPlayers(team, club);
   if (instruction.starting_xi) {
-    const unavailable = instruction.starting_xi.filter((id) => !availableMatchdaySquad.includes(id));
-    if (unavailable.length) throw new Error(`Human XI contains players outside the available matchday squad: ${unavailable.join(', ')}`);
+    const ineligible = instruction.starting_xi.filter((id) => !eligibleIds.includes(id));
+    if (ineligible.length) throw new Error(`Human XI contains ineligible or unregistered players: ${ineligible.join(', ')}`);
+
+    const existingOrder = [...team.starting_xi, ...team.bench, ...eligibleIds];
+    const benchPool = [...new Set(existingOrder)]
+      .filter((id) => eligibleIds.includes(id) && !instruction.starting_xi.includes(id));
+
     team.starting_xi = [...instruction.starting_xi];
-    team.bench = availableMatchdaySquad.filter((id) => !instruction.starting_xi.includes(id)).slice(0, 7);
+    team.bench = benchPool.slice(0, 7);
+    ensureSelectedPlayerState(matchState, club, [...team.starting_xi, ...team.bench]);
   }
   if (instruction.formation) team.formation = instruction.formation;
   team.tactics = { ...team.tactics, ...instruction.tactics, home_instruction: team.tactics?.home_instruction ?? null };
@@ -70,6 +110,7 @@ function applyHumanInstruction(team, instruction) {
     ...team.manager_decision,
     source: 'human',
     human_override: true,
+    eligible_registered_count: eligibleIds.length,
     submitted_formation: team.formation,
     submitted_tactics: { ...team.tactics }
   };
@@ -116,6 +157,7 @@ export function playHumanManagerSeason({
   instructionsByMatchday = {}
 } = {}) {
   const prepared = prepareHumanManagerSeason({ clubs, humanClubId, seasonId, startAt, daysBetweenRounds });
+  const humanClub = clubById(clubs, humanClubId);
   const normalizedDefault = normalizeInstruction(defaultInstruction);
   const decisionLedger = [];
 
@@ -124,7 +166,7 @@ export function playHumanManagerSeason({
     const side = fixture.home_club_id === humanClubId ? 'home' : fixture.away_club_id === humanClubId ? 'away' : null;
     if (side) {
       const instruction = instructionForMatchday(normalizedDefault, instructionsByMatchday, fixture.matchday);
-      applyHumanInstruction(contract.teams[side], instruction);
+      applyHumanInstruction(contract.teams[side], instruction, humanClub, contract.match_state);
       decisionLedger.push(Object.freeze({
         fixture_id: fixture.fixture_id,
         matchday: fixture.matchday,
