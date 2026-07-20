@@ -57,3 +57,19 @@ test('season manager decisions preserve availability exclusions and opponent-awa
     row.teams.home.tactics.mentality !== 'balanced'
     || row.teams.away.tactics.mentality !== 'balanced'));
 });
+
+test('autonomous seasons preserve every constitutional formation supported by the engine', () => {
+  const supported = ['4-3-3-wide', '4-2-3-1', '4-4-2', '4-1-4-1', '3-5-2', '3-4-3', '5-3-2'];
+
+  for (const formation of supported) {
+    const clubs = syntheticSeasonClubs({ clubCount: 4, baseRating: 86 }).map((club) => ({ ...club, formation }));
+    const output = simulateStatefulSeason({
+      clubs,
+      seasonId: `pr60-formation-${formation}`,
+      simulator: deterministicSimulator
+    });
+
+    assert.equal(output.accepted, true, formation);
+    assert.ok(output.results.every((row) => row.teams.home.formation === formation && row.teams.away.formation === formation), formation);
+  }
+});
