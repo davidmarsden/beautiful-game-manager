@@ -27,6 +27,31 @@ test('derives a viable depth chart, roles and contract horizons from squad-cycle
   assert.ok(report.needs.some((row) => row.type === 'squad_size' && row.severity === 'high'));
 });
 
+test('uses season boundaries rather than an arbitrary month cutoff for contract horizons', () => {
+  const state = intelligenceState();
+  const report = analyseSquad(state, { clubId: 'club-1', at: '2026-08-01T00:00:00.000Z' });
+  const thisSeason = report.players.filter((row) => row.contract_end_at === state.calendar.season_end);
+
+  assert.ok(thisSeason.length > 0);
+  assert.ok(thisSeason.every((row) => row.contract_horizon === 'expiring_this_season'));
+  assert.equal(report.summary.expiring_this_season, thisSeason.length);
+});
+
+test('resolves supported position aliases before deriving coverage groups', () => {
+  const state = intelligenceState();
+  const player = state.players[state.clubs['club-1'].player_ids[0]];
+  const originalPosition = player.position;
+  delete player.position;
+  player.primary_position = originalPosition;
+
+  const report = analyseSquad(state, { clubId: 'club-1', at: '2026-08-01T00:00:00.000Z' });
+  const row = report.players.find((item) => item.player_id === player.tbg_player_id);
+
+  assert.equal(row.position, originalPosition);
+  assert.equal(row.position_group, 'goalkeeper');
+  assert.equal(report.coverage.find((item) => item.group === 'goalkeeper').registered, 2);
+});
+
 test('distinguishes structural registration gaps from temporary availability gaps', () => {
   const state = intelligenceState();
   const defenderId = state.clubs['club-1'].registered_player_ids.find((id) => state.players[id].position === 'Centre-Back');
