@@ -183,9 +183,9 @@ export function registerPlayer(state, { clubId, playerId: idValue, at } = {}) {
   const target = club(state, clubId);
   const player = ownedPlayer(state, idValue);
   if (player.club_id !== target.club_id) throw new Error(`${player.tbg_player_id} is not owned by ${target.club_id}`);
+  assertRegistrationPossible(state, target, atIso, player.tbg_player_id);
   const existing = state.registrations[player.tbg_player_id];
   if (existing?.registered && existing.club_id === target.club_id) return existing;
-  assertRegistrationPossible(state, target, atIso, player.tbg_player_id);
   state.registrations[player.tbg_player_id] = { player_id: player.tbg_player_id, club_id: target.club_id, registered: true, registered_at: atIso };
   if (!target.registered_player_ids.includes(player.tbg_player_id)) target.registered_player_ids.push(player.tbg_player_id);
   event(state, 'player_registered', atIso, { club_id: target.club_id, player_id: player.tbg_player_id });
