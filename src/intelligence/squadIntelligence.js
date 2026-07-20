@@ -1,7 +1,7 @@
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
-export const SQUAD_INTELLIGENCE_VERSION = 'tbg-squad-intelligence-v1.1';
+export const SQUAD_INTELLIGENCE_VERSION = 'tbg-squad-intelligence-v1.2';
 export const DEFAULT_HARD_MINIMUM_SQUAD = 18;
 export const DEFAULT_PREFERRED_MINIMUM_SQUAD = 22;
 
@@ -10,6 +10,13 @@ const GROUP_REQUIREMENTS = Object.freeze({
   defender: 6,
   midfielder: 5,
   attacker: 3
+});
+
+const POSITION_GROUP_CODES = Object.freeze({
+  goalkeeper: new Set(['gk', 'goalkeeper']),
+  defender: new Set(['cb', 'rb', 'lb', 'def', 'defender', 'defence']),
+  midfielder: new Set(['dm', 'cm', 'am', 'mid', 'midfielder', 'midfield']),
+  attacker: new Set(['lw', 'rw', 'ss', 'cf', 'att', 'attacker', 'attack', 'forward'])
 });
 
 const DAY = 86400000;
@@ -30,9 +37,14 @@ function playerPosition(player) {
 
 function positionGroup(position) {
   const value = text(position).toLowerCase();
-  if (value.includes('goalkeeper') || value === 'gk') return 'goalkeeper';
-  if (value.includes('back') || value.includes('defender') || value.includes('defence')) return 'defender';
-  if (value.includes('midfield') || value.includes('wing-back')) return 'midfielder';
+  if (POSITION_GROUP_CODES.goalkeeper.has(value)) return 'goalkeeper';
+  if (POSITION_GROUP_CODES.defender.has(value)) return 'defender';
+  if (POSITION_GROUP_CODES.midfielder.has(value)) return 'midfielder';
+  if (POSITION_GROUP_CODES.attacker.has(value)) return 'attacker';
+  if (value.includes('goalkeeper')) return 'goalkeeper';
+  if (value.includes('wing-back') || value.includes('back') || value.includes('defender') || value.includes('defence')) return 'defender';
+  if (value.includes('midfield')) return 'midfielder';
+  if (value.includes('winger') || value.includes('forward') || value.includes('striker') || value.includes('attack')) return 'attacker';
   return 'attacker';
 }
 
