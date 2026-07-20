@@ -32,7 +32,11 @@ Every owned player has one current active contract. The foundation supports:
 - deterministic expiry processing;
 - release to free agency when an active contract expires.
 
-Expired players are removed from the club squad and registration list but remain in the player universe.
+Imported contract dates remain authoritative. When source data does not provide a contract, TBG creates a deterministic stagger across the current season and the following four seasons. Approximately ten percent of each starting squad expires at the first season end—two players in an 18- or 19-player synthetic squad—rather than every default contract expiring together.
+
+The stagger is rotated deterministically per club, so repeated imports produce the same contract calendar without giving every club the same players or positions in the expiry group. Expired players are removed from the club squad and registration list but remain in the player universe.
+
+The calibration path generates youth intake before processing the small first expiry group and requires every synthetic club to retain at least 18 owned players. Live human-managed clubs are expected to sit closer to their configured squad caps, while later AI recruitment and renewal strategy will manage clubs approaching their minimum viable squad.
 
 ## Youth intake
 
