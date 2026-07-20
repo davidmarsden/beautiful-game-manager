@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeManagerDecision } from '../src/matchEngine/managerDecision.js';
+import { availabilityForPlayer, createSquadAvailability } from '../src/matchEngine/squadAvailability.js';
 
 function player(id, position, rating, fitness = 100) {
   return {
@@ -45,22 +46,23 @@ test('manager selects a positionally valid deterministic XI and bench', () => {
   assert.equal(first.starting_xi.length, 11);
   assert.equal(new Set(first.starting_xi).size, 11);
   assert.ok(first.starting_xi.includes('gk1'));
+  assert.ok(first.starting_xi.includes('m1'));
   assert.equal(first.bench.length, 7);
   assert.ok(first.starting_xi.every((id) => !first.bench.includes(id)));
 });
 
-test('manager rotates a tired incumbent when a credible replacement is available', () => {
+test('manager rotates a tired incumbent when the best credible replacement is available', () => {
   const previous = ['gk1', 'd1', 'd2', 'd3', 'd4', 'm1', 'm2', 'm3', 'a1', 'a2', 'a3'];
   const decision = makeManagerDecision({
     club,
-    playerState: stateFor(club.players, { a1: 55, a5: 100 }),
+    playerState: stateFor(club.players, { a1: 55 }),
     previousStartingXi: previous,
     opponent: { average_rating: 89 },
     matchday: 5
   });
 
   assert.ok(!decision.starting_xi.includes('a1'));
-  assert.ok(decision.starting_xi.includes('a5'));
+  assert.ok(decision.starting_xi.includes('a4'));
   assert.ok(decision.decision.rotated_out.includes('a1'));
   assert.ok(decision.decision.rotation_count >= 1);
 });
@@ -84,17 +86,42 @@ test('manager adapts tactics to opponent strength and squad fitness', () => {
   assert.equal(tired.tactics.tempo, 'slow');
 });
 
-test('manager respects availability and refuses an impossible XI', () => {
+test('manager respects boolean and availability-object callbacks', () => {
   const unavailable = new Set(['a1']);
-  const decision = makeManagerDecision({
+  const booleanDecision = makeManagerDecision({
     club,
     playerState: stateFor(club.players),
     availability: (id) => !unavailable.has(id),
     matchday: 3
   });
-  assert.ok(!decision.starting_xi.includes('a1'));
-  assert.ok(!decision.bench.includes('a1'));
+  assert.ok(!booleanDecision.starting_xi.includes('a1'));
+  assert.ok(!booleanDecision.bench.includes('a1'));
 
+  const calendar = createSquadAvailability(club.players.map((row) => row.tbg_player_id));
+  calendar.players.a1.injury_until_matchday = 4;
+  const objectDecision = makeManagerDecision({
+    club,
+    playerState: stateFor(club.players),
+    availability: (id, matchday) => availabilityForPlayer(calendar, id, matchday),
+    matchday: 3
+  });
+  assert.ok(!objectDecision.starting_xi.includes('a1'));
+  assert.ok(!objectDecision.bench.includes('a1'));
+});
+
+test('defensive midfielders remain midfielders and cannot satisfy a back-four shortage', () => {
+  const shortDefence = {
+    ...club,
+    players: club.players.filter((row) => row.tbg_player_id !== 'd4' && row.tbg_player_id !== 'd5' && row.tbg_player_id !== 'd6')
+  };
+  assert.throws(() => makeManagerDecision({
+    club: shortDefence,
+    playerState: stateFor(shortDefence.players),
+    matchday: 3
+  }), /No viable formation/);
+});
+
+test('manager refuses an impossible XI', () => {
   assert.throws(() => makeManagerDecision({
     club,
     playerState: stateFor(club.players),
