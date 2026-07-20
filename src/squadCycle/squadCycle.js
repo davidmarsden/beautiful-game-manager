@@ -3,7 +3,7 @@ const integer = (value, fallback = 0) => Number.isInteger(Number(value)) ? Numbe
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
 
-export const SQUAD_CYCLE_VERSION = 'tbg-squad-cycle-v1.1';
+export const SQUAD_CYCLE_VERSION = 'tbg-squad-cycle-v1.2';
 export const DEFAULT_REGISTRATION_LIMIT = 25;
 export const DEFAULT_YOUTH_INTAKE_SIZE = 3;
 
@@ -17,6 +17,12 @@ function iso(value) {
 
 function addDays(value, days) {
   return new Date(new Date(value).getTime() + days * DAY).toISOString();
+}
+
+function addYears(value, years) {
+  const date = new Date(value);
+  date.setUTCFullYear(date.getUTCFullYear() + years);
+  return date.toISOString();
 }
 
 function hash(value) {
@@ -44,14 +50,24 @@ function clonePlayer(player) {
   };
 }
 
-function normaliseContract(player, clubId, seasonEnd) {
+function defaultInitialContractYears(clubId, playerIndex, squadSize) {
+  const safeSize = Math.max(1, integer(squadSize, 1));
+  const expiringCount = Math.max(1, Math.round(safeSize * 0.1));
+  const rotation = hash(`${clubId}:initial-contract-rotation`) % safeSize;
+  const rank = (playerIndex + rotation) % safeSize;
+  if (rank < expiringCount) return 0;
+  return 1 + ((rank - expiringCount) % 4);
+}
+
+function normaliseContract(player, clubId, seasonEnd, playerIndex, squadSize) {
   const source = player.contract || {};
+  const defaultYears = defaultInitialContractYears(clubId, playerIndex, squadSize);
   return {
     contract_id: text(source.contract_id) || `${player.tbg_player_id}:${clubId}:contract`,
     player_id: player.tbg_player_id,
     club_id: clubId,
-    start_at: iso(source.start_at || addDays(seasonEnd, -365)),
-    end_at: iso(source.end_at || seasonEnd),
+    start_at: iso(source.start_at || addYears(seasonEnd, -1)),
+    end_at: iso(source.end_at || addYears(seasonEnd, defaultYears)),
     wage: Math.max(0, integer(source.wage, 1000)),
     status: source.status === 'expired' || source.status === 'released' ? source.status : 'active'
   };
@@ -148,13 +164,14 @@ export function createSquadCycleState({ clubs = [], seasonId = 'season', seasonS
     const clubId = text(sourceClub.club_id);
     if (!clubId || state.clubs[clubId]) throw new Error(`Invalid or duplicate club ID: ${clubId}`);
     state.clubs[clubId] = { club_id: clubId, club_name: text(sourceClub.club_name || clubId), player_ids: [], registered_player_ids: [] };
-    for (const sourcePlayer of sourceClub.players || []) {
+    const sourcePlayers = sourceClub.players || [];
+    for (const [playerIndex, sourcePlayer] of sourcePlayers.entries()) {
       const player = clonePlayer(sourcePlayer);
       if (state.players[player.tbg_player_id]) throw new Error(`Duplicate player ID: ${player.tbg_player_id}`);
       player.club_id = clubId;
       state.players[player.tbg_player_id] = player;
       state.clubs[clubId].player_ids.push(player.tbg_player_id);
-      const contract = normaliseContract(player, clubId, calendar.season_end);
+      const contract = normaliseContract(player, clubId, calendar.season_end, playerIndex, sourcePlayers.length);
       state.contracts[contract.contract_id] = contract;
       player.contract_id = contract.contract_id;
       state.registrations[player.tbg_player_id] = {
