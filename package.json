@@ -19,7 +19,8 @@
     "release-candidate:constitutional": "node scripts/generate-constitutional-release-candidate.js",
     "playable:human-season": "node scripts/generate-human-manager-season-report.js",
     "squad-cycle:foundations": "node scripts/generate-squad-cycle-report.js",
-    "calibration:gate": "npm test && npm run calibration:report && npm run calibration:shadow && npm run calibration:league-structure && npm run calibration:rollover && npm run calibration:availability && npm run calibration:season-availability && npm run calibration:manager-decisions && npm run calibration:ai-season && npm run calibration:multi-season && npm run calibration:final-outcomes && npm run release-candidate:constitutional && npm run playable:human-season && npm run squad-cycle:foundations"
+    "squad-intelligence:report": "node scripts/generate-squad-intelligence-report.js",
+    "calibration:gate": "npm test && npm run calibration:report && npm run calibration:shadow && npm run calibration:league-structure && npm run calibration:rollover && npm run calibration:availability && npm run calibration:season-availability && npm run calibration:manager-decisions && npm run calibration:ai-season && npm run calibration:multi-season && npm run calibration:final-outcomes && npm run release-candidate:constitutional && npm run playable:human-season && npm run squad-cycle:foundations && npm run squad-intelligence:report"
   },
   "engines": {
     "node": ">=20"
