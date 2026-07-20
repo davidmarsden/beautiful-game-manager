@@ -9,7 +9,7 @@ function hash(value) {
 
 function deterministicSimulator(contract) {
   const outcome = hash(contract.fixture.fixture_id) % 3;
-  const score = outcome === 0 ? { home: 1, away: 0 } : outcome === 1 ? { home: 1, away: 1 } : { home: 0, away: 1 };
+  const score = outcome === 0 ? { home: 2, away: 1 } : outcome === 1 ? { home: 1, away: 1 } : { home: 1, away: 2 };
   return {
     fixture_id: contract.fixture.fixture_id,
     run_key: contract.run_key,
