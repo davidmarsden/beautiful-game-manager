@@ -109,7 +109,7 @@ export function makeManagerDecision({ club, opponent = {}, side = 'home', matchd
     if (!id) return false;
     return availability ? isAvailable(availability(id, matchday)) : true;
   });
-  if (eligible.length < 11) throw new Error(`Manager decision found only ${eligible.length} eligible players for ${text(club.club_id) || 'club'}`);
+  if (eligible.length < 11) throw new Error(`Manager decision found only ${eligible.length} eligible players for ${text(club.club_id) || 'club'} on matchday ${matchday}`);
   const formation = chooseFormation(club, eligible, policy);
   const starters = selectByShape(eligible, formation, playerState, previousStartingXi, policy);
   const starterIds = starters.map(playerId);
