@@ -49,6 +49,7 @@ test('manager selects a positionally valid deterministic XI and bench', () => {
   assert.ok(first.starting_xi.includes('m1'));
   assert.equal(first.bench.length, 7);
   assert.ok(first.starting_xi.every((id) => !first.bench.includes(id)));
+  assert.equal(first.decision.emergency_youth_count, 0);
 });
 
 test('manager rotates a tired incumbent when the best credible replacement is available', () => {
@@ -109,23 +110,48 @@ test('manager respects boolean and availability-object callbacks', () => {
   assert.ok(!objectDecision.bench.includes('a1'));
 });
 
-test('defensive midfielders remain midfielders and cannot satisfy a back-four shortage', () => {
+test('senior players cover out of position before an emergency youth is called', () => {
   const shortDefence = {
     ...club,
     players: club.players.filter((row) => row.tbg_player_id !== 'd4' && row.tbg_player_id !== 'd5' && row.tbg_player_id !== 'd6')
   };
-  assert.throws(() => makeManagerDecision({
+  const decision = makeManagerDecision({
     club: shortDefence,
     playerState: stateFor(shortDefence.players),
     matchday: 3
-  }), /No viable formation/);
+  });
+  assert.equal(decision.starting_xi.length, 11);
+  assert.equal(decision.decision.emergency_youth_count, 0);
+  assert.ok(decision.decision.out_of_position_count > 0);
 });
 
-test('manager refuses an impossible XI', () => {
-  assert.throws(() => makeManagerDecision({
+test('manager promotes deterministic emergency youth when fewer than eleven seniors are eligible', () => {
+  const eligibleIds = ['gk1', 'd1', 'd2', 'd3', 'd4', 'm1', 'm2', 'm3', 'a1', 'a2'];
+  const options = {
     club,
     playerState: stateFor(club.players),
-    availability: (id) => ['gk1', 'd1', 'd2', 'd3', 'd4', 'm1', 'm2', 'm3', 'a1', 'a2'].includes(id),
+    availability: (id) => eligibleIds.includes(id),
     matchday: 3
-  }), /only 10 eligible players/);
+  };
+  const first = makeManagerDecision(options);
+  const second = makeManagerDecision(options);
+
+  assert.deepEqual(first, second);
+  assert.equal(first.starting_xi.length, 11);
+  assert.equal(first.decision.eligible_count, 10);
+  assert.equal(first.decision.emergency_youth_count, 1);
+  assert.ok(first.decision.emergency_youth[0].includes('emergency-youth'));
+  assert.ok(first.starting_xi.includes(first.decision.emergency_youth[0]));
+});
+
+test('manager supplies an emergency goalkeeper rather than failing', () => {
+  const decision = makeManagerDecision({
+    club,
+    playerState: stateFor(club.players),
+    availability: (id) => !id.startsWith('gk'),
+    matchday: 7
+  });
+  assert.equal(decision.starting_xi.length, 11);
+  assert.equal(decision.decision.emergency_youth_count, 1);
+  assert.ok(decision.decision.emergency_youth[0].includes('goalkeeper'));
 });
