@@ -45,10 +45,10 @@ test('human manager may select an exact XI from the available matchday squad', (
     clubs,
     humanClubId,
     seasonId: 'pr64-exact-xi',
-    defaultInstruction: { starting_xi: exactXi }
+    instructionsByMatchday: { 1: { starting_xi: exactXi } }
   });
   assert.equal(report.accepted, true);
-  assert.deepEqual(report.decisions[0].starting_xi, exactXi);
+  assert.deepEqual(report.decisions.find((decision) => decision.matchday === 1).starting_xi, exactXi);
 });
 
 test('rejects invalid human lineups before resolving a match', () => {
