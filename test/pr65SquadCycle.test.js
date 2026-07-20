@@ -22,6 +22,10 @@ function foundationState(options = {}) {
   });
 }
 
+function serialisableState(state) {
+  return JSON.parse(JSON.stringify(state));
+}
+
 test('creates a registered contracted squad for every club', () => {
   const state = foundationState();
   const snapshot = squadCycleSnapshot(state);
@@ -56,6 +60,24 @@ test('transfer windows reject closed-date moves and accept open-window transfers
   assert.equal(state.clubs['club-1'].player_ids.includes(playerId), false);
   assert.equal(state.clubs['club-2'].registered_player_ids.includes(playerId), true);
   assert.equal(state.contracts[state.players[playerId].contract_id].wage, 25000);
+  assert.equal(squadCycleSnapshot(state).accepted, true);
+});
+
+test('a transfer rejected by destination capacity leaves all state unchanged', () => {
+  const state = foundationState({ registrationLimit: 19 });
+  const playerId = state.clubs['club-1'].player_ids[0];
+  const before = serialisableState(state);
+
+  assert.throws(() => transferPlayer(state, {
+    playerId,
+    fromClubId: 'club-1',
+    toClubId: 'club-2',
+    at: '2026-07-15T12:00:00.000Z',
+    contractEndAt: '2030-06-30T23:59:59.000Z'
+  }), /registration limit reached/);
+
+  assert.deepEqual(serialisableState(state), before);
+  assert.equal(state.players[playerId].club_id, 'club-1');
   assert.equal(squadCycleSnapshot(state).accepted, true);
 });
 
@@ -95,6 +117,25 @@ test('contract renewal protects a player while unrenewed expiries create free ag
   assert.equal(state.players[protectedId].club_id, 'club-1');
   assert.equal(state.players[expiringId].club_id, null);
   assert.equal(squadCycleSnapshot(state).accepted, true);
+});
+
+test('an invalid renewal leaves the active contract and entire state unchanged', () => {
+  const state = foundationState();
+  const playerId = state.clubs['club-1'].player_ids[0];
+  const originalContractId = state.players[playerId].contract_id;
+  const before = serialisableState(state);
+
+  assert.throws(() => renewContract(state, {
+    playerId,
+    clubId: 'club-1',
+    at: '2027-05-01T12:00:00.000Z',
+    endAt: '2027-04-30T12:00:00.000Z',
+    wage: 30000
+  }), /Contract end must be after contract start/);
+
+  assert.deepEqual(serialisableState(state), before);
+  assert.equal(state.players[playerId].contract_id, originalContractId);
+  assert.equal(state.contracts[originalContractId].status, 'active');
 });
 
 test('youth intake is deterministic and produces constitutional youth ratings', () => {
