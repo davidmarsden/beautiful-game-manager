@@ -9,6 +9,8 @@ function availabilitySimulator(records, { massAbsence = false } = {}) {
       fixture: contract.fixture,
       home: [...contract.teams.home.starting_xi],
       away: [...contract.teams.away.starting_xi],
+      homeDecision: contract.teams.home.manager_decision,
+      awayDecision: contract.teams.away.manager_decision,
       match_state: contract.match_state
     });
     const targetIds = first
@@ -58,16 +60,20 @@ test('season selection honours injury windows and restores players after recover
   assert.equal(targetFixtures[1].match_state.players[target], undefined);
 });
 
-test('availability integration refuses to field an ineligible emergency XI', () => {
+test('availability integration always fields eleven using senior cover before emergency youth', () => {
   const clubs = syntheticSeasonClubs({ clubCount: 4 });
-  assert.throws(
-    () => simulateStatefulSeason({
-      clubs,
-      seasonId: 'pr58-insufficient-eligible-squad',
-      simulator: availabilitySimulator([], { massAbsence: true })
-    }),
-    /only 10 eligible players/
-  );
+  const records = [];
+  const report = simulateStatefulSeason({
+    clubs,
+    seasonId: 'pr58-insufficient-eligible-squad',
+    simulator: availabilitySimulator(records, { massAbsence: true })
+  });
+
+  assert.equal(report.accepted, true, JSON.stringify(report.checks, null, 2));
+  assert.equal(report.checks.every_club_fields_eleven, true);
+  assert.ok(report.metrics.out_of_position_starters > 0 || report.metrics.emergency_youth_callups > 0);
+  assert.ok(records.every((row) => row.home.length === 11 && row.away.length === 11));
+  assert.equal(report.metrics.unavailable_selections, 0);
 });
 
 test('season availability behaviour is deterministic for identical inputs', () => {

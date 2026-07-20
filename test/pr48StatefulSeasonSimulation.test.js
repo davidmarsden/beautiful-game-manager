@@ -60,7 +60,7 @@ test('congested seasons carry state between fixtures rather than resetting fitne
   assert.equal(report.checks.fitness_stays_bounded, true);
 });
 
-test('depleted squads fail instead of selecting injured or suspended players', () => {
+test('depleted squads still field eleven without selecting injured players', () => {
   const clubs = syntheticSeasonClubs({ clubCount: 4 }).map((club) => (
     club.club_id === 'club-1' ? { ...club, players: club.players.slice(0, 11) } : club
   ));
@@ -74,10 +74,11 @@ test('depleted squads fail instead of selecting injured or suspended players', (
     return stubResult(contract, { events: [{ event_id: `${contract.fixture.fixture_id}:event-1` }], injuries });
   };
 
-  assert.throws(
-    () => simulateStatefulSeason({ clubs, seasonId: 'depleted-squad', simulator }),
-    /only 10 eligible players for club-1 on matchday 2/
-  );
+  const report = simulateStatefulSeason({ clubs, seasonId: 'depleted-squad', simulator });
+  assert.equal(report.accepted, true, JSON.stringify(report.checks, null, 2));
+  assert.equal(report.checks.every_club_fields_eleven, true);
+  assert.equal(report.metrics.unavailable_selections, 0);
+  assert.ok(report.metrics.emergency_youth_callups > 0);
 });
 
 test('events without a non-empty public event ID are rejected', () => {
