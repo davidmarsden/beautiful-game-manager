@@ -12,7 +12,7 @@ const round = (value, places = 4) => Number(Number(value).toFixed(places));
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
 const text = (value) => String(value ?? '').trim();
 
-export const SEASON_SIMULATION_VERSION = 'tbg-stateful-season-harness-v1.2';
+export const SEASON_SIMULATION_VERSION = 'tbg-stateful-season-harness-v1.3';
 
 const DEFAULT_POSITIONS = Object.freeze([
   'Goalkeeper', 'Right-Back', 'Centre-Back', 'Centre-Back', 'Left-Back',
@@ -123,6 +123,21 @@ function averageSquadRating(club) {
   return club.players.reduce((sum, player) => sum + Number(player.underlying_ability_rating ?? 75), 0) / club.players.length;
 }
 
+function registerEmergencyPlayers(state, players) {
+  for (const player of players) {
+    const id = player.tbg_player_id;
+    if (!state.players[id]) state.players[id] = { fitness: 100, sharpness: 100, morale: 50, temporary_emergency_callup: true };
+    if (!Object.prototype.hasOwnProperty.call(state.availability.players, id)) {
+      state.availability.players[id] = {
+        injury_until_matchday: 0,
+        suspension_until_matchday: 0,
+        injury_reason: null,
+        suspension_reason: null
+      };
+    }
+  }
+}
+
 function selectTeam(club, opponent, state, matchday, side) {
   const managerDecision = makeManagerDecision({
     club,
@@ -133,6 +148,7 @@ function selectTeam(club, opponent, state, matchday, side) {
     previousStartingXi: state.clubs[club.club_id].previous_starting_xi,
     availability: (playerId, day) => availabilityForPlayer(state.availability, playerId, day)
   });
+  registerEmergencyPlayers(state, managerDecision.emergency_players);
   return {
     side,
     club_id: club.club_id,
@@ -144,14 +160,15 @@ function selectTeam(club, opponent, state, matchday, side) {
     tactical_familiarity: 80,
     cohesion: 75,
     tactics: { ...managerDecision.tactics },
-    manager_decision: managerDecision.decision
+    manager_decision: managerDecision.decision,
+    emergency_players: [...managerDecision.emergency_players]
   };
 }
 
 function contractState(state, teams) {
   const ids = [...teams.home.starting_xi, ...teams.home.bench, ...teams.away.starting_xi, ...teams.away.bench];
   return { players: Object.fromEntries(ids.map((id) => {
-    const availability = state.availability.players[id];
+    const availability = state.availability.players[id] || { injury_until_matchday: 0, suspension_until_matchday: 0 };
     return [id, {
       ...state.players[id],
       unavailable_until_matchday: availability.injury_until_matchday,
@@ -207,6 +224,8 @@ export function simulateStatefulSeason({ clubs = syntheticSeasonClubs(), seasonI
   let managerDecisionCount = 0;
   let totalRotations = 0;
   let tacticalAdjustments = 0;
+  let emergencyYouthCallups = 0;
+  let outOfPositionStarters = 0;
 
   for (const fixture of fixtures) {
     const homeClub = clubMap.get(fixture.home_club_id);
@@ -220,11 +239,13 @@ export function simulateStatefulSeason({ clubs = syntheticSeasonClubs(), seasonI
     };
     managerDecisionCount += 2;
     totalRotations += teams.home.manager_decision.rotation_count + teams.away.manager_decision.rotation_count;
+    emergencyYouthCallups += teams.home.manager_decision.emergency_youth_count + teams.away.manager_decision.emergency_youth_count;
+    outOfPositionStarters += teams.home.manager_decision.out_of_position_count + teams.away.manager_decision.out_of_position_count;
     tacticalAdjustments += Number(JSON.stringify(teams.home.tactics) !== JSON.stringify(homeClub.tactics));
     tacticalAdjustments += Number(JSON.stringify(teams.away.tactics) !== JSON.stringify(awayClub.tactics));
     const selectedIds = [...teams.home.starting_xi, ...teams.home.bench, ...teams.away.starting_xi, ...teams.away.bench];
     unavailableSelections += selectedIds.filter((id) => !availabilityForPlayer(state.availability, id, fixture.matchday).available).length;
-    const world = { players: [...homeClub.players, ...awayClub.players] };
+    const world = { players: [...homeClub.players, ...awayClub.players, ...teams.home.emergency_players, ...teams.away.emergency_players] };
     const contract = {
       contract_version: '2d2-v1', engine_mode: MATCH_ENGINE_MODES.constitutional,
       run_key: `${seasonId}:${fixture.fixture_id}`,
@@ -271,6 +292,7 @@ export function simulateStatefulSeason({ clubs = syntheticSeasonClubs(), seasonI
   const standings = finalTable(table);
   const allStateRows = Object.values(state.players);
   const finalAvailability = availabilitySnapshot(state.availability, fixtures.at(-1).matchday + 1);
+  const registeredPlayerCount = clubs.reduce((sum, club) => sum + club.players.length, 0);
   const checks = Object.freeze({
     every_fixture_played_once: results.length === fixtures.length && state.applied_run_keys.size === fixtures.length,
     balanced_played_counts: standings.every((row) => row.played === (clubs.length - 1) * 2),
@@ -281,10 +303,11 @@ export function simulateStatefulSeason({ clubs = syntheticSeasonClubs(), seasonI
     fitness_stays_bounded: allStateRows.every((row) => row.fitness >= 0 && row.fitness <= 100),
     no_duplicate_state_application: state.applied_run_keys.size === results.length,
     unavailable_players_are_never_selected: unavailableSelections === 0,
-    availability_calendar_covers_every_player: Object.keys(state.availability.players).length === clubs.reduce((sum, club) => sum + club.players.length, 0),
+    availability_calendar_covers_every_player: Object.keys(state.availability.players).length >= registeredPlayerCount,
     manager_decision_for_every_team: managerDecisionCount === fixtures.length * 2,
     manager_decisions_are_positionally_valid: results.every((row) => row.teams.home.starting_xi.length === 11 && row.teams.away.starting_xi.length === 11),
-    manager_tactics_present: results.every((row) => row.teams.home.tactics && row.teams.away.tactics)
+    manager_tactics_present: results.every((row) => row.teams.home.tactics && row.teams.away.tactics),
+    every_club_fields_eleven: results.every((row) => row.teams.home.starting_xi.length === 11 && row.teams.away.starting_xi.length === 11)
   });
   return Object.freeze({
     version: SEASON_SIMULATION_VERSION,
@@ -309,7 +332,9 @@ export function simulateStatefulSeason({ clubs = syntheticSeasonClubs(), seasonI
       unavailable_selections: unavailableSelections,
       manager_decisions: managerDecisionCount,
       total_rotations: totalRotations,
-      tactical_adjustments: tacticalAdjustments
+      tactical_adjustments: tacticalAdjustments,
+      emergency_youth_callups: emergencyYouthCallups,
+      out_of_position_starters: outOfPositionStarters
     }),
     checks,
     accepted: Object.values(checks).every(Boolean)
