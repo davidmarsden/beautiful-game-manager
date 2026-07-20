@@ -2,12 +2,16 @@ const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
-export const MANAGER_DECISION_VERSION = 'tbg-manager-decision-v1.1';
+export const MANAGER_DECISION_VERSION = 'tbg-manager-decision-v1.2';
 
 const FORMATIONS = Object.freeze({
   '4-3-3-wide': Object.freeze({ goalkeeper: 1, defender: 4, midfielder: 3, attacker: 3 }),
   '4-2-3-1': Object.freeze({ goalkeeper: 1, defender: 4, midfielder: 5, attacker: 1 }),
-  '4-4-2': Object.freeze({ goalkeeper: 1, defender: 4, midfielder: 4, attacker: 2 })
+  '4-4-2': Object.freeze({ goalkeeper: 1, defender: 4, midfielder: 4, attacker: 2 }),
+  '4-1-4-1': Object.freeze({ goalkeeper: 1, defender: 4, midfielder: 5, attacker: 1 }),
+  '3-5-2': Object.freeze({ goalkeeper: 1, defender: 3, midfielder: 5, attacker: 2 }),
+  '3-4-3': Object.freeze({ goalkeeper: 1, defender: 3, midfielder: 4, attacker: 3 }),
+  '5-3-2': Object.freeze({ goalkeeper: 1, defender: 5, midfielder: 3, attacker: 2 })
 });
 
 function positionGroup(player) {
@@ -86,7 +90,7 @@ function isAvailable(result) {
 }
 
 export const DEFAULT_MANAGER_POLICY = Object.freeze({
-  allowed_formations: Object.freeze(['4-3-3-wide', '4-2-3-1', '4-4-2']),
+  allowed_formations: Object.freeze(['4-3-3-wide', '4-2-3-1', '4-4-2', '4-1-4-1', '3-5-2', '3-4-3', '5-3-2']),
   rotation_fitness_threshold: 82,
   fitness_weight: 0.045,
   sharpness_weight: 0.015,
