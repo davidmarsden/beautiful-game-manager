@@ -27,6 +27,7 @@ jobs:
       - run: npm run release-candidate:constitutional
       - run: npm run playable:human-season
       - run: npm run squad-cycle:foundations
+      - run: npm run squad-intelligence:report
       - uses: actions/upload-artifact@v4
         if: always()
         with:
