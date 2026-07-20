@@ -26,6 +26,14 @@ function serialisableState(state) {
   return JSON.parse(JSON.stringify(state));
 }
 
+function expiringPlayers(state, clubId) {
+  const expiry = new Date(state.calendar.contract_expiry_at).getTime();
+  return state.clubs[clubId].player_ids.filter((playerId) => {
+    const contract = state.contracts[state.players[playerId].contract_id];
+    return contract.status === 'active' && new Date(contract.end_at).getTime() <= expiry;
+  });
+}
+
 test('creates a registered contracted squad for every club', () => {
   const state = foundationState();
   const snapshot = squadCycleSnapshot(state);
@@ -33,6 +41,40 @@ test('creates a registered contracted squad for every club', () => {
   assert.equal(snapshot.clubs.length, 4);
   assert.ok(snapshot.clubs.every((club) => club.squad_size === 19 && club.registered_size === 19));
   assert.equal(snapshot.active_contract_count, 76);
+});
+
+test('initial contracts are staggered with only ten percent expiring in season one', () => {
+  const first = foundationState();
+  const second = foundationState();
+  assert.deepEqual(serialisableState(first), serialisableState(second));
+
+  for (const clubId of Object.keys(first.clubs)) {
+    assert.equal(expiringPlayers(first, clubId).length, 2);
+    const contractEnds = new Set(first.clubs[clubId].player_ids.map((playerId) => first.contracts[first.players[playerId].contract_id].end_at));
+    assert.equal(contractEnds.size, 5);
+  }
+});
+
+test('explicit imported contract dates override the generated stagger', () => {
+  const clubs = syntheticSeasonClubs({ clubCount: 4, baseRating: 86 });
+  clubs[0].players[0] = {
+    ...clubs[0].players[0],
+    contract: {
+      start_at: '2026-07-01T00:00:00.000Z',
+      end_at: '2032-06-30T23:59:59.000Z',
+      wage: 9000
+    }
+  };
+  const state = createSquadCycleState({
+    clubs,
+    seasonId: 'pr65-imported-contract',
+    seasonStart: '2026-08-01T00:00:00.000Z',
+    seasonEnd: '2027-06-30T23:59:59.000Z'
+  });
+  const playerId = state.clubs['club-1'].player_ids[0];
+  const contract = state.contracts[state.players[playerId].contract_id];
+  assert.equal(contract.end_at, '2032-06-30T23:59:59.000Z');
+  assert.equal(contract.wage, 9000);
 });
 
 test('transfer windows reject closed-date moves and accept open-window transfers', () => {
@@ -102,8 +144,8 @@ test('registration enforces ownership, deadlines and squad limits', () => {
 
 test('contract renewal protects a player while unrenewed expiries create free agents', () => {
   const state = foundationState();
-  const protectedId = state.clubs['club-1'].player_ids[0];
-  const expiringId = state.clubs['club-1'].player_ids[1];
+  const [protectedId, expiringId] = expiringPlayers(state, 'club-1');
+  assert.ok(protectedId && expiringId);
   renewContract(state, {
     playerId: protectedId,
     clubId: 'club-1',
@@ -117,6 +159,17 @@ test('contract renewal protects a player while unrenewed expiries create free ag
   assert.equal(state.players[protectedId].club_id, 'club-1');
   assert.equal(state.players[expiringId].club_id, null);
   assert.equal(squadCycleSnapshot(state).accepted, true);
+});
+
+test('season-one expiries remain limited and youth intake preserves viable squads', () => {
+  const state = foundationState();
+  for (const clubId of Object.keys(state.clubs)) generateYouthIntake(state, { clubId });
+  const released = processContractExpiries(state);
+  const snapshot = squadCycleSnapshot(state);
+
+  assert.equal(released.length, 8);
+  assert.ok(snapshot.clubs.every((club) => club.squad_size >= 18));
+  assert.equal(snapshot.accepted, true, JSON.stringify(snapshot.checks, null, 2));
 });
 
 test('an invalid renewal leaves the active contract and entire state unchanged', () => {
