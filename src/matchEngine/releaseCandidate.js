@@ -1,7 +1,7 @@
 export const CONSTITUTIONAL_RELEASE_CANDIDATE_VERSION = 'tbg-constitutional-release-candidate-v1.0';
 
 export const REQUIRED_RELEASE_EVIDENCE = Object.freeze([
-  Object.freeze({ key: 'calibration', filename: 'calibration-report.json', acceptedPath: ['sections'], description: 'Core match, stress and tactical calibration' }),
+  Object.freeze({ key: 'calibration', filename: 'calibration-report.json', acceptedPath: ['accepted'], description: 'Core match, stress and tactical calibration' }),
   Object.freeze({ key: 'shadow', filename: 'shadow-comparison.json', acceptedPath: ['accepted'], description: 'Compatibility-versus-constitutional shadow comparison' }),
   Object.freeze({ key: 'league_structure', filename: 'league-structure-report.json', acceptedPath: ['accepted'], description: 'Complete five-division league structure' }),
   Object.freeze({ key: 'season_rollover', filename: 'season-rollover.json', acceptedPath: ['accepted'], description: 'Promotion, relegation and season rollover' }),
@@ -71,8 +71,10 @@ function readPath(value, path) {
 function acceptedEvidence(requirement, report) {
   if (!report || typeof report !== 'object') return false;
   if (requirement.key === 'calibration') {
+    if (report.accepted !== true) return false;
     const sections = report.sections || {};
-    return Object.keys(sections).length > 0 && Object.values(sections).every((section) => section?.accepted !== false);
+    return Object.keys(sections).length > 0
+      && Object.values(sections).every((section) => section?.accepted === true);
   }
   if (requirement.key === 'multi_season') {
     return report.metrics?.seasons_completed >= 50 && Object.values(report.checks || {}).every(Boolean);
