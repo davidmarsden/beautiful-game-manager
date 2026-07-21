@@ -1,7 +1,7 @@
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
-export const SEASON_ARCHIVE_VERSION = 'tbg-season-archive-v1.1';
+export const SEASON_ARCHIVE_VERSION = 'tbg-season-archive-v1.2';
 
 function freezeRows(rows) {
   return Object.freeze(rows.map((row) => Object.freeze(row)));
@@ -157,9 +157,9 @@ function buildAwards(clubs, players) {
     champion: champion ? Object.freeze({ club_id: champion.club_id, position: champion.position, points: champion.points }) : null,
     best_attack: bestAttack ? Object.freeze({ club_id: bestAttack.club_id, goals_for: bestAttack.goals_for }) : null,
     best_defence: bestDefence ? Object.freeze({ club_id: bestDefence.club_id, goals_against: bestDefence.goals_against }) : null,
-    golden_boot: topScorer ? Object.freeze({ player_id: topScorer.player_id, club_id: topScorer.club_id, goals: topScorer.goals }) : null,
-    assist_leader: assistLeader ? Object.freeze({ player_id: assistLeader.player_id, club_id: assistLeader.club_id, assists: assistLeader.assists }) : null,
-    appearance_leader: appearanceLeader ? Object.freeze({ player_id: appearanceLeader.player_id, club_id: appearanceLeader.club_id, appearances: appearanceLeader.appearances }) : null
+    golden_boot: topScorer && topScorer.goals > 0 ? Object.freeze({ player_id: topScorer.player_id, club_id: topScorer.club_id, goals: topScorer.goals }) : null,
+    assist_leader: assistLeader && assistLeader.assists > 0 ? Object.freeze({ player_id: assistLeader.player_id, club_id: assistLeader.club_id, assists: assistLeader.assists }) : null,
+    appearance_leader: appearanceLeader && appearanceLeader.appearances > 0 ? Object.freeze({ player_id: appearanceLeader.player_id, club_id: appearanceLeader.club_id, appearances: appearanceLeader.appearances }) : null
   });
 }
 
