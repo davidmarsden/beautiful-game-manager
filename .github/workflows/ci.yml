@@ -29,6 +29,7 @@ jobs:
       - run: npm run squad-cycle:foundations
       - run: npm run squad-intelligence:report
       - run: npm run ai-squad-management:report
+      - run: npm run season-archive:report
       - uses: actions/upload-artifact@v4
         if: always()
         with:
