@@ -92,6 +92,8 @@ function renderLegacyNextFixture(model) {
       return;
     }
 
+    card.textContent = model.summary.next_opponent;
+    summary.textContent = model.summary.submitted ? 'Team submitted' : 'No team submitted';
     button.hidden = false;
     button.disabled = false;
   });
