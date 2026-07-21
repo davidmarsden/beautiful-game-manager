@@ -4,7 +4,8 @@ import { syntheticPlayableLeagueStructure } from '../src/matchEngine/leagueStruc
 import { createPersistentLeagueWorld } from '../src/world/persistentLeagueWorld.js';
 import {
   advancePersistentMatchday,
-  runPersistentMatchdays
+  runPersistentMatchdays,
+  validatePersistentMatchdayWorld
 } from '../src/world/persistentMatchdayWorld.js';
 import { loadPersistentWorld } from '../src/world/persistentSeasonLoop.js';
 
@@ -61,9 +62,12 @@ test('completes the season only after the final matchday then archives and rolls
   assert.equal(run.final_world.phase, 'preseason');
   assert.equal(run.final_world.season_number, 2);
   assert.equal(run.final_world.matchday_cycle, undefined);
+  assert.equal(run.final_world.matchday_history.length, 1);
+  assert.equal(run.final_world.matchday_history[0].checkpoints.length, 6);
   assert.equal(run.final_world.history.archives.length, 5);
   assert.equal(run.final_world.competition.movement_history.length, 8);
   assert.equal(run.reports.reduce((sum, row) => sum + row.checkpoint.fixture_count, 0), 60);
+  assert.equal(validatePersistentMatchdayWorld(run.final_world).valid, true);
 });
 
 test('does not replay a processed fixture when a cursor is corrupted backwards', () => {
@@ -71,7 +75,14 @@ test('does not replay a processed fixture when a cursor is corrupted backwards',
   const corrupted = structuredClone(first.world);
   corrupted.matchday_cycle.current_matchday = 1;
   for (const runtime of Object.values(corrupted.matchday_cycle.runtimes)) runtime.next_matchday = 1;
-  assert.throws(() => advancePersistentMatchday(corrupted), /Fixture already applied/);
+  assert.throws(() => advancePersistentMatchday(corrupted), /matchday cursors disagree|Fixture already applied/);
+});
+
+test('rejects duplicate persisted checkpoint identities', () => {
+  const completed = runPersistentMatchdays({ world: world(), matchdays: 6 }).final_world;
+  const corrupted = structuredClone(completed);
+  corrupted.matchday_history.push(structuredClone(corrupted.matchday_history[0]));
+  assert.equal(validatePersistentMatchdayWorld(corrupted).valid, false);
 });
 
 test('records one human decision at each human-club matchday', () => {
