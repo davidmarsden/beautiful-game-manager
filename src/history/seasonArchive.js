@@ -1,7 +1,7 @@
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
-export const SEASON_ARCHIVE_VERSION = 'tbg-season-archive-v1.0';
+export const SEASON_ARCHIVE_VERSION = 'tbg-season-archive-v1.1';
 
 function freezeRows(rows) {
   return Object.freeze(rows.map((row) => Object.freeze(row)));
@@ -40,7 +40,7 @@ function playerClubMap(season) {
     for (const side of ['home', 'away']) {
       const clubId = result.fixture?.[`${side}_club_id`];
       const team = result.teams?.[side];
-      for (const id of [...(team?.starting_xi || []), ...(team?.bench || [])]) {
+      for (const id of [...(team?.starting_xi || []), ...(team?.bench || []), ...(result.lineup_state?.[side]?.players_used || [])]) {
         if (!map.has(id)) map.set(id, clubId);
       }
     }
@@ -70,10 +70,15 @@ function buildPlayerRecords(season) {
   for (const result of season.results || []) {
     for (const side of ['home', 'away']) {
       const team = result.teams?.[side] || {};
-      for (const id of team.starting_xi || []) {
+      const starters = new Set(team.starting_xi || []);
+      const playersUsed = new Set(result.lineup_state?.[side]?.players_used || team.starting_xi || []);
+      for (const id of starters) {
+        const row = ensure(id);
+        row.starts += 1;
+      }
+      for (const id of playersUsed) {
         const row = ensure(id);
         row.appearances += 1;
-        row.starts += 1;
       }
       for (const id of team.bench || []) {
         const row = ensure(id);
@@ -119,6 +124,28 @@ function buildClubRecords(season) {
   })));
 }
 
+function rebuildClubRecords(results, clubIds) {
+  const table = Object.fromEntries(clubIds.map((clubId) => [clubId, {
+    club_id: clubId, played: 0, won: 0, drawn: 0, lost: 0,
+    goals_for: 0, goals_against: 0, goal_difference: 0, points: 0
+  }]));
+  for (const result of results || []) {
+    const home = table[text(result.fixture?.home_club_id)];
+    const away = table[text(result.fixture?.away_club_id)];
+    if (!home || !away) continue;
+    const homeGoals = number(result.score?.home);
+    const awayGoals = number(result.score?.away);
+    home.played += 1; away.played += 1;
+    home.goals_for += homeGoals; home.goals_against += awayGoals;
+    away.goals_for += awayGoals; away.goals_against += homeGoals;
+    if (homeGoals > awayGoals) { home.won += 1; away.lost += 1; home.points += 3; }
+    else if (awayGoals > homeGoals) { away.won += 1; home.lost += 1; away.points += 3; }
+    else { home.drawn += 1; away.drawn += 1; home.points += 1; away.points += 1; }
+  }
+  for (const row of Object.values(table)) row.goal_difference = row.goals_for - row.goals_against;
+  return table;
+}
+
 function buildAwards(clubs, players) {
   const champion = clubs[0] || null;
   const bestAttack = stableRank(clubs, [['goals_for', 'desc'], ['points', 'desc']])[0] || null;
@@ -126,7 +153,6 @@ function buildAwards(clubs, players) {
   const topScorer = stableRank(players, [['goals', 'desc'], ['assists', 'desc'], ['appearances', 'asc']])[0] || null;
   const assistLeader = stableRank(players, [['assists', 'desc'], ['goals', 'desc'], ['appearances', 'asc']])[0] || null;
   const appearanceLeader = stableRank(players, [['appearances', 'desc'], ['starts', 'desc']])[0] || null;
-
   return Object.freeze({
     champion: champion ? Object.freeze({ club_id: champion.club_id, position: champion.position, points: champion.points }) : null,
     best_attack: bestAttack ? Object.freeze({ club_id: bestAttack.club_id, goals_for: bestAttack.goals_for }) : null,
@@ -156,15 +182,23 @@ export function createSeasonArchive(season, { archivedAt = null } = {}) {
   const players = buildPlayerRecords(season);
   const awards = buildAwards(clubs, players);
   const records = buildRecords(clubs, players);
-  const fixtureIds = (season.results || []).map((row) => text(row.fixture?.fixture_id));
+  const fixtureIds = season.results.map((row) => text(row.fixture?.fixture_id));
+  const rebuilt = rebuildClubRecords(season.results, clubs.map((row) => row.club_id));
+  const fixturesMatchStandings = clubs.every((row) => {
+    const source = rebuilt[row.club_id];
+    return source && ['played', 'won', 'drawn', 'lost', 'goals_for', 'goals_against', 'goal_difference', 'points']
+      .every((key) => number(row[key]) === number(source[key]));
+  });
 
   const checks = Object.freeze({
     fixture_count_reconciles: fixtureIds.length === number(season.fixture_count, fixtureIds.length),
     fixture_ids_are_unique: new Set(fixtureIds).size === fixtureIds.length && fixtureIds.every(Boolean),
     one_champion: clubs.filter((row) => row.champion).length === 1,
     standings_reconcile: clubs.every((row) => row.played === row.won + row.drawn + row.lost && row.points === row.won * 3 + row.drawn),
+    standings_match_fixture_scores: fixturesMatchStandings,
     goals_reconcile: clubs.reduce((sum, row) => sum + row.goals_for, 0) === clubs.reduce((sum, row) => sum + row.goals_against, 0),
-    player_appearances_reconcile: players.reduce((sum, row) => sum + row.starts, 0) === fixtureIds.length * 22,
+    player_starts_reconcile: players.reduce((sum, row) => sum + row.starts, 0) === fixtureIds.length * 22,
+    player_appearances_cover_starts: players.every((row) => row.appearances >= row.starts),
     awards_reference_archived_entities: !awards.champion || clubs.some((row) => row.club_id === awards.champion.club_id)
   });
 
@@ -173,16 +207,8 @@ export function createSeasonArchive(season, { archivedAt = null } = {}) {
     archive_id: `${season.season_id}:archive`,
     season_id: season.season_id,
     archived_at: archivedAt ? new Date(archivedAt).toISOString() : null,
-    summary: Object.freeze({
-      club_count: clubs.length,
-      fixture_count: fixtureIds.length,
-      total_goals: clubs.reduce((sum, row) => sum + row.goals_for, 0),
-      champion_club_id: awards.champion?.club_id || null
-    }),
-    clubs,
-    players,
-    awards,
-    records,
+    summary: Object.freeze({ club_count: clubs.length, fixture_count: fixtureIds.length, total_goals: clubs.reduce((sum, row) => sum + row.goals_for, 0), champion_club_id: awards.champion?.club_id || null }),
+    clubs, players, awards, records,
     source_fixture_ids: Object.freeze(fixtureIds),
     checks,
     accepted: Object.values(checks).every(Boolean)
@@ -192,9 +218,7 @@ export function createSeasonArchive(season, { archivedAt = null } = {}) {
 export function appendSeasonArchive(history, archive) {
   if (!archive?.accepted) throw new Error('Cannot append an unaccepted season archive');
   const archives = [...(history?.archives || [])];
-  if (archives.some((row) => row.archive_id === archive.archive_id || row.season_id === archive.season_id)) {
-    throw new Error(`Season already archived: ${archive.season_id}`);
-  }
+  if (archives.some((row) => row.archive_id === archive.archive_id || row.season_id === archive.season_id)) throw new Error(`Season already archived: ${archive.season_id}`);
   archives.push(archive);
   archives.sort((a, b) => a.season_id.localeCompare(b.season_id));
   return Object.freeze({ version: 'tbg-history-index-v1.0', archives: Object.freeze(archives) });
