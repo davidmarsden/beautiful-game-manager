@@ -95,6 +95,11 @@ test('shows played count without inventing a percentage when schedule total is u
     fixtures: undefined,
     fixture_history: Array.from({ length: 2 }, (_, index) => ({ fixture_id: `played-${index}`, completed: true }))
   });
+  data.squad = [
+    ...data.squad.map((player) => ({ ...player, injury_status: 'Available' })),
+    { tbg_player_id: 'depth-1', display_name: 'Depth Midfielder', position: 'CM', registered: true, injury_status: 'Available' },
+    { tbg_player_id: 'depth-2', display_name: 'Depth Forward', position: 'CF', registered: true, injury_status: 'Available' }
+  ];
   const model = buildPortalViewModel(data);
   assert.equal(model.summary.played, 2);
   assert.equal(model.summary.total, 0);
@@ -103,5 +108,6 @@ test('shows played count without inventing a percentage when schedule total is u
   assert.equal(model.summary.has_next_fixture, false);
   assert.equal(model.summary.next_opponent, 'Schedule pending');
   assert.equal(model.alerts.some((row) => row.title === 'Team selection not submitted'), false);
+  assert.equal(model.alerts.length, 1);
   assert.equal(model.alerts[0].detail, 'No squad decisions require attention');
 });
