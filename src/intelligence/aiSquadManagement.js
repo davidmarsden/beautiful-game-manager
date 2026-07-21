@@ -3,9 +3,8 @@ import { activeTransferWindow, registerPlayer, renewContract } from '../squadCyc
 
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
-const DAY = 86400000;
 
-export const AI_SQUAD_MANAGEMENT_VERSION = 'tbg-ai-squad-management-v1.0';
+export const AI_SQUAD_MANAGEMENT_VERSION = 'tbg-ai-squad-management-v1.1';
 
 const GROUP_ORDER = Object.freeze(['goalkeeper', 'defender', 'midfielder', 'attacker']);
 
@@ -60,6 +59,9 @@ function addFreeAgentToClub(state, { clubId, playerId: idValue, at, contractYear
   if (!player) throw new Error(`Unknown player: ${idValue}`);
   if (player.club_id) throw new Error(`${playerId(player)} is not a free agent`);
   if (!activeTransferWindow(state, atIso)) throw new Error(`Transfer window is closed at ${atIso}`);
+  if (club.registered_player_ids.length >= state.registration_limit) {
+    throw new Error(`${club.club_id} registration limit reached`);
+  }
 
   const contractId = `${playerId(player)}:${club.club_id}:${atIso}:free-agent`;
   if (state.contracts[contractId]) throw new Error(`Duplicate contract: ${contractId}`);
@@ -123,32 +125,37 @@ export function planAiSquad(state, {
     .sort((a, b) => b.rating - a.rating || a.player_id.localeCompare(b.player_id));
 
   let projectedRegistered = analysis.summary.registered_seniors;
+  let projectedTotalRegistered = club.registered_player_ids.length;
   const projectedCoverage = Object.fromEntries(analysis.coverage.map((row) => [row.group, row.registered]));
+  const hasRegistrationCapacity = () => projectedTotalRegistered < state.registration_limit;
 
   for (const group of GROUP_ORDER) {
     const requirement = analysis.coverage.find((row) => row.group === group)?.required || 0;
-    while ((projectedCoverage[group] || 0) < requirement) {
+    while ((projectedCoverage[group] || 0) < requirement && hasRegistrationCapacity()) {
       const index = unregisteredOwned.findIndex((row) => row.position_group === group);
       if (index < 0) break;
       const [row] = unregisteredOwned.splice(index, 1);
       actions.push(decision('register', club.club_id, row.player_id, `repair_${group}_coverage`));
       projectedCoverage[group] += 1;
       projectedRegistered += 1;
+      projectedTotalRegistered += 1;
     }
   }
 
-  while (projectedRegistered < hardMinimum && unregisteredOwned.length) {
+  while (projectedRegistered < hardMinimum && unregisteredOwned.length && hasRegistrationCapacity()) {
     const row = unregisteredOwned.shift();
     actions.push(decision('register', club.club_id, row.player_id, 'repair_hard_minimum'));
     projectedCoverage[row.position_group] = (projectedCoverage[row.position_group] || 0) + 1;
     projectedRegistered += 1;
+    projectedTotalRegistered += 1;
   }
 
   const prospects = analysis.players
     .filter((row) => !row.registered && row.age <= 18 && row.rating >= 68)
     .sort((a, b) => b.rating - a.rating || a.player_id.localeCompare(b.player_id));
-  if (prospects.length && club.registered_player_ids.length + actions.filter((row) => row.action === 'register').length < state.registration_limit) {
+  if (prospects.length && hasRegistrationCapacity()) {
     actions.push(decision('promote_youth', club.club_id, prospects[0].player_id, 'best_ready_prospect'));
+    projectedTotalRegistered += 1;
   }
 
   const candidates = freeAgents(state).map((player) => ({
@@ -158,21 +165,23 @@ export function planAiSquad(state, {
 
   for (const group of GROUP_ORDER) {
     const requirement = analysis.coverage.find((row) => row.group === group)?.required || 0;
-    while ((projectedCoverage[group] || 0) < requirement) {
+    while ((projectedCoverage[group] || 0) < requirement && hasRegistrationCapacity()) {
       const index = candidates.findIndex((row) => row.group === group);
       if (index < 0) break;
       const [{ player }] = candidates.splice(index, 1);
       actions.push(decision('sign_free_agent', club.club_id, playerId(player), `repair_${group}_coverage`));
       projectedCoverage[group] += 1;
       projectedRegistered += 1;
+      projectedTotalRegistered += 1;
     }
   }
 
-  while (projectedRegistered < preferredMinimum && candidates.length) {
+  while (projectedRegistered < preferredMinimum && candidates.length && hasRegistrationCapacity()) {
     const { player, group } = candidates.shift();
     actions.push(decision('sign_free_agent', club.club_id, playerId(player), projectedRegistered < hardMinimum ? 'repair_hard_minimum' : 'reach_preferred_range'));
     projectedCoverage[group] = (projectedCoverage[group] || 0) + 1;
     projectedRegistered += 1;
+    projectedTotalRegistered += 1;
   }
 
   return Object.freeze({
@@ -181,7 +190,12 @@ export function planAiSquad(state, {
     at: atIso,
     before: analysis,
     actions: Object.freeze(actions),
-    projected: Object.freeze({ registered_seniors: projectedRegistered, coverage: Object.freeze(projectedCoverage) })
+    projected: Object.freeze({
+      registered_seniors: projectedRegistered,
+      total_registered: projectedTotalRegistered,
+      registration_limit: state.registration_limit,
+      coverage: Object.freeze(projectedCoverage)
+    })
   });
 }
 
