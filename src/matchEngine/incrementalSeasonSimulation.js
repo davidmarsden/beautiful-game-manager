@@ -15,6 +15,14 @@ const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, v
 const round = (value, places = 4) => Number(Number(value).toFixed(places));
 const text = (value) => String(value ?? '').trim();
 const unique = (values) => new Set(values).size === values.length;
+const SUPPORTED_FORMATIONS = new Set(['4-3-3-wide', '4-2-3-1', '4-4-2', '4-1-4-1', '3-5-2', '3-4-3', '5-3-2']);
+const ALLOWED_TACTICS = Object.freeze({
+  style: new Set(['possession', 'counter_transition', 'direct', 'high_press', 'low_block', 'balanced']),
+  route_to_goal: new Set(['central', 'balanced', 'wide']),
+  pressing: new Set(['low', 'mid', 'high']),
+  tempo: new Set(['slow', 'normal', 'fast']),
+  mentality: new Set(['cautious', 'balanced', 'positive', 'attacking'])
+});
 
 function initialState(clubs) {
   const players = {};
@@ -114,23 +122,29 @@ function contractState(state, teams) {
 }
 
 function normalizeInstruction(instruction = {}) {
+  const formation = text(instruction.formation);
+  if (formation && !SUPPORTED_FORMATIONS.has(formation)) throw new Error(`Unsupported human formation: ${formation}`);
+  for (const [key, value] of Object.entries(instruction.tactics || {})) {
+    if (!ALLOWED_TACTICS[key] || !ALLOWED_TACTICS[key].has(value)) throw new Error(`Unsupported human tactic: ${key}=${value}`);
+  }
   return {
-    formation: text(instruction.formation) || null,
+    formation: formation || null,
     tactics: { ...(instruction.tactics || {}) },
     starting_xi: instruction.starting_xi ? instruction.starting_xi.map(text) : null
   };
 }
 
-function applyHumanInstruction(team, instruction, club, matchState) {
+function applyHumanInstruction(team, instruction, club, matchState, availabilityState, matchday) {
   const normalized = normalizeInstruction(instruction);
-  const eligibleIds = club.players.map((player) => player.tbg_player_id);
+  const registeredIds = club.players.map((player) => player.tbg_player_id);
+  const eligibleIds = registeredIds.filter((id) => availabilityForPlayer(availabilityState, id, matchday).available);
   if (normalized.starting_xi) {
     if (normalized.starting_xi.length !== 11 || !unique(normalized.starting_xi)) throw new Error('Human starting XI must contain exactly eleven unique players');
     const ineligible = normalized.starting_xi.filter((id) => !eligibleIds.includes(id));
-    if (ineligible.length) throw new Error(`Human XI contains ineligible players: ${ineligible.join(', ')}`);
+    if (ineligible.length) throw new Error(`Human XI contains unavailable, ineligible or unregistered players: ${ineligible.join(', ')}`);
     const pool = [...new Set([...team.starting_xi, ...team.bench, ...eligibleIds])];
     team.starting_xi = [...normalized.starting_xi];
-    team.bench = pool.filter((id) => !team.starting_xi.includes(id)).slice(0, 7);
+    team.bench = pool.filter((id) => eligibleIds.includes(id) && !team.starting_xi.includes(id)).slice(0, 7);
     for (const id of [...team.starting_xi, ...team.bench]) {
       if (!matchState.players[id]) matchState.players[id] = { fitness: 100, sharpness: 100, morale: 50, unavailable_until_matchday: 0, suspension_until_matchday: 0 };
     }
@@ -216,7 +230,7 @@ export function advanceIncrementalMatchday(runtime, { clubs, humanInstruction = 
     const matchState = contractState(runtime.state, teams);
     if (humanSide) {
       const humanClub = humanSide === 'home' ? homeClub : awayClub;
-      applyHumanInstruction(teams[humanSide], humanInstruction, humanClub, matchState);
+      applyHumanInstruction(teams[humanSide], humanInstruction, humanClub, matchState, runtime.state.availability, fixture.matchday);
       runtime.human_decisions.push({
         fixture_id: fixture.fixture_id,
         matchday: fixture.matchday,
