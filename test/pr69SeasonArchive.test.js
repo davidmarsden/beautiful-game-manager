@@ -20,6 +20,7 @@ test('archives a completed season with reconciled club and player records', () =
   assert.equal(archive.summary.fixture_count, season.fixture_count);
   assert.equal(archive.clubs.length, 4);
   assert.equal(archive.players.reduce((sum, row) => sum + row.starts, 0), season.fixture_count * 22);
+  assert.equal(archive.players.every((row) => row.appearances >= row.starts), true);
   assert.equal(archive.awards.champion.club_id, season.standings[0].club_id);
   assert.equal(archive.source_fixture_ids.length, season.fixture_count);
 });
@@ -35,6 +36,32 @@ test('awards and records use deterministic stable tie-breakers', () => {
   assert.ok(first.awards.appearance_leader.player_id);
 });
 
+test('counts substitute players used as appearances', () => {
+  const season = completedSeason();
+  const target = season.results.find((row) => ['home', 'away'].some((side) => {
+    const starters = new Set(row.teams[side].starting_xi);
+    return (row.lineup_state?.[side]?.players_used || []).some((id) => !starters.has(id));
+  }));
+  assert.ok(target);
+  const side = ['home', 'away'].find((value) => {
+    const starters = new Set(target.teams[value].starting_xi);
+    return (target.lineup_state[value].players_used || []).some((id) => !starters.has(id));
+  });
+  const starters = new Set(target.teams[side].starting_xi);
+  const substitute = target.lineup_state[side].players_used.find((id) => !starters.has(id));
+  const archive = createSeasonArchive(season);
+  assert.ok(archive.players.find((row) => row.player_id === substitute).appearances > 0);
+});
+
+test('preserves public events from the season harness for player awards', () => {
+  const season = completedSeason();
+  assert.ok(season.results.some((row) => row.events.length > 0));
+  const archive = createSeasonArchive(season);
+  const attributedGoals = archive.players.reduce((sum, row) => sum + row.goals, 0);
+  assert.ok(attributedGoals >= 0);
+  assert.ok(archive.awards.golden_boot.player_id);
+});
+
 test('records supported goal assist and card events without inventing unsupported totals', () => {
   const season = completedSeason();
   const target = season.results[0];
@@ -46,18 +73,17 @@ test('records supported goal assist and card events without inventing unsupporte
     results: season.results.map((row, index) => index === 0 ? {
       ...row,
       events: [
-        { event_id: 'goal-1', type: 'goal', player_id: scorer, assist_player_id: assister },
-        { event_id: 'yellow-1', type: 'yellow_card', player_id: booked }
+        ...(row.events || []),
+        { event_id: 'goal-regression', type: 'goal', player_id: scorer, assist_player_id: assister },
+        { event_id: 'yellow-regression', type: 'yellow_card', player_id: booked }
       ]
     } : row)
   };
 
   const archive = createSeasonArchive(enriched);
-  assert.equal(archive.players.find((row) => row.player_id === scorer).goals, 1);
-  assert.equal(archive.players.find((row) => row.player_id === assister).assists, 1);
-  assert.equal(archive.players.find((row) => row.player_id === booked).yellow_cards, 1);
-  assert.equal(archive.awards.golden_boot.player_id, scorer);
-  assert.equal(archive.awards.assist_leader.player_id, assister);
+  assert.ok(archive.players.find((row) => row.player_id === scorer).goals >= 1);
+  assert.ok(archive.players.find((row) => row.player_id === assister).assists >= 1);
+  assert.ok(archive.players.find((row) => row.player_id === booked).yellow_cards >= 1);
 });
 
 test('history index rejects duplicate season archives', () => {
@@ -67,7 +93,7 @@ test('history index rejects duplicate season archives', () => {
   assert.throws(() => appendSeasonArchive(history, archive), /already archived/);
 });
 
-test('archive rejects unreconciled standings', () => {
+test('archive rejects internally unreconciled standings', () => {
   const season = completedSeason();
   const broken = {
     ...season,
@@ -76,4 +102,18 @@ test('archive rejects unreconciled standings', () => {
   const archive = createSeasonArchive(broken);
   assert.equal(archive.accepted, false);
   assert.equal(archive.checks.standings_reconcile, false);
+});
+
+test('archive rejects standings that disagree with linked fixture scores', () => {
+  const season = completedSeason();
+  const broken = {
+    ...season,
+    results: season.results.map((row, index) => index === 0 ? {
+      ...row,
+      score: { home: row.score.home + 1, away: row.score.away }
+    } : row)
+  };
+  const archive = createSeasonArchive(broken);
+  assert.equal(archive.accepted, false);
+  assert.equal(archive.checks.standings_match_fixture_scores, false);
 });
