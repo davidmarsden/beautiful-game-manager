@@ -20,7 +20,8 @@
     "playable:human-season": "node scripts/generate-human-manager-season-report.js",
     "squad-cycle:foundations": "node scripts/generate-squad-cycle-report.js",
     "squad-intelligence:report": "node scripts/generate-squad-intelligence-report.js",
-    "calibration:gate": "npm test && npm run calibration:report && npm run calibration:shadow && npm run calibration:league-structure && npm run calibration:rollover && npm run calibration:availability && npm run calibration:season-availability && npm run calibration:manager-decisions && npm run calibration:ai-season && npm run calibration:multi-season && npm run calibration:final-outcomes && npm run release-candidate:constitutional && npm run playable:human-season && npm run squad-cycle:foundations && npm run squad-intelligence:report"
+    "ai-squad-management:report": "node scripts/generate-ai-squad-management-report.js",
+    "calibration:gate": "npm test && npm run calibration:report && npm run calibration:shadow && npm run calibration:league-structure && npm run calibration:rollover && npm run calibration:availability && npm run calibration:season-availability && npm run calibration:manager-decisions && npm run calibration:ai-season && npm run calibration:multi-season && npm run calibration:final-outcomes && npm run release-candidate:constitutional && npm run playable:human-season && npm run squad-cycle:foundations && npm run squad-intelligence:report && npm run ai-squad-management:report"
   },
   "engines": {
     "node": ">=20"
