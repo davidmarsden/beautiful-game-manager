@@ -30,9 +30,13 @@ jobs:
       - run: npm run squad-intelligence:report
       - run: npm run ai-squad-management:report
       - run: npm run season-archive:report
+      - run: npm run persistent-world:report
+      - run: npm run release-candidate:playable-world
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: calibration-report
-          path: calibration/generated/
+          path: |
+            calibration/generated/
+            reports/generated/
       - run: npm test
