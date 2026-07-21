@@ -14,7 +14,6 @@ import { analyseSquad } from '../intelligence/squadIntelligence.js';
 import { appendSeasonArchive, createSeasonArchive } from '../history/seasonArchive.js';
 
 const text = (value) => String(value ?? '').trim();
-const DAY = 86400000;
 
 export const PERSISTENT_WORLD_VERSION = 'tbg-playable-persistent-world-v1.0';
 export const PERSISTENT_SAVE_VERSION = 'tbg-playable-world-save-v1.0';
@@ -79,8 +78,12 @@ function registeredSeasonClubs(world) {
   return Object.keys(world.squad_cycle.clubs).sort().map((clubId) => {
     const cycleClub = world.squad_cycle.clubs[clubId];
     const profile = world.club_profiles[clubId];
-    const players = cycleClub.registered_player_ids.map((playerId) => world.squad_cycle.players[playerId]).filter(Boolean);
-    if (players.length < 18) throw new Error(`${clubId} cannot start ${world.squad_cycle.season_id}: only ${players.length} registered players`);
+    const players = cycleClub.registered_player_ids
+      .map((playerId) => world.squad_cycle.players[playerId])
+      .filter(Boolean);
+    if (players.length < 18) {
+      throw new Error(`${clubId} cannot start ${world.squad_cycle.season_id}: only ${players.length} registered players`);
+    }
     return Object.freeze({
       ...profile,
       players: Object.freeze(players.map((player) => Object.freeze({ ...player })))
@@ -135,7 +138,9 @@ function viability(world, at) {
       club_id: clubId,
       registered_seniors: report.summary.registered_seniors,
       hard_minimum_gap: report.summary.hard_minimum_gap,
-      coverage_gaps: Object.freeze(report.coverage.filter((row) => row.registered_gap > 0).map((row) => Object.freeze({ group: row.group, gap: row.registered_gap }))),
+      coverage_gaps: Object.freeze(report.coverage
+        .filter((row) => row.registered_gap > 0)
+        .map((row) => Object.freeze({ group: row.group, gap: row.registered_gap }))),
       viable: report.summary.hard_minimum_gap === 0 && report.coverage.every((row) => row.registered_gap === 0)
     });
   });
@@ -150,7 +155,11 @@ function rolloverSquadCycle(world) {
   world.season_start = nextStart;
   world.season_end = nextEnd;
   world.squad_cycle.season_id = nextId;
-  world.squad_cycle.calendar = defaultSquadCycleCalendar({ seasonId: nextId, seasonStart: nextStart, seasonEnd: nextEnd });
+  world.squad_cycle.calendar = defaultSquadCycleCalendar({
+    seasonId: nextId,
+    seasonStart: nextStart,
+    seasonEnd: nextEnd
+  });
   return world.squad_cycle.calendar;
 }
 
@@ -158,7 +167,10 @@ export function validatePersistentWorld(world) {
   const errors = [];
   if (world?.version !== PERSISTENT_WORLD_VERSION) errors.push(`Unsupported world version: ${world?.version}`);
   if (!world?.world_id) errors.push('World ID is required');
-  if (!world?.human_club_id || !world?.squad_cycle?.clubs?.[world.human_club_id]) errors.push('Human club must exist in the world');
+  if (!world?.human_club_id || !world?.squad_cycle?.clubs?.[world.human_club_id]) {
+    errors.push('Human club must exist in the world');
+  }
+
   const state = world?.squad_cycle;
   if (!state) errors.push('Squad-cycle state is required');
   if (state) {
@@ -171,12 +183,21 @@ export function validatePersistentWorld(world) {
         if (!club.player_ids.includes(playerId)) errors.push(`${clubId} registers unowned player ${playerId}`);
       }
     }
+
     for (const player of Object.values(state.players || {})) {
       if (!player.club_id) continue;
       const contract = activeContract(state, player);
-      if (!contract || contract.status !== 'active' || contract.club_id !== player.club_id) errors.push(`${player.tbg_player_id} lacks a matching active contract`);
+      if (
+        !contract
+        || contract.status !== 'active'
+        || contract.club_id !== player.club_id
+        || contract.player_id !== player.tbg_player_id
+      ) {
+        errors.push(`${player.tbg_player_id} lacks a matching active contract`);
+      }
     }
   }
+
   const archiveIds = (world?.history?.archives || []).map((row) => row.archive_id);
   if (new Set(archiveIds).size !== archiveIds.length) errors.push('History contains duplicate archives');
   const eventIds = (world?.event_ledger || []).map((row) => row.event_id);
@@ -188,19 +209,20 @@ export function savePersistentWorld(world) {
   const validation = validatePersistentWorld(world);
   if (!validation.valid) throw new Error(`Cannot save invalid world: ${validation.errors.join('; ')}`);
   const payload = clone(world);
-  const envelope = {
+  return canonicalJson({
     save_version: PERSISTENT_SAVE_VERSION,
     world_version: world.version,
     saved_at: world.clock,
     checksum: checksum(payload),
     world: payload
-  };
-  return canonicalJson(envelope);
+  });
 }
 
 export function loadPersistentWorld(serialized) {
   const envelope = typeof serialized === 'string' ? JSON.parse(serialized) : clone(serialized);
-  if (envelope?.save_version !== PERSISTENT_SAVE_VERSION) throw new Error(`Unsupported save version: ${envelope?.save_version}`);
+  if (envelope?.save_version !== PERSISTENT_SAVE_VERSION) {
+    throw new Error(`Unsupported save version: ${envelope?.save_version}`);
+  }
   if (checksum(envelope.world) !== envelope.checksum) throw new Error('Persistent-world checksum mismatch');
   const validation = validatePersistentWorld(envelope.world);
   if (!validation.valid) throw new Error(`Invalid persistent world: ${validation.errors.join('; ')}`);
@@ -219,7 +241,13 @@ export function createPersistentWorld({
   const start = iso(seasonStart);
   const end = iso(seasonEnd);
   const initialSeasonId = `${worldId}:season-1`;
-  const squadCycle = createSquadCycleState({ clubs, seasonId: initialSeasonId, seasonStart: start, seasonEnd: end, registrationLimit });
+  const squadCycle = createSquadCycleState({
+    clubs,
+    seasonId: initialSeasonId,
+    seasonStart: start,
+    seasonEnd: end,
+    registrationLimit
+  });
   const world = {
     version: PERSISTENT_WORLD_VERSION,
     world_id: text(worldId),
@@ -237,7 +265,10 @@ export function createPersistentWorld({
     event_ledger: [],
     checkpoints: []
   };
-  worldEvent(world, 'world_created', world.clock, { human_club_id: world.human_club_id, club_count: clubs.length });
+  worldEvent(world, 'world_created', world.clock, {
+    human_club_id: world.human_club_id,
+    club_count: clubs.length
+  });
   const validation = validatePersistentWorld(world);
   if (!validation.valid) throw new Error(`Could not create persistent world: ${validation.errors.join('; ')}`);
   return world;
@@ -265,6 +296,7 @@ export function advancePersistentSeason(worldInput, {
 } = {}) {
   const world = loadPersistentWorld(savePersistentWorld(worldInput));
   if (world.phase !== 'preseason') throw new Error(`World must be in preseason to advance: ${world.phase}`);
+
   const currentSeasonId = world.squad_cycle.season_id;
   const summerOpen = world.squad_cycle.calendar.transfer_windows[0].opens_at;
   world.clock = summerOpen;
@@ -272,7 +304,9 @@ export function advancePersistentSeason(worldInput, {
   const humanRenewals = applyHumanContinuityInstruction(world, summerOpen);
   const aiPreseason = manageAiClubs(world, summerOpen);
   const beforeSeason = viability(world, summerOpen);
-  if (!beforeSeason.every((row) => row.viable)) throw new Error(`Season cannot begin with invalid squads: ${JSON.stringify(beforeSeason.filter((row) => !row.viable))}`);
+  if (!beforeSeason.every((row) => row.viable)) {
+    throw new Error(`Season cannot begin with invalid squads: ${JSON.stringify(beforeSeason.filter((row) => !row.viable))}`);
+  }
 
   world.phase = 'season';
   world.clock = world.season_start;
@@ -287,7 +321,9 @@ export function advancePersistentSeason(worldInput, {
     defaultInstruction,
     instructionsByMatchday
   });
-  if (!seasonRun.accepted || !seasonRun.season_report?.accepted) throw new Error(`Season simulation was not accepted: ${currentSeasonId}`);
+  if (!seasonRun.accepted || !seasonRun.season_report?.accepted) {
+    throw new Error(`Season simulation was not accepted: ${currentSeasonId}`);
+  }
 
   world.clock = world.season_end;
   const archive = createSeasonArchive(seasonRun.season_report, { archivedAt: world.clock });
@@ -299,27 +335,40 @@ export function advancePersistentSeason(worldInput, {
     archive_id: archive.archive_id,
     decision_count: seasonRun.decisions.length
   });
-  worldEvent(world, 'season_archived', world.clock, { archive_id: archive.archive_id, champion_club_id: archive.summary.champion_club_id });
+  worldEvent(world, 'season_archived', world.clock, {
+    archive_id: archive.archive_id,
+    champion_club_id: archive.summary.champion_club_id
+  });
 
   world.phase = 'offseason';
   for (const clubId of Object.keys(world.squad_cycle.clubs).sort()) {
     const created = generateYouthIntake(world.squad_cycle, { clubId });
-    worldEvent(world, 'club_youth_intake_completed', world.squad_cycle.calendar.youth_intake_at, { club_id: clubId, player_count: created.length });
+    worldEvent(world, 'club_youth_intake_completed', world.squad_cycle.calendar.youth_intake_at, {
+      club_id: clubId,
+      player_count: created.length
+    });
   }
   const released = processContractExpiries(world.squad_cycle);
-  worldEvent(world, 'contract_expiry_cycle_completed', world.clock, { released_player_ids: [...released] });
+  worldEvent(world, 'contract_expiry_cycle_completed', world.clock, {
+    released_player_ids: [...released]
+  });
   const offseasonCheckpoint = checkpointPersistentWorld(world, 'offseason-after-expiry');
 
   const nextCalendar = rolloverSquadCycle(world);
   world.clock = nextCalendar.transfer_windows[0].opens_at;
   const aiNextPreseason = manageAiClubs(world, world.clock);
   const nextSeasonViability = viability(world, world.clock);
-  if (!nextSeasonViability.every((row) => row.viable)) throw new Error(`Rollover produced invalid squads: ${JSON.stringify(nextSeasonViability.filter((row) => !row.viable))}`);
+  if (!nextSeasonViability.every((row) => row.viable)) {
+    throw new Error(`Rollover produced invalid squads: ${JSON.stringify(nextSeasonViability.filter((row) => !row.viable))}`);
+  }
   world.phase = 'preseason';
-  worldEvent(world, 'season_rollover_completed', world.clock, { from_season_id: currentSeasonId, to_season_id: world.squad_cycle.season_id });
+  worldEvent(world, 'season_rollover_completed', world.clock, {
+    from_season_id: currentSeasonId,
+    to_season_id: world.squad_cycle.season_id
+  });
+
   const finalSave = savePersistentWorld(world);
   const restored = loadPersistentWorld(finalSave);
-
   const checks = Object.freeze({
     opening_save_load_equivalent: openingCheckpoint.checkpoint.equivalent,
     offseason_save_load_equivalent: offseasonCheckpoint.checkpoint.equivalent,
@@ -355,19 +404,25 @@ export function advancePersistentSeason(worldInput, {
 }
 
 export function runPersistentWorldSeasons({ seasons = 2, world, ...advanceOptions } = {}) {
-  if (!Number.isInteger(seasons) || seasons < 1) throw new Error('Persistent-world season count must be a positive integer');
+  if (!Number.isInteger(seasons) || seasons < 1) {
+    throw new Error('Persistent-world season count must be a positive integer');
+  }
+
   let current = world || createPersistentWorld();
+  const startingArchiveCount = current.history?.archives?.length || 0;
+  const startingSeasonNumber = current.season_number;
   const reports = [];
   for (let index = 0; index < seasons; index += 1) {
     const report = advancePersistentSeason(current, advanceOptions);
     reports.push(report);
     current = report.world;
   }
+
   const checks = Object.freeze({
     every_season_accepted: reports.every((row) => row.accepted),
     archives_are_unique: new Set(current.history.archives.map((row) => row.archive_id)).size === current.history.archives.length,
-    archive_count_matches_seasons: current.history.archives.length === seasons,
-    world_advanced_exactly: current.season_number === seasons + 1,
+    archive_count_matches_seasons: current.history.archives.length - startingArchiveCount === seasons,
+    world_advanced_exactly: current.season_number - startingSeasonNumber === seasons,
     final_world_valid: validatePersistentWorld(current).valid,
     final_squads_viable: viability(current, current.clock).every((row) => row.viable)
   });
