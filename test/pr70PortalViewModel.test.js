@@ -41,7 +41,9 @@ test('builds a deterministic tablet overview from bootstrap data', () => {
   assert.equal(first.summary.table_position, 4);
   assert.equal(first.summary.played, 1);
   assert.equal(first.summary.total, 2);
+  assert.equal(first.summary.progress_known, true);
   assert.equal(first.summary.progress_percent, 50);
+  assert.equal(first.summary.has_next_fixture, true);
   assert.equal(first.summary.registered, 16);
   assert.equal(first.coverage.every((row) => row.gap === 0), true);
   assert.ok(first.alerts.some((row) => row.title === 'Team selection not submitted'));
@@ -61,41 +63,51 @@ test('surfaces structural, temporary and contract alerts without inventing archi
   assert.equal(model.archive.assist_leader, null);
 });
 
-test('excludes youth and loaned-out players from playable senior depth', () => {
+test('excludes youth and loaned players from playable senior depth', () => {
   const data = bootstrap();
+  data.squad = data.squad.filter((player) => !['cb-4', 'cb-5'].includes(player.tbg_player_id));
   data.squad.push(
     { tbg_player_id: 'academy-cb', display_name: 'Academy Defender', position: 'CB', squad_registration: 'youth', registered: true, injury_status: 'Available' },
     { tbg_player_id: 'loan-cb', display_name: 'Loaned Defender', position: 'CB', loaned_out: true, registered: true, injury_status: 'Available' }
   );
-  data.squad = data.squad.filter((player) => !['cb-4', 'cb-5'].includes(player.tbg_player_id));
-
   const model = buildPortalViewModel(data);
-  assert.equal(model.summary.registered, 14);
   assert.equal(model.coverage.find((row) => row.group === 'defender').registered, 4);
   assert.equal(model.coverage.find((row) => row.group === 'defender').gap, 2);
+  assert.equal(model.summary.registered, 14);
 });
 
-test('uses fixture history only for played count and explicit season total for progress', () => {
+test('uses explicit fixture total rather than capped fixture history', () => {
   const data = bootstrap({
     fixtures: undefined,
-    fixture_history: Array.from({ length: 10 }, (_, index) => ({ fixture_id: `played-${index + 1}`, status: 'played', score: { home: 1, away: 0 } })),
+    fixture_history: Array.from({ length: 10 }, (_, index) => ({ fixture_id: `played-${index}`, completed: true })),
     season: { fixture_count: 38 }
   });
-
   const model = buildPortalViewModel(data);
   assert.equal(model.summary.played, 10);
   assert.equal(model.summary.total, 38);
+  assert.equal(model.summary.progress_known, true);
   assert.equal(model.summary.progress_percent, 26);
 });
 
-test('does not claim complete season progress when only capped history is available', () => {
+test('shows played count without inventing a percentage when schedule total is unavailable', () => {
   const data = bootstrap({
+    next_fixture: null,
     fixtures: undefined,
-    fixture_history: Array.from({ length: 10 }, (_, index) => ({ fixture_id: `played-${index + 1}`, status: 'played', score: { home: 1, away: 0 } }))
+    fixture_history: Array.from({ length: 2 }, (_, index) => ({ fixture_id: `played-${index}`, completed: true }))
   });
-
+  data.squad = [
+    ...data.squad.map((player) => ({ ...player, injury_status: 'Available' })),
+    { tbg_player_id: 'depth-1', display_name: 'Depth Midfielder', position: 'CM', registered: true, injury_status: 'Available' },
+    { tbg_player_id: 'depth-2', display_name: 'Depth Forward', position: 'CF', registered: true, injury_status: 'Available' }
+  ];
   const model = buildPortalViewModel(data);
-  assert.equal(model.summary.played, 10);
+  assert.equal(model.summary.played, 2);
   assert.equal(model.summary.total, 0);
-  assert.equal(model.summary.progress_percent, 0);
+  assert.equal(model.summary.progress_known, false);
+  assert.equal(model.summary.progress_percent, null);
+  assert.equal(model.summary.has_next_fixture, false);
+  assert.equal(model.summary.next_opponent, 'Schedule pending');
+  assert.equal(model.alerts.some((row) => row.title === 'Team selection not submitted'), false);
+  assert.equal(model.alerts.length, 1);
+  assert.equal(model.alerts[0].detail, 'No squad decisions require attention');
 });

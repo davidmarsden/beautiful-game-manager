@@ -64,12 +64,17 @@ function showView(name) {
 function renderSummary(model) {
   if (!$('portalOverview')) return;
   const position = model.summary.table_position ? `${model.summary.table_position}` : '—';
-  const progress = model.summary.total ? `${model.summary.played}/${model.summary.total}` : `${model.summary.played}`;
+  const progress = model.summary.progress_known ? `${model.summary.played}/${model.summary.total}` : `${model.summary.played} played`;
+  const progressDetail = model.summary.progress_known ? `${model.summary.progress_percent}% complete` : 'Total schedule unavailable';
+  const fixtureLabel = model.summary.has_next_fixture ? 'Next opponent' : 'Fixture status';
+  const fixtureDetail = model.summary.has_next_fixture
+    ? (model.summary.submitted ? 'Team submitted' : 'Selection required')
+    : 'No selection needed';
   $('portalOverview').innerHTML = `
     <article><span>League position</span><strong>${position}</strong><small>${model.summary.points ?? '—'} pts</small></article>
-    <article><span>Season progress</span><strong>${progress}</strong><small>${model.summary.progress_percent}% complete</small></article>
+    <article><span>Season progress</span><strong>${progress}</strong><small>${progressDetail}</small></article>
     <article><span>Registered squad</span><strong>${model.summary.registered}</strong><small>${model.summary.available} available</small></article>
-    <article><span>Next opponent</span><strong>${escapeHtml(model.summary.next_opponent)}</strong><small>${model.summary.submitted ? 'Team submitted' : 'Selection required'}</small></article>`;
+    <article><span>${fixtureLabel}</span><strong>${escapeHtml(model.summary.next_opponent)}</strong><small>${fixtureDetail}</small></article>`;
 }
 
 function renderAlerts(model) {
@@ -101,9 +106,12 @@ function renderContracts(model) {
 }
 
 function renderSeason(model) {
-  const width = `${Math.min(100, Math.max(0, model.summary.progress_percent))}%`;
+  const width = model.summary.progress_known ? `${Math.min(100, Math.max(0, model.summary.progress_percent))}%` : '0%';
+  document.querySelectorAll('.season-progress-shell').forEach((shell) => shell.classList.toggle('unknown', !model.summary.progress_known));
   document.querySelectorAll('.season-progress-bar').forEach((bar) => { bar.style.width = width; });
-  const progressText = model.summary.total ? `${model.summary.played} of ${model.summary.total} fixtures completed` : `${model.summary.played} fixtures completed`;
+  const progressText = model.summary.progress_known
+    ? `${model.summary.played} of ${model.summary.total} fixtures completed`
+    : `${model.summary.played} fixtures completed · total schedule unavailable`;
   if ($('seasonProgressText')) $('seasonProgressText').textContent = progressText;
   document.querySelectorAll('[data-progress-text]').forEach((node) => { node.textContent = progressText; });
   if (!$('seasonArchiveSummary')) return;

@@ -117,11 +117,13 @@ export function buildPortalViewModel(data, { now = new Date() } = {}) {
   const played = schedule.length ? schedule.filter(resultIsComplete).length : history.filter(resultIsComplete).length;
   const explicitTotal = number(data?.season?.fixture_count || data?.world?.fixture_count || data?.competition?.fixture_count);
   const total = schedule.length || explicitTotal;
+  const progressKnown = total > 0;
   const standings = standingsRows(data);
   const clubId = text(data?.club?.tbg_club_id || data?.club?.club_id || data?.club?.id);
   const tableRow = standings.find((row) => text(row.club_id || row.tbg_club_id || row.id) === clubId) || null;
   const deadline = fixtureDeadline(data);
   const submission = data?.current_submission || data?.submission || data?.next_fixture?.submission;
+  const hasNextFixture = Boolean(data?.next_fixture);
 
   const alerts = [];
   for (const row of coverage.filter((item) => item.gap > 0)) {
@@ -132,8 +134,8 @@ export function buildPortalViewModel(data, { now = new Date() } = {}) {
   }
   if (registered.length < 18) alerts.push({ kind: 'critical', view: 'squad', title: 'Senior squad below playable minimum', detail: `${registered.length}/18 registered` });
   if (contractRows.some((row) => row.days <= 90)) alerts.push({ kind: 'warning', view: 'squad', title: 'Contract decisions required', detail: `${contractRows.filter((row) => row.days <= 90).length} expire within 90 days` });
-  if (data?.next_fixture && !submission) alerts.push({ kind: 'action', view: 'tactics', title: 'Team selection not submitted', detail: deadline ? `Deadline ${deadline.toLocaleString()}` : 'Submit before kickoff' });
-  if (!alerts.length) alerts.push({ kind: 'good', view: 'dashboard', title: 'No urgent club actions', detail: 'Squad and fixture preparation are in order' });
+  if (hasNextFixture && !submission) alerts.push({ kind: 'action', view: 'tactics', title: 'Team selection not submitted', detail: deadline ? `Deadline ${deadline.toLocaleString()}` : 'Submit before kickoff' });
+  if (!alerts.length) alerts.push({ kind: 'good', view: 'dashboard', title: 'No urgent club actions', detail: hasNextFixture ? 'Squad and fixture preparation are in order' : 'No squad decisions require attention' });
 
   const archive = data?.season_archive || data?.archive || null;
   const recentResults = (history.length ? history : schedule.filter(resultIsComplete)).slice(-5).reverse();
@@ -146,8 +148,10 @@ export function buildPortalViewModel(data, { now = new Date() } = {}) {
       points: tableRow?.points ?? null,
       played,
       total,
-      progress_percent: total ? Math.min(100, Math.round((played / total) * 100)) : 0,
-      next_opponent: text(data?.next_fixture?.opponent_name || data?.next_fixture?.opponent || 'No fixture scheduled'),
+      progress_known: progressKnown,
+      progress_percent: progressKnown ? Math.min(100, Math.round((played / total) * 100)) : null,
+      has_next_fixture: hasNextFixture,
+      next_opponent: text(data?.next_fixture?.opponent_name || data?.next_fixture?.opponent || 'Schedule pending'),
       deadline_at: deadline?.toISOString() || null,
       submitted: Boolean(submission)
     }),
