@@ -31,8 +31,22 @@ export function positionGroup(value) {
   return 'attacker';
 }
 
+function isYouth(player) {
+  const registration = text(player?.squad_registration || player?.registration_group || player?.squad_status).toLowerCase();
+  if (['youth', 'youth_only', 'academy'].includes(registration)) return true;
+  if (player?.youth_eligible_at_season_start !== undefined) return Boolean(player.youth_eligible_at_season_start);
+  return number(player?.season_start_age ?? player?.age, 99) <= 21;
+}
+
+function isLoanedOut(player) {
+  return Boolean(player?.loaned_out || text(player?.loan_status).toLowerCase() === 'loaned_out');
+}
+
 function isRegistered(player) {
-  return player?.registered !== false && player?.registration_status !== 'unregistered' && player?.squad_status !== 'youth_only';
+  return !isYouth(player)
+    && !isLoanedOut(player)
+    && player?.registered !== false
+    && text(player?.registration_status).toLowerCase() !== 'unregistered';
 }
 
 function isAvailable(player) {
@@ -47,8 +61,12 @@ function contractDate(player) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function fixtureRows(data) {
-  return data?.fixtures || data?.schedule || data?.fixture_history || data?.competition?.fixtures || [];
+function scheduleRows(data) {
+  return data?.fixtures || data?.schedule || data?.competition?.fixtures || [];
+}
+
+function historyRows(data) {
+  return data?.fixture_history || data?.results || data?.competition?.results || [];
 }
 
 function standingsRows(data) {
@@ -94,9 +112,11 @@ export function buildPortalViewModel(data, { now = new Date() } = {}) {
     .filter((row) => row.days <= 365)
     .sort((a, b) => a.end - b.end || playerName(a.player).localeCompare(playerName(b.player)));
 
-  const fixtures = fixtureRows(data);
-  const played = fixtures.filter(resultIsComplete).length;
-  const total = fixtures.length || number(data?.season?.fixture_count || data?.world?.fixture_count);
+  const schedule = scheduleRows(data);
+  const history = historyRows(data);
+  const played = schedule.length ? schedule.filter(resultIsComplete).length : history.filter(resultIsComplete).length;
+  const explicitTotal = number(data?.season?.fixture_count || data?.world?.fixture_count || data?.competition?.fixture_count);
+  const total = schedule.length || explicitTotal;
   const standings = standingsRows(data);
   const clubId = text(data?.club?.tbg_club_id || data?.club?.club_id || data?.club?.id);
   const tableRow = standings.find((row) => text(row.club_id || row.tbg_club_id || row.id) === clubId) || null;
@@ -116,7 +136,7 @@ export function buildPortalViewModel(data, { now = new Date() } = {}) {
   if (!alerts.length) alerts.push({ kind: 'good', view: 'dashboard', title: 'No urgent club actions', detail: 'Squad and fixture preparation are in order' });
 
   const archive = data?.season_archive || data?.archive || null;
-  const recentResults = fixtures.filter(resultIsComplete).slice(-5).reverse();
+  const recentResults = (history.length ? history : schedule.filter(resultIsComplete)).slice(-5).reverse();
 
   return Object.freeze({
     summary: Object.freeze({
@@ -126,7 +146,7 @@ export function buildPortalViewModel(data, { now = new Date() } = {}) {
       points: tableRow?.points ?? null,
       played,
       total,
-      progress_percent: total ? Math.round((played / total) * 100) : 0,
+      progress_percent: total ? Math.min(100, Math.round((played / total) * 100)) : 0,
       next_opponent: text(data?.next_fixture?.opponent_name || data?.next_fixture?.opponent || 'No fixture scheduled'),
       deadline_at: deadline?.toISOString() || null,
       submitted: Boolean(submission)
