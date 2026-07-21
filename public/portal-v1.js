@@ -77,6 +77,28 @@ function renderSummary(model) {
     <article><span>${fixtureLabel}</span><strong>${escapeHtml(model.summary.next_opponent)}</strong><small>${fixtureDetail}</small></article>`;
 }
 
+function renderLegacyNextFixture(model) {
+  window.requestAnimationFrame(() => {
+    const card = $('nextFixtureCard');
+    const summary = $('submissionSummary');
+    const button = card?.closest('.panel')?.querySelector('button[data-view="tactics"]');
+    if (!card || !summary || !button) return;
+
+    if (!model.summary.has_next_fixture) {
+      card.textContent = 'Schedule pending';
+      summary.textContent = 'No selection needed';
+      button.hidden = true;
+      button.disabled = true;
+      return;
+    }
+
+    card.textContent = model.summary.next_opponent;
+    summary.textContent = model.summary.submitted ? 'Team submitted' : 'No team submitted';
+    button.hidden = false;
+    button.disabled = false;
+  });
+}
+
 function renderAlerts(model) {
   if (!$('clubAlerts')) return;
   $('clubAlerts').innerHTML = model.alerts.map((alert) => `
@@ -133,6 +155,7 @@ function renderPortal(data) {
   try {
     const model = buildPortalViewModel(data);
     renderSummary(model);
+    renderLegacyNextFixture(model);
     renderAlerts(model);
     renderDepth(model);
     renderContracts(model);
