@@ -21,7 +21,6 @@ import { appendSeasonArchive, createSeasonArchive } from '../history/seasonArchi
 
 export const PERSISTENT_LEAGUE_VERSION = 'tbg-persistent-five-division-world-v1.0';
 
-const clone = (value) => JSON.parse(JSON.stringify(value));
 const unique = (values) => new Set(values).size === values.length;
 
 function addYears(value, years) {
@@ -279,6 +278,9 @@ export function advancePersistentLeagueSeason(worldInput, {
 export function runPersistentLeagueSeasons({ seasons = 2, world, ...options } = {}) {
   if (!Number.isInteger(seasons) || seasons < 1) throw new Error('Season count must be positive');
   let current = world || createPersistentLeagueWorld();
+  const startingArchiveCount = current.history?.archives?.length || 0;
+  const startingMovementCount = current.competition?.movement_history?.length || 0;
+  const startingSeasonNumber = current.season_number;
   const reports = [];
   for (let index = 0; index < seasons; index += 1) {
     const report = advancePersistentLeagueSeason(current, options);
@@ -287,8 +289,9 @@ export function runPersistentLeagueSeasons({ seasons = 2, world, ...options } = 
   }
   const checks = Object.freeze({
     every_season_accepted: reports.every((row) => row.accepted),
-    archives_match_divisions_and_seasons: current.history.archives.length === seasons * 5,
-    movements_match_boundaries_and_seasons: current.competition.movement_history.length === seasons * current.competition.movement_count_per_boundary * 8,
+    archives_match_divisions_and_seasons: current.history.archives.length - startingArchiveCount === seasons * 5,
+    movements_match_boundaries_and_seasons: current.competition.movement_history.length - startingMovementCount === seasons * current.competition.movement_count_per_boundary * 8,
+    world_advanced_exactly: current.season_number - startingSeasonNumber === seasons,
     final_world_valid: validatePersistentLeagueWorld(current).valid,
     division_membership_unique: unique(current.competition.divisions.flatMap((row) => row.club_ids)),
     final_world_returns_to_preseason: current.phase === 'preseason'
