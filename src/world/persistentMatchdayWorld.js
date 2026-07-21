@@ -282,8 +282,10 @@ export function runPersistentMatchdays({ world, matchdays, humanInstructionsByMa
   if (!Number.isInteger(matchdays) || matchdays < 1) throw new Error('Matchday count must be positive');
   let current = clone(world);
   const reports = [];
+  const expected = [];
   for (let index = 0; index < matchdays; index += 1) {
     const expectedMatchday = current.matchday_cycle?.current_matchday || 1;
+    expected.push(expectedMatchday);
     const report = advancePersistentMatchday(current, {
       humanInstruction: humanInstructionsByMatchday[expectedMatchday] || humanInstructionsByMatchday[String(expectedMatchday)] || {},
       daysBetweenRounds
@@ -294,7 +296,7 @@ export function runPersistentMatchdays({ world, matchdays, humanInstructionsByMa
   const checks = Object.freeze({
     every_advance_accepted: reports.every((row) => row.accepted),
     checkpoints_are_unique: unique(reports.map((row) => row.checkpoint.checkpoint_id)),
-    matchdays_are_sequential: reports.every((row, index) => row.matchday === index + 1),
+    matchdays_are_sequential: reports.every((row, index) => row.matchday === expected[index]),
     final_world_valid: validatePersistentLeagueWorld(current).valid
   });
   return Object.freeze({ version: PERSISTENT_MATCHDAY_VERSION, matchdays, reports: Object.freeze(reports), final_world: current, checks, accepted: Object.values(checks).every(Boolean) });
