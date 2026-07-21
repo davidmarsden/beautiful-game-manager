@@ -4,12 +4,13 @@ import { createSquadCycleState, unregisterPlayer } from '../src/squadCycle/squad
 import { syntheticSeasonClubs } from '../src/matchEngine/seasonSimulation.js';
 import { executeAiSquadPlan, manageWorldSquads, planAiSquad } from '../src/intelligence/aiSquadManagement.js';
 
-function stateWithFreeAgents() {
+function stateWithFreeAgents({ registrationLimit } = {}) {
   const state = createSquadCycleState({
     clubs: syntheticSeasonClubs({ clubCount: 4, baseRating: 86 }),
     seasonId: 'pr67-ai-squad',
     seasonStart: '2026-08-01T00:00:00.000Z',
-    seasonEnd: '2027-06-30T23:59:59.000Z'
+    seasonEnd: '2027-06-30T23:59:59.000Z',
+    registrationLimit
   });
 
   const freeAgentRows = [
@@ -68,6 +69,25 @@ test('repairs hard-minimum and positional gaps using owned players then free age
   assert.equal(result.after.coverage.find((row) => row.group === 'defender').registered_gap, 0);
   assert.ok(result.actions.some((row) => row.action === 'sign_free_agent'));
   assert.ok(state.events.some((row) => row.type === 'ai_squad_decision_applied'));
+});
+
+test('caps planned and executed signings at registration capacity without partial mutation', () => {
+  const state = stateWithFreeAgents({ registrationLimit: 19 });
+  const club = state.clubs['club-1'];
+  const freeAgentIds = Object.values(state.players).filter((player) => !player.club_id).map((player) => player.tbg_player_id).sort();
+  const beforeOwnership = Object.fromEntries(freeAgentIds.map((id) => [id, state.players[id].club_id]));
+  const beforeContracts = Object.keys(state.contracts).length;
+
+  const plan = planAiSquad(state, { clubId: 'club-1', at, preferredMinimum: 22 });
+  assert.equal(plan.actions.some((row) => row.action === 'sign_free_agent'), false);
+  assert.equal(plan.projected.total_registered, 19);
+  assert.equal(plan.projected.registration_limit, 19);
+
+  const result = executeAiSquadPlan(state, { clubId: 'club-1', at, preferredMinimum: 22 });
+  assert.equal(club.registered_player_ids.length, 19);
+  assert.equal(Object.keys(state.contracts).length, beforeContracts + result.actions.filter((row) => row.action === 'renew').length);
+  assert.deepEqual(Object.fromEntries(freeAgentIds.map((id) => [id, state.players[id].club_id])), beforeOwnership);
+  assert.equal(state.events.some((row) => row.type === 'free_agent_signed'), false);
 });
 
 test('renews expiring non-surplus players before expiry', () => {
