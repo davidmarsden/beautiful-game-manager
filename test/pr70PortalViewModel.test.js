@@ -60,3 +60,42 @@ test('surfaces structural, temporary and contract alerts without inventing archi
   assert.equal(model.archive.golden_boot, null);
   assert.equal(model.archive.assist_leader, null);
 });
+
+test('excludes youth and loaned-out players from playable senior depth', () => {
+  const data = bootstrap();
+  data.squad.push(
+    { tbg_player_id: 'academy-cb', display_name: 'Academy Defender', position: 'CB', squad_registration: 'youth', registered: true, injury_status: 'Available' },
+    { tbg_player_id: 'loan-cb', display_name: 'Loaned Defender', position: 'CB', loaned_out: true, registered: true, injury_status: 'Available' }
+  );
+  data.squad = data.squad.filter((player) => !['cb-4', 'cb-5'].includes(player.tbg_player_id));
+
+  const model = buildPortalViewModel(data);
+  assert.equal(model.summary.registered, 14);
+  assert.equal(model.coverage.find((row) => row.group === 'defender').registered, 4);
+  assert.equal(model.coverage.find((row) => row.group === 'defender').gap, 2);
+});
+
+test('uses fixture history only for played count and explicit season total for progress', () => {
+  const data = bootstrap({
+    fixtures: undefined,
+    fixture_history: Array.from({ length: 10 }, (_, index) => ({ fixture_id: `played-${index + 1}`, status: 'played', score: { home: 1, away: 0 } })),
+    season: { fixture_count: 38 }
+  });
+
+  const model = buildPortalViewModel(data);
+  assert.equal(model.summary.played, 10);
+  assert.equal(model.summary.total, 38);
+  assert.equal(model.summary.progress_percent, 26);
+});
+
+test('does not claim complete season progress when only capped history is available', () => {
+  const data = bootstrap({
+    fixtures: undefined,
+    fixture_history: Array.from({ length: 10 }, (_, index) => ({ fixture_id: `played-${index + 1}`, status: 'played', score: { home: 1, away: 0 } }))
+  });
+
+  const model = buildPortalViewModel(data);
+  assert.equal(model.summary.played, 10);
+  assert.equal(model.summary.total, 0);
+  assert.equal(model.summary.progress_percent, 0);
+});
