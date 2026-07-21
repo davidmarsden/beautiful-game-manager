@@ -1,7 +1,7 @@
 import { simulateMatch } from '../matchSimulation.js';
 import { buildDoubleRoundRobin, simulateStatefulSeason, syntheticSeasonClubs } from './seasonSimulation.js';
 
-export const HUMAN_MANAGER_SEASON_VERSION = 'tbg-human-manager-season-v1.1';
+export const HUMAN_MANAGER_SEASON_VERSION = 'tbg-human-manager-season-v1.2';
 
 const SUPPORTED_FORMATIONS = new Set(['4-3-3-wide', '4-2-3-1', '4-4-2', '4-1-4-1', '3-5-2', '3-4-3', '5-3-2']);
 const ALLOWED_TACTICS = Object.freeze({
@@ -217,6 +217,7 @@ export function playHumanManagerSeason({
     final_standing: Object.freeze({ ...finalStanding }),
     final_table: season.standings,
     season_metrics: season.metrics,
+    season_report: season,
     checks,
     accepted: Object.values(checks).every(Boolean)
   });
