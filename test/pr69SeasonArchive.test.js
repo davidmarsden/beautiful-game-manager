@@ -62,6 +62,19 @@ test('preserves public events from the season harness for player awards', () => 
   assert.ok(archive.awards.golden_boot.player_id);
 });
 
+test('suppresses player awards when the winning total is zero', () => {
+  const season = completedSeason();
+  const withoutAttributedEvents = {
+    ...season,
+    results: season.results.map((row) => ({ ...row, events: [] }))
+  };
+  const archive = createSeasonArchive(withoutAttributedEvents);
+
+  assert.equal(archive.awards.golden_boot, null);
+  assert.equal(archive.awards.assist_leader, null);
+  assert.ok(archive.awards.appearance_leader);
+});
+
 test('records supported goal assist and card events without inventing unsupported totals', () => {
   const season = completedSeason();
   const target = season.results[0];
