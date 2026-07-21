@@ -61,6 +61,19 @@ test('repeated multi-division seasons preserve unique membership and history', (
   assert.equal(new Set(clubIds).size, 20);
 });
 
+test('resumed multi-division batches count only newly added history', () => {
+  const firstSeason = advancePersistentLeagueSeason(world()).world;
+  const resumed = runPersistentLeagueSeasons({ seasons: 1, world: firstSeason });
+
+  assert.equal(resumed.accepted, true);
+  assert.equal(resumed.final_world.history.archives.length, 10);
+  assert.equal(resumed.final_world.competition.movement_history.length, 16);
+  assert.equal(resumed.final_world.season_number, 3);
+  assert.equal(resumed.checks.archives_match_divisions_and_seasons, true);
+  assert.equal(resumed.checks.movements_match_boundaries_and_seasons, true);
+  assert.equal(resumed.checks.world_advanced_exactly, true);
+});
+
 test('rejects swapped canonical division levels and duplicate membership', () => {
   const swapped = structuredClone(world());
   swapped.competition.divisions[0].level = 2;
