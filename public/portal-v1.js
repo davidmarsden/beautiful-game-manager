@@ -3,6 +3,18 @@ import { buildPortalViewModel } from './portal-v1-model.js';
 const $ = (id) => document.getElementById(id);
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
 
+const nativeFetch = window.fetch.bind(window);
+window.fetch = async (...args) => {
+  const response = await nativeFetch(...args);
+  const requestUrl = typeof args[0] === 'string' ? args[0] : args[0]?.url;
+  if (requestUrl && new URL(requestUrl, window.location.href).pathname === '/api/bootstrap' && response.ok) {
+    response.clone().json().then((data) => {
+      if (!data?.no_assignment) window.dispatchEvent(new CustomEvent('tbg:portal-rendered', { detail: data }));
+    }).catch((error) => console.warn('Could not read portal bootstrap response', error));
+  }
+  return response;
+};
+
 function showView(name) {
   document.querySelectorAll('.view').forEach((view) => view.classList.toggle('active', view.id === `${name}View`));
   document.querySelectorAll('[data-view]').forEach((button) => button.classList.toggle('active', button.dataset.view === name));
