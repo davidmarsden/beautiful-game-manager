@@ -99,6 +99,22 @@ function divisionSnapshots(world) {
   }));
 }
 
+export function validatePersistentMatchdayWorld(world) {
+  const base = validatePersistentLeagueWorld(world);
+  const errors = [...base.errors];
+  const completed = world?.matchday_history || [];
+  const completedIds = completed.flatMap((season) => (season.checkpoints || []).map((row) => row.checkpoint_id));
+  if (!unique(completedIds)) errors.push('Completed matchday history contains duplicate checkpoint IDs');
+  if (world?.matchday_cycle) {
+    const activeIds = (world.matchday_cycle.checkpoints || []).map((row) => row.checkpoint_id);
+    if (!unique(activeIds)) errors.push('Active matchday cycle contains duplicate checkpoint IDs');
+    if (activeIds.some((id) => completedIds.includes(id))) errors.push('Active checkpoint already exists in completed history');
+    const processed = Object.values(world.matchday_cycle.runtimes || {}).map((runtime) => runtime.next_matchday);
+    if (processed.some((next) => next !== world.matchday_cycle.current_matchday)) errors.push('Division matchday cursors disagree');
+  }
+  return Object.freeze({ valid: errors.length === 0, errors: Object.freeze(errors) });
+}
+
 function initializeSeasonCycle(world, { daysBetweenRounds = 7 } = {}) {
   if (world.matchday_cycle) throw new Error(`Matchday cycle already active: ${world.matchday_cycle.season_id}`);
   const summerOpen = world.squad_cycle.calendar.transfer_windows[0].opens_at;
@@ -124,6 +140,7 @@ function initializeSeasonCycle(world, { daysBetweenRounds = 7 } = {}) {
   }
   world.phase = 'season';
   world.clock = world.season_start;
+  world.matchday_history ||= [];
   world.matchday_cycle = {
     version: PERSISTENT_MATCHDAY_VERSION,
     season_id: world.squad_cycle.season_id,
@@ -184,6 +201,10 @@ function completeSeason(world) {
     movement_ids: movements.map((row) => row.movement_id),
     human_final_standing: humanReport?.standings.find((row) => row.club_id === world.human_club_id) || null
   });
+  world.matchday_history.push({
+    season_id: cycle.season_id,
+    checkpoints: cycle.checkpoints.map((row) => ({ ...row }))
+  });
 
   world.phase = 'offseason';
   for (const clubId of Object.keys(world.squad_cycle.clubs).sort()) generateYouthIntake(world.squad_cycle, { clubId });
@@ -215,8 +236,8 @@ export function advancePersistentMatchday(worldInput, {
   daysBetweenRounds = 7
 } = {}) {
   const world = loadPersistentWorld(savePersistentWorld(worldInput));
-  const validation = validatePersistentLeagueWorld(world);
-  if (!validation.valid) throw new Error(`Invalid persistent league world: ${validation.errors.join('; ')}`);
+  const validation = validatePersistentMatchdayWorld(world);
+  if (!validation.valid) throw new Error(`Invalid persistent matchday world: ${validation.errors.join('; ')}`);
   if (world.phase === 'preseason') initializeSeasonCycle(world, { daysBetweenRounds });
   if (world.phase !== 'season' || !world.matchday_cycle) throw new Error(`World is not ready for matchday advancement: ${world.phase}`);
 
@@ -253,9 +274,12 @@ export function advancePersistentMatchday(worldInput, {
   if (allComplete) completion = completeSeason(world);
   const saved = savePersistentWorld(world);
   const restored = loadPersistentWorld(saved);
-  const restoredValidation = validatePersistentLeagueWorld(restored);
+  const restoredValidation = validatePersistentMatchdayWorld(restored);
+  const persistedCheckpoint = allComplete
+    ? restored.matchday_history.flatMap((row) => row.checkpoints).some((row) => row.checkpoint_id === checkpoint.checkpoint_id)
+    : restored.matchday_cycle.checkpoints.some((row) => row.checkpoint_id === checkpoint.checkpoint_id);
   const checks = Object.freeze({
-    one_checkpoint_added: allComplete ? true : restored.matchday_cycle.checkpoints.some((row) => row.checkpoint_id === checkpoint.checkpoint_id),
+    one_checkpoint_added: persistedCheckpoint,
     no_fixture_replay: unique(Object.values(cycle.runtimes).flatMap((runtime) => runtime.state.applied_run_keys)),
     matchday_processed_in_every_division: resultRows.length === 5 && resultRows.every((row) => row.matchday === matchday),
     save_load_valid: restoredValidation.valid,
@@ -297,7 +321,7 @@ export function runPersistentMatchdays({ world, matchdays, humanInstructionsByMa
     every_advance_accepted: reports.every((row) => row.accepted),
     checkpoints_are_unique: unique(reports.map((row) => row.checkpoint.checkpoint_id)),
     matchdays_are_sequential: reports.every((row, index) => row.matchday === expected[index]),
-    final_world_valid: validatePersistentLeagueWorld(current).valid
+    final_world_valid: validatePersistentMatchdayWorld(current).valid
   });
   return Object.freeze({ version: PERSISTENT_MATCHDAY_VERSION, matchdays, reports: Object.freeze(reports), final_world: current, checks, accepted: Object.values(checks).every(Boolean) });
 }
