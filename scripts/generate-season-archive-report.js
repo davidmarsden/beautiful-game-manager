@@ -15,14 +15,16 @@ const checks = {
   archive_accepted: archive.accepted,
   champion_matches_final_table: archive.awards.champion?.club_id === season.standings[0]?.club_id,
   fixture_links_complete: archive.source_fixture_ids.length === season.fixture_count,
-  club_totals_reconcile: archive.checks.standings_reconcile && archive.checks.goals_reconcile,
-  player_starts_reconcile: archive.checks.player_appearances_reconcile,
+  club_totals_reconcile: archive.checks.standings_reconcile && archive.checks.standings_match_fixture_scores && archive.checks.goals_reconcile,
+  player_starts_reconcile: archive.checks.player_starts_reconcile,
+  appearances_cover_starts: archive.checks.player_appearances_cover_starts,
+  public_events_preserved: season.results.every((row) => Array.isArray(row.events)),
   deterministic_awards_present: Boolean(archive.awards.champion && archive.awards.best_attack && archive.awards.best_defence && archive.awards.appearance_leader),
   history_index_created: history.archives.length === 1
 };
 
 const report = {
-  version: 'tbg-season-archive-report-v1.0',
+  version: 'tbg-season-archive-report-v1.1',
   accepted: Object.values(checks).every(Boolean),
   checks,
   evidence: {
@@ -30,6 +32,7 @@ const report = {
     fixture_count: archive.summary.fixture_count,
     club_count: archive.summary.club_count,
     total_goals: archive.summary.total_goals,
+    preserved_event_count: season.results.reduce((sum, row) => sum + row.events.length, 0),
     champion: archive.awards.champion,
     best_attack: archive.awards.best_attack,
     best_defence: archive.awards.best_defence,
@@ -51,6 +54,7 @@ const markdown = [
   `- Fixtures archived: **${archive.summary.fixture_count}**`,
   `- Champion: **${archive.awards.champion?.club_id}**`,
   `- Total goals: **${archive.summary.total_goals}**`,
+  `- Public events preserved: **${report.evidence.preserved_event_count}**`,
   '',
   '## Checks',
   ...Object.entries(checks).map(([key, value]) => `- ${key}: ${value ? 'PASS' : 'FAIL'}`),
