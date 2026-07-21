@@ -85,6 +85,20 @@ test('rejects duplicate persisted checkpoint identities', () => {
   assert.equal(validatePersistentMatchdayWorld(corrupted).valid, false);
 });
 
+test('rejects an unavailable player in the human starting XI before saving matchday two', () => {
+  const first = advancePersistentMatchday(world());
+  const humanRuntime = Object.values(first.world.matchday_cycle.runtimes).find((runtime) => runtime.human_club_id);
+  const unavailableId = Object.entries(humanRuntime.state.availability.players)
+    .find(([, row]) => row.injury_until_matchday >= 2 || row.suspension_until_matchday >= 2)?.[0];
+  assert.ok(unavailableId);
+  const registered = first.world.squad_cycle.clubs[first.world.human_club_id].registered_player_ids;
+  const startingXi = [unavailableId, ...registered.filter((id) => id !== unavailableId).slice(0, 10)];
+  assert.throws(
+    () => advancePersistentMatchday(first.world, { humanInstruction: { starting_xi: startingXi } }),
+    /unavailable, ineligible or unregistered/
+  );
+});
+
 test('records one human decision at each human-club matchday', () => {
   const run = runPersistentMatchdays({
     world: world(),
