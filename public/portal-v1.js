@@ -3,6 +3,46 @@ import { buildPortalViewModel } from './portal-v1-model.js';
 const $ = (id) => document.getElementById(id);
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
 
+function mountPortalWorkspace() {
+  if (!document.querySelector('link[href="./portal-v1.css"]')) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = './portal-v1.css';
+    document.head.append(link);
+  }
+
+  const dashboard = $('dashboardView');
+  if (dashboard && !$('portalOverview')) {
+    dashboard.insertAdjacentHTML('afterbegin', `
+      <section id="portalOverview" class="portal-overview" aria-label="Club overview"></section>
+      <section class="portal-layout">
+        <article class="portal-card"><h3>Club actions</h3><div id="clubAlerts" class="portal-alerts"><p class="portal-empty">Loading club priorities…</p></div></article>
+        <article class="portal-card"><h3>Season status</h3><div class="season-progress-shell"><div id="seasonProgressBar" class="season-progress-bar"></div></div><p id="seasonProgressText" class="portal-empty">Loading season progress…</p></article>
+      </section>`);
+  }
+
+  const squad = $('squadView');
+  if (squad && !$('squadDepthCards')) {
+    const heading = squad.querySelector('.section-heading');
+    heading?.insertAdjacentHTML('afterend', `
+      <div class="portal-section-heading"><div><h3>Squad intelligence</h3><p>Registered and currently available cover against the playable minimum.</p></div></div>
+      <section id="squadDepthCards" class="squad-depth-grid"></section>
+      <section class="portal-card"><h3>Contract watch · next 12 months</h3><div id="contractWatchList" class="contract-watch"><p class="portal-empty">Loading contracts…</p></div></section>`);
+  }
+
+  const schedule = $('scheduleView');
+  if (schedule && !schedule.querySelector('.portal-schedule-progress')) {
+    schedule.insertAdjacentHTML('beforeend', `<section class="portal-card portal-schedule-progress"><h3>Season progress</h3><div class="season-progress-shell"><div class="season-progress-bar" data-progress-copy></div></div><p class="portal-empty" data-progress-text>Fixtures will populate as the world advances.</p></section>`);
+  }
+
+  const competitions = $('competitionsView');
+  if (competitions && !$('seasonArchiveSummary')) {
+    competitions.insertAdjacentHTML('beforeend', `<section class="portal-card"><h3>Season honours and records</h3><div id="seasonArchiveSummary" class="season-archive-summary"><p class="portal-empty">End-of-season awards will appear here when the season archive is created.</p></div></section>`);
+  }
+}
+
+mountPortalWorkspace();
+
 const nativeFetch = window.fetch.bind(window);
 window.fetch = async (...args) => {
   const response = await nativeFetch(...args);
@@ -61,8 +101,11 @@ function renderContracts(model) {
 }
 
 function renderSeason(model) {
-  if ($('seasonProgressBar')) $('seasonProgressBar').style.width = `${Math.min(100, Math.max(0, model.summary.progress_percent))}%`;
-  if ($('seasonProgressText')) $('seasonProgressText').textContent = model.summary.total ? `${model.summary.played} of ${model.summary.total} fixtures completed` : `${model.summary.played} fixtures completed`;
+  const width = `${Math.min(100, Math.max(0, model.summary.progress_percent))}%`;
+  document.querySelectorAll('.season-progress-bar').forEach((bar) => { bar.style.width = width; });
+  const progressText = model.summary.total ? `${model.summary.played} of ${model.summary.total} fixtures completed` : `${model.summary.played} fixtures completed`;
+  if ($('seasonProgressText')) $('seasonProgressText').textContent = progressText;
+  document.querySelectorAll('[data-progress-text]').forEach((node) => { node.textContent = progressText; });
   if (!$('seasonArchiveSummary')) return;
   if (!model.archive) {
     $('seasonArchiveSummary').innerHTML = '<p class="portal-empty">End-of-season awards will appear here when the season archive is created.</p>';
