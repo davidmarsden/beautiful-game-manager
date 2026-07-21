@@ -1,3 +1,4 @@
+import './portal-v1.js';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 async function loadConfig() {
