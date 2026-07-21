@@ -86,7 +86,9 @@ function safeCheckpoint(world) {
   if (world.phase === 'preseason' || world.phase === 'offseason') return true;
   if (world.phase !== 'season' || !world.matchday_cycle) return false;
   const nextValues = Object.values(world.matchday_cycle.runtimes || {}).map((runtime) => runtime.next_matchday);
-  return nextValues.length === 5 && unique(nextValues) && nextValues[0] === world.matchday_cycle.current_matchday;
+  return nextValues.length === 5
+    && new Set(nextValues).size === 1
+    && nextValues[0] === world.matchday_cycle.current_matchday;
 }
 
 function terminateForRetirement(world, player, at) {
