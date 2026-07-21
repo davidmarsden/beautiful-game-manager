@@ -18,11 +18,17 @@ function world() {
   });
 }
 
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]));
+}
+
 test('persistent save/load is deterministic and rejects corruption', () => {
   const created = world();
   const saved = savePersistentWorld(created);
   const loaded = loadPersistentWorld(saved);
-  assert.deepEqual(loaded, created);
+  assert.deepEqual(canonical(loaded), canonical(created));
   assert.equal(validatePersistentWorld(loaded).valid, true);
 
   const envelope = JSON.parse(saved);
@@ -64,6 +70,17 @@ test('repeated persistent seasons preserve unique history and viable squads', ()
   assert.equal(first.reports.every((row) => row.checks.final_save_load_equivalent), true);
 });
 
+test('batch advancement checks deltas when history already exists', () => {
+  const advanced = advancePersistentSeason(world()).world;
+  const report = runPersistentWorldSeasons({ seasons: 1, world: advanced });
+
+  assert.equal(report.accepted, true);
+  assert.equal(report.final_world.history.archives.length, 2);
+  assert.equal(report.final_world.season_number, 3);
+  assert.equal(report.checks.archive_count_matches_seasons, true);
+  assert.equal(report.checks.world_advanced_exactly, true);
+});
+
 test('load rejects broken ownership references rather than repairing them', () => {
   const created = world();
   const broken = structuredClone(created);
@@ -71,5 +88,17 @@ test('load rejects broken ownership references rather than repairing them', () =
   const validation = validatePersistentWorld(broken);
   assert.equal(validation.valid, false);
   assert.ok(validation.errors.some((row) => row.includes('unknown player')));
+  assert.throws(() => savePersistentWorld(broken), /Cannot save invalid world/);
+});
+
+test('load rejects a player pointing at another player contract', () => {
+  const created = world();
+  const broken = structuredClone(created);
+  const [firstId, secondId] = broken.squad_cycle.clubs['club-1'].player_ids;
+  broken.squad_cycle.players[firstId].contract_id = broken.squad_cycle.players[secondId].contract_id;
+
+  const validation = validatePersistentWorld(broken);
+  assert.equal(validation.valid, false);
+  assert.ok(validation.errors.some((row) => row.includes(`${firstId} lacks a matching active contract`)));
   assert.throws(() => savePersistentWorld(broken), /Cannot save invalid world/);
 });
