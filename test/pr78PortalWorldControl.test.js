@@ -13,6 +13,7 @@ import {
   transferPortalPlayer
 } from '../src/world/portalWorldControl.js';
 import { applyPlayerLifecycleReconciliation, PLAYER_LIFECYCLE_MANIFEST_VERSION } from '../src/world/playerLifecycleReconciliation.js';
+import { assertWorldMatchesAppointment, buildSavePayload } from '../netlify/functions/world-control.mjs';
 
 function world() {
   const divisions = syntheticPlayableLeagueStructure({ clubsPerDivision: 4 });
@@ -24,6 +25,13 @@ function world() {
   });
 }
 
+function identityRow(source = world()) {
+  return {
+    manager: { id: 'manager-pr78' },
+    appointment: { world_id: source.world_id, club_id: source.human_club_id }
+  };
+}
+
 test('portal save and load preserve a canonical persistent world', () => {
   const saved = savePortalWorld(world());
   const loaded = loadPortalWorld(saved.saved_world);
@@ -31,6 +39,33 @@ test('portal save and load preserve a canonical persistent world', () => {
   assert.equal(loaded.accepted, true);
   assert.deepEqual(loaded.world, saved.world);
   assert.equal(loaded.summary.phase, 'preseason');
+});
+
+test('Supabase payload uses the canonical envelope save_version', () => {
+  const source = world();
+  const saved = savePortalWorld(source);
+  const envelope = JSON.parse(saved.saved_world);
+  const payload = buildSavePayload(identityRow(source), saved, { updatedAt: '2026-07-22T12:00:00.000Z' });
+
+  assert.equal(payload.save_version, envelope.save_version);
+  assert.equal(payload.save_checksum, envelope.checksum);
+  assert.equal(payload.save_version, 'tbg-persistent-save-v1.0');
+  assert.equal(payload.world_id, source.world_id);
+  assert.equal(payload.updated_at, '2026-07-22T12:00:00.000Z');
+});
+
+test('portal save imports must match both the appointed world and club', () => {
+  const source = world();
+  const appointment = identityRow(source).appointment;
+  assert.equal(assertWorldMatchesAppointment(source, appointment), true);
+  assert.throws(
+    () => assertWorldMatchesAppointment({ ...source, world_id: 'different-world' }, appointment, { label: 'Imported save' }),
+    /active world appointment/
+  );
+  assert.throws(
+    () => assertWorldMatchesAppointment({ ...source, human_club_id: 'd2-club-1' }, appointment, { label: 'Imported save' }),
+    /active club appointment/
+  );
 });
 
 test('portal advances exactly one persistent matchday', () => {
