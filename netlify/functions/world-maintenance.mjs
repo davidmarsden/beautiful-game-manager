@@ -41,11 +41,11 @@ function ageHours(value, now) {
 
 async function recordMonitor(stored, inspection, latestBackup, now, status = null, details = {}) {
   return insert('world_operation_events', {
-    operation_id: `monitor:${stored.world_id}:${stored.manager_id}:${Date.parse(now)}`,
+    operation_id: `monitor:${stored.world_id}:${Date.parse(now)}`,
     operation_type: 'monitor',
     world_id: stored.world_id,
-    manager_id: stored.manager_id,
-    club_id: stored.club_id,
+    manager_id: null,
+    club_id: null,
     source_backup_id: latestBackup?.backup_id || null,
     previous_checksum: stored.save_checksum,
     replacement_checksum: stored.save_checksum,
@@ -62,11 +62,11 @@ export default async () => {
     return new Response(JSON.stringify({ error: 'Scheduled maintenance is not configured' }), { status: 503 });
   }
   try {
-    const saves = await supabase('/rest/v1/persistent_world_saves?select=*&order=updated_at.asc');
+    const saves = await supabase('/rest/v1/canonical_world_saves?select=*&order=updated_at.asc');
     const results = [];
     for (const stored of saves) {
       try {
-        const backupRows = await supabase(`/rest/v1/persistent_world_backups?world_id=eq.${encodeURIComponent(stored.world_id)}&manager_id=eq.${encodeURIComponent(stored.manager_id)}&select=*&order=created_at.desc&limit=1`);
+        const backupRows = await supabase(`/rest/v1/persistent_world_backups?world_id=eq.${encodeURIComponent(stored.world_id)}&select=*&order=created_at.desc&limit=1`);
         let latestBackup = backupRows[0] || null;
         let backupCreated = null;
 
@@ -99,7 +99,6 @@ export default async () => {
         await recordMonitor(stored, inspection, latestBackup, now);
         results.push({
           world_id: stored.world_id,
-          manager_id: stored.manager_id,
           severity: inspection.severity,
           backup_created: Boolean(backupCreated),
           backup_skipped_invalid: preflight.severity === 'critical',
@@ -107,15 +106,19 @@ export default async () => {
         });
       } catch (error) {
         const inspection = {
+          world_id: stored.world_id,
+          manager_id: null,
+          club_id: null,
+          checked_at: now,
           severity: 'critical',
           checks: {},
           metrics: {},
           errors: [error.message]
         };
-        const alert = buildMonitoringAlert(inspection, { createdAt: now, worldId: stored.world_id, managerId: stored.manager_id, clubId: stored.club_id });
+        const alert = buildMonitoringAlert(inspection, { createdAt: now });
         if (alert) await insert('world_operation_alerts', alert, 'alert_id').catch(() => null);
         await recordMonitor(stored, inspection, null, now, 'failed', { error: error.message }).catch(() => null);
-        results.push({ world_id: stored.world_id, manager_id: stored.manager_id, severity: 'critical', backup_created: false, alert_created: Boolean(alert), error: error.message });
+        results.push({ world_id: stored.world_id, severity: 'critical', backup_created: false, alert_created: Boolean(alert), error: error.message });
       }
     }
     return new Response(JSON.stringify({ accepted: results.every((row) => row.severity !== 'critical'), checked_at: now, worlds_checked: results.length, results }), {

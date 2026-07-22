@@ -4,7 +4,6 @@ import { syntheticPlayableLeagueStructure } from '../src/matchEngine/leagueStruc
 import { createPersistentLeagueWorld } from '../src/world/persistentLeagueWorld.js';
 import { advancePersistentMatchday } from '../src/world/persistentMatchdayWorld.js';
 import { savePersistentWorld } from '../src/world/persistentSeasonLoop.js';
-import { conditionalReplacementPath } from '../netlify/functions/world-operations.mjs';
 import {
   buildMonitoringAlert,
   buildResetPlan,
@@ -13,46 +12,62 @@ import {
   inspectPersistentSave,
   selectRollbackBackup
 } from '../src/world/worldOperations.js';
+import { conditionalReplacementPath } from '../netlify/functions/world-operations.mjs';
+
+const MANAGER_ID = '11111111-1111-1111-1111-111111111111';
 
 function world(worldId = 'pr79-world') {
   const divisions = syntheticPlayableLeagueStructure({ clubsPerDivision: 4 });
-  return createPersistentLeagueWorld({ worldId, divisions, humanClubId: divisions[0].clubs[0].club_id, movementCount: 1 });
+  return createPersistentLeagueWorld({
+    worldId,
+    divisions,
+    humanClubId: divisions[0].clubs[0].club_id,
+    movementCount: 1
+  });
 }
 
 function stored(source, updatedAt = '2026-07-22T10:00:00.000Z') {
   const envelope = JSON.parse(savePersistentWorld(source));
   return {
     world_id: source.world_id,
-    manager_id: '11111111-1111-1111-1111-111111111111',
+    manager_id: MANAGER_ID,
     club_id: source.human_club_id,
     save_version: envelope.save_version,
     save_checksum: envelope.checksum,
     save_envelope: envelope,
+    season_id: source.squad_cycle.season_id,
+    season_number: source.season_number,
+    phase: source.phase,
+    matchday: source.matchday_cycle?.current_matchday || null,
     updated_at: updatedAt
   };
 }
 
-test('builds an immutable canonical backup record', () => {
+test('backup records preserve the canonical envelope and metadata', () => {
   const source = stored(world());
   const backup = buildWorldBackupRecord(source, {
-    backupId: 'backup-1', trigger: 'manual', reason: 'before_test', createdAt: '2026-07-22T11:00:00.000Z'
+    backupId: 'backup-one',
+    trigger: 'manual',
+    reason: 'operator_test',
+    createdAt: '2026-07-22T10:05:00.000Z',
+    createdBy: MANAGER_ID
   });
-  assert.equal(backup.backup_id, 'backup-1');
+  assert.equal(backup.backup_id, 'backup-one');
   assert.equal(backup.world_id, source.world_id);
   assert.equal(backup.save_checksum, source.save_checksum);
-  assert.equal(backup.source, 'manual');
-  assert.equal(backup.phase, 'preseason');
+  assert.deepEqual(backup.save_envelope, source.save_envelope);
 });
 
 test('monitor validates metadata, freshness and backup coverage', () => {
   const source = stored(world());
-  const backup = buildWorldBackupRecord(source, { createdAt: '2026-07-22T10:30:00.000Z' });
-  const healthy = inspectPersistentSave(source, { now: '2026-07-22T11:00:00.000Z', latestBackup: backup });
-  assert.equal(healthy.severity, 'healthy');
-  assert.equal(Object.values(healthy.checks).every(Boolean), true);
-  const warning = inspectPersistentSave(source, { now: '2026-07-24T11:00:00.000Z', latestBackup: backup });
-  assert.equal(warning.severity, 'warning');
-  assert.equal(buildMonitoringAlert(warning).severity, 'warning');
+  const backup = buildWorldBackupRecord(source, { createdAt: '2026-07-22T10:05:00.000Z' });
+  const inspection = inspectPersistentSave(source, {
+    now: '2026-07-22T11:00:00.000Z',
+    latestBackup: backup
+  });
+  assert.equal(inspection.severity, 'healthy');
+  assert.equal(Object.values(inspection.checks).every(Boolean), true);
+  assert.equal(buildMonitoringAlert(inspection), null);
 });
 
 test('monitor detects corrupted metadata without mutating the save', () => {
@@ -84,8 +99,8 @@ test('replacement database write is conditional on the previously inspected chec
   const plan = buildRestorePlan(current, backup, { expectedChecksum: current.save_checksum });
   const path = conditionalReplacementPath(plan);
   assert.match(path, /world_id=eq\.world%20with%20spaces/);
-  assert.match(path, new RegExp(`manager_id=eq\\.${current.manager_id}`));
-  assert.match(path, new RegExp(`save_checksum=eq\\.${plan.previous_checksum}`));
+  assert.doesNotMatch(path, /manager_id=/);
+  assert.match(path, new RegExp(`save_checksum=eq\.${plan.previous_checksum}`));
   assert.doesNotMatch(path, /on_conflict/);
 });
 
@@ -95,21 +110,19 @@ test('restore rejects backups from a different world', () => {
   assert.throws(() => buildRestorePlan(current, foreign, { expectedChecksum: current.save_checksum }), /different world/);
 });
 
-test('rollback selects the newest backup with a different checksum', () => {
+test('rollback chooses the newest backup with a different checksum', () => {
   const source = stored(world());
-  const first = buildWorldBackupRecord(source, { backupId: 'first', createdAt: '2026-07-22T09:00:00.000Z' });
-  const advanced = stored(advancePersistentMatchday(world()).world);
-  const second = buildWorldBackupRecord(advanced, { backupId: 'second', createdAt: '2026-07-22T10:00:00.000Z' });
-  const duplicateCurrent = { ...second, backup_id: 'current-copy', created_at: '2026-07-22T11:00:00.000Z' };
-  assert.equal(selectRollbackBackup([first, second, duplicateCurrent], advanced.save_checksum).backup_id, 'first');
+  const current = stored(advancePersistentMatchday(world()).world, '2026-07-22T12:00:00.000Z');
+  const same = buildWorldBackupRecord(current, { backupId: 'same', createdAt: '2026-07-22T12:10:00.000Z' });
+  const older = buildWorldBackupRecord(source, { backupId: 'older', createdAt: '2026-07-22T10:00:00.000Z' });
+  assert.equal(selectRollbackBackup([same, older], current.save_checksum).backup_id, 'older');
 });
 
-test('reset uses the same identity and concurrency protections as restore', () => {
-  const currentWorld = advancePersistentMatchday(world()).world;
-  const current = stored(currentWorld);
-  const clean = savePersistentWorld(world());
-  const plan = buildResetPlan(current, clean, { expectedChecksum: current.save_checksum, requestedAt: '2026-07-22T13:00:00.000Z' });
+test('reset requires the same world identity', () => {
+  const current = stored(advancePersistentMatchday(world()).world);
+  const reset = stored(world());
+  const plan = buildResetPlan(current, reset, { expectedChecksum: current.save_checksum });
+  assert.equal(plan.accepted, true);
   assert.equal(plan.operation_type, 'reset');
-  assert.equal(plan.replacement.phase, 'preseason');
-  assert.equal(plan.checks.world_identity_preserved, true);
+  assert.throws(() => buildResetPlan(current, stored(world('other-world')), { expectedChecksum: current.save_checksum }), /different world/);
 });

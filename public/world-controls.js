@@ -3,7 +3,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => 
 
 let authorization = '';
 let bootstrap = null;
-let controlState = null;
+let sharedState = null;
 
 const nativeFetch = window.fetch.bind(window);
 window.fetch = async (...args) => {
@@ -17,49 +17,49 @@ function mount() {
   const workspace = document.querySelector('.workspace');
   const tabs = workspace?.querySelector('.tabs');
   if (!workspace || !tabs || $('worldView')) return;
-  tabs.insertAdjacentHTML('beforeend', '<button data-view="world">World Control</button>');
+  tabs.insertAdjacentHTML('beforeend', '<button data-view="world">World</button>');
   workspace.insertAdjacentHTML('beforeend', `
     <div id="worldView" class="view">
       <div class="world-control-heading">
-        <div><h2>Persistent World Control</h2><p>Save, resume and advance the world from this manager portal.</p></div>
-        <span id="worldControlStatus" class="world-control-status">Checking save…</span>
+        <div><h2>Shared World</h2><p>One canonical TBG world, advanced automatically for every manager at the scheduled turn.</p></div>
+        <span id="worldControlStatus" class="world-control-status">Checking world…</span>
       </div>
       <section id="worldControlSummary" class="world-control-summary"></section>
       <section class="world-control-grid">
         <article class="world-control-card">
-          <h3>Save and resume</h3>
-          <p>The canonical save is stored against your manager and world appointment.</p>
-          <div class="world-control-actions">
-            <button id="refreshWorldSave" type="button">Load latest</button>
-            <button id="exportWorldSave" type="button">Export save</button>
-            <label class="file-action">Import save<input id="importWorldSave" type="file" accept="application/json,.json"></label>
-          </div>
+          <h3>Next scheduled turn</h3>
+          <p id="turnDeadline">The next deadline is loading.</p>
+          <p id="turnSubmissionState">No team instructions submitted yet.</p>
         </article>
         <article class="world-control-card">
-          <h3>Advance world</h3>
-          <p>Processes exactly one matchday across all five divisions and creates a new checkpoint.</p>
-          <button id="advanceWorld" class="primary-action" type="button">Advance one matchday</button>
+          <h3>Team submission</h3>
+          <p>Submit or revise your team instructions before the deadline. The world advances centrally; individual managers cannot trigger fixtures.</p>
+          <label>Formation<select id="turnFormation"><option value="">Use current/default</option><option>4-3-3-wide</option><option>4-2-3-1</option><option>4-4-2</option><option>4-1-4-1</option><option>3-5-2</option><option>3-4-3</option><option>5-3-2</option></select></label>
+          <label>Mentality<select id="turnMentality"><option value="">Use current/default</option><option value="cautious">Cautious</option><option value="balanced">Balanced</option><option value="positive">Positive</option><option value="attacking">Attacking</option></select></label>
+          <button id="submitTurn" class="primary-action" type="button">Submit for next fixture</button>
         </article>
         <article class="world-control-card">
-          <h3>Registration</h3>
+          <h3>Registration request</h3>
           <label>Owned player<select id="registrationPlayer"></select></label>
-          <div class="world-control-actions"><button id="registerWorldPlayer" type="button">Register</button><button id="unregisterWorldPlayer" type="button">Unregister</button></div>
+          <div class="world-control-actions"><button id="registerWorldPlayer" type="button">Request registration</button><button id="unregisterWorldPlayer" type="button">Request removal</button></div>
         </article>
         <article class="world-control-card">
-          <h3>Contracts</h3>
+          <h3>Contract request</h3>
           <label>Owned player<select id="contractPlayer"></select></label>
           <label>Extension<select id="contractYears"><option value="1">1 season</option><option value="2" selected>2 seasons</option><option value="3">3 seasons</option><option value="4">4 seasons</option><option value="5">5 seasons</option></select></label>
-          <button id="renewWorldContract" type="button">Offer renewal</button>
+          <button id="renewWorldContract" type="button">Submit renewal request</button>
         </article>
         <article class="world-control-card world-transfer-card">
-          <h3>Transfers</h3>
-          <label>Direction<select id="transferDirection"><option value="sell">Sell owned player</option><option value="buy">Buy player</option></select></label>
+          <h3>Transfer request</h3>
+          <p>Requests enter the shared-world command ledger. They do not directly remove a player from another manager's club.</p>
+          <label>Action<select id="transferDirection"><option value="sell">List owned player</option><option value="buy">Submit transfer offer</option></select></label>
           <label>Player ID<input id="transferPlayerId" autocomplete="off" placeholder="tbg-player-id"></label>
           <label>Other club ID<input id="transferClubId" autocomplete="off" placeholder="tbg-club-id"></label>
           <label>Fee<input id="transferFee" type="number" min="0" step="1" value="0"></label>
-          <button id="submitWorldTransfer" type="button">Complete transfer</button>
+          <button id="submitWorldTransfer" type="button">Submit request</button>
         </article>
       </section>
+      <p class="world-control-message">Saving, loading, importing, restoring, rolling back and advancing the world are automated or administrator-only operations.</p>
       <p id="worldControlMessage" class="world-control-message" aria-live="polite"></p>
     </div>`);
 
@@ -70,34 +70,49 @@ function mount() {
   bind();
 }
 
-function options() {
+function playerOptions() {
   const squad = bootstrap?.squad || [];
   return squad.map((player) => `<option value="${escapeHtml(player.tbg_player_id)}">${escapeHtml(player.display_name || player.tbg_player_id)}</option>`).join('');
 }
 
+function countdown(value) {
+  if (!value) return 'Schedule pending';
+  const difference = new Date(value).getTime() - Date.now();
+  if (difference <= 0) return 'Turn is due and will be processed centrally';
+  const hours = Math.floor(difference / 3600000);
+  const minutes = Math.floor((difference % 3600000) / 60000);
+  return `${new Date(value).toLocaleString()} · ${hours}h ${minutes}m remaining`;
+}
+
 function render() {
-  const summary = controlState?.summary;
-  $('worldControlStatus').textContent = controlState?.has_save ? 'Save ready' : 'No save imported';
+  const summary = sharedState?.summary;
+  const world = sharedState?.world;
+  const submission = sharedState?.submission;
+  $('worldControlStatus').textContent = world ? `World ${world.turn_status}` : 'World unavailable';
   $('worldControlSummary').innerHTML = summary ? `
     <article><span>Season</span><strong>${summary.season_number}</strong><small>${escapeHtml(summary.season_id)}</small></article>
-    <article><span>Phase</span><strong>${escapeHtml(summary.phase)}</strong><small>${summary.current_matchday ? `Matchday ${summary.current_matchday} of ${summary.maximum_matchday}` : 'Preseason control'}</small></article>
-    <article><span>Registered</span><strong>${summary.registered_players}</strong><small>${summary.owned_players} owned</small></article>
-    <article><span>Last saved</span><strong>${controlState.save?.updated_at ? new Date(controlState.save.updated_at).toLocaleTimeString() : '—'}</strong><small>${escapeHtml(controlState.save?.checksum?.slice(0, 12) || 'No checksum')}</small></article>` : '<p>No persistent save is attached to this appointment yet. Import an accepted save to begin.</p>';
-  $('advanceWorld').disabled = !summary?.can_advance;
-  const playerOptions = options();
-  $('registrationPlayer').innerHTML = playerOptions;
-  $('contractPlayer').innerHTML = playerOptions;
+    <article><span>Phase</span><strong>${escapeHtml(summary.phase)}</strong><small>${summary.current_matchday ? `Matchday ${summary.current_matchday} of ${summary.maximum_matchday}` : 'Preseason'}</small></article>
+    <article><span>Your club</span><strong>${escapeHtml(sharedState.appointment?.club_id || '—')}</strong><small>Shared canonical world</small></article>
+    <article><span>Checkpoint</span><strong>${world?.updated_at ? new Date(world.updated_at).toLocaleTimeString() : '—'}</strong><small>${escapeHtml(world?.checksum?.slice(0, 12) || 'No checksum')}</small></article>` : '<p>No canonical world has been initialised for this appointment.</p>';
+  $('turnDeadline').textContent = countdown(world?.next_turn_at);
+  $('turnSubmissionState').textContent = submission
+    ? `${submission.status[0].toUpperCase()}${submission.status.slice(1)} ${new Date(submission.submitted_at).toLocaleString()}`
+    : 'No team instructions submitted for this turn.';
+  $('submitTurn').disabled = world?.turn_status !== 'open';
+  const options = playerOptions();
+  $('registrationPlayer').innerHTML = options;
+  $('contractPlayer').innerHTML = options;
 }
 
 async function api(body = null) {
   if (!authorization) throw new Error('Portal session is not ready');
-  const response = await nativeFetch('/api/world-control', {
+  const response = await nativeFetch('/api/shared-world', {
     method: body ? 'POST' : 'GET',
     headers: { authorization, ...(body ? { 'content-type': 'application/json' } : {}) },
     body: body ? JSON.stringify(body) : undefined
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'World control request failed');
+  if (!response.ok) throw new Error(data.error || 'Shared-world request failed');
   return data;
 }
 
@@ -107,53 +122,57 @@ async function act(label, body) {
   document.querySelectorAll('#worldView button').forEach((button) => { button.disabled = true; });
   try {
     const data = await api(body);
-    controlState = { ...controlState, ...data, has_save: true };
-    render();
     message.textContent = `${label} complete.`;
-    window.dispatchEvent(new CustomEvent('tbg:world-controlled', { detail: data }));
+    sharedState = await api();
+    render();
+    window.dispatchEvent(new CustomEvent('tbg:world-submission', { detail: data }));
   } catch (error) {
     message.textContent = error.message;
   } finally {
     document.querySelectorAll('#worldView button').forEach((button) => { button.disabled = false; });
-    if (controlState?.summary) $('advanceWorld').disabled = !controlState.summary.can_advance;
+    if (sharedState?.world) $('submitTurn').disabled = sharedState.world.turn_status !== 'open';
   }
 }
 
 function bind() {
-  $('refreshWorldSave').addEventListener('click', async () => {
-    try { controlState = await api(); render(); $('worldControlMessage').textContent = 'Latest save loaded.'; }
-    catch (error) { $('worldControlMessage').textContent = error.message; }
+  $('submitTurn').addEventListener('click', () => {
+    const formation = $('turnFormation').value;
+    const mentality = $('turnMentality').value;
+    act('Submitting team instructions', {
+      type: 'submit_turn',
+      instruction: {
+        ...(formation ? { formation } : {}),
+        ...(mentality ? { tactics: { mentality } } : {})
+      }
+    });
   });
-  $('advanceWorld').addEventListener('click', () => act('Advancing world', { type: 'advance' }));
-  $('registerWorldPlayer').addEventListener('click', () => act('Registering player', { type: 'register_player', playerId: $('registrationPlayer').value }));
-  $('unregisterWorldPlayer').addEventListener('click', () => act('Unregistering player', { type: 'unregister_player', playerId: $('registrationPlayer').value }));
-  $('renewWorldContract').addEventListener('click', () => act('Renewing contract', { type: 'renew_contract', playerId: $('contractPlayer').value, years: Number($('contractYears').value) }));
-  $('submitWorldTransfer').addEventListener('click', () => act('Completing transfer', {
-    type: 'transfer_player', direction: $('transferDirection').value,
-    playerId: $('transferPlayerId').value.trim(), otherClubId: $('transferClubId').value.trim(), fee: Number($('transferFee').value) || 0
+  $('registerWorldPlayer').addEventListener('click', () => act('Submitting registration request', {
+    type: 'submit_command', command_type: 'register_player', command_payload: { playerId: $('registrationPlayer').value }
   }));
-  $('exportWorldSave').addEventListener('click', async () => {
-    try {
-      const data = await api({ type: 'export_save' });
-      const blob = new Blob([data.saved_world], { type: 'application/json' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `${data.summary.world_id}-${data.summary.season_id}.json`;
-      link.click();
-      URL.revokeObjectURL(link.href);
-    } catch (error) { $('worldControlMessage').textContent = error.message; }
-  });
-  $('importWorldSave').addEventListener('change', async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    await act('Importing save', { type: 'import_save', saved_world: await file.text() });
-    event.target.value = '';
+  $('unregisterWorldPlayer').addEventListener('click', () => act('Submitting registration removal', {
+    type: 'submit_command', command_type: 'unregister_player', command_payload: { playerId: $('registrationPlayer').value }
+  }));
+  $('renewWorldContract').addEventListener('click', () => act('Submitting contract request', {
+    type: 'submit_command', command_type: 'renew_contract', command_payload: { playerId: $('contractPlayer').value, years: Number($('contractYears').value) }
+  }));
+  $('submitWorldTransfer').addEventListener('click', () => {
+    const direction = $('transferDirection').value;
+    act('Submitting transfer request', {
+      type: 'submit_command',
+      command_type: direction === 'sell' ? 'transfer_listing' : 'transfer_offer',
+      command_payload: {
+        direction,
+        playerId: $('transferPlayerId').value.trim(),
+        otherClubId: $('transferClubId').value.trim(),
+        fee: Number($('transferFee').value) || 0
+      }
+    });
   });
 }
 
 window.addEventListener('tbg:portal-rendered', async (event) => {
   bootstrap = event.detail;
   mount();
-  try { controlState = await api(); render(); }
-  catch (error) { $('worldControlMessage').textContent = error.message; }
+  try { sharedState = await api(); render(); }
+  catch (error) { $('worldControlStatus').textContent = 'World unavailable'; $('worldControlMessage').textContent = error.message; }
 });
