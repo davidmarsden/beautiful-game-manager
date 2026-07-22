@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { syntheticPlayableLeagueStructure } from '../src/matchEngine/leagueStructureSimulation.js';
 import { createPersistentLeagueWorld } from '../src/world/persistentLeagueWorld.js';
 import {
@@ -10,7 +11,7 @@ import {
   selectTurnInstructions,
   validateManagerTurnSubmission
 } from '../src/world/sharedWorldScheduler.js';
-import { nextScheduledTurn } from '../netlify/functions/scheduled-world-turn.mjs';
+import { commandForDomain, nextScheduledTurn } from '../netlify/functions/scheduled-world-turn.mjs';
 
 function world() {
   const divisions = syntheticPlayableLeagueStructure({ clubsPerDivision: 4 });
@@ -78,6 +79,33 @@ test('only the central scheduler advances the canonical world and records the tu
   assert.equal(result.world.matchday_cycle.current_matchday, 2);
   assert.equal(result.world.shared_turn_history.length, 1);
   assert.equal(result.world.shared_turn_history[0].checkpoint_id, result.advance.checkpoint.checkpoint_id);
+});
+
+test('transfer negotiation rows never become immediate player moves', () => {
+  for (const commandType of ['transfer_listing', 'transfer_offer', 'transfer_response']) {
+    assert.equal(commandForDomain({ command_type: commandType, command_payload: { playerId: 'p1', otherClubId: 'c2', direction: 'buy' } }), null);
+  }
+  assert.deepEqual(commandForDomain({ command_type: 'register_player', command_payload: { playerId: 'p1' } }), {
+    type: 'register_player',
+    playerId: 'p1'
+  });
+});
+
+test('shared-world RLS binds submissions and commands to active appointments', () => {
+  const sql = fs.readFileSync(new URL('../supabase/migrations/20260722_pr81_shared_canonical_world.sql', import.meta.url), 'utf8');
+  assert.match(sql, /a\.manager_id = manager_turn_submissions\.manager_id/);
+  assert.match(sql, /a\.world_id = manager_turn_submissions\.world_id/);
+  assert.match(sql, /a\.club_id = manager_turn_submissions\.club_id/);
+  assert.match(sql, /a\.manager_id = manager_world_commands\.manager_id/);
+  assert.match(sql, /a\.world_id = manager_world_commands\.world_id/);
+  assert.match(sql, /a\.club_id = manager_world_commands\.club_id/);
+  assert.match(sql, /a\.status = 'active'/);
+});
+
+test('scheduled maintenance reads the canonical shared save table', () => {
+  const source = fs.readFileSync(new URL('../netlify/functions/world-maintenance.mjs', import.meta.url), 'utf8');
+  assert.match(source, /canonical_world_saves\?select=/);
+  assert.doesNotMatch(source, /persistent_world_saves\?select=/);
 });
 
 test('the twice-weekly scheduler resolves the next configured turn', () => {
