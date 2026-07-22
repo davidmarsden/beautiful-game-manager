@@ -39,6 +39,23 @@ function ageHours(value, now) {
   return value ? Math.max(0, (new Date(now) - new Date(value)) / 3600000) : Infinity;
 }
 
+async function recordMonitor(stored, inspection, latestBackup, now, status = null, details = {}) {
+  return insert('world_operation_events', {
+    operation_id: `monitor:${stored.world_id}:${stored.manager_id}:${Date.parse(now)}`,
+    operation_type: 'monitor',
+    world_id: stored.world_id,
+    manager_id: stored.manager_id,
+    club_id: stored.club_id,
+    source_backup_id: latestBackup?.backup_id || null,
+    previous_checksum: stored.save_checksum,
+    replacement_checksum: stored.save_checksum,
+    status: status || (inspection.severity === 'critical' ? 'failed' : 'accepted'),
+    details: { severity: inspection.severity, checks: inspection.checks, metrics: inspection.metrics, ...details },
+    requested_by: null,
+    created_at: now
+  }, 'operation_id');
+}
+
 export default async () => {
   const now = new Date().toISOString();
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -48,42 +65,58 @@ export default async () => {
     const saves = await supabase('/rest/v1/persistent_world_saves?select=*&order=updated_at.asc');
     const results = [];
     for (const stored of saves) {
-      const backupRows = await supabase(`/rest/v1/persistent_world_backups?world_id=eq.${encodeURIComponent(stored.world_id)}&manager_id=eq.${encodeURIComponent(stored.manager_id)}&select=*&order=created_at.desc&limit=1`);
-      let latestBackup = backupRows[0] || null;
-      let backupCreated = null;
-      if (!latestBackup || ageHours(latestBackup.created_at, now) >= BACKUP_INTERVAL_HOURS) {
-        const record = buildWorldBackupRecord(stored, {
-          trigger: 'scheduled',
-          reason: 'scheduled_retention_backup',
-          createdAt: now
+      try {
+        const backupRows = await supabase(`/rest/v1/persistent_world_backups?world_id=eq.${encodeURIComponent(stored.world_id)}&manager_id=eq.${encodeURIComponent(stored.manager_id)}&select=*&order=created_at.desc&limit=1`);
+        let latestBackup = backupRows[0] || null;
+        let backupCreated = null;
+
+        const preflight = inspectPersistentSave(stored, {
+          now,
+          staleAfterHours: STALE_SAVE_HOURS,
+          latestBackup,
+          backupMaxAgeHours: BACKUP_INTERVAL_HOURS + 1
         });
-        const inserted = await insert('persistent_world_backups', record, 'backup_id');
-        backupCreated = inserted[0] || record;
-        latestBackup = backupCreated;
+
+        if (preflight.severity !== 'critical' && (!latestBackup || ageHours(latestBackup.created_at, now) >= BACKUP_INTERVAL_HOURS)) {
+          const record = buildWorldBackupRecord(stored, {
+            trigger: 'scheduled',
+            reason: 'scheduled_retention_backup',
+            createdAt: now
+          });
+          const inserted = await insert('persistent_world_backups', record, 'backup_id');
+          backupCreated = inserted[0] || record;
+          latestBackup = backupCreated;
+        }
+
+        const inspection = inspectPersistentSave(stored, {
+          now,
+          staleAfterHours: STALE_SAVE_HOURS,
+          latestBackup,
+          backupMaxAgeHours: BACKUP_INTERVAL_HOURS + 1
+        });
+        const alert = buildMonitoringAlert(inspection, { createdAt: now });
+        if (alert) await insert('world_operation_alerts', alert, 'alert_id');
+        await recordMonitor(stored, inspection, latestBackup, now);
+        results.push({
+          world_id: stored.world_id,
+          manager_id: stored.manager_id,
+          severity: inspection.severity,
+          backup_created: Boolean(backupCreated),
+          backup_skipped_invalid: preflight.severity === 'critical',
+          alert_created: Boolean(alert)
+        });
+      } catch (error) {
+        const inspection = {
+          severity: 'critical',
+          checks: {},
+          metrics: {},
+          errors: [error.message]
+        };
+        const alert = buildMonitoringAlert(inspection, { createdAt: now, worldId: stored.world_id, managerId: stored.manager_id, clubId: stored.club_id });
+        if (alert) await insert('world_operation_alerts', alert, 'alert_id').catch(() => null);
+        await recordMonitor(stored, inspection, null, now, 'failed', { error: error.message }).catch(() => null);
+        results.push({ world_id: stored.world_id, manager_id: stored.manager_id, severity: 'critical', backup_created: false, alert_created: Boolean(alert), error: error.message });
       }
-      const inspection = inspectPersistentSave(stored, {
-        now,
-        staleAfterHours: STALE_SAVE_HOURS,
-        latestBackup,
-        backupMaxAgeHours: BACKUP_INTERVAL_HOURS + 1
-      });
-      const alert = buildMonitoringAlert(inspection, { createdAt: now });
-      if (alert) await insert('world_operation_alerts', alert, 'alert_id');
-      await insert('world_operation_events', {
-        operation_id: `monitor:${stored.world_id}:${stored.manager_id}:${Date.parse(now)}`,
-        operation_type: 'monitor',
-        world_id: stored.world_id,
-        manager_id: stored.manager_id,
-        club_id: stored.club_id,
-        source_backup_id: latestBackup?.backup_id || null,
-        previous_checksum: stored.save_checksum,
-        replacement_checksum: stored.save_checksum,
-        status: inspection.severity === 'critical' ? 'failed' : 'accepted',
-        details: { severity: inspection.severity, checks: inspection.checks, metrics: inspection.metrics },
-        requested_by: null,
-        created_at: now
-      }, 'operation_id');
-      results.push({ world_id: stored.world_id, manager_id: stored.manager_id, severity: inspection.severity, backup_created: Boolean(backupCreated), alert_created: Boolean(alert) });
     }
     return new Response(JSON.stringify({ accepted: results.every((row) => row.severity !== 'critical'), checked_at: now, worlds_checked: results.length, results }), {
       status: results.some((row) => row.severity === 'critical') ? 503 : 200,
