@@ -13,6 +13,7 @@ import {
   transferPortalPlayer
 } from '../src/world/portalWorldControl.js';
 import { applyPlayerLifecycleReconciliation, PLAYER_LIFECYCLE_MANIFEST_VERSION } from '../src/world/playerLifecycleReconciliation.js';
+import { PERSISTENT_SAVE_VERSION } from '../src/world/persistentSeasonLoop.js';
 import { assertWorldMatchesAppointment, buildSavePayload } from '../netlify/functions/world-control.mjs';
 
 function world() {
@@ -49,7 +50,7 @@ test('Supabase payload uses the canonical envelope save_version', () => {
 
   assert.equal(payload.save_version, envelope.save_version);
   assert.equal(payload.save_checksum, envelope.checksum);
-  assert.equal(payload.save_version, 'tbg-persistent-save-v1.0');
+  assert.equal(payload.save_version, PERSISTENT_SAVE_VERSION);
   assert.equal(payload.world_id, source.world_id);
   assert.equal(payload.updated_at, '2026-07-22T12:00:00.000Z');
 });
