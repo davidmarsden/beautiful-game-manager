@@ -69,8 +69,12 @@ function prepareWorld({ clubsPerDivision, worldId }) {
   return Object.freeze({ world, renewedPlayerId, boughtPlayerId, sellerClubId: seller });
 }
 
-function lifecycleManifest(world) {
-  const aiClubIds = Object.keys(world.squad_cycle.clubs).filter((id) => id !== world.human_club_id).sort();
+function lifecycleManifest(world, excludedClubIds = []) {
+  const excluded = new Set([world.human_club_id, ...excludedClubIds].filter(Boolean));
+  const aiClubIds = Object.keys(world.squad_cycle.clubs)
+    .filter((id) => !excluded.has(id))
+    .sort();
+  if (aiClubIds.length < 3) throw new Error('Representative lifecycle scenario requires three unaffected AI clubs');
   const retired = world.squad_cycle.clubs[aiClubIds[0]].registered_player_ids[0];
   const inactive = world.squad_cycle.clubs[aiClubIds[1]].registered_player_ids[0];
   const reviewed = world.squad_cycle.clubs[aiClubIds[2]].registered_player_ids[0];
@@ -106,7 +110,7 @@ function runTrajectory({
   const reports = [];
   const saves = [];
   let manifestApplied = Boolean(world.reality_sync?.applied_snapshot_ids?.includes('tm-representative-rc-2026-08-01'));
-  const manifest = lifecycleManifest(world);
+  const manifest = lifecycleManifest(world, [prepared.sellerClubId]);
 
   for (let index = 0; index < totalMatchdays; index += 1) {
     const report = advancePersistentMatchday(world, {
@@ -173,12 +177,6 @@ export function buildRepresentativePersistentWorldReleaseCandidate({
   const primary = runTrajectory({ clubsPerDivision, seasons, splitAfter, worldId });
   const repeated = runTrajectory({ clubsPerDivision, seasons, worldId });
 
-  const firstHalf = runTrajectory({
-    clubsPerDivision,
-    seasons: 1,
-    splitAfter,
-    worldId
-  });
   let resumedWorld = loadPersistentWorld(primary.split_save);
   const remainingMatchdays = totalMatchdays - splitAfter;
   const resumedReports = [];
