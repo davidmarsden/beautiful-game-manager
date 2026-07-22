@@ -35,6 +35,7 @@ jobs:
       - run: npm run persistent-league:report
       - run: npm run persistent-matchday:report
       - run: npm run player-lifecycle:report
+      - run: npm run world-operations:report
       - uses: actions/upload-artifact@v4
         if: always()
         with:
