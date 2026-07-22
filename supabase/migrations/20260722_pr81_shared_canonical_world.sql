@@ -64,6 +64,12 @@ create table if not exists public.world_turn_runs (
   unique (world_id, season_id, matchday)
 );
 
+-- PR #79 backups and alerts now belong to the world, not to an individual manager save.
+alter table if exists public.persistent_world_backups alter column manager_id drop not null;
+alter table if exists public.persistent_world_backups alter column club_id drop not null;
+drop index if exists public.persistent_world_backups_lookup_idx;
+create index if not exists persistent_world_backups_world_idx on public.persistent_world_backups(world_id, created_at desc);
+
 create index if not exists manager_turn_submissions_manager_idx on public.manager_turn_submissions(manager_id, submitted_at desc);
 create index if not exists manager_world_commands_manager_idx on public.manager_world_commands(manager_id, submitted_at desc);
 create index if not exists canonical_world_due_idx on public.canonical_world_saves(turn_status, next_turn_at);
