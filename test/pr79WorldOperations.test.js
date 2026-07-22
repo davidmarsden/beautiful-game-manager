@@ -4,6 +4,7 @@ import { syntheticPlayableLeagueStructure } from '../src/matchEngine/leagueStruc
 import { createPersistentLeagueWorld } from '../src/world/persistentLeagueWorld.js';
 import { advancePersistentMatchday } from '../src/world/persistentMatchdayWorld.js';
 import { savePersistentWorld } from '../src/world/persistentSeasonLoop.js';
+import { conditionalReplacementPath } from '../netlify/functions/world-operations.mjs';
 import {
   buildMonitoringAlert,
   buildResetPlan,
@@ -74,6 +75,18 @@ test('restore requires optimistic checksum match and preserves world identity', 
   assert.equal(plan.replacement.world_id, current.world_id);
   assert.equal(plan.replacement.club_id, current.club_id);
   assert.notEqual(plan.previous_checksum, plan.replacement_checksum);
+});
+
+test('replacement database write is conditional on the previously inspected checksum', () => {
+  const opening = stored(world('world with spaces'));
+  const current = stored(advancePersistentMatchday(world('world with spaces')).world);
+  const backup = buildWorldBackupRecord(opening, { backupId: 'conditional-backup' });
+  const plan = buildRestorePlan(current, backup, { expectedChecksum: current.save_checksum });
+  const path = conditionalReplacementPath(plan);
+  assert.match(path, /world_id=eq\.world%20with%20spaces/);
+  assert.match(path, new RegExp(`manager_id=eq\\.${current.manager_id}`));
+  assert.match(path, new RegExp(`save_checksum=eq\\.${plan.previous_checksum}`));
+  assert.doesNotMatch(path, /on_conflict/);
 });
 
 test('restore rejects backups from a different world', () => {
