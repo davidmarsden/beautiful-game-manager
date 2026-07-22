@@ -39,22 +39,16 @@ export function nextScheduledTurn(after = new Date()) {
   throw new Error('Could not resolve the next scheduled turn');
 }
 
-function commandForDomain(row) {
+export function commandForDomain(row) {
   const payload = row.command_payload || {};
   if (row.command_type === 'register_player') return { type: 'register_player', playerId: payload.playerId || payload.player_id };
   if (row.command_type === 'unregister_player') return { type: 'unregister_player', playerId: payload.playerId || payload.player_id };
   if (row.command_type === 'renew_contract') return { type: 'renew_contract', playerId: payload.playerId || payload.player_id, years: payload.years, wage: payload.wage };
-  if (row.command_type === 'transfer_offer' || row.command_type === 'transfer_response') {
-    return {
-      type: 'transfer_player',
-      playerId: payload.playerId || payload.player_id,
-      direction: payload.direction,
-      otherClubId: payload.otherClubId || payload.other_club_id,
-      fee: payload.fee,
-      contractYears: payload.contractYears || payload.contract_years,
-      wage: payload.wage
-    };
-  }
+
+  // Listings, offers and responses are negotiation records, not authority to move a player.
+  // A transfer may only become a domain command after a separate agreement resolver has
+  // matched the required parties and emitted an explicitly authorised transaction.
+  if (row.command_type === 'transfer_offer' || row.command_type === 'transfer_listing' || row.command_type === 'transfer_response') return null;
   return null;
 }
 
@@ -65,7 +59,7 @@ function applyPendingCommands(worldInput, rows) {
   for (const row of rows) {
     const command = commandForDomain(row);
     if (!command) {
-      results.push({ id: row.id, status: 'rejected', error: `Unsupported scheduled command: ${row.command_type}` });
+      results.push({ id: row.id, status: 'rejected', error: `Command requires negotiation resolution before application: ${row.command_type}` });
       continue;
     }
     try {
