@@ -67,9 +67,24 @@ alter table public.persistent_world_backups enable row level security;
 alter table public.world_operation_events enable row level security;
 alter table public.world_operation_alerts enable row level security;
 
+create policy "admins read all persistent saves" on public.persistent_world_saves
+  for select using (exists (
+    select 1 from public.manager_profiles p where p.user_id = auth.uid() and p.is_admin = true
+  ));
+create policy "admins insert persistent saves" on public.persistent_world_saves
+  for insert with check (exists (
+    select 1 from public.manager_profiles p where p.user_id = auth.uid() and p.is_admin = true
+  ));
+create policy "admins update persistent saves" on public.persistent_world_saves
+  for update using (exists (
+    select 1 from public.manager_profiles p where p.user_id = auth.uid() and p.is_admin = true
+  )) with check (exists (
+    select 1 from public.manager_profiles p where p.user_id = auth.uid() and p.is_admin = true
+  ));
+
 create policy "admins read world backups" on public.persistent_world_backups
   for select using (exists (
-    select 1 from public.manager_profiles p where p.id = manager_id and p.user_id = auth.uid() and p.is_admin = true
+    select 1 from public.manager_profiles p where p.user_id = auth.uid() and p.is_admin = true
   ));
 create policy "admins create world backups" on public.persistent_world_backups
   for insert with check (exists (
