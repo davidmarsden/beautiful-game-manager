@@ -69,25 +69,46 @@ function prepareWorld({ clubsPerDivision, worldId }) {
   return Object.freeze({ world, renewedPlayerId, boughtPlayerId, sellerClubId: seller });
 }
 
-function lifecycleManifest(world, excludedClubIds = []) {
-  const excluded = new Set([world.human_club_id, ...excludedClubIds].filter(Boolean));
-  const aiClubIds = Object.keys(world.squad_cycle.clubs)
-    .filter((id) => !excluded.has(id))
-    .sort();
-  if (aiClubIds.length < 3) throw new Error('Representative lifecycle scenario requires three unaffected AI clubs');
-  const retired = world.squad_cycle.clubs[aiClubIds[0]].registered_player_ids[0];
-  const inactive = world.squad_cycle.clubs[aiClubIds[1]].registered_player_ids[0];
-  const reviewed = world.squad_cycle.clubs[aiClubIds[2]].registered_player_ids[0];
+function lifecycleManifest(world, protectedPlayerIds = []) {
+  const protectedIds = new Set(protectedPlayerIds.filter(Boolean));
+  const candidates = [...world.squad_cycle.clubs[world.human_club_id].registered_player_ids]
+    .filter((id) => !protectedIds.has(id))
+    .slice(-3);
+  if (candidates.length !== 3) throw new Error('Representative lifecycle scenario requires three human-club players');
   return Object.freeze({
     version: PLAYER_LIFECYCLE_MANIFEST_VERSION,
     source_snapshot_id: 'tm-representative-rc-2026-08-01',
-    effective_at: '2026-08-01T00:00:00.000Z',
+    effective_at: '2026-08-15T00:00:00.000Z',
     players: Object.freeze([
-      { tbg_player_id: retired, new_status: REALITY_STATUS.retired, source: 'transfermarkt', evidence_ref: 'rc:retired' },
-      { tbg_player_id: inactive, new_status: REALITY_STATUS.withoutClubTooLong, source: 'transfermarkt', evidence_ref: 'rc:without-club' },
-      { tbg_player_id: reviewed, new_status: REALITY_STATUS.underReview, source: 'transfermarkt', evidence_ref: 'rc:review' }
+      { tbg_player_id: candidates[0], new_status: REALITY_STATUS.retired, source: 'transfermarkt', evidence_ref: 'rc:retired' },
+      { tbg_player_id: candidates[1], new_status: REALITY_STATUS.withoutClubTooLong, source: 'transfermarkt', evidence_ref: 'rc:without-club' },
+      { tbg_player_id: candidates[2], new_status: REALITY_STATUS.underReview, source: 'transfermarkt', evidence_ref: 'rc:review' }
     ])
   });
+}
+
+function repairHumanLifecycleVacancies(worldInput, { protectedPlayerIds = [], excludedDonorClubIds = [] } = {}) {
+  const manifest = lifecycleManifest(worldInput, protectedPlayerIds);
+  const reconciliation = applyPlayerLifecycleReconciliation(worldInput, manifest);
+  if (!reconciliation.accepted) throw new Error('Representative lifecycle reconciliation was rejected');
+  let world = reconciliation.world;
+  const excluded = new Set([world.human_club_id, ...excludedDonorClubIds].filter(Boolean));
+  const donors = Object.keys(world.squad_cycle.clubs).filter((id) => !excluded.has(id)).sort().slice(0, 3);
+  if (donors.length !== 3) throw new Error('Representative lifecycle repair requires three donor clubs');
+  const replacementPlayerIds = [];
+  for (const donorClubId of donors) {
+    const donor = world.squad_cycle.clubs[donorClubId];
+    const playerId = donor.registered_player_ids.at(-1);
+    world = transferPortalPlayer(world, {
+      playerId,
+      direction: 'buy',
+      otherClubId: donorClubId,
+      fee: 1750000,
+      contractYears: 3
+    }).world;
+    replacementPlayerIds.push(playerId);
+  }
+  return Object.freeze({ world, reconciliation, replacementPlayerIds: Object.freeze(replacementPlayerIds) });
 }
 
 function seasonMatchdays(clubsPerDivision) {
@@ -98,19 +119,15 @@ function runTrajectory({
   clubsPerDivision,
   seasons,
   splitAfter = null,
-  resumeEnvelope = null,
   lifecycleAfter = 3,
   worldId = 'representative-persistent-world'
 }) {
-  const prepared = resumeEnvelope
-    ? { world: loadPersistentWorld(resumeEnvelope), renewedPlayerId: null, boughtPlayerId: null, sellerClubId: null }
-    : prepareWorld({ clubsPerDivision, worldId });
+  const prepared = prepareWorld({ clubsPerDivision, worldId });
   let world = prepared.world;
   const totalMatchdays = seasons * seasonMatchdays(clubsPerDivision);
   const reports = [];
   const saves = [];
-  let manifestApplied = Boolean(world.reality_sync?.applied_snapshot_ids?.includes('tm-representative-rc-2026-08-01'));
-  const manifest = lifecycleManifest(world, [prepared.sellerClubId]);
+  let manifestApplied = false;
 
   for (let index = 0; index < totalMatchdays; index += 1) {
     const report = advancePersistentMatchday(world, {
@@ -119,9 +136,11 @@ function runTrajectory({
     reports.push(report);
     world = report.world;
     if (!manifestApplied && reports.length === lifecycleAfter) {
-      const reconciliation = applyPlayerLifecycleReconciliation(world, manifest);
-      if (!reconciliation.accepted) throw new Error('Representative lifecycle reconciliation was rejected');
-      world = reconciliation.world;
+      const repaired = repairHumanLifecycleVacancies(world, {
+        protectedPlayerIds: [prepared.renewedPlayerId, prepared.boughtPlayerId],
+        excludedDonorClubIds: [prepared.sellerClubId]
+      });
+      world = repaired.world;
       manifestApplied = true;
     }
     if (splitAfter && reports.length === splitAfter) saves.push(savePersistentWorld(world));
@@ -149,16 +168,7 @@ function worldFacts(world) {
   const eventIds = world.event_ledger.map((row) => row.event_id);
   const squadEventIds = world.squad_cycle.events.map((row) => row.event_id);
   const checkpointIds = (world.matchday_history || []).flatMap((row) => row.checkpoints.map((checkpoint) => checkpoint.checkpoint_id));
-  return Object.freeze({
-    players,
-    contracts,
-    registrations,
-    movementIds,
-    archiveIds,
-    eventIds,
-    squadEventIds,
-    checkpointIds
-  });
+  return Object.freeze({ players, contracts, registrations, movementIds, archiveIds, eventIds, squadEventIds, checkpointIds });
 }
 
 export function buildRepresentativePersistentWorldReleaseCandidate({
@@ -179,13 +189,10 @@ export function buildRepresentativePersistentWorldReleaseCandidate({
 
   let resumedWorld = loadPersistentWorld(primary.split_save);
   const remainingMatchdays = totalMatchdays - splitAfter;
-  const resumedReports = [];
   for (let index = 0; index < remainingMatchdays; index += 1) {
-    const report = advancePersistentMatchday(resumedWorld, {
+    resumedWorld = advancePersistentMatchday(resumedWorld, {
       humanInstruction: { formation: '4-3-3-wide', tactics: { mentality: 'positive', pressing: 'mid' } }
-    });
-    resumedReports.push(report);
-    resumedWorld = report.world;
+    }).world;
   }
   const resumedSave = savePersistentWorld(resumedWorld);
 
@@ -252,7 +259,7 @@ export function buildRepresentativePersistentWorldReleaseCandidate({
     registrations_reference_players: facts.registrations.every((row) => facts.players.some((player) => player.tbg_player_id === row.player_id)),
     owned_players_have_active_contracts: facts.players.filter((row) => row.club_id).every((row) => facts.contracts.some((contract) => contract.contract_id === row.contract_id && contract.status === 'active')),
     portal_contract_action_persisted: facts.eventIds.some((id) => id.endsWith(':portal_renew_contract')),
-    portal_transfer_action_persisted: facts.eventIds.some((id) => id.endsWith(':portal_transfer_player')),
+    portal_transfer_action_persisted: facts.eventIds.filter((id) => id.endsWith(':portal_transfer_player')).length >= 4,
     final_save_nonempty: bytes(primary.saved_world) > 0
   });
 
