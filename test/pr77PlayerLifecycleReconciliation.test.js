@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { syntheticPlayableLeagueStructure } from '../src/matchEngine/leagueStructureSimulation.js';
 import { createPersistentLeagueWorld } from '../src/world/persistentLeagueWorld.js';
 import { advancePersistentMatchday } from '../src/world/persistentMatchdayWorld.js';
+import { planAiSquad } from '../src/intelligence/aiSquadManagement.js';
 import {
   applyPlayerLifecycleReconciliation,
   PLAYER_LIFECYCLE_MANIFEST_VERSION,
@@ -32,13 +33,7 @@ test('confirmed retirement terminates contract, clears ownership and preserves t
   const source = world();
   const playerId = source.squad_cycle.clubs['d1-club-1'].registered_player_ids[0];
   const contractId = source.squad_cycle.players[playerId].contract_id;
-  const result = applyPlayerLifecycleReconciliation(source, manifest('tm-retirement-1', [{
-    tbg_player_id: playerId,
-    new_status: 'RETIRED',
-    source: 'transfermarkt',
-    evidence_ref: 'tm:retired'
-  }]));
-
+  const result = applyPlayerLifecycleReconciliation(source, manifest('tm-retirement-1', [{ tbg_player_id: playerId, new_status: 'RETIRED', source: 'transfermarkt', evidence_ref: 'tm:retired' }]));
   const player = result.world.squad_cycle.players[playerId];
   assert.equal(result.accepted, true);
   assert.equal(player.lifecycle_status, 'retired');
@@ -54,11 +49,7 @@ test('without-club-too-long inactivates but does not terminate an owned contract
   const source = world();
   const playerId = source.squad_cycle.clubs['d2-club-1'].registered_player_ids[0];
   const contractId = source.squad_cycle.players[playerId].contract_id;
-  const result = applyPlayerLifecycleReconciliation(source, manifest('tm-inactive-1', [{
-    tbg_player_id: playerId,
-    new_status: 'WITHOUT_CLUB_TOO_LONG'
-  }]));
-
+  const result = applyPlayerLifecycleReconciliation(source, manifest('tm-inactive-1', [{ tbg_player_id: playerId, new_status: 'WITHOUT_CLUB_TOO_LONG' }]));
   assert.equal(result.accepted, true);
   assert.equal(result.world.squad_cycle.players[playerId].lifecycle_status, 'inactive');
   assert.equal(result.world.squad_cycle.players[playerId].club_id, 'd2-club-1');
@@ -70,16 +61,8 @@ test('a retired player who changes their mind returns as a free agent without re
   const source = world();
   const playerId = source.squad_cycle.clubs['d3-club-1'].registered_player_ids[0];
   const contractId = source.squad_cycle.players[playerId].contract_id;
-  const retired = applyPlayerLifecycleReconciliation(source, manifest('tm-retirement-2', [{
-    tbg_player_id: playerId,
-    new_status: 'RETIRED'
-  }]));
-  const returned = applyPlayerLifecycleReconciliation(retired.world, manifest('tm-return-1', [{
-    tbg_player_id: playerId,
-    new_status: 'ACTIVE',
-    evidence_ref: 'tm:return-from-retirement'
-  }], '2026-09-01T12:00:00.000Z'));
-
+  const retired = applyPlayerLifecycleReconciliation(source, manifest('tm-retirement-2', [{ tbg_player_id: playerId, new_status: 'RETIRED' }]));
+  const returned = applyPlayerLifecycleReconciliation(retired.world, manifest('tm-return-1', [{ tbg_player_id: playerId, new_status: 'ACTIVE', evidence_ref: 'tm:return-from-retirement' }], '2026-09-01T12:00:00.000Z'));
   const player = returned.world.squad_cycle.players[playerId];
   assert.equal(returned.accepted, true);
   assert.equal(player.lifecycle_status, 'active');
@@ -94,15 +77,8 @@ test('an inactive owned player can be reactivated without losing the existing co
   const source = world();
   const playerId = source.squad_cycle.clubs['d4-club-1'].registered_player_ids[0];
   const contractId = source.squad_cycle.players[playerId].contract_id;
-  const inactive = applyPlayerLifecycleReconciliation(source, manifest('tm-inactive-2', [{
-    tbg_player_id: playerId,
-    new_status: 'UNDER_REVIEW'
-  }]));
-  const active = applyPlayerLifecycleReconciliation(inactive.world, manifest('tm-cleared-1', [{
-    tbg_player_id: playerId,
-    new_status: 'ACTIVE'
-  }], '2026-08-15T12:00:00.000Z'));
-
+  const inactive = applyPlayerLifecycleReconciliation(source, manifest('tm-inactive-2', [{ tbg_player_id: playerId, new_status: 'UNDER_REVIEW' }]));
+  const active = applyPlayerLifecycleReconciliation(inactive.world, manifest('tm-cleared-1', [{ tbg_player_id: playerId, new_status: 'ACTIVE' }], '2026-08-15T12:00:00.000Z'));
   assert.equal(active.accepted, true);
   assert.equal(active.world.squad_cycle.players[playerId].club_id, 'd4-club-1');
   assert.equal(active.world.squad_cycle.contracts[contractId].status, 'active');
@@ -116,7 +92,6 @@ test('the same source snapshot is idempotent', () => {
   const update = manifest('tm-idempotent-1', [{ tbg_player_id: playerId, new_status: 'RETIRED' }]);
   const first = applyPlayerLifecycleReconciliation(source, update);
   const second = applyPlayerLifecycleReconciliation(first.world, update);
-
   assert.equal(first.applied, true);
   assert.equal(second.applied, false);
   assert.equal(second.idempotent, true);
@@ -127,22 +102,31 @@ test('the same source snapshot is idempotent', () => {
 test('reconciliation applies safely between persisted matchdays', () => {
   const afterMatchday = advancePersistentMatchday(world()).world;
   const playerId = afterMatchday.squad_cycle.clubs['d2-club-2'].registered_player_ids[0];
-  const result = applyPlayerLifecycleReconciliation(afterMatchday, manifest('tm-between-md', [{
-    tbg_player_id: playerId,
-    new_status: 'RETIRED'
-  }], '2026-08-09T00:00:00.000Z'));
-
+  const result = applyPlayerLifecycleReconciliation(afterMatchday, manifest('tm-between-md', [{ tbg_player_id: playerId, new_status: 'RETIRED' }], '2026-08-09T00:00:00.000Z'));
   assert.equal(result.accepted, true);
   assert.equal(result.world.phase, 'season');
   assert.equal(result.world.matchday_cycle.current_matchday, 2);
   assert.equal(validatePlayerLifecycleWorld(result.world).valid, true);
 });
 
+test('AI squad planning never re-registers inactive owned players', () => {
+  const source = world();
+  const playerId = source.squad_cycle.clubs['d2-club-1'].registered_player_ids[0];
+  const inactive = applyPlayerLifecycleReconciliation(source, manifest('tm-ai-inactive', [{ tbg_player_id: playerId, new_status: 'UNDER_REVIEW' }])).world;
+  const plan = planAiSquad(inactive.squad_cycle, { clubId: 'd2-club-1', at: inactive.squad_cycle.calendar.transfer_windows[0].opens_at });
+  assert.equal(plan.actions.some((row) => row.player_id === playerId), false);
+});
+
+test('AI squad planning never signs retired players from the free-agent pool', () => {
+  const source = world();
+  const playerId = source.squad_cycle.clubs['d3-club-1'].registered_player_ids[0];
+  const retired = applyPlayerLifecycleReconciliation(source, manifest('tm-ai-retired', [{ tbg_player_id: playerId, new_status: 'RETIRED' }])).world;
+  const plan = planAiSquad(retired.squad_cycle, { clubId: 'd3-club-2', at: retired.squad_cycle.calendar.transfer_windows[0].opens_at, hardMinimum: 30, preferredMinimum: 30 });
+  assert.equal(plan.actions.some((row) => row.player_id === playerId), false);
+});
+
 test('rejects unknown players and duplicate manifest identities', () => {
-  assert.throws(() => applyPlayerLifecycleReconciliation(world(), manifest('tm-unknown', [{
-    tbg_player_id: 'not-in-world',
-    new_status: 'RETIRED'
-  }])), /unknown player/);
+  assert.throws(() => applyPlayerLifecycleReconciliation(world(), manifest('tm-unknown', [{ tbg_player_id: 'not-in-world', new_status: 'RETIRED' }])), /unknown player/);
   const playerId = world().squad_cycle.clubs['d1-club-1'].registered_player_ids[0];
   assert.throws(() => applyPlayerLifecycleReconciliation(world(), manifest('tm-duplicate', [
     { tbg_player_id: playerId, new_status: 'ACTIVE' },
