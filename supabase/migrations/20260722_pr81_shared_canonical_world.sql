@@ -85,20 +85,58 @@ create policy "Authenticated managers can read canonical worlds"
 create policy "Managers can read their turn submissions"
   on public.manager_turn_submissions for select to authenticated
   using (manager_id in (select id from public.manager_profiles where user_id = auth.uid()));
-create policy "Managers can create their turn submissions"
+create policy "Managers can create their appointed turn submissions"
   on public.manager_turn_submissions for insert to authenticated
-  with check (manager_id in (select id from public.manager_profiles where user_id = auth.uid()));
-create policy "Managers can update their unlocked turn submissions"
+  with check (
+    manager_id in (select id from public.manager_profiles where user_id = auth.uid())
+    and exists (
+      select 1 from public.manager_appointments a
+      where a.manager_id = manager_turn_submissions.manager_id
+        and a.world_id = manager_turn_submissions.world_id
+        and a.club_id = manager_turn_submissions.club_id
+        and a.status = 'active'
+    )
+  );
+create policy "Managers can update their appointed unlocked turn submissions"
   on public.manager_turn_submissions for update to authenticated
-  using (manager_id in (select id from public.manager_profiles where user_id = auth.uid()) and status in ('draft','submitted'))
-  with check (manager_id in (select id from public.manager_profiles where user_id = auth.uid()) and status in ('draft','submitted'));
+  using (
+    manager_id in (select id from public.manager_profiles where user_id = auth.uid())
+    and status in ('draft','submitted')
+    and exists (
+      select 1 from public.manager_appointments a
+      where a.manager_id = manager_turn_submissions.manager_id
+        and a.world_id = manager_turn_submissions.world_id
+        and a.club_id = manager_turn_submissions.club_id
+        and a.status = 'active'
+    )
+  )
+  with check (
+    manager_id in (select id from public.manager_profiles where user_id = auth.uid())
+    and status in ('draft','submitted')
+    and exists (
+      select 1 from public.manager_appointments a
+      where a.manager_id = manager_turn_submissions.manager_id
+        and a.world_id = manager_turn_submissions.world_id
+        and a.club_id = manager_turn_submissions.club_id
+        and a.status = 'active'
+    )
+  );
 
 create policy "Managers can read their world commands"
   on public.manager_world_commands for select to authenticated
   using (manager_id in (select id from public.manager_profiles where user_id = auth.uid()));
-create policy "Managers can submit world commands"
+create policy "Managers can submit appointed world commands"
   on public.manager_world_commands for insert to authenticated
-  with check (manager_id in (select id from public.manager_profiles where user_id = auth.uid()));
+  with check (
+    manager_id in (select id from public.manager_profiles where user_id = auth.uid())
+    and exists (
+      select 1 from public.manager_appointments a
+      where a.manager_id = manager_world_commands.manager_id
+        and a.world_id = manager_world_commands.world_id
+        and a.club_id = manager_world_commands.club_id
+        and a.status = 'active'
+    )
+  );
 
 create policy "Authenticated managers can read turn runs"
   on public.world_turn_runs for select to authenticated using (true);
