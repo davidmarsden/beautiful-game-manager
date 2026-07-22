@@ -56,22 +56,39 @@ async function readSave(token, managerId, worldId) {
   return rows[0] || null;
 }
 
-async function writeSave(token, identityRow, result) {
+export function assertWorldMatchesAppointment(world, appointment, { label = 'World' } = {}) {
+  if (world.world_id !== appointment.world_id) {
+    throw new Error(`${label} does not match the active world appointment`);
+  }
+  if (world.human_club_id !== appointment.club_id) {
+    throw new Error(`${label} does not match the active club appointment`);
+  }
+  return true;
+}
+
+export function buildSavePayload(identityRow, result, { updatedAt = new Date().toISOString() } = {}) {
   const summary = result.summary || portalWorldSummary(result.world);
   const envelope = JSON.parse(result.saved_world);
-  const payload = {
+  if (!envelope.save_version) throw new Error('Canonical save envelope is missing save_version');
+  if (!envelope.checksum) throw new Error('Canonical save envelope is missing checksum');
+  assertWorldMatchesAppointment(result.world, identityRow.appointment, { label: 'Saved world' });
+  return {
     world_id: identityRow.appointment.world_id,
     manager_id: identityRow.manager.id,
     club_id: identityRow.appointment.club_id,
-    save_version: envelope.version,
+    save_version: envelope.save_version,
     save_checksum: envelope.checksum,
     save_envelope: envelope,
     season_id: summary.season_id,
     season_number: summary.season_number,
     phase: summary.phase,
     matchday: summary.current_matchday,
-    updated_at: new Date().toISOString()
+    updated_at: updatedAt
   };
+}
+
+async function writeSave(token, identityRow, result) {
+  const payload = buildSavePayload(identityRow, result);
   const rows = await supabase('/rest/v1/persistent_world_saves?on_conflict=world_id,manager_id', token, {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -91,7 +108,11 @@ export default async (request) => {
     if (request.method === 'GET') {
       if (!stored) return json({ configured: true, has_save: false, world_id: current.appointment.world_id, club_id: current.appointment.club_id });
       const loaded = loadPortalWorld(JSON.stringify(stored.save_envelope));
-      if (loaded.world.human_club_id !== current.appointment.club_id) return json({ error: 'Stored world does not match the active club appointment' }, 409);
+      try {
+        assertWorldMatchesAppointment(loaded.world, current.appointment, { label: 'Stored world' });
+      } catch (error) {
+        return json({ error: error.message }, 409);
+      }
       return json({ configured: true, has_save: true, summary: loaded.summary, save: { updated_at: stored.updated_at, checksum: stored.save_checksum } });
     }
 
@@ -101,11 +122,19 @@ export default async (request) => {
     if (!stored) {
       if (body.type !== 'import_save' || !body.saved_world) return json({ error: 'No persistent save exists. Import a valid save first.' }, 409);
       const imported = loadPersistentWorld(typeof body.saved_world === 'string' ? body.saved_world : JSON.stringify(body.saved_world));
-      if (imported.human_club_id !== current.appointment.club_id) return json({ error: 'Imported save does not match the active club appointment' }, 409);
+      try {
+        assertWorldMatchesAppointment(imported, current.appointment, { label: 'Imported save' });
+      } catch (error) {
+        return json({ error: error.message }, 409);
+      }
       result = savePortalWorld(imported);
     } else {
       const world = loadPersistentWorld(JSON.stringify(stored.save_envelope));
-      if (world.human_club_id !== current.appointment.club_id) return json({ error: 'Stored world does not match the active club appointment' }, 409);
+      try {
+        assertWorldMatchesAppointment(world, current.appointment, { label: 'Stored world' });
+      } catch (error) {
+        return json({ error: error.message }, 409);
+      }
       if (body.type === 'export_save') {
         return json({ accepted: true, command: 'export_save', summary: portalWorldSummary(world), saved_world: JSON.stringify(stored.save_envelope) });
       }
@@ -114,7 +143,7 @@ export default async (request) => {
     const saved = await writeSave(token, current, result);
     return json({ accepted: result.accepted, command: result.command, result: result.result, summary: result.summary, save: { updated_at: saved.updated_at, checksum: saved.save_checksum } });
   } catch (error) {
-    const status = /Session|Authentication/.test(error.message) ? 401 : /appointment|match|checkpoint|window|registration|contract|transfer|player/i.test(error.message) ? 409 : 503;
+    const status = /Session|Authentication/.test(error.message) ? 401 : /appointment|match|checkpoint|window|registration|contract|transfer|player|world/i.test(error.message) ? 409 : 503;
     return json({ error: error.message }, status);
   }
 };
