@@ -4,7 +4,7 @@ import { activeTransferWindow, registerPlayer, renewContract } from '../squadCyc
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
-export const AI_SQUAD_MANAGEMENT_VERSION = 'tbg-ai-squad-management-v1.1';
+export const AI_SQUAD_MANAGEMENT_VERSION = 'tbg-ai-squad-management-v1.2';
 
 const GROUP_ORDER = Object.freeze(['goalkeeper', 'defender', 'midfielder', 'attacker']);
 
@@ -39,6 +39,14 @@ function rating(player) {
   return number(player?.underlying_ability_rating ?? player?.rating);
 }
 
+function activeInCirculation(player) {
+  return player?.active_circulation !== false && !['inactive', 'retired'].includes(text(player?.lifecycle_status).toLowerCase());
+}
+
+function assertActiveInCirculation(player, action) {
+  if (!activeInCirculation(player)) throw new Error(`${playerId(player)} is excluded from active circulation and cannot be ${action}`);
+}
+
 function positionGroupFromReport(report, id) {
   return report.players.find((row) => row.player_id === id)?.position_group || 'attacker';
 }
@@ -48,7 +56,7 @@ function sortedPlayers(players) {
 }
 
 function freeAgents(state) {
-  return sortedPlayers(Object.values(state.players).filter((player) => !player.club_id && number(player.age, 24) >= 19));
+  return sortedPlayers(Object.values(state.players).filter((player) => !player.club_id && number(player.age, 24) >= 19 && activeInCirculation(player)));
 }
 
 function addFreeAgentToClub(state, { clubId, playerId: idValue, at, contractYears = 3, wage } = {}) {
@@ -57,6 +65,7 @@ function addFreeAgentToClub(state, { clubId, playerId: idValue, at, contractYear
   const player = state.players[text(idValue)];
   if (!club) throw new Error(`Unknown club: ${clubId}`);
   if (!player) throw new Error(`Unknown player: ${idValue}`);
+  assertActiveInCirculation(player, 'signed');
   if (player.club_id) throw new Error(`${playerId(player)} is not a free agent`);
   if (!activeTransferWindow(state, atIso)) throw new Error(`Transfer window is closed at ${atIso}`);
   if (club.registered_player_ids.length >= state.registration_limit) {
@@ -108,10 +117,11 @@ export function planAiSquad(state, {
   const analysis = analyseSquad(state, { clubId, at: atIso, hardMinimum, preferredMinimum });
   const club = state.clubs[text(clubId)];
   if (!club) throw new Error(`Unknown club: ${clubId}`);
+  const eligiblePlayerIds = new Set(Object.values(state.players).filter(activeInCirculation).map(playerId));
 
   const actions = [];
   const expiring = analysis.players
-    .filter((row) => row.contract_horizon === 'expiring_this_season' && row.registered && row.squad_role !== 'surplus')
+    .filter((row) => eligiblePlayerIds.has(row.player_id) && row.contract_horizon === 'expiring_this_season' && row.registered && row.squad_role !== 'surplus')
     .sort((a, b) => b.rating - a.rating || a.player_id.localeCompare(b.player_id));
 
   for (const row of expiring) {
@@ -121,7 +131,7 @@ export function planAiSquad(state, {
   }
 
   const unregisteredOwned = analysis.players
-    .filter((row) => !row.registered && row.age >= 19)
+    .filter((row) => eligiblePlayerIds.has(row.player_id) && !row.registered && row.age >= 19)
     .sort((a, b) => b.rating - a.rating || a.player_id.localeCompare(b.player_id));
 
   let projectedRegistered = analysis.summary.registered_seniors;
@@ -151,7 +161,7 @@ export function planAiSquad(state, {
   }
 
   const prospects = analysis.players
-    .filter((row) => !row.registered && row.age <= 18 && row.rating >= 68)
+    .filter((row) => eligiblePlayerIds.has(row.player_id) && !row.registered && row.age <= 18 && row.rating >= 68)
     .sort((a, b) => b.rating - a.rating || a.player_id.localeCompare(b.player_id));
   if (prospects.length && hasRegistrationCapacity()) {
     actions.push(decision('promote_youth', club.club_id, prospects[0].player_id, 'best_ready_prospect'));
@@ -204,6 +214,8 @@ export function executeAiSquadPlan(state, options = {}) {
   const applied = [];
 
   for (const row of plan.actions) {
+    const player = row.player_id ? state.players[row.player_id] : null;
+    if (player) assertActiveInCirculation(player, row.action === 'sign_free_agent' ? 'signed' : 'used in squad repair');
     if (row.action === 'renew') {
       renewContract(state, {
         clubId: row.club_id,
@@ -214,7 +226,6 @@ export function executeAiSquadPlan(state, options = {}) {
     } else if (row.action === 'register') {
       registerPlayer(state, { clubId: row.club_id, playerId: row.player_id, at: plan.at });
     } else if (row.action === 'promote_youth') {
-      const player = state.players[row.player_id];
       player.promoted_to_senior_at = plan.at;
       event(state, 'youth_promoted', plan.at, { club_id: row.club_id, player_id: row.player_id });
       registerPlayer(state, { clubId: row.club_id, playerId: row.player_id, at: plan.at });
