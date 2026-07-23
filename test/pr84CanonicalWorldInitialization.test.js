@@ -24,8 +24,6 @@ function publication({ clubsPerDivision = 10 } = {}) {
   return { world_id: 'published-world', clubs, players, player_ownership };
 }
 
-const divisionClubCount = (world, level) => world.competition.divisions.find((division) => division.level === level)?.club_ids?.length;
-
 test('builds a valid five-division canonical save from published data', () => {
   const source = publication();
   const result = buildCanonicalWorldFromPublication(source, {
@@ -54,7 +52,7 @@ test('discovers Division Five from textual and nested publication fields', () =>
     humanClubId: source.clubs[0].tbg_club_id,
     movementCount: 4
   });
-  assert.equal(divisionClubCount(result.world, 5), 10);
+  assert.equal(result.world.competition.divisions.find((division) => division.level === 5).club_ids.length, 10);
 });
 
 test('discovers clubs from a publication-level divisions membership ledger', () => {
@@ -67,7 +65,7 @@ test('discovers clubs from a publication-level divisions membership ledger', () 
     humanClubId: source.clubs[0].tbg_club_id,
     movementCount: 4
   });
-  assert.equal(divisionClubCount(result.world, 5), 10);
+  assert.equal(result.world.competition.divisions.find((division) => division.level === 5).club_ids.length, 10);
 });
 
 test('scans later division ledgers when the first candidate is empty', () => {
@@ -83,7 +81,7 @@ test('scans later division ledgers when the first candidate is empty', () => {
     humanClubId: source.clubs[0].tbg_club_id,
     movementCount: 4
   });
-  assert.equal(divisionClubCount(result.world, 5), 10);
+  assert.equal(result.world.competition.divisions.find((division) => division.level === 5).club_ids.length, 10);
 });
 
 test('preserves numeric primitive squad player references', () => {
@@ -121,13 +119,13 @@ test('uses authoritative ownership to prevent one player entering two clubs', ()
   assert.equal(result.world.squad_cycle.clubs[second.tbg_club_id].player_ids.includes(borrowed), false);
 });
 
-test('fails safely when a published division cannot field playable clubs', () => {
+test('rejects a non-contiguous published division set', () => {
   const source = publication();
-  source.clubs = source.clubs.filter((club) => club.division_id !== 'division-5');
+  source.clubs = source.clubs.filter((club) => club.division_id !== 'division-4');
   assert.throws(() => buildCanonicalWorldFromPublication(source, {
     worldId: 'tbg-world-1',
     humanClubId: source.clubs[0].tbg_club_id
-  }), /Division 5/);
+  }), /contiguous levels 1 through 5/);
 });
 
 test('rejects a division too small for configured promotion and relegation', () => {
