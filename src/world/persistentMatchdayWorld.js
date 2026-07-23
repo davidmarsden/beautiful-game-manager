@@ -1,4 +1,3 @@
-import { DEFAULT_PLAYABLE_DIVISION_IDS } from '../matchEngine/leagueStructureSimulation.js';
 import { rollOverPlayableLeague } from '../matchEngine/seasonRollover.js';
 import {
   advanceIncrementalMatchday,
@@ -84,10 +83,13 @@ function manageAi(world, at) {
 }
 
 function divisionMembership(divisions) {
-  return DEFAULT_PLAYABLE_DIVISION_IDS.map((divisionId, index) => {
-    const division = divisions.find((row) => row.division_id === divisionId);
-    return { division_id: divisionId, level: index + 1, club_ids: division.clubs.map((club) => club.club_id).sort() };
-  });
+  return [...divisions]
+    .sort((a, b) => a.level - b.level)
+    .map((division, index) => ({
+      division_id: division.division_id,
+      level: index + 1,
+      club_ids: division.clubs.map((club) => club.club_id).sort()
+    }));
 }
 
 function divisionSnapshots(world) {
@@ -107,8 +109,11 @@ export function validatePersistentMatchdayWorld(world) {
   if (!unique(completedIds)) errors.push('Completed matchday history contains duplicate checkpoint IDs');
   if (world?.matchday_cycle) {
     const activeIds = (world.matchday_cycle.checkpoints || []).map((row) => row.checkpoint_id);
-    if (!unique(activeIds)) errors.push('Active matchday cycle contains duplicate checkpoint IDs');
+    if (!unique(activeIds)) errors.push('Completed matchday history contains duplicate checkpoint IDs');
     if (activeIds.some((id) => completedIds.includes(id))) errors.push('Active checkpoint already exists in completed history');
+    const runtimeIds = Object.keys(world.matchday_cycle.runtimes || {}).sort();
+    const divisionIds = (world.competition?.divisions || []).map((division) => division.division_id).sort();
+    if (JSON.stringify(runtimeIds) !== JSON.stringify(divisionIds)) errors.push('Matchday runtimes do not match world divisions');
     const processed = Object.values(world.matchday_cycle.runtimes || {}).map((runtime) => runtime.next_matchday);
     if (processed.some((next) => next !== world.matchday_cycle.current_matchday)) errors.push('Division matchday cursors disagree');
   }
@@ -256,7 +261,8 @@ export function advancePersistentMatchday(worldInput, {
     });
   }
 
-  const kickoff = cycle.runtimes[DEFAULT_PLAYABLE_DIVISION_IDS[0]].fixtures.find((fixture) => fixture.matchday === matchday)?.kickoff_at;
+  const firstDivisionId = world.competition.divisions[0].division_id;
+  const kickoff = cycle.runtimes[firstDivisionId].fixtures.find((fixture) => fixture.matchday === matchday)?.kickoff_at;
   world.clock = kickoff || world.clock;
   cycle.current_matchday += 1;
   const allComplete = Object.values(cycle.runtimes).every((runtime) => runtime.completed);
@@ -281,7 +287,7 @@ export function advancePersistentMatchday(worldInput, {
   const checks = Object.freeze({
     one_checkpoint_added: persistedCheckpoint,
     no_fixture_replay: unique(Object.values(cycle.runtimes).flatMap((runtime) => runtime.state.applied_run_keys)),
-    matchday_processed_in_every_division: resultRows.length === 5 && resultRows.every((row) => row.matchday === matchday),
+    matchday_processed_in_every_division: resultRows.length === world.competition.divisions.length && resultRows.every((row) => row.matchday === matchday),
     save_load_valid: restoredValidation.valid,
     season_state_is_coherent: allComplete ? restored.phase === 'preseason' : restored.phase === 'season' && restored.matchday_cycle.current_matchday === matchday + 1,
     final_squads_viable_when_complete: !allComplete || allViable(restored, restored.clock),

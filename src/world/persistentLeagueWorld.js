@@ -1,4 +1,4 @@
-import { syntheticPlayableLeagueStructure, DEFAULT_PLAYABLE_DIVISION_IDS } from '../matchEngine/leagueStructureSimulation.js';
+import { syntheticPlayableLeagueStructure } from '../matchEngine/leagueStructureSimulation.js';
 import { simulateStatefulSeason } from '../matchEngine/seasonSimulation.js';
 import { playHumanManagerSeason } from '../matchEngine/humanManagerSeason.js';
 import { rollOverPlayableLeague } from '../matchEngine/seasonRollover.js';
@@ -19,9 +19,10 @@ import { executeAiSquadPlan } from '../intelligence/aiSquadManagement.js';
 import { analyseSquad } from '../intelligence/squadIntelligence.js';
 import { appendSeasonArchive, createSeasonArchive } from '../history/seasonArchive.js';
 
-export const PERSISTENT_LEAGUE_VERSION = 'tbg-persistent-five-division-world-v1.0';
+export const PERSISTENT_LEAGUE_VERSION = 'tbg-persistent-published-division-world-v1.1';
 
 const unique = (values) => new Set(values).size === values.length;
+const divisionId = (level) => `d${level}`;
 
 function addYears(value, years) {
   const date = new Date(value);
@@ -29,16 +30,31 @@ function addYears(value, years) {
   return date.toISOString();
 }
 
+export function canonicalDivisionIds(divisionsOrCount) {
+  const count = Array.isArray(divisionsOrCount) ? divisionsOrCount.length : Number(divisionsOrCount);
+  if (!Number.isInteger(count) || count < 2) throw new Error('Persistent league requires at least two divisions');
+  return Object.freeze(Array.from({ length: count }, (_, index) => divisionId(index + 1)));
+}
+
+function orderedDivisions(divisions) {
+  if (!Array.isArray(divisions) || divisions.length < 2) throw new Error('Persistent league requires at least two divisions');
+  const ordered = [...divisions].sort((a, b) => a.level - b.level);
+  const ids = canonicalDivisionIds(ordered);
+  ordered.forEach((division, index) => {
+    if (division.level !== index + 1) throw new Error(`Persistent league divisions must be contiguous from level 1; found level ${division.level}`);
+    if (division.division_id !== ids[index] && division.division_id !== `division-${index + 1}`) {
+      throw new Error(`Invalid division identity ${division.division_id} for level ${index + 1}`);
+    }
+  });
+  return ordered;
+}
+
 function divisionMembership(divisions) {
-  return Object.freeze(DEFAULT_PLAYABLE_DIVISION_IDS.map((divisionId, index) => {
-    const division = divisions.find((row) => row.division_id === divisionId);
-    if (!division || division.level !== index + 1) throw new Error('Persistent league requires canonical d1=1 through d5=5');
-    return Object.freeze({
-      division_id: divisionId,
-      level: index + 1,
-      club_ids: Object.freeze(division.clubs.map((club) => club.club_id).sort())
-    });
-  }));
+  return Object.freeze(orderedDivisions(divisions).map((division, index) => Object.freeze({
+    division_id: divisionId(index + 1),
+    level: index + 1,
+    club_ids: Object.freeze(division.clubs.map((club) => club.club_id).sort())
+  })));
 }
 
 function registeredClub(world, clubId) {
@@ -62,12 +78,13 @@ function validateCompetition(world) {
   const errors = [];
   const divisions = world?.competition?.divisions || [];
   if (world?.competition?.version !== PERSISTENT_LEAGUE_VERSION) errors.push('Unsupported persistent league version');
-  if (divisions.length !== 5) errors.push('Persistent league requires five divisions');
+  if (divisions.length < 2) errors.push('Persistent league requires at least two divisions');
   const ids = divisions.map((row) => row.division_id);
-  if (!unique(ids) || !DEFAULT_PLAYABLE_DIVISION_IDS.every((id) => ids.includes(id))) errors.push('Canonical division set is incomplete');
-  for (const [index, id] of DEFAULT_PLAYABLE_DIVISION_IDS.entries()) {
-    const division = divisions.find((row) => row.division_id === id);
-    if (division?.level !== index + 1) errors.push(`Invalid canonical level for ${id}`);
+  if (!unique(ids)) errors.push('Division IDs must be unique');
+  for (const [index, division] of divisions.entries()) {
+    if (division.division_id !== divisionId(index + 1) || division.level !== index + 1) {
+      errors.push(`Invalid contiguous division at position ${index + 1}`);
+    }
   }
   const clubIds = divisions.flatMap((row) => row.club_ids || []);
   if (!unique(clubIds)) errors.push('A club belongs to more than one division');
@@ -85,19 +102,20 @@ export function validatePersistentLeagueWorld(world) {
 }
 
 export function createPersistentLeagueWorld({
-  worldId = 'tbg-five-division-world',
+  worldId = 'tbg-published-division-world',
   divisions = syntheticPlayableLeagueStructure({ clubsPerDivision: 4 }),
   humanClubId = divisions[0]?.clubs[0]?.club_id,
   seasonStart,
   seasonEnd,
   movementCount = 1
 } = {}) {
-  const clubs = divisions.flatMap((division) => division.clubs);
+  const normalized = orderedDivisions(divisions).map((division, index) => ({ ...division, division_id: divisionId(index + 1), level: index + 1 }));
+  const clubs = normalized.flatMap((division) => division.clubs);
   const world = createPersistentWorld({ worldId, clubs, humanClubId, seasonStart, seasonEnd });
   world.competition = {
     version: PERSISTENT_LEAGUE_VERSION,
     movement_count_per_boundary: movementCount,
-    divisions: divisionMembership(divisions),
+    divisions: divisionMembership(normalized),
     movement_history: []
   };
   const validation = validatePersistentLeagueWorld(world);
@@ -156,9 +174,9 @@ function simulateDivisions(world, options) {
       }) }));
     }
   }
-  const accepted = reports.every((row) => row.accepted) && humanRun?.accepted;
+  const accepted = reports.every((row) => row.accepted) && Boolean(humanRun?.accepted);
   return Object.freeze({
-    version: 'tbg-persistent-five-division-season-v1.0',
+    version: 'tbg-persistent-published-division-season-v1.1',
     season_id: currentSeasonId,
     divisions: Object.freeze(reports),
     human_run: humanRun,
@@ -207,7 +225,7 @@ export function advancePersistentLeagueSeason(worldInput, {
 
   world.phase = 'season';
   const season = simulateDivisions(world, { defaultInstruction, instructionsByMatchday, daysBetweenRounds });
-  if (!season.accepted) throw new Error(`Five-division season rejected: ${completedSeasonId}`);
+  if (!season.accepted) throw new Error(`Persistent league season rejected: ${completedSeasonId}`);
   const archives = archiveDivisions(world, season);
 
   const rollover = rollOverPlayableLeague({
@@ -216,7 +234,7 @@ export function advancePersistentLeagueSeason(worldInput, {
     movementCount: world.competition.movement_count_per_boundary,
     nextSeasonId: `${world.world_id}:season-${world.season_number + 1}`
   });
-  if (!rollover.accepted) throw new Error('Five-division rollover rejected');
+  if (!rollover.accepted) throw new Error('Persistent league rollover rejected');
   const movementRows = rollover.movements.map((row, index) => Object.freeze({
     movement_id: `${completedSeasonId}:movement-${String(index + 1).padStart(2, '0')}`,
     season_id: completedSeasonId,
@@ -244,11 +262,13 @@ export function advancePersistentLeagueSeason(worldInput, {
   const restored = loadPersistentWorld(saved);
   const finalValidation = validatePersistentLeagueWorld(restored);
   const clubIds = restored.competition.divisions.flatMap((row) => row.club_ids);
+  const divisionCount = restored.competition.divisions.length;
+  const expectedMovements = world.competition.movement_count_per_boundary * 2 * (divisionCount - 1);
   const checks = Object.freeze({
     season_completed: season.accepted,
-    five_division_archives_created: archives.length === 5,
-    movement_count_correct: movementRows.length === world.competition.movement_count_per_boundary * 8,
-    canonical_divisions_preserved: DEFAULT_PLAYABLE_DIVISION_IDS.every((id, index) => restored.competition.divisions[index].division_id === id && restored.competition.divisions[index].level === index + 1),
+    division_archives_created: archives.length === divisionCount,
+    movement_count_correct: movementRows.length === expectedMovements,
+    contiguous_divisions_preserved: restored.competition.divisions.every((division, index) => division.division_id === divisionId(index + 1) && division.level === index + 1),
     every_club_preserved_once: unique(clubIds) && clubIds.length === Object.keys(restored.squad_cycle.clubs).length,
     movement_history_persisted: restored.competition.movement_history.filter((row) => row.season_id === completedSeasonId).length === movementRows.length,
     human_decisions_complete: season.human_run.decisions.length === season.human_run.onboarding.required_decisions,
@@ -281,16 +301,18 @@ export function runPersistentLeagueSeasons({ seasons = 2, world, ...options } = 
   const startingArchiveCount = current.history?.archives?.length || 0;
   const startingMovementCount = current.competition?.movement_history?.length || 0;
   const startingSeasonNumber = current.season_number;
+  const divisionCount = current.competition.divisions.length;
   const reports = [];
   for (let index = 0; index < seasons; index += 1) {
     const report = advancePersistentLeagueSeason(current, options);
     reports.push(report);
     current = report.world;
   }
+  const expectedMovementsPerSeason = current.competition.movement_count_per_boundary * 2 * (divisionCount - 1);
   const checks = Object.freeze({
     every_season_accepted: reports.every((row) => row.accepted),
-    archives_match_divisions_and_seasons: current.history.archives.length - startingArchiveCount === seasons * 5,
-    movements_match_boundaries_and_seasons: current.competition.movement_history.length - startingMovementCount === seasons * current.competition.movement_count_per_boundary * 8,
+    archives_match_divisions_and_seasons: current.history.archives.length - startingArchiveCount === seasons * divisionCount,
+    movements_match_boundaries_and_seasons: current.competition.movement_history.length - startingMovementCount === seasons * expectedMovementsPerSeason,
     world_advanced_exactly: current.season_number - startingSeasonNumber === seasons,
     final_world_valid: validatePersistentLeagueWorld(current).valid,
     division_membership_unique: unique(current.competition.divisions.flatMap((row) => row.club_ids)),

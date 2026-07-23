@@ -22,7 +22,8 @@ test('promotion and relegation produce a complete balanced next-season structure
   assert.equal(rollover.divisions.length, 5);
   assert.equal(rollover.movements.length, 8);
   assert.ok(rollover.divisions.every((division) => division.club_count === 4));
-  assert.equal(rollover.checks.canonical_division_levels_preserved, true);
+  assert.equal(rollover.checks.contiguous_division_set_preserved, true);
+  assert.equal(rollover.checks.report_divisions_match_supplied_divisions, true);
 
   const originalIds = divisions.flatMap((division) => division.clubs.map((club) => club.club_id)).sort();
   const nextIds = rollover.divisions.flatMap((division) => division.clubs.map((club) => club.club_id)).sort();
@@ -45,11 +46,11 @@ test('season rollover is deterministic for the same completed season', () => {
   assert.deepEqual(first, second);
 });
 
-test('season rollover refuses incomplete or unaccepted structures', () => {
+test('season rollover refuses mismatched or unaccepted structures', () => {
   const { divisions, report } = completedSeason();
   assert.throws(
     () => rollOverPlayableLeague({ divisions: divisions.slice(0, 4), completedReport: report }),
-    /complete canonical d1-d5/
+    /report divisions do not match supplied divisions/
   );
   assert.throws(
     () => rollOverPlayableLeague({ divisions, completedReport: { ...report, accepted: false } }),
@@ -57,7 +58,7 @@ test('season rollover refuses incomplete or unaccepted structures', () => {
   );
 });
 
-test('season rollover refuses non-canonical division levels', () => {
+test('season rollover refuses non-contiguous division levels', () => {
   const { divisions, report } = completedSeason();
   const invalidLevels = divisions.map((division) => {
     if (division.division_id === 'd2') return { ...division, level: 3 };
@@ -67,6 +68,6 @@ test('season rollover refuses non-canonical division levels', () => {
 
   assert.throws(
     () => rollOverPlayableLeague({ divisions: invalidLevels, completedReport: report }),
-    /canonical division levels: d1=1 through d5=5/
+    /contiguous divisions d1 through dN/
   );
 });
