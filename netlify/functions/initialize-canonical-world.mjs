@@ -91,9 +91,6 @@ export default async (request) => {
       created_at: now,
       updated_at: now
     };
-    const inserted = await requestSupabase('/rest/v1/canonical_world_saves', SUPABASE_SERVICE_ROLE_KEY, {
-      method: 'POST', body: JSON.stringify(stored)
-    });
     const backup = buildWorldBackupRecord(stored, {
       backupId: `${worldId}:initial`,
       trigger: 'manual',
@@ -101,28 +98,32 @@ export default async (request) => {
       createdAt: now,
       createdBy: current.manager.id
     });
-    await requestSupabase('/rest/v1/persistent_world_backups', SUPABASE_SERVICE_ROLE_KEY, {
-      method: 'POST', body: JSON.stringify({ ...backup, manager_id: null, club_id: null })
-    });
-    await requestSupabase('/rest/v1/world_operation_events', SUPABASE_SERVICE_ROLE_KEY, {
+    const event = {
+      operation_id: `initialize:${worldId}:${Date.parse(now)}`,
+      operation_type: 'initialize',
+      world_id: worldId,
+      manager_id: null,
+      club_id: null,
+      source_backup_id: backup.backup_id,
+      previous_checksum: null,
+      replacement_checksum: initialized.envelope.checksum,
+      status: 'accepted',
+      details: { action: 'initialize_canonical_world', summary: initialized.summary },
+      requested_by: current.manager.id,
+      created_at: now
+    };
+    const rpc = await requestSupabase('/rest/v1/rpc/initialize_canonical_world', SUPABASE_SERVICE_ROLE_KEY, {
       method: 'POST',
       body: JSON.stringify({
-        operation_id: `initialize:${worldId}:${Date.parse(now)}`,
-        operation_type: 'initialize',
-        world_id: worldId,
-        manager_id: null,
-        club_id: null,
-        previous_checksum: null,
-        replacement_checksum: initialized.envelope.checksum,
-        status: 'accepted',
-        details: { action: 'initialize_canonical_world', summary: initialized.summary },
-        requested_by: current.manager.id,
-        created_at: now
+        p_save: stored,
+        p_backup: { ...backup, manager_id: null, club_id: null },
+        p_event: event
       })
     });
     return json({
       accepted: true,
-      world: inserted[0] || stored,
+      operation: rpc,
+      world: stored,
       summary: initialized.summary,
       next_turn_at: nextTurnAt,
       backup_id: backup.backup_id
