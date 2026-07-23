@@ -16,31 +16,45 @@ function playerId(player) {
   return text(player?.tbg_player_id || player?.player_id || player?.transfermarkt_id || player?.id);
 }
 
-function projectPlayer(player, index, registrationLimit) {
+function ownershipClubId(ownership) {
+  return text(ownership?.club_id || ownership?.owner_club_id || ownership?.tbg_club_id || ownership?.owned_by_club_id);
+}
+
+function projectPlayer(player, ownership, index, registrationLimit) {
   const id = playerId(player);
   if (!id) throw new Error('Publication player is missing a stable ID');
   return {
     ...player,
+    ...(ownership?.contract ? { contract: ownership.contract } : {}),
     tbg_player_id: id,
     display_name: text(player.display_name || player.canonical_name || player.name || id),
-    age: number(player.age ?? player.season_start_age, 24),
+    age: number(player.age ?? ownership?.season_start_age ?? player.season_start_age, 24),
     underlying_ability_rating: number(player.underlying_ability_rating ?? player.rating ?? player.overall_rating, 75),
     registered: index < registrationLimit
   };
 }
 
-function projectClub(sourceClub, playersById, registrationLimit) {
+function projectClub(sourceClub, playersById, ownershipById, registrationLimit) {
   const clubId = text(sourceClub.tbg_club_id || sourceClub.club_id || sourceClub.id);
   if (!clubId) throw new Error('Publication club is missing a stable ID');
   const squadIds = sourceClub.squad?.player_ids || sourceClub.player_ids || [];
-  const players = squadIds.map((id) => playersById.get(text(id))).filter(Boolean);
-  if (players.length < 18) throw new Error(`${clubId} has only ${players.length} published squad players`);
+  const players = squadIds
+    .map((id) => {
+      const stableId = text(id);
+      const player = playersById.get(stableId);
+      const ownership = ownershipById.get(stableId);
+      const ownerClubId = ownershipClubId(ownership);
+      if (!player || (ownerClubId && ownerClubId !== clubId)) return null;
+      return { player, ownership };
+    })
+    .filter(Boolean);
+  if (players.length < 18) throw new Error(`${clubId} has only ${players.length} authoritatively owned published squad players`);
   return {
     club_id: clubId,
     club_name: text(sourceClub.canonical_name || sourceClub.club_name || sourceClub.name || clubId),
     formation: text(sourceClub.formation) || '4-3-3-wide',
     tactics: { style: 'balanced', route_to_goal: 'balanced', pressing: 'mid', tempo: 'normal', mentality: 'balanced', ...(sourceClub.tactics || {}) },
-    players: players.map((player, index) => projectPlayer(player, index, registrationLimit))
+    players: players.map(({ player, ownership }, index) => projectPlayer(player, ownership, index, registrationLimit))
   };
 }
 
@@ -58,10 +72,11 @@ export function buildCanonicalWorldFromPublication(publicationWorld, {
   const resolvedWorldId = text(worldId || publicationWorld.world_id);
   if (!resolvedWorldId) throw new Error('Canonical world ID is required');
   const playersById = new Map(publicationWorld.players.map((player) => [playerId(player), player]).filter(([id]) => id));
+  const ownershipById = new Map((publicationWorld.player_ownership || []).map((row) => [playerId(row), row]).filter(([id]) => id));
   const divisions = [1, 2, 3, 4, 5].map((level) => {
     const clubs = publicationWorld.clubs
       .filter((club) => divisionLevel(club.division_id || club.division || club.level) === level)
-      .map((club) => projectClub(club, playersById, registrationLimit));
+      .map((club) => projectClub(club, playersById, ownershipById, registrationLimit));
     if (clubs.length < 4) throw new Error(`Division ${level} has only ${clubs.length} usable clubs`);
     return { division_id: `d${level}`, level, club_count: clubs.length, clubs };
   });
