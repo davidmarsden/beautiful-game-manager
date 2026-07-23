@@ -38,7 +38,7 @@ async function identity(token) {
   });
   if (!userResponse.ok) throw new Error('Session is invalid or expired');
   const user = await userResponse.json();
-  const profiles = await supabase(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id,user_id,display_name&limit=1`, token);
+  const profiles = await supabase(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id,user_id,display_name,is_admin&limit=1`, token);
   const manager = profiles[0];
   if (!manager) throw new Error('Manager profile has not been created yet');
   const appointments = await supabase(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=world_id,club_id&limit=1`, token);
@@ -75,7 +75,14 @@ export default async (request) => {
     if (!token) return json({ error: 'Authentication required' }, 401);
     const current = await identity(token);
     const stored = await readCanonicalWorld(token, current.appointment.world_id);
-    if (!stored) return json({ configured: true, has_world: false, world_id: current.appointment.world_id, club_id: current.appointment.club_id }, 409);
+    if (!stored) return json({
+      configured: true,
+      has_world: false,
+      world_id: current.appointment.world_id,
+      club_id: current.appointment.club_id,
+      is_admin: Boolean(current.manager.is_admin),
+      message: 'The shared-world database is ready, but this world has not yet been initialized.'
+    });
     const world = loadPersistentWorld(JSON.stringify(stored.save_envelope));
     assertAppointment(world, current.appointment);
     const turn = currentTurnIdentity(world);
