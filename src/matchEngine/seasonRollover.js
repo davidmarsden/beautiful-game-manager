@@ -23,6 +23,15 @@ function standingsByDivision(completedReport) {
   return new Map((completedReport?.divisions || []).map((division) => [division.division_id, division.standings]));
 }
 
+function reportMatchesDivisions(completedReport, ordered) {
+  if (!Array.isArray(completedReport?.divisions)) return false;
+  const suppliedIds = ordered.map((division) => division.division_id).sort();
+  const reportIds = completedReport.divisions.map((division) => division.division_id).sort();
+  return unique(reportIds)
+    && suppliedIds.length === reportIds.length
+    && JSON.stringify(suppliedIds) === JSON.stringify(reportIds);
+}
+
 export function rollOverPlayableLeague({
   divisions,
   completedReport,
@@ -32,6 +41,7 @@ export function rollOverPlayableLeague({
   const ordered = orderedDivisions(divisions);
   if (!ordered) throw new Error('Season rollover requires contiguous divisions d1 through dN');
   if (!completedReport?.accepted) throw new Error('Season rollover requires an accepted completed league report');
+  if (!reportMatchesDivisions(completedReport, ordered)) throw new Error('Season rollover report divisions do not match supplied divisions');
   if (!Number.isInteger(movementCount) || movementCount < 1) throw new Error('movementCount must be a positive integer');
 
   const standingsMap = standingsByDivision(completedReport);
@@ -78,6 +88,7 @@ export function rollOverPlayableLeague({
   const nextClubIds = nextDivisions.flatMap((division) => division.clubs.map((club) => club.club_id)).sort();
   const checks = Object.freeze({
     contiguous_division_set_preserved: Boolean(orderedDivisions(nextDivisions)),
+    report_divisions_match_supplied_divisions: reportMatchesDivisions(completedReport, ordered),
     every_division_keeps_its_size: nextDivisions.every((division, index) => division.club_count === ordered[index].club_count),
     every_club_preserved_once: unique(nextClubIds) && JSON.stringify(nextClubIds) === JSON.stringify(originalClubIds),
     expected_movement_count: movements.length === movementCount * 2 * (ordered.length - 1),
