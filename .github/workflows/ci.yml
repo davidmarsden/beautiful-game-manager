@@ -44,4 +44,6 @@ jobs:
           path: |
             calibration/generated/
             reports/generated/
+      - name: Run canonical world initializer tests
+        run: node --test test/pr84CanonicalWorldInitialization.test.js
       - run: npm test
