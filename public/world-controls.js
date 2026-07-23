@@ -93,13 +93,14 @@ function render() {
   const world = sharedState?.world;
   const submission = sharedState?.submission;
   const hasWorld = Boolean(sharedState?.has_world && world);
+  const isAdmin = Boolean(sharedState?.is_admin ?? bootstrap?.manager?.is_admin);
   $('worldControlStatus').textContent = hasWorld ? `World ${world.turn_status}` : 'Not initialized';
   $('worldControlSummary').innerHTML = summary ? `
     <article><span>Season</span><strong>${summary.season_number}</strong><small>${escapeHtml(summary.season_id)}</small></article>
     <article><span>Phase</span><strong>${escapeHtml(summary.phase)}</strong><small>${summary.current_matchday ? `Matchday ${summary.current_matchday} of ${summary.maximum_matchday}` : 'Preseason'}</small></article>
     <article><span>Your club</span><strong>${escapeHtml(sharedState.appointment?.club_id || '—')}</strong><small>Shared canonical world</small></article>
     <article><span>Checkpoint</span><strong>${world?.updated_at ? new Date(world.updated_at).toLocaleTimeString() : '—'}</strong><small>${escapeHtml(world?.checksum?.slice(0, 12) || 'No checksum')}</small></article>` : `<p>${escapeHtml(sharedState?.message || 'The shared world has not yet been initialized.')}</p>`;
-  $('worldInitializer').hidden = hasWorld || !bootstrap?.manager?.is_admin;
+  $('worldInitializer').hidden = hasWorld || !isAdmin;
   $('worldControls').hidden = !hasWorld;
   $('turnDeadline').textContent = countdown(world?.next_turn_at);
   $('turnSubmissionState').textContent = submission
