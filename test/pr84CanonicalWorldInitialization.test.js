@@ -39,6 +39,35 @@ test('builds a valid five-division canonical save from published data', () => {
   assert.deepEqual(loadPersistentWorld(JSON.stringify(result.envelope)), result.world);
 });
 
+test('discovers Division Five from textual and nested publication fields', () => {
+  const source = publication();
+  const divisionFive = source.clubs.filter((club) => club.division_id === 'division-5');
+  divisionFive.forEach((club, index) => {
+    delete club.division_id;
+    if (index < 5) club.division_name = 'Division Five';
+    else club.competition = { division: '5th Division' };
+  });
+  const result = buildCanonicalWorldFromPublication(source, {
+    worldId: 'tbg-world-1',
+    humanClubId: source.clubs[0].tbg_club_id,
+    movementCount: 4
+  });
+  assert.equal(result.world.competition.divisions.find((division) => division.level === 5).clubs.length, 10);
+});
+
+test('discovers clubs from a publication-level divisions membership ledger', () => {
+  const source = publication();
+  const divisionFive = source.clubs.filter((club) => club.division_id === 'division-5');
+  source.divisions = [{ division_id: 'd5', club_ids: divisionFive.map((club) => club.tbg_club_id) }];
+  divisionFive.forEach((club) => { delete club.division_id; });
+  const result = buildCanonicalWorldFromPublication(source, {
+    worldId: 'tbg-world-1',
+    humanClubId: source.clubs[0].tbg_club_id,
+    movementCount: 4
+  });
+  assert.equal(result.world.competition.divisions.find((division) => division.level === 5).clubs.length, 10);
+});
+
 test('uses authoritative ownership to prevent one player entering two clubs', () => {
   const source = publication();
   const first = source.clubs[0];
