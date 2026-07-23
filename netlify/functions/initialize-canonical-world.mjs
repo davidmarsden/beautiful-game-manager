@@ -17,21 +17,38 @@ const bearerToken = (request) => {
   return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
 };
 
-async function requestSupabase(path, token, options = {}) {
+function isJwt(value) {
+  return String(value || '').split('.').length === 3;
+}
+
+async function requestSupabase(path, { apiKey, bearer, ...options } = {}) {
+  const headers = {
+    apikey: apiKey,
+    accept: 'application/json',
+    'content-type': 'application/json',
+    prefer: options.prefer || 'return=representation',
+    ...(options.headers || {})
+  };
+  if (bearer) headers.authorization = `Bearer ${bearer}`;
   const response = await fetch(`${SUPABASE_URL}${path}`, {
     ...options,
-    headers: {
-      apikey: token,
-      authorization: `Bearer ${token}`,
-      accept: 'application/json',
-      'content-type': 'application/json',
-      prefer: options.prefer || 'return=representation',
-      ...(options.headers || {})
-    }
+    headers
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.message || body.error || `Supabase returned ${response.status}`);
   return body;
+}
+
+function userRequest(path, token, options = {}) {
+  return requestSupabase(path, { ...options, apiKey: SUPABASE_ANON_KEY, bearer: token });
+}
+
+function serviceRequest(path, options = {}) {
+  return requestSupabase(path, {
+    ...options,
+    apiKey: SUPABASE_SERVICE_ROLE_KEY,
+    ...(isJwt(SUPABASE_SERVICE_ROLE_KEY) ? { bearer: SUPABASE_SERVICE_ROLE_KEY } : {})
+  });
 }
 
 async function adminIdentity(token) {
@@ -40,10 +57,10 @@ async function adminIdentity(token) {
   });
   if (!userResponse.ok) throw new Error('Session is invalid or expired');
   const user = await userResponse.json();
-  const profiles = await requestSupabase(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id,user_id,display_name,is_admin&limit=1`, token);
+  const profiles = await userRequest(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id,user_id,display_name,is_admin&limit=1`, token);
   const manager = profiles[0];
   if (!manager?.is_admin) throw new Error('Administrator access required');
-  const appointments = await requestSupabase(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=world_id,club_id&limit=1`, token);
+  const appointments = await userRequest(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=world_id,club_id&limit=1`, token);
   if (!appointments[0]) throw new Error('Administrator has no active world appointment');
   return { user, manager, appointment: appointments[0] };
 }
@@ -62,7 +79,7 @@ export default async (request) => {
     if (!token) return json({ error: 'Authentication required' }, 401);
     const current = await adminIdentity(token);
     const worldId = current.appointment.world_id;
-    const existing = await requestSupabase(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&select=world_id&limit=1`, SUPABASE_SERVICE_ROLE_KEY);
+    const existing = await serviceRequest(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&select=world_id&limit=1`);
     if (existing[0]) return json({ error: `Canonical world ${worldId} has already been initialized` }, 409);
 
     const publication = await fetchPublicationWorld();
@@ -112,7 +129,7 @@ export default async (request) => {
       requested_by: current.manager.id,
       created_at: now
     };
-    const rpc = await requestSupabase('/rest/v1/rpc/initialize_canonical_world', SUPABASE_SERVICE_ROLE_KEY, {
+    const rpc = await serviceRequest('/rest/v1/rpc/initialize_canonical_world', {
       method: 'POST',
       body: JSON.stringify({
         p_save: stored,
