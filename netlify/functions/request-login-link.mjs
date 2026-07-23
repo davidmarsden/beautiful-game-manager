@@ -1,5 +1,6 @@
-const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+const clean = (value) => String(value || '').trim();
+const SUPABASE_URL = clean(process.env.SUPABASE_URL).replace(/\/+$/, '');
+const SUPABASE_ANON_KEY = clean(process.env.SUPABASE_ANON_KEY);
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -10,14 +11,20 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
 });
 
 function validEmail(value) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean(value));
 }
 
 function allowedRedirect(value, request) {
-  const requested = new URL(String(value || '/'), request.url);
+  const requested = new URL(clean(value) || '/', request.url);
   const origin = new URL(request.url).origin;
   if (requested.origin !== origin) throw new Error('Login redirect must stay on the manager portal');
   return requested.toString();
+}
+
+function fetchFailure(error) {
+  const code = clean(error?.cause?.code || error?.code);
+  const name = clean(error?.cause?.name || error?.name);
+  return [error?.message || 'Could not reach Supabase Auth', name, code].filter(Boolean).join(' · ');
 }
 
 export default async (request) => {
@@ -26,20 +33,27 @@ export default async (request) => {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return json({ error: 'Supabase authentication is not configured' }, 503);
 
     const body = await request.json().catch(() => ({}));
-    const email = String(body.email || '').trim().toLowerCase();
+    const email = clean(body.email).toLowerCase();
     if (!validEmail(email)) return json({ error: 'Enter a valid email address' }, 400);
     const redirectTo = allowedRedirect(body.redirect_to || '/', request);
+    const endpoint = new URL('/auth/v1/otp', `${SUPABASE_URL}/`);
+    endpoint.searchParams.set('redirect_to', redirectTo);
 
-    const response = await fetch(`${SUPABASE_URL}/auth/v1/otp?redirect_to=${encodeURIComponent(redirectTo)}`, {
-      method: 'POST',
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        accept: 'application/json',
-        'content-type': 'application/json'
-      },
-      body: JSON.stringify({ email, create_user: true })
-    });
+    let response;
+    try {
+      response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          accept: 'application/json',
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({ email, create_user: true })
+      });
+    } catch (error) {
+      return json({ error: fetchFailure(error) }, 503);
+    }
+
     const result = await response.json().catch(() => ({}));
     if (!response.ok) return json({ error: result.msg || result.message || result.error_description || result.error || `Supabase returned ${response.status}` }, response.status);
 
