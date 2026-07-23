@@ -108,7 +108,7 @@ export default async (request) => {
       method: 'POST',
       body: JSON.stringify({
         operation_id: `initialize:${worldId}:${Date.parse(now)}`,
-        operation_type: 'reset',
+        operation_type: 'initialize',
         world_id: worldId,
         manager_id: null,
         club_id: null,
