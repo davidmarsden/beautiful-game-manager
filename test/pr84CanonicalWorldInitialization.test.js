@@ -68,6 +68,43 @@ test('discovers clubs from a publication-level divisions membership ledger', () 
   assert.equal(result.world.competition.divisions.find((division) => division.level === 5).clubs.length, 10);
 });
 
+test('scans later division ledgers when the first candidate is empty', () => {
+  const source = publication();
+  const divisionFive = source.clubs.filter((club) => club.division_id === 'division-5');
+  source.divisions = [];
+  source.league_structure = {
+    divisions: [{ division_id: 'division-v', members: divisionFive.map((club) => ({ club_id: club.tbg_club_id })) }]
+  };
+  divisionFive.forEach((club) => { delete club.division_id; });
+  const result = buildCanonicalWorldFromPublication(source, {
+    worldId: 'tbg-world-1',
+    humanClubId: source.clubs[0].tbg_club_id,
+    movementCount: 4
+  });
+  assert.equal(result.world.competition.divisions.find((division) => division.level === 5).clubs.length, 10);
+});
+
+test('preserves numeric primitive squad player references', () => {
+  const source = publication();
+  const club = source.clubs[0];
+  club.squad.player_ids.forEach((oldId, index) => {
+    const numericId = 9000000 + index;
+    const player = source.players.find((row) => row.tbg_player_id === oldId);
+    const ownership = source.player_ownership.find((row) => row.tbg_player_id === oldId);
+    player.tbg_player_id = numericId;
+    ownership.tbg_player_id = numericId;
+    club.squad.player_ids[index] = numericId;
+  });
+  const result = buildCanonicalWorldFromPublication(source, {
+    worldId: 'tbg-world-1',
+    humanClubId: club.tbg_club_id,
+    movementCount: 4
+  });
+  const projected = result.world.squad_cycle.clubs[club.tbg_club_id];
+  assert.equal(projected.player_ids.length >= 18, true);
+  assert.equal(projected.player_ids.includes('9000000'), true);
+});
+
 test('uses authoritative ownership to prevent one player entering two clubs', () => {
   const source = publication();
   const first = source.clubs[0];
