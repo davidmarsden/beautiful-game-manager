@@ -25,6 +25,11 @@ function playerId(player) {
   return text(player?.tbg_player_id || player?.player_id || player?.transfermarkt_id || player?.id);
 }
 
+function playerReferenceId(reference) {
+  if (reference === null || reference === undefined) return '';
+  return typeof reference === 'object' ? playerId(reference) : text(reference);
+}
+
 function clubId(club) {
   return text(club?.tbg_club_id || club?.club_id || club?.id);
 }
@@ -61,7 +66,7 @@ function divisionRows(publicationWorld) {
     publicationWorld?.competition?.divisions,
     publicationWorld?.competitions?.league?.divisions
   ];
-  return candidates.find(Array.isArray) || [];
+  return candidates.flatMap((rows) => Array.isArray(rows) ? rows : []);
 }
 
 function membershipDivisionLevel(club, publicationWorld) {
@@ -72,8 +77,8 @@ function membershipDivisionLevel(club, publicationWorld) {
     if (!level) continue;
     const members = [
       ...(Array.isArray(row?.club_ids) ? row.club_ids : []),
-      ...(Array.isArray(row?.clubs) ? row.clubs.map((entry) => typeof entry === 'string' ? entry : clubId(entry)) : []),
-      ...(Array.isArray(row?.members) ? row.members.map((entry) => typeof entry === 'string' ? entry : clubId(entry)) : [])
+      ...(Array.isArray(row?.clubs) ? row.clubs.map((entry) => typeof entry === 'object' ? clubId(entry) : text(entry)) : []),
+      ...(Array.isArray(row?.members) ? row.members.map((entry) => typeof entry === 'object' ? clubId(entry) : text(entry)) : [])
     ].map(text);
     if (members.includes(id)) return level;
   }
@@ -104,7 +109,7 @@ function projectClub(sourceClub, playersById, ownershipById, registrationLimit) 
   const squadIds = sourceClub.squad?.player_ids || sourceClub.player_ids || [];
   const players = squadIds
     .map((playerReference) => {
-      const stableId = text(typeof playerReference === 'string' ? playerReference : playerId(playerReference));
+      const stableId = playerReferenceId(playerReference);
       const player = playersById.get(stableId);
       const ownership = ownershipById.get(stableId);
       const ownerClubId = ownershipClubId(ownership);
