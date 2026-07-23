@@ -7,17 +7,81 @@ const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
 function divisionLevel(value) {
+  if (Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 5) return Number(value);
   const source = text(value).toLowerCase();
-  const match = source.match(/(?:division|div|d)[-_ ]?([1-5])\b/) || source.match(/^([1-5])$/);
-  return match ? Number(match[1]) : null;
+  if (!source) return null;
+  const words = { one: 1, first: 1, i: 1, two: 2, second: 2, ii: 2, three: 3, third: 3, iii: 3, four: 4, fourth: 4, iv: 4, five: 5, fifth: 5, v: 5 };
+  const numeric = source.match(/(?:division|div|tier|level|d)[-_ ]*0?([1-5])(?:\b|[-_ ])/i)
+    || source.match(/(?:^|[-_ ])0?([1-5])(?:st|nd|rd|th)?(?:\b|[-_ ])/i);
+  if (numeric) return Number(numeric[1]);
+  for (const [label, level] of Object.entries(words)) {
+    if (new RegExp(`(?:division|div|tier|level|d)[-_ ]*${label}(?:\\b|[-_ ])`, 'i').test(source)
+      || new RegExp(`(?:^|[-_ ])${label}(?:\\b|[-_ ])`, 'i').test(source)) return level;
+  }
+  return null;
 }
 
 function playerId(player) {
   return text(player?.tbg_player_id || player?.player_id || player?.transfermarkt_id || player?.id);
 }
 
+function clubId(club) {
+  return text(club?.tbg_club_id || club?.club_id || club?.id);
+}
+
 function ownershipClubId(ownership) {
   return text(ownership?.club_id || ownership?.owner_club_id || ownership?.tbg_club_id || ownership?.owned_by_club_id);
+}
+
+function explicitClubDivisionLevel(club) {
+  const candidates = [
+    club?.division_id,
+    club?.division,
+    club?.division_name,
+    club?.division_number,
+    club?.division_level,
+    club?.league_division,
+    club?.tier,
+    club?.level,
+    club?.competition?.division_id,
+    club?.competition?.division,
+    club?.competition?.level
+  ];
+  for (const candidate of candidates) {
+    const level = divisionLevel(candidate);
+    if (level) return level;
+  }
+  return null;
+}
+
+function divisionRows(publicationWorld) {
+  const candidates = [
+    publicationWorld?.divisions,
+    publicationWorld?.league_structure?.divisions,
+    publicationWorld?.competition?.divisions,
+    publicationWorld?.competitions?.league?.divisions
+  ];
+  return candidates.find(Array.isArray) || [];
+}
+
+function membershipDivisionLevel(club, publicationWorld) {
+  const id = clubId(club);
+  if (!id) return null;
+  for (const row of divisionRows(publicationWorld)) {
+    const level = divisionLevel(row?.level ?? row?.division_level ?? row?.division_number ?? row?.division_id ?? row?.id ?? row?.name);
+    if (!level) continue;
+    const members = [
+      ...(Array.isArray(row?.club_ids) ? row.club_ids : []),
+      ...(Array.isArray(row?.clubs) ? row.clubs.map((entry) => typeof entry === 'string' ? entry : clubId(entry)) : []),
+      ...(Array.isArray(row?.members) ? row.members.map((entry) => typeof entry === 'string' ? entry : clubId(entry)) : [])
+    ].map(text);
+    if (members.includes(id)) return level;
+  }
+  return null;
+}
+
+function clubDivisionLevel(club, publicationWorld) {
+  return explicitClubDivisionLevel(club) || membershipDivisionLevel(club, publicationWorld);
 }
 
 function projectPlayer(player, ownership, index, registrationLimit) {
@@ -35,23 +99,23 @@ function projectPlayer(player, ownership, index, registrationLimit) {
 }
 
 function projectClub(sourceClub, playersById, ownershipById, registrationLimit) {
-  const clubId = text(sourceClub.tbg_club_id || sourceClub.club_id || sourceClub.id);
-  if (!clubId) throw new Error('Publication club is missing a stable ID');
+  const id = clubId(sourceClub);
+  if (!id) throw new Error('Publication club is missing a stable ID');
   const squadIds = sourceClub.squad?.player_ids || sourceClub.player_ids || [];
   const players = squadIds
-    .map((id) => {
-      const stableId = text(id);
+    .map((playerReference) => {
+      const stableId = text(typeof playerReference === 'string' ? playerReference : playerId(playerReference));
       const player = playersById.get(stableId);
       const ownership = ownershipById.get(stableId);
       const ownerClubId = ownershipClubId(ownership);
-      if (!player || (ownerClubId && ownerClubId !== clubId)) return null;
+      if (!player || (ownerClubId && ownerClubId !== id)) return null;
       return { player, ownership };
     })
     .filter(Boolean);
-  if (players.length < 18) throw new Error(`${clubId} has only ${players.length} authoritatively owned published squad players`);
+  if (players.length < 18) throw new Error(`${id} has only ${players.length} authoritatively owned published squad players`);
   return {
-    club_id: clubId,
-    club_name: text(sourceClub.canonical_name || sourceClub.club_name || sourceClub.name || clubId),
+    club_id: id,
+    club_name: text(sourceClub.canonical_name || sourceClub.club_name || sourceClub.name || id),
     formation: text(sourceClub.formation) || '4-3-3-wide',
     tactics: { style: 'balanced', route_to_goal: 'balanced', pressing: 'mid', tempo: 'normal', mentality: 'balanced', ...(sourceClub.tactics || {}) },
     players: players.map(({ player, ownership }, index) => projectPlayer(player, ownership, index, registrationLimit))
@@ -79,11 +143,14 @@ export function buildCanonicalWorldFromPublication(publicationWorld, {
   if (!resolvedWorldId) throw new Error('Canonical world ID is required');
   const playersById = new Map(publicationWorld.players.map((player) => [playerId(player), player]).filter(([id]) => id));
   const ownershipById = new Map((publicationWorld.player_ownership || []).map((row) => [playerId(row), row]).filter(([id]) => id));
+  const resolvedLevels = new Map(publicationWorld.clubs.map((club) => [clubId(club), clubDivisionLevel(club, publicationWorld)]));
   const divisions = [1, 2, 3, 4, 5].map((level) => {
-    const clubs = publicationWorld.clubs
-      .filter((club) => divisionLevel(club.division_id || club.division || club.level) === level)
-      .map((club) => projectClub(club, playersById, ownershipById, registrationLimit));
-    if (clubs.length < 4) throw new Error(`Division ${level} has only ${clubs.length} usable clubs`);
+    const matchingClubs = publicationWorld.clubs.filter((club) => resolvedLevels.get(clubId(club)) === level);
+    const clubs = matchingClubs.map((club) => projectClub(club, playersById, ownershipById, registrationLimit));
+    if (clubs.length < 4) {
+      const unresolved = [...resolvedLevels.entries()].filter(([, resolved]) => !resolved).slice(0, 12).map(([id]) => id);
+      throw new Error(`Division ${level} has only ${clubs.length} usable clubs${unresolved.length ? `; unresolved published clubs include ${unresolved.join(', ')}` : ''}`);
+    }
     if (movementCount * 2 >= clubs.length) {
       throw new Error(`Division ${level} needs more than ${movementCount * 2} clubs for ${movementCount}-up/${movementCount}-down`);
     }
