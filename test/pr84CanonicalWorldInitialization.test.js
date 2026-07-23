@@ -125,7 +125,7 @@ test('rejects a non-contiguous published division set', () => {
   assert.throws(() => buildCanonicalWorldFromPublication(source, {
     worldId: 'tbg-world-1',
     humanClubId: source.clubs[0].tbg_club_id
-  }), /contiguous levels 1 through 5/);
+  }), /Published divisions must be contiguous from Division 1; found 1, 2, 3, 5/);
 });
 
 test('rejects a division too small for configured promotion and relegation', () => {
