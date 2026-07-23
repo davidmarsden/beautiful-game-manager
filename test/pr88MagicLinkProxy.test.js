@@ -12,14 +12,18 @@ test('magic-link request is proxied through the same-origin Netlify endpoint', (
   assert.match(html, /src="\.\/login-proxy\.js"/);
 });
 
-test('server proxy sends the public key to Supabase Auth and preserves portal redirect', () => {
-  assert.match(functionSource, /\/auth\/v1\/otp\?redirect_to=/);
+test('server proxy normalizes configuration and sends the public key to Supabase Auth', () => {
+  assert.match(functionSource, /String\(value \|\| ''\)\.trim\(\)/);
+  assert.match(functionSource, /replace\(\/\\\/\+\$\/, ''\)/);
+  assert.match(functionSource, /new URL\('\/auth\/v1\/otp'/);
   assert.match(functionSource, /apikey:\s*SUPABASE_ANON_KEY/);
-  assert.match(functionSource, /authorization:\s*`Bearer \$\{SUPABASE_ANON_KEY\}`/);
+  assert.doesNotMatch(functionSource, /authorization:\s*`Bearer \$\{SUPABASE_ANON_KEY\}`/);
   assert.match(functionSource, /requested\.origin !== origin/);
 });
 
-test('server proxy does not expose or require the service-role key', () => {
+test('server proxy returns useful transport diagnostics without exposing secrets', () => {
+  assert.match(functionSource, /error\?\.cause\?\.code/);
+  assert.match(functionSource, /fetchFailure\(error\)/);
   assert.doesNotMatch(functionSource, /SERVICE_ROLE/);
   assert.doesNotMatch(functionSource, /sb_secret/);
 });
