@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { syntheticPlayableLeagueStructure } from '../src/matchEngine/leagueStructureSimulation.js';
+import { rollOverPlayableLeague } from '../src/matchEngine/seasonRollover.js';
 import { buildCanonicalWorldFromPublication } from '../src/world/canonicalWorldInitialization.js';
 import { createPersistentLeagueWorld, runPersistentLeagueSeasons, validatePersistentLeagueWorld } from '../src/world/persistentLeagueWorld.js';
+import { advancePersistentMatchday } from '../src/world/persistentMatchdayWorld.js';
 
 function publicationWithDivisions(divisionCount, clubsPerDivision = 10) {
   const sourceDivisions = syntheticPlayableLeagueStructure({ clubsPerDivision }).slice(0, divisionCount);
@@ -28,6 +30,20 @@ function publicationWithDivisions(divisionCount, clubsPerDivision = 10) {
   return { world_id: `published-${divisionCount}`, clubs, players, player_ownership, divisions };
 }
 
+function fourDivisionWorld({ clubsPerDivision = 10, movementCount = 4 } = {}) {
+  const divisions = syntheticPlayableLeagueStructure({ clubsPerDivision }).slice(0, 4)
+    .map((division, index) => ({ ...division, division_id: `d${index + 1}`, level: index + 1 }));
+  return {
+    divisions,
+    world: createPersistentLeagueWorld({
+      worldId: 'four-division-rollover',
+      divisions,
+      humanClubId: divisions[0].clubs[0].club_id,
+      movementCount
+    })
+  };
+}
+
 test('canonical initialization follows the published four-division structure', () => {
   const publication = publicationWithDivisions(4);
   const result = buildCanonicalWorldFromPublication(publication, {
@@ -42,19 +58,39 @@ test('canonical initialization follows the published four-division structure', (
 });
 
 test('four-division persistent world completes rollover across three boundaries', () => {
-  const divisions = syntheticPlayableLeagueStructure({ clubsPerDivision: 10 }).slice(0, 4)
-    .map((division, index) => ({ ...division, division_id: `d${index + 1}`, level: index + 1 }));
-  const world = createPersistentLeagueWorld({
-    worldId: 'four-division-rollover',
-    divisions,
-    humanClubId: divisions[0].clubs[0].club_id,
-    movementCount: 4
-  });
+  const { world } = fourDivisionWorld();
   const report = runPersistentLeagueSeasons({ seasons: 1, world });
   assert.equal(report.accepted, true);
   assert.equal(report.reports[0].archives.length, 4);
   assert.equal(report.reports[0].movements.length, 24);
   assert.equal(report.final_world.competition.divisions.length, 4);
+});
+
+test('four-division matchday advancement processes every stored division', () => {
+  const { world } = fourDivisionWorld();
+  const report = advancePersistentMatchday(world);
+  assert.equal(report.accepted, true);
+  assert.equal(report.division_results.length, 4);
+  assert.equal(report.checks.matchday_processed_in_every_division, true);
+  assert.deepEqual(Object.keys(report.world.matchday_cycle.runtimes).sort(), ['d1', 'd2', 'd3', 'd4']);
+});
+
+test('rollover rejects a completed report with a different division set', () => {
+  const { divisions, world } = fourDivisionWorld({ clubsPerDivision: 4, movementCount: 1 });
+  const complete = runPersistentLeagueSeasons({ seasons: 1, world }).reports[0].season;
+  const fiveDivisionReport = {
+    ...complete,
+    divisions: [
+      ...complete.divisions,
+      { division_id: 'd5', level: 5, standings: [] }
+    ],
+    accepted: true
+  };
+  assert.throws(() => rollOverPlayableLeague({
+    divisions,
+    completedReport: fiveDivisionReport,
+    movementCount: 1
+  }), /report divisions do not match supplied divisions/);
 });
 
 test('five-division support remains available when publication contains five', () => {
