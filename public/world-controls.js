@@ -25,7 +25,12 @@ function mount() {
         <span id="worldControlStatus" class="world-control-status">Checking world…</span>
       </div>
       <section id="worldControlSummary" class="world-control-summary"></section>
-      <section class="world-control-grid">
+      <section id="worldInitializer" class="world-control-card" hidden>
+        <h3>Initialize shared world</h3>
+        <p>Create the first authoritative world from the approved published club and player data. This can only be done once.</p>
+        <button id="initializeWorld" class="primary-action" type="button">Initialize canonical world</button>
+      </section>
+      <section id="worldControls" class="world-control-grid">
         <article class="world-control-card">
           <h3>Next scheduled turn</h3>
           <p id="turnDeadline">The next deadline is loading.</p>
@@ -59,7 +64,6 @@ function mount() {
           <button id="submitWorldTransfer" type="button">Submit request</button>
         </article>
       </section>
-      <p class="world-control-message">Saving, loading, importing, restoring, rolling back and advancing the world are automated or administrator-only operations.</p>
       <p id="worldControlMessage" class="world-control-message" aria-live="polite"></p>
     </div>`);
 
@@ -88,17 +92,20 @@ function render() {
   const summary = sharedState?.summary;
   const world = sharedState?.world;
   const submission = sharedState?.submission;
-  $('worldControlStatus').textContent = world ? `World ${world.turn_status}` : 'World unavailable';
+  const hasWorld = Boolean(sharedState?.has_world && world);
+  $('worldControlStatus').textContent = hasWorld ? `World ${world.turn_status}` : 'Not initialized';
   $('worldControlSummary').innerHTML = summary ? `
     <article><span>Season</span><strong>${summary.season_number}</strong><small>${escapeHtml(summary.season_id)}</small></article>
     <article><span>Phase</span><strong>${escapeHtml(summary.phase)}</strong><small>${summary.current_matchday ? `Matchday ${summary.current_matchday} of ${summary.maximum_matchday}` : 'Preseason'}</small></article>
     <article><span>Your club</span><strong>${escapeHtml(sharedState.appointment?.club_id || '—')}</strong><small>Shared canonical world</small></article>
-    <article><span>Checkpoint</span><strong>${world?.updated_at ? new Date(world.updated_at).toLocaleTimeString() : '—'}</strong><small>${escapeHtml(world?.checksum?.slice(0, 12) || 'No checksum')}</small></article>` : '<p>No canonical world has been initialised for this appointment.</p>';
+    <article><span>Checkpoint</span><strong>${world?.updated_at ? new Date(world.updated_at).toLocaleTimeString() : '—'}</strong><small>${escapeHtml(world?.checksum?.slice(0, 12) || 'No checksum')}</small></article>` : `<p>${escapeHtml(sharedState?.message || 'The shared world has not yet been initialized.')}</p>`;
+  $('worldInitializer').hidden = hasWorld || !bootstrap?.manager?.is_admin;
+  $('worldControls').hidden = !hasWorld;
   $('turnDeadline').textContent = countdown(world?.next_turn_at);
   $('turnSubmissionState').textContent = submission
     ? `${submission.status[0].toUpperCase()}${submission.status.slice(1)} ${new Date(submission.submitted_at).toLocaleString()}`
     : 'No team instructions submitted for this turn.';
-  $('submitTurn').disabled = world?.turn_status !== 'open';
+  $('submitTurn').disabled = !hasWorld || world?.turn_status !== 'open';
   const options = playerOptions();
   $('registrationPlayer').innerHTML = options;
   $('contractPlayer').innerHTML = options;
@@ -114,6 +121,28 @@ async function api(body = null) {
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Shared-world request failed');
   return data;
+}
+
+async function initializeWorld() {
+  const message = $('worldControlMessage');
+  message.textContent = 'Initializing canonical world…';
+  $('initializeWorld').disabled = true;
+  try {
+    const response = await nativeFetch('/api/initialize-canonical-world', {
+      method: 'POST',
+      headers: { authorization, 'content-type': 'application/json' },
+      body: '{}'
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Canonical-world initialization failed');
+    message.textContent = `Shared world initialized: ${data.summary.club_count} clubs and ${data.summary.player_count} players.`;
+    sharedState = await api();
+    render();
+  } catch (error) {
+    message.textContent = error.message;
+  } finally {
+    $('initializeWorld').disabled = false;
+  }
 }
 
 async function act(label, body) {
@@ -135,6 +164,7 @@ async function act(label, body) {
 }
 
 function bind() {
+  $('initializeWorld').addEventListener('click', initializeWorld);
   $('submitTurn').addEventListener('click', () => {
     const formation = $('turnFormation').value;
     const mentality = $('turnMentality').value;
