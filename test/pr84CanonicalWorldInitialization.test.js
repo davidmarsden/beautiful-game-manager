@@ -5,8 +5,8 @@ import { buildCanonicalWorldFromPublication } from '../src/world/canonicalWorldI
 import { validatePersistentLeagueWorld } from '../src/world/persistentLeagueWorld.js';
 import { loadPersistentWorld } from '../src/world/persistentSeasonLoop.js';
 
-function publication() {
-  const divisions = syntheticPlayableLeagueStructure({ clubsPerDivision: 4 });
+function publication({ clubsPerDivision = 10 } = {}) {
+  const divisions = syntheticPlayableLeagueStructure({ clubsPerDivision });
   const players = [];
   const player_ownership = [];
   const clubs = divisions.flatMap((division) => division.clubs.map((club) => {
@@ -33,7 +33,7 @@ test('builds a valid five-division canonical save from published data', () => {
   });
   assert.equal(result.summary.world_id, 'tbg-world-1');
   assert.equal(result.summary.division_count, 5);
-  assert.equal(result.summary.club_count, 20);
+  assert.equal(result.summary.club_count, 50);
   assert.equal(result.world.competition.movement_count_per_boundary, 4);
   assert.equal(validatePersistentLeagueWorld(result.world).valid, true);
   assert.deepEqual(loadPersistentWorld(JSON.stringify(result.envelope)), result.world);
@@ -60,4 +60,26 @@ test('fails safely when a published division cannot field playable clubs', () =>
     worldId: 'tbg-world-1',
     humanClubId: source.clubs[0].tbg_club_id
   }), /Division 5/);
+});
+
+test('rejects a division too small for configured promotion and relegation', () => {
+  const source = publication({ clubsPerDivision: 8 });
+  assert.throws(() => buildCanonicalWorldFromPublication(source, {
+    worldId: 'tbg-world-1',
+    humanClubId: source.clubs[0].tbg_club_id,
+    movementCount: 4
+  }), /needs more than 8 clubs for 4-up\/4-down/);
+});
+
+test('persists the configured registration limit in the canonical save', () => {
+  const source = publication();
+  const result = buildCanonicalWorldFromPublication(source, {
+    worldId: 'tbg-world-1',
+    humanClubId: source.clubs[0].tbg_club_id,
+    registrationLimit: 20,
+    movementCount: 4
+  });
+  assert.equal(result.world.squad_cycle.registration_limit, 20);
+  assert.equal(loadPersistentWorld(JSON.stringify(result.envelope)).squad_cycle.registration_limit, 20);
+  assert.ok(Object.values(result.world.squad_cycle.clubs).every((club) => club.registered_player_ids.length <= 20));
 });
