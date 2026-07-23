@@ -71,6 +71,21 @@ async function fetchPublicationWorld() {
   return response.json();
 }
 
+function backupMetadata(backup) {
+  return {
+    backup_id: backup.backup_id,
+    world_id: backup.world_id,
+    manager_id: null,
+    club_id: null,
+    source: backup.source,
+    reason: backup.reason,
+    created_by: backup.created_by,
+    created_at: backup.created_at,
+    restored_at: null,
+    restored_by: null
+  };
+}
+
 export default async (request) => {
   try {
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -133,14 +148,23 @@ export default async (request) => {
       method: 'POST',
       body: JSON.stringify({
         p_save: stored,
-        p_backup: { ...backup, manager_id: null, club_id: null },
+        p_backup: backupMetadata(backup),
         p_event: event
       })
     });
     return json({
       accepted: true,
       operation: rpc,
-      world: stored,
+      world: {
+        world_id: stored.world_id,
+        save_version: stored.save_version,
+        save_checksum: stored.save_checksum,
+        season_id: stored.season_id,
+        season_number: stored.season_number,
+        phase: stored.phase,
+        next_turn_at: stored.next_turn_at,
+        turn_status: stored.turn_status
+      },
       summary: initialized.summary,
       next_turn_at: nextTurnAt,
       backup_id: backup.backup_id
