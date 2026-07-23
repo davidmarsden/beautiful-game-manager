@@ -1,28 +1,22 @@
-import { DEFAULT_PLAYABLE_DIVISION_IDS } from './leagueStructureSimulation.js';
-
 const round = (value, places = 4) => Number(Number(value).toFixed(places));
 const unique = (values) => new Set(values).size === values.length;
 
-export const SEASON_ROLLOVER_VERSION = 'tbg-season-rollover-v1.1';
+export const SEASON_ROLLOVER_VERSION = 'tbg-season-rollover-v1.2';
 
 function averageStartingRating(clubs) {
   const ratings = clubs.flatMap((club) => club.players.slice(0, 11).map((player) => Number(player.underlying_ability_rating)));
   return round(ratings.reduce((sum, rating) => sum + rating, 0) / Math.max(1, ratings.length), 3);
 }
 
-function canonicalDivisionSet(divisions) {
-  const ids = divisions.map((division) => division.division_id);
-  return ids.length === DEFAULT_PLAYABLE_DIVISION_IDS.length
-    && unique(ids)
-    && DEFAULT_PLAYABLE_DIVISION_IDS.every((id) => ids.includes(id));
-}
-
-function canonicalDivisionLevels(divisions) {
-  const byId = new Map(divisions.map((division) => [division.division_id, division]));
-  return DEFAULT_PLAYABLE_DIVISION_IDS.every((divisionId, index) => (
-    Number.isInteger(byId.get(divisionId)?.level)
-    && byId.get(divisionId).level === index + 1
+function orderedDivisions(divisions) {
+  if (!Array.isArray(divisions) || divisions.length < 2) return null;
+  const ordered = [...divisions].sort((a, b) => a.level - b.level);
+  const valid = ordered.every((division, index) => (
+    division.level === index + 1
+    && division.division_id === `d${index + 1}`
+    && Array.isArray(division.clubs)
   ));
+  return valid ? ordered : null;
 }
 
 function standingsByDivision(completedReport) {
@@ -35,18 +29,11 @@ export function rollOverPlayableLeague({
   movementCount = 1,
   nextSeasonId = `${completedReport?.season_id || 'season'}-next`
 } = {}) {
-  if (!Array.isArray(divisions) || !canonicalDivisionSet(divisions)) {
-    throw new Error('Season rollover requires the complete canonical d1-d5 league structure');
-  }
-  if (!canonicalDivisionLevels(divisions)) {
-    throw new Error('Season rollover requires canonical division levels: d1=1 through d5=5');
-  }
+  const ordered = orderedDivisions(divisions);
+  if (!ordered) throw new Error('Season rollover requires contiguous divisions d1 through dN');
   if (!completedReport?.accepted) throw new Error('Season rollover requires an accepted completed league report');
   if (!Number.isInteger(movementCount) || movementCount < 1) throw new Error('movementCount must be a positive integer');
 
-  const ordered = DEFAULT_PLAYABLE_DIVISION_IDS.map((divisionId) => (
-    divisions.find((division) => division.division_id === divisionId)
-  ));
   const standingsMap = standingsByDivision(completedReport);
   const clubsByDivision = new Map(ordered.map((division) => [division.division_id, new Map(division.clubs.map((club) => [club.club_id, club]))]));
   const promoted = new Map();
@@ -57,9 +44,7 @@ export function rollOverPlayableLeague({
     if (!Array.isArray(standings) || standings.length !== division.clubs.length) {
       throw new Error(`Season rollover standings do not reconcile for ${division.division_id}`);
     }
-    if (movementCount * 2 >= division.clubs.length) {
-      throw new Error(`movementCount is too large for ${division.division_id}`);
-    }
+    if (movementCount * 2 >= division.clubs.length) throw new Error(`movementCount is too large for ${division.division_id}`);
     const standingIds = standings.map((row) => row.club_id);
     if (!unique(standingIds) || standingIds.some((id) => !clubsByDivision.get(division.division_id).has(id))) {
       throw new Error(`Season rollover standings contain invalid clubs for ${division.division_id}`);
@@ -86,24 +71,18 @@ export function rollOverPlayableLeague({
     for (const club of incomingRelegated) movements.push(Object.freeze({ club_id: club.club_id, from_division_id: ordered[index - 1].division_id, to_division_id: division.division_id, movement: 'relegated' }));
 
     const clubs = Object.freeze([...retained, ...incomingPromoted, ...incomingRelegated].sort((a, b) => a.club_id.localeCompare(b.club_id)));
-    return Object.freeze({
-      ...division,
-      club_count: clubs.length,
-      average_starting_rating: averageStartingRating(clubs),
-      clubs
-    });
+    return Object.freeze({ ...division, club_count: clubs.length, average_starting_rating: averageStartingRating(clubs), clubs });
   });
 
   const originalClubIds = ordered.flatMap((division) => division.clubs.map((club) => club.club_id)).sort();
   const nextClubIds = nextDivisions.flatMap((division) => division.clubs.map((club) => club.club_id)).sort();
   const checks = Object.freeze({
-    complete_division_set_preserved: canonicalDivisionSet(nextDivisions),
-    canonical_division_levels_preserved: canonicalDivisionLevels(nextDivisions),
+    contiguous_division_set_preserved: Boolean(orderedDivisions(nextDivisions)),
     every_division_keeps_its_size: nextDivisions.every((division, index) => division.club_count === ordered[index].club_count),
     every_club_preserved_once: unique(nextClubIds) && JSON.stringify(nextClubIds) === JSON.stringify(originalClubIds),
     expected_movement_count: movements.length === movementCount * 2 * (ordered.length - 1),
     top_and_bottom_divisions_have_one_way_movement: movements.filter((row) => row.to_division_id === 'd1' && row.movement === 'promoted').length === movementCount
-      && movements.filter((row) => row.to_division_id === 'd5' && row.movement === 'relegated').length === movementCount
+      && movements.filter((row) => row.to_division_id === `d${ordered.length}` && row.movement === 'relegated').length === movementCount
   });
 
   return Object.freeze({
