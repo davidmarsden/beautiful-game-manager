@@ -69,6 +69,12 @@ export function buildCanonicalWorldFromPublication(publicationWorld, {
   if (!publicationWorld || !Array.isArray(publicationWorld.clubs) || !Array.isArray(publicationWorld.players)) {
     throw new Error('Published world must contain clubs and players');
   }
+  if (!Number.isInteger(registrationLimit) || registrationLimit < 18) {
+    throw new Error('Registration limit must be an integer of at least 18');
+  }
+  if (!Number.isInteger(movementCount) || movementCount < 1) {
+    throw new Error('Promotion and relegation places must be a positive integer');
+  }
   const resolvedWorldId = text(worldId || publicationWorld.world_id);
   if (!resolvedWorldId) throw new Error('Canonical world ID is required');
   const playersById = new Map(publicationWorld.players.map((player) => [playerId(player), player]).filter(([id]) => id));
@@ -78,6 +84,9 @@ export function buildCanonicalWorldFromPublication(publicationWorld, {
       .filter((club) => divisionLevel(club.division_id || club.division || club.level) === level)
       .map((club) => projectClub(club, playersById, ownershipById, registrationLimit));
     if (clubs.length < 4) throw new Error(`Division ${level} has only ${clubs.length} usable clubs`);
+    if (movementCount * 2 >= clubs.length) {
+      throw new Error(`Division ${level} needs more than ${movementCount * 2} clubs for ${movementCount}-up/${movementCount}-down`);
+    }
     return { division_id: `d${level}`, level, club_count: clubs.length, clubs };
   });
   const clubIds = divisions.flatMap((division) => division.clubs.map((club) => club.club_id));
@@ -91,6 +100,7 @@ export function buildCanonicalWorldFromPublication(publicationWorld, {
     seasonEnd,
     movementCount
   });
+  world.squad_cycle.registration_limit = registrationLimit;
   const validation = validatePersistentLeagueWorld(world);
   if (!validation.valid) throw new Error(`Initial canonical world is invalid: ${validation.errors.join('; ')}`);
   const serialized = savePersistentWorld(world);
