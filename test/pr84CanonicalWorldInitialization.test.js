@@ -24,6 +24,8 @@ function publication({ clubsPerDivision = 10 } = {}) {
   return { world_id: 'published-world', clubs, players, player_ownership };
 }
 
+const divisionClubCount = (world, level) => world.competition.divisions.find((division) => division.level === level)?.club_ids?.length;
+
 test('builds a valid five-division canonical save from published data', () => {
   const source = publication();
   const result = buildCanonicalWorldFromPublication(source, {
@@ -52,7 +54,7 @@ test('discovers Division Five from textual and nested publication fields', () =>
     humanClubId: source.clubs[0].tbg_club_id,
     movementCount: 4
   });
-  assert.equal(result.world.competition.divisions.find((division) => division.level === 5).clubs.length, 10);
+  assert.equal(divisionClubCount(result.world, 5), 10);
 });
 
 test('discovers clubs from a publication-level divisions membership ledger', () => {
@@ -65,7 +67,7 @@ test('discovers clubs from a publication-level divisions membership ledger', () 
     humanClubId: source.clubs[0].tbg_club_id,
     movementCount: 4
   });
-  assert.equal(result.world.competition.divisions.find((division) => division.level === 5).clubs.length, 10);
+  assert.equal(divisionClubCount(result.world, 5), 10);
 });
 
 test('scans later division ledgers when the first candidate is empty', () => {
@@ -81,7 +83,7 @@ test('scans later division ledgers when the first candidate is empty', () => {
     humanClubId: source.clubs[0].tbg_club_id,
     movementCount: 4
   });
-  assert.equal(result.world.competition.divisions.find((division) => division.level === 5).clubs.length, 10);
+  assert.equal(divisionClubCount(result.world, 5), 10);
 });
 
 test('preserves numeric primitive squad player references', () => {
