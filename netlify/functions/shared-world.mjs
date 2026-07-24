@@ -101,7 +101,7 @@ function commandType(type) {
   return type;
 }
 
-function commandSummary(world, row) {
+function commandSummaryImpl(world, row) {
   const rawPayload = row.command_payload || {};
   const playerId = rawPayload.playerId || rawPayload.player_id || null;
   const otherClubId = rawPayload.otherClubId || rawPayload.other_club_id || null;
@@ -155,6 +155,7 @@ export default async (request) => {
     ]);
     const summary = appointmentSummary(world, current.appointment.club_id);
     const appointment = { ...current.appointment, club_name: summary.club_name, division_name: summary.division_name };
+    const commandSummary = (row) => commandSummaryImpl(world, row);
 
     if (request.method === 'GET') {
       return json({
@@ -177,7 +178,7 @@ export default async (request) => {
           submitted_at: existing.submitted_at,
           locked_at: existing.locked_at
         } : null,
-        commands: commandRows.map((row) => commandSummary(world, row))
+        commands: commandRows.map(commandSummary)
       });
     }
 
@@ -215,7 +216,7 @@ export default async (request) => {
         effective_matchday: turn.matchday
       };
       const rows = await supabase('/rest/v1/manager_world_commands', token, { method: 'POST', body: JSON.stringify(payload) });
-      return json({ accepted: true, command: type, request: commandSummary(world, rows[0] || payload), turn, summary });
+      return json({ accepted: true, command: type, request: commandSummaryImpl(world, rows[0] || payload), turn, summary });
     }
 
     return json({ error: 'Managers cannot save, load, import, restore or advance the shared world' }, 403);
