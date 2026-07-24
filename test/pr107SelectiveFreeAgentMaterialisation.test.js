@@ -51,6 +51,21 @@ test('repair considers a large external catalogue but persists only selected sig
   assert.equal(Object.values(result.world.squad_cycle.players).filter((row) => row.canonical_status === 'free_agent').length, 0);
 });
 
+test('under-19 external candidates cannot consume senior viability signings', () => {
+  const result = planCanonicalRegistrationRepair(world(), {
+    freeAgentCandidates: [
+      { source_index: 0, player: { tbg_player_id: 'youth-gk', display_name: 'Youth Keeper', position: 'GK', age: 18, underlying_ability_rating: 99, club_id: null, contract_id: null } },
+      { source_index: 1, player: { tbg_player_id: 'senior-gk', display_name: 'Senior Keeper', position: 'GK', age: 24, underlying_ability_rating: 75, club_id: null, contract_id: null } }
+    ]
+  });
+
+  assert.equal(result.preview.accepted, true);
+  assert.equal(result.preview.external_free_agents_considered, 1);
+  assert.equal(result.preview.external_free_agents_materialised, 1);
+  assert.equal(result.world.squad_cycle.players['youth-gk'], undefined);
+  assert.ok(result.world.squad_cycle.players['senior-gk']);
+});
+
 test('preview reconciles registrations before and after', () => {
   const result = planCanonicalRegistrationRepair(world(), {
     freeAgentCandidates: [{ source_index: 0, player: { tbg_player_id: 'external-gk', display_name: 'External Keeper', position: 'GK', age: 27, underlying_ability_rating: 79, club_id: null, contract_id: null } }]
