@@ -105,9 +105,21 @@ function commandLabel(type) {
 
 function commandSubject(command) {
   const payload = command.payload || {};
-  const player = payload.playerId || payload.player_id;
+  const display = command.display || {};
+  const player = display.player_name || payload.player_name || payload.playerId || payload.player_id;
+  const otherClub = display.other_club_name || payload.other_club_name || '';
   const years = payload.years ? ` · ${payload.years} season${Number(payload.years) === 1 ? '' : 's'}` : '';
-  return `${commandLabel(command.type)}${player ? ` · ${player}` : ''}${years}`;
+  const clubContext = otherClub ? ` · ${otherClub}` : '';
+  return `${commandLabel(command.type)}${player ? ` · ${player}` : ''}${clubContext}${years}`;
+}
+
+function commandTechnicalDetails(command) {
+  const payload = command.payload || {};
+  const display = command.display || {};
+  const playerId = display.player_id || payload.playerId || payload.player_id || '';
+  const otherClubId = display.other_club_id || payload.otherClubId || payload.other_club_id || '';
+  if (!playerId && !otherClubId) return '';
+  return `<small>Reference${playerId ? ` · Player ${escapeHtml(playerId)}` : ''}${otherClubId ? ` · Club ${escapeHtml(otherClubId)}` : ''}</small>`;
 }
 
 function renderCommandHistory() {
@@ -123,6 +135,7 @@ function renderCommandHistory() {
       <div class="world-control-heading"><div><strong>${escapeHtml(commandSubject(command))}</strong><small>${escapeHtml(processed)}</small></div><span class="world-control-status">${escapeHtml(command.status)}</span></div>
       ${outcome}
       <small>Season ${escapeHtml(command.effective_season_id || '—')} · Matchday ${escapeHtml(command.effective_matchday ?? '—')}</small>
+      ${commandTechnicalDetails(command)}
     </article>`;
   }).join('') : '<p>No registration, contract or transfer requests have been submitted yet.</p>';
 }
