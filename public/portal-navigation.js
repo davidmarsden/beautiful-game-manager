@@ -14,8 +14,8 @@ function normaliseView(value) {
 }
 
 function viewFromTarget(target) {
-  const explicit = target.closest?.('[data-view]');
-  if (explicit) return normaliseView(explicit.dataset.view);
+  const explicit = target.closest?.('[data-view], [data-portal-view]');
+  if (explicit) return normaliseView(explicit.dataset.view || explicit.dataset.portalView);
   const navLink = target.closest?.('#clubNav a');
   return navLink ? normaliseView(navLink.textContent) : null;
 }
@@ -31,8 +31,9 @@ export function showPortalView(viewName, { focus = false } = {}) {
     panel.classList.toggle('active', active);
     panel.hidden = !active;
   });
-  document.querySelectorAll('[data-view]').forEach((control) => {
-    const active = normaliseView(control.dataset.view) === view;
+  document.querySelectorAll('[data-view], [data-portal-view]').forEach((control) => {
+    const requestedView = control.dataset.view || control.dataset.portalView;
+    const active = normaliseView(requestedView) === view;
     control.classList.toggle('active', active);
     control.setAttribute('aria-selected', String(active));
   });
