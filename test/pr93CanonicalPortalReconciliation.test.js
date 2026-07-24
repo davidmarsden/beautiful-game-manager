@@ -144,11 +144,13 @@ test('team decisions are persisted through the canonical turn ledger', async () 
 test('world view resolves the appointed club name rather than displaying its internal ID', async () => {
   const source = await readFile(new URL('../netlify/functions/shared-world.mjs', import.meta.url), 'utf8');
   const display = await readFile(new URL('../public/canonical-display.js', import.meta.url), 'utf8');
+  const worldControls = await readFile(new URL('../public/world-controls.js', import.meta.url), 'utf8');
   const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
   assert.match(source, /club_name: projection\.club\.canonical_name/);
   assert.match(source, /appointment = \{ \.\.\.current\.appointment, club_name: summary\.club_name/);
   assert.doesNotMatch(source, /portalWorldSummary/);
-  assert.match(display, /strong\.textContent = clubName/);
+  assert.match(worldControls, /sharedState\.appointment\?\.club_name \|\| summary\.club_name/);
+  assert.doesNotMatch(display, /MutationObserver/);
   assert.match(display, /Preseason — fixtures have not been generated yet/);
   assert.match(html, /src="\.\/canonical-display\.js"/);
   assert.doesNotMatch(html, /inaugural 38-match schedule/i);
