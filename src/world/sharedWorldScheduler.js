@@ -1,7 +1,7 @@
 import { advancePersistentMatchday, validatePersistentMatchdayWorld } from './persistentMatchdayWorld.js';
 import { loadPersistentWorld, savePersistentWorld } from './persistentSeasonLoop.js';
 
-export const SHARED_WORLD_SCHEDULER_VERSION = 'tbg-shared-world-scheduler-v1.1';
+export const SHARED_WORLD_SCHEDULER_VERSION = 'tbg-shared-world-scheduler-v1.2';
 
 const text = (value) => String(value ?? '').trim();
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -111,7 +111,12 @@ export function buildScheduledTurnPlan(worldInput, submissions = [], {
   const allClubIds = Object.keys(world.squad_cycle.clubs || {}).sort();
   const submittedClubIds = Object.keys(selected.by_club).sort();
   const fallbackClubIds = allClubIds.filter((id) => !submittedClubIds.includes(id));
-  const instructionSourcesByClub = Object.fromEntries(allClubIds.map((clubId) => [clubId, submittedClubIds.includes(clubId) ? 'manager_submission' : 'deterministic_fallback']));
+  const instructionSourcesByClub = Object.fromEntries(allClubIds.map((clubId) => {
+    const selectedSubmission = selected.selected_submissions[clubId];
+    return [clubId, selectedSubmission
+      ? { type: 'manager_submission', ...clone(selectedSubmission) }
+      : { type: 'deterministic_fallback' }];
+  }));
   return Object.freeze({
     version: SHARED_WORLD_SCHEDULER_VERSION,
     world_id: world.world_id,
