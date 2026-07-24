@@ -2,33 +2,18 @@ import { analyseSquad, positionGroup } from '../intelligence/squadIntelligence.j
 import { registerPlayer, unregisterPlayer } from '../squadCycle/squadCycle.js';
 import { loadPersistentWorld, savePersistentWorld } from './persistentSeasonLoop.js';
 
-export const VIABLE_CANONICAL_REGISTRATION_VERSION = 'tbg-viable-canonical-registration-v1.1';
-export const CANONICAL_POSITION_REQUIREMENTS = Object.freeze({
-  goalkeeper: 2,
-  defender: 6,
-  midfielder: 5,
-  attacker: 3
-});
+export const VIABLE_CANONICAL_REGISTRATION_VERSION = 'tbg-viable-canonical-registration-v1.2';
+export const CANONICAL_POSITION_REQUIREMENTS = Object.freeze({ goalkeeper: 2, defender: 6, midfielder: 5, attacker: 3 });
 
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const playerId = (player) => text(player?.tbg_player_id || player?.player_id || player?.id);
-const playerPosition = (player) => text(
-  player?.position
-  || player?.primary_position
-  || player?.position_group
-  || player?.position_name
-  || player?.canonical_position
-  || player?.position_detail
-  || player?.transfermarkt_position
-  || player?.specific_position
-);
+const playerPosition = (player) => text(player?.position || player?.primary_position || player?.position_group || player?.position_name || player?.canonical_position || player?.position_detail || player?.transfermarkt_position || player?.specific_position);
 const rating = (player) => number(player?.underlying_ability_rating ?? player?.rating ?? player?.overall_rating);
 const playerName = (player) => text(player?.display_name || player?.canonical_name || player?.name || playerId(player));
 
 function ranked(players) {
-  return players
-    .map((player, sourceIndex) => ({ player, sourceIndex, id: playerId(player), group: positionGroup(playerPosition(player)), rating: rating(player) }))
+  return players.map((player, sourceIndex) => ({ player, sourceIndex, id: playerId(player), group: positionGroup(playerPosition(player)), rating: rating(player) }))
     .filter((row) => row.id)
     .sort((a, b) => b.rating - a.rating || a.sourceIndex - b.sourceIndex || a.id.localeCompare(b.id));
 }
@@ -38,36 +23,31 @@ export function selectViableRegistrationIds(players, registrationLimit = 25, req
   const selected = [];
   const selectedIds = new Set();
   const missing = {};
-
   for (const [group, required] of Object.entries(requirements)) {
-    const candidates = rows.filter((row) => row.group === group && !selectedIds.has(row.id));
-    const chosen = candidates.slice(0, required);
+    const chosen = rows.filter((row) => row.group === group && !selectedIds.has(row.id)).slice(0, required);
     chosen.forEach((row) => { selected.push(row); selectedIds.add(row.id); });
     missing[group] = Math.max(0, required - chosen.length);
   }
-
   const reservedForMissingCoverage = Object.values(missing).reduce((sum, gap) => sum + gap, 0);
   const ownedTarget = Math.max(0, registrationLimit - reservedForMissingCoverage);
   for (const row of rows) {
     if (selected.length >= ownedTarget) break;
     if (!selectedIds.has(row.id)) { selected.push(row); selectedIds.add(row.id); }
   }
-
-  return Object.freeze({
-    selected_ids: Object.freeze(selected.map((row) => row.id)),
-    missing: Object.freeze(missing),
-    reserved_free_agent_places: reservedForMissingCoverage
-  });
+  return Object.freeze({ selected_ids: Object.freeze(selected.map((row) => row.id)), missing: Object.freeze(missing), reserved_free_agent_places: reservedForMissingCoverage });
 }
 
 function appendEvent(state, type, at, payload) {
   state.events ||= [];
-  state.events.push({
-    event_id: `${state.season_id}:${String(state.events.length + 1).padStart(4, '0')}:${type}`,
-    type,
-    at: new Date(at).toISOString(),
-    ...payload
-  });
+  state.events.push({ event_id: `${state.season_id}:${String(state.events.length + 1).padStart(4, '0')}:${type}`, type, at: new Date(at).toISOString(), ...payload });
+}
+
+function materialiseCandidate(state, player) {
+  const id = playerId(player);
+  if (state.players[id]) return false;
+  state.players[id] = { ...player, tbg_player_id: id, club_id: null, contract_id: null, canonical_status: 'free_agent' };
+  state.registrations[id] = { player_id: id, club_id: null, registered: false, registered_at: null };
+  return true;
 }
 
 function signFreeAgent(state, { clubId, playerId: id, at }) {
@@ -79,16 +59,9 @@ function signFreeAgent(state, { clubId, playerId: id, at }) {
   const contractId = `${id}:${clubId}:${atIso}:registration-repair`;
   player.club_id = clubId;
   club.player_ids.push(id);
-  state.contracts[contractId] = {
-    contract_id: contractId,
-    player_id: id,
-    club_id: clubId,
-    start_at: atIso,
-    end_at: state.calendar.season_end,
-    wage: 1000,
-    status: 'active'
-  };
+  state.contracts[contractId] = { contract_id: contractId, player_id: id, club_id: clubId, start_at: atIso, end_at: state.calendar.season_end, wage: 1000, status: 'active' };
   player.contract_id = contractId;
+  player.canonical_status = 'contracted';
   state.registrations[id] = { player_id: id, club_id: clubId, registered: false, registered_at: null };
   appendEvent(state, 'free_agent_signed', atIso, { club_id: clubId, player_id: id, contract_id: contractId, reason: 'canonical_registration_repair' });
   registerPlayer(state, { clubId, playerId: id, at: atIso });
@@ -100,11 +73,12 @@ function actionPlayer(state, id) {
   return { player_id: id, player_name: playerName(player), position_group: positionGroup(playerPosition(player)), rating: rating(player) };
 }
 
-export function planCanonicalRegistrationRepair(worldInput, { at } = {}) {
+export function planCanonicalRegistrationRepair(worldInput, { at, freeAgentCandidates = [] } = {}) {
   const world = loadPersistentWorld(savePersistentWorld(worldInput));
   const state = world.squad_cycle;
   const repairAt = at || state.calendar?.transfer_windows?.[0]?.opens_at || world.clock;
   const registrationLimit = state.registration_limit;
+  const registeredBefore = Object.values(state.clubs).reduce((sum, club) => sum + club.registered_player_ids.length, 0);
   const clubs = [];
 
   for (const clubId of Object.keys(state.clubs).sort()) {
@@ -115,23 +89,25 @@ export function planCanonicalRegistrationRepair(worldInput, { at } = {}) {
     const current = new Set(club.registered_player_ids);
     const removed = [...current].filter((id) => !desired.has(id)).map((id) => actionPlayer(state, id));
     const added = [...desired].filter((id) => !current.has(id)).map((id) => actionPlayer(state, id));
-
     for (const row of removed) unregisterPlayer(state, { clubId, playerId: row.player_id, at: repairAt, reason: 'canonical_registration_rebalance' });
     for (const row of added) registerPlayer(state, { clubId, playerId: row.player_id, at: repairAt });
-
-    clubs.push({
-      club_id: clubId,
-      club_name: text(world.club_profiles?.[clubId]?.club_name || club.club_name || clubId),
-      registrations_added: added,
-      registrations_removed: removed,
-      free_agents_signed: [],
-      initial_missing: selection.missing
-    });
+    clubs.push({ club_id: clubId, club_name: text(world.club_profiles?.[clubId]?.club_name || club.club_name || clubId), registered_before: current.size, registrations_added: added, registrations_removed: removed, free_agents_signed: [], initial_missing: selection.missing });
   }
 
-  const freeAgents = ranked(Object.values(state.players).filter((player) => !player.club_id && number(player.age, 24) >= 19));
+  const existingFreeAgents = Object.values(state.players).filter((player) => !player.club_id && number(player.age, 24) >= 19);
+  const externalPlayers = freeAgentCandidates.map((row) => row?.player || row).filter(Boolean);
+  const existingIds = new Set(existingFreeAgents.map(playerId));
+  const freeAgents = ranked([...existingFreeAgents, ...externalPlayers.filter((player) => !existingIds.has(playerId(player)))]);
+  const externalIds = new Set(externalPlayers.map(playerId));
   const usedFreeAgents = new Set();
+  const materialisedExternalIds = new Set();
   const nextFreeAgent = (group = null) => freeAgents.find((entry) => !usedFreeAgents.has(entry.id) && (!group || entry.group === group));
+  const signCandidate = (row, candidate) => {
+    if (externalIds.has(candidate.id) && materialiseCandidate(state, candidate.player)) materialisedExternalIds.add(candidate.id);
+    usedFreeAgents.add(candidate.id);
+    signFreeAgent(state, { clubId: row.club_id, playerId: candidate.id, at: repairAt });
+    row.free_agents_signed.push(actionPlayer(state, candidate.id));
+  };
 
   for (const row of clubs) {
     const club = state.clubs[row.club_id];
@@ -140,47 +116,42 @@ export function planCanonicalRegistrationRepair(worldInput, { at } = {}) {
       for (let count = 0; count < gap.registered_gap; count += 1) {
         const candidate = nextFreeAgent(gap.group);
         if (!candidate || club.registered_player_ids.length >= registrationLimit) break;
-        usedFreeAgents.add(candidate.id);
-        signFreeAgent(state, { clubId: row.club_id, playerId: candidate.id, at: repairAt });
-        row.free_agents_signed.push(actionPlayer(state, candidate.id));
+        signCandidate(row, candidate);
       }
     }
-
     report = analyseSquad(state, { clubId: row.club_id, at: repairAt });
     while (report.summary.hard_minimum_gap > 0 && club.registered_player_ids.length < registrationLimit) {
       const candidate = nextFreeAgent();
       if (!candidate) break;
-      usedFreeAgents.add(candidate.id);
-      signFreeAgent(state, { clubId: row.club_id, playerId: candidate.id, at: repairAt });
-      row.free_agents_signed.push(actionPlayer(state, candidate.id));
+      signCandidate(row, candidate);
       report = analyseSquad(state, { clubId: row.club_id, at: repairAt });
     }
-
     report = analyseSquad(state, { clubId: row.club_id, at: repairAt });
-    row.final_registered = report.summary.registered_seniors;
+    row.final_registered = club.registered_player_ids.length;
+    row.final_registered_seniors = report.summary.registered_seniors;
+    row.registration_delta = row.final_registered - row.registered_before;
     row.final_coverage = report.coverage.map((entry) => ({ group: entry.group, registered: entry.registered, required: entry.required, gap: entry.registered_gap }));
     row.viable = report.viable;
   }
 
-  const blocked = clubs.filter((row) => !row.viable).map((row) => ({
-    club_id: row.club_id,
-    club_name: row.club_name,
-    registered_seniors: row.final_registered,
-    coverage_gaps: row.final_coverage.filter((entry) => entry.gap > 0)
-  }));
-
+  const blocked = clubs.filter((row) => !row.viable).map((row) => ({ club_id: row.club_id, club_name: row.club_name, registered_seniors: row.final_registered_seniors, coverage_gaps: row.final_coverage.filter((entry) => entry.gap > 0) }));
+  const registeredAfter = Object.values(state.clubs).reduce((sum, club) => sum + club.registered_player_ids.length, 0);
   const preview = Object.freeze({
     version: VIABLE_CANONICAL_REGISTRATION_VERSION,
     repair_at: new Date(repairAt).toISOString(),
     registration_limit: registrationLimit,
+    registered_before: registeredBefore,
+    registered_after: registeredAfter,
+    net_registration_change: registeredAfter - registeredBefore,
     registrations_added: clubs.reduce((sum, row) => sum + row.registrations_added.length, 0),
     registrations_removed: clubs.reduce((sum, row) => sum + row.registrations_removed.length, 0),
     free_agents_signed: clubs.reduce((sum, row) => sum + row.free_agents_signed.length, 0),
+    external_free_agents_considered: externalPlayers.length,
+    external_free_agents_materialised: materialisedExternalIds.size,
     clubs_still_impossible: blocked.length,
     clubs: Object.freeze(clubs),
     blocked: Object.freeze(blocked),
     accepted: blocked.length === 0
   });
-
   return Object.freeze({ world, preview });
 }
