@@ -110,8 +110,8 @@ function commandSummaryImpl(world, row) {
     type: row.command_type,
     payload: {
       ...rawPayload,
-      ...(playerId ? { player_id: playerId, playerId: playerName(world, playerId), player_name: playerName(world, playerId) } : {}),
-      ...(otherClubId ? { other_club_id: otherClubId, otherClubId, other_club_name: clubName(world, otherClubId) } : {})
+      ...(playerId ? { player_id: playerId, player_name: playerName(world, playerId) } : {}),
+      ...(otherClubId ? { other_club_id: otherClubId, other_club_name: clubName(world, otherClubId) } : {})
     },
     display: {
       player_id: playerId,
