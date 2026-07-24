@@ -17,18 +17,6 @@ function applyCanonicalDisplay(data) {
 
   const last = data.last_fixture;
   if ($('lastFixtureCard') && !last) $('lastFixtureCard').innerHTML = '<div class="placeholder">No canonical matches have been played yet</div>';
-
-  const summary = $('worldControlSummary');
-  if (summary) {
-    const replaceInternalId = () => {
-      const articles = [...summary.querySelectorAll('article')];
-      const clubArticle = articles.find((article) => article.querySelector('span')?.textContent === 'Your club');
-      const strong = clubArticle?.querySelector('strong');
-      if (strong) strong.textContent = clubName;
-    };
-    replaceInternalId();
-    new MutationObserver(replaceInternalId).observe(summary, { childList: true, subtree: true });
-  }
 }
 
 window.addEventListener('tbg:portal-rendered', (event) => applyCanonicalDisplay(event.detail));
