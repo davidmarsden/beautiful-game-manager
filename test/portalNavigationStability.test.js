@@ -33,9 +33,11 @@ test('bootstrap projection is cached and invalidated only after manager writes',
   assert.ok(html.indexOf('portal-navigation.js') > html.indexOf('world-controls.js'));
 });
 
-test('navigation controller covers both portal menus without duplicate network work', async () => {
+test('navigation controller covers menus and dashboard alert actions without duplicate work', async () => {
   const source = await read('public/portal-navigation.js');
-  assert.match(source, /target\.closest\?\.\('\[data-view\]'\)/);
+  assert.match(source, /target\.closest\?\.\('\[data-view\], \[data-portal-view\]'\)/);
+  assert.match(source, /explicit\.dataset\.view \|\| explicit\.dataset\.portalView/);
+  assert.match(source, /document\.querySelectorAll\('\[data-view\], \[data-portal-view\]'\)/);
   assert.match(source, /target\.closest\?\.\('#clubNav a'\)/);
   assert.match(source, /VIEW_ALIASES/);
 });
