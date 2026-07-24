@@ -1,5 +1,5 @@
 import { planCanonicalRegistrationRepair } from '../../src/world/viableCanonicalRegistration.js';
-import { importCanonicalFreeAgentReservoir } from '../../src/world/canonicalFreeAgentReservoir.js';
+import { canonicalFreeAgentReservoirFingerprint, importCanonicalFreeAgentReservoir } from '../../src/world/canonicalFreeAgentReservoir.js';
 import { loadPersistentWorld, savePersistentWorld } from '../../src/world/persistentSeasonLoop.js';
 
 const WORLD_URL = process.env.TBG_WORLD_URL || 'https://raw.githubusercontent.com/davidmarsden/beautiful-game-engine/main/derived/world/world.json';
@@ -38,15 +38,6 @@ async function fetchPublicationWorld() {
   const response = await fetch(WORLD_URL, { headers: { accept: 'application/json' } });
   if (!response.ok) throw new Error(`World publication returned ${response.status}`);
   return response.json();
-}
-
-function reservoirFingerprint(ids) {
-  let hash = 2166136261;
-  for (const character of [...ids].sort().join('|')) {
-    hash ^= character.charCodeAt(0);
-    hash = Math.imul(hash, 16777619);
-  }
-  return `fnv1a-${(hash >>> 0).toString(16).padStart(8, '0')}`;
 }
 
 async function adminIdentity(token) {
@@ -88,8 +79,9 @@ export default async (request) => {
 
     const publication = await fetchPublicationWorld();
     const world = loadPersistentWorld(JSON.stringify(before.save_envelope));
+    const existingPlayerIds = Object.keys(world.squad_cycle.players);
+    const fingerprint = canonicalFreeAgentReservoirFingerprint(publication, { existingPlayerIds });
     const reservoir = importCanonicalFreeAgentReservoir(world, publication);
-    const fingerprint = reservoirFingerprint(reservoir.imported_player_ids);
     const planned = planCanonicalRegistrationRepair(world, {
       at: world.squad_cycle.calendar?.transfer_windows?.[0]?.opens_at || world.clock
     });
