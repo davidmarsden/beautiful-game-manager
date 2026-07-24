@@ -34,6 +34,19 @@ test('initial registration selection satisfies positional requirements before fi
   assert.ok(counts.attacker >= 3);
 });
 
+test('position-first selection honours publication position aliases', () => {
+  const aliasPlayers = [
+    { tbg_player_id: 'gk-1', transfermarkt_position: 'Goalkeeper', age: 25, rating: 80 },
+    { tbg_player_id: 'gk-2', position_detail: 'Goalkeeper', age: 24, rating: 79 },
+    ...Array.from({ length: 6 }, (_, index) => ({ tbg_player_id: `def-${index}`, specific_position: 'Centre-Back', age: 24, rating: 78 - index })),
+    ...Array.from({ length: 5 }, (_, index) => ({ tbg_player_id: `mid-${index}`, transfermarkt_position: 'Central Midfield', age: 24, rating: 72 - index })),
+    ...Array.from({ length: 3 }, (_, index) => ({ tbg_player_id: `att-${index}`, position_detail: 'Centre-Forward', age: 24, rating: 67 - index }))
+  ];
+  const selected = selectViableRegistrationIds(aliasPlayers, 16);
+  assert.equal(selected.selected_ids.length, 16);
+  assert.deepEqual(selected.missing, { goalkeeper: 0, defender: 0, midfielder: 0, attacker: 0 });
+});
+
 test('missing owned coverage reserves registration places for free-agent repair', () => {
   const squad = [
     ...players('goalkeeper', 1),
@@ -54,6 +67,13 @@ test('future canonical worlds use position-first registration rather than public
   assert.match(initializer, /registeredIds\.has\(playerId\(player\)\)/);
 });
 
+test('live repair fills positional gaps and then the senior hard minimum', async () => {
+  const repair = await source('src/world/viableCanonicalRegistration.js');
+  for (const alias of ['position_detail', 'transfermarkt_position', 'specific_position']) assert.match(repair, new RegExp(alias));
+  assert.match(repair, /while \(report\.summary\.hard_minimum_gap > 0/);
+  assert.match(repair, /const candidate = nextFreeAgent\(\)/);
+});
+
 test('administrator repair is preview-first and checksum-protected', async () => {
   const [endpoint, control] = await Promise.all([
     source('netlify/functions/repair-canonical-registrations.mjs'),
@@ -61,8 +81,8 @@ test('administrator repair is preview-first and checksum-protected', async () =>
   ]);
   assert.match(endpoint, /action === 'preview'/);
   assert.match(endpoint, /expected_checksum !== before\.save_checksum/);
-  assert.match(endpoint, /save_checksum=eq\./);
-  assert.match(endpoint, /turn_status=eq\./);
+  assert.match(endpoint, /p_expected_checksum: before\.save_checksum/);
+  assert.match(endpoint, /p_expected_turn_status: before\.turn_status/);
   assert.match(endpoint, /operation_type: 'registration_repair'/);
   assert.match(control, /Preview registration repair/);
   assert.match(control, /Apply previewed repair/);
@@ -77,8 +97,14 @@ test('repair preview exposes all required administrator evidence', async () => {
   assert.match(repair, /loadPersistentWorld\(savePersistentWorld\(worldInput\)\)/);
 });
 
-test('registration repair audit migration permits the explicit operation type', async () => {
+test('registration repair migration atomically replaces checkpoint and writes audit evidence', async () => {
   const migration = await source('supabase/migrations/20260724_pr105_registration_repair_operation_type.sql');
+  const endpoint = await source('netlify/functions/repair-canonical-registrations.mjs');
   assert.match(migration, /world_operation_events_operation_type_check/);
   assert.match(migration, /'registration_repair'/);
+  assert.match(migration, /create or replace function public\.apply_canonical_registration_repair/);
+  assert.match(migration, /update public\.canonical_world_saves[\s\S]*insert into public\.world_operation_events/);
+  assert.match(migration, /security definer/);
+  assert.match(endpoint, /\/rest\/v1\/rpc\/apply_canonical_registration_repair/);
+  assert.doesNotMatch(endpoint, /method: 'PATCH'/);
 });
