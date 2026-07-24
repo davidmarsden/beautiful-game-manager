@@ -95,12 +95,6 @@ export default async (request) => {
       const failedRuns = await service(`/rest/v1/world_turn_runs?world_id=eq.${encodeURIComponent(worldId)}&previous_checksum=eq.${encodeURIComponent(before.save_checksum)}&status=eq.failed&select=id,completed_at,error_message&order=completed_at.desc&limit=1`);
       retryRun = failedRuns[0] || null;
       if (!retryRun) return json({ error: 'Failed world has no matching failed turn record; manual recovery is required' }, 409);
-      const reopened = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&save_checksum=eq.${encodeURIComponent(before.save_checksum)}&turn_status=eq.failed`, {
-        method: 'PATCH',
-        body: JSON.stringify({ turn_status: 'open', updated_at: now }),
-        headers: { prefer: 'return=representation' }
-      });
-      if (reopened.length !== 1) return json({ error: 'Failed world changed before retry; replay rejected' }, 409);
     }
 
     const operationId = retrying
@@ -108,6 +102,15 @@ export default async (request) => {
       : `scheduled-turn:${worldId}:${before.season_id}:${before.matchday}:${before.save_checksum}`;
     const existing = await service(`/rest/v1/world_operation_events?operation_id=eq.${encodeURIComponent(operationId)}&select=operation_id,status&limit=1`);
     if (existing[0]) return json({ error: 'This canonical turn recovery has already been executed or recorded' }, 409);
+
+    if (retrying) {
+      const reopened = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&save_checksum=eq.${encodeURIComponent(before.save_checksum)}&turn_status=eq.failed`, {
+        method: 'PATCH',
+        body: JSON.stringify({ turn_status: 'open', updated_at: now }),
+        headers: { prefer: 'return=representation' }
+      });
+      if (reopened.length !== 1) return json({ error: 'Failed world changed before retry; replay rejected' }, 409);
+    }
 
     const schedulerResponse = await scheduledWorldTurn();
     const schedulerBody = await schedulerResponse.json();
