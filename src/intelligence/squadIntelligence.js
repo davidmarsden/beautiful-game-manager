@@ -35,7 +35,7 @@ function playerPosition(player) {
   );
 }
 
-function positionGroup(position) {
+export function positionGroup(position) {
   const value = text(position).toLowerCase();
   if (POSITION_GROUP_CODES.goalkeeper.has(value)) return 'goalkeeper';
   if (POSITION_GROUP_CODES.defender.has(value)) return 'defender';
