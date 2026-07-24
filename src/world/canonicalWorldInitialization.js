@@ -1,7 +1,8 @@
 import { createPersistentLeagueWorld, validatePersistentLeagueWorld } from './persistentLeagueWorld.js';
 import { loadPersistentWorld, savePersistentWorld } from './persistentSeasonLoop.js';
+import { selectViableRegistrationIds } from './viableCanonicalRegistration.js';
 
-export const CANONICAL_WORLD_INITIALIZATION_VERSION = 'tbg-canonical-world-initialization-v1.1';
+export const CANONICAL_WORLD_INITIALIZATION_VERSION = 'tbg-canonical-world-initialization-v1.2';
 
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -100,7 +101,7 @@ function publishedDivisionLevels(publicationWorld, resolvedLevels) {
   return levels;
 }
 
-function projectPlayer(player, ownership, index, registrationLimit) {
+function projectPlayer(player, ownership, registered) {
   const id = playerId(player);
   if (!id) throw new Error('Publication player is missing a stable ID');
   return {
@@ -110,7 +111,7 @@ function projectPlayer(player, ownership, index, registrationLimit) {
     display_name: text(player.display_name || player.canonical_name || player.name || id),
     age: number(player.age ?? ownership?.season_start_age ?? player.season_start_age, 24),
     underlying_ability_rating: number(player.underlying_ability_rating ?? player.rating ?? player.overall_rating, 75),
-    registered: index < registrationLimit
+    registered
   };
 }
 
@@ -129,12 +130,14 @@ function projectClub(sourceClub, playersById, ownershipById, registrationLimit) 
     })
     .filter(Boolean);
   if (players.length < 18) throw new Error(`${id} has only ${players.length} authoritatively owned published squad players`);
+  const selection = selectViableRegistrationIds(players.map(({ player, ownership }) => ({ ...player, age: number(player.age ?? ownership?.season_start_age ?? player.season_start_age, 24) })), registrationLimit);
+  const registeredIds = new Set(selection.selected_ids);
   return {
     club_id: id,
     club_name: text(sourceClub.canonical_name || sourceClub.club_name || sourceClub.name || id),
     formation: text(sourceClub.formation) || '4-3-3-wide',
     tactics: { style: 'balanced', route_to_goal: 'balanced', pressing: 'mid', tempo: 'normal', mentality: 'balanced', ...(sourceClub.tactics || {}) },
-    players: players.map(({ player, ownership }, index) => projectPlayer(player, ownership, index, registrationLimit))
+    players: players.map(({ player, ownership }) => projectPlayer(player, ownership, registeredIds.has(playerId(player))))
   };
 }
 
