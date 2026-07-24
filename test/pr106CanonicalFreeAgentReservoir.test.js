@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { canonicalFreeAgentCandidates, importCanonicalFreeAgentReservoir } from '../src/world/canonicalFreeAgentReservoir.js';
+import { canonicalFreeAgentCandidates, canonicalFreeAgentReservoirFingerprint, importCanonicalFreeAgentReservoir } from '../src/world/canonicalFreeAgentReservoir.js';
 
 const source = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
@@ -52,6 +52,22 @@ test('reservoir import preserves stable IDs and does not duplicate canonical pla
   });
 });
 
+test('reservoir fingerprint changes when any plan-affecting candidate field changes', () => {
+  const original = publication();
+  const baseline = canonicalFreeAgentReservoirFingerprint(original);
+  for (const mutate of [
+    (copy) => { copy.players[3].position = 'CB'; },
+    (copy) => { copy.players[3].rating = 91; },
+    (copy) => { copy.players[3].age = 19; },
+    (copy) => { copy.players[3].name = 'Renamed Keeper'; },
+    (copy) => { copy.players.reverse(); }
+  ]) {
+    const changed = structuredClone(original);
+    mutate(changed);
+    assert.notEqual(canonicalFreeAgentReservoirFingerprint(changed), baseline);
+  }
+});
+
 test('future canonical initialization persists the publication reservoir', async () => {
   const initializer = await source('src/world/canonicalWorldInitialization.js');
   assert.match(initializer, /importCanonicalFreeAgentReservoir\(world, publicationWorld\)/);
@@ -64,6 +80,7 @@ test('live repair imports reservoir before planning and pins apply to its finger
     source('public/admin-turn-control.js')
   ]);
   assert.match(endpoint, /fetchPublicationWorld\(\)/);
+  assert.match(endpoint, /canonicalFreeAgentReservoirFingerprint\(publication, \{ existingPlayerIds \}\)/);
   assert.match(endpoint, /importCanonicalFreeAgentReservoir\(world, publication\)/);
   assert.match(endpoint, /expected_reservoir_fingerprint !== fingerprint/);
   assert.match(endpoint, /Published free-agent reservoir changed after preview/);
