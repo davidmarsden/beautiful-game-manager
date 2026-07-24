@@ -48,6 +48,38 @@ export function commandForDomain(row) {
   return null;
 }
 
+function commandLabel(type) {
+  return ({
+    register_player: 'Player registration',
+    unregister_player: 'Registration removal',
+    renew_contract: 'Contract renewal',
+    transfer_offer: 'Transfer offer',
+    transfer_listing: 'Transfer listing',
+    transfer_response: 'Transfer response'
+  })[type] || 'Manager request';
+}
+
+function outcomeReason(result, row) {
+  if (result.status === 'applied') return `${commandLabel(row.command_type)} was applied to the canonical world.`;
+  return result.error || `${commandLabel(row.command_type)} was rejected.`;
+}
+
+function inboxEvent(row, result, now) {
+  const applied = result.status === 'applied';
+  const label = commandLabel(row.command_type);
+  const playerId = row.command_payload?.playerId || row.command_payload?.player_id || null;
+  return {
+    recipient_manager_id: row.manager_id,
+    club_id: row.club_id,
+    message_type: 'world_command_outcome',
+    subject: `${label} ${applied ? 'completed' : 'rejected'}`,
+    body: outcomeReason(result, row),
+    related_player_id: playerId,
+    priority: applied ? 'normal' : 'high',
+    created_at: now
+  };
+}
+
 function applyPendingCommands(worldInput, rows) {
   let world = loadPersistentWorld(savePersistentWorld(worldInput));
   const originalHumanClubId = world.human_club_id;
@@ -88,7 +120,7 @@ async function processWorld(stored, now) {
     const matchday = world.matchday_cycle?.current_matchday || 1;
     const appointments = await service(`/rest/v1/manager_appointments?world_id=eq.${encodeURIComponent(worldId)}&status=eq.active&select=world_id,manager_id,club_id,status`);
     const submissions = await service(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(worldId)}&season_id=eq.${encodeURIComponent(seasonId)}&matchday=eq.${matchday}&status=eq.submitted&select=*&order=submitted_at.asc,id.asc`);
-    const commands = await service(`/rest/v1/manager_world_commands?world_id=eq.${encodeURIComponent(worldId)}&status=eq.pending&effective_season_id=eq.${encodeURIComponent(seasonId)}&effective_matchday=eq.${matchday}&select=*&order=submitted_at.asc`);
+    const commands = await service(`/rest/v1/manager_world_commands?world_id=eq.${encodeURIComponent(worldId)}&status=eq.pending&effective_season_id=eq.${encodeURIComponent(seasonId)}&effective_matchday=eq.${matchday}&select=*&order=submitted_at.asc,id.asc`);
 
     const commandRun = applyPendingCommands(world, commands);
     world = commandRun.world;
@@ -142,10 +174,23 @@ async function processWorld(stored, now) {
     });
     if (replaced.length !== 1) throw new Error('Canonical world changed during scheduled processing');
 
+    const commandById = new Map(commands.map((row) => [row.id, row]));
     for (const result of commandRun.results) {
+      const row = commandById.get(result.id);
+      const reason = outcomeReason(result, row);
       await service(`/rest/v1/manager_world_commands?id=eq.${encodeURIComponent(result.id)}`, {
         method: 'PATCH',
-        body: JSON.stringify({ status: result.status, processed_at: now }),
+        body: JSON.stringify({
+          status: result.status,
+          processed_at: now,
+          outcome_reason: reason,
+          outcome_details: result.status === 'applied' ? { result: result.result || {} } : { error: result.error || reason }
+        }),
+        headers: { prefer: 'return=minimal' }
+      });
+      await service('/rest/v1/manager_messages', {
+        method: 'POST',
+        body: JSON.stringify(inboxEvent(row, result, now)),
         headers: { prefer: 'return=minimal' }
       });
     }
@@ -181,7 +226,7 @@ export default async () => {
   const due = await service(`/rest/v1/canonical_world_saves?turn_status=eq.open&next_turn_at=lte.${encodeURIComponent(now)}&select=*`);
   const results = [];
   for (const stored of due) results.push(await processWorld(stored, now));
-  return json({ version: 'tbg-scheduled-world-turn-v1.1', checked_at: now, worlds_due: due.length, results });
+  return json({ version: 'tbg-scheduled-world-turn-v1.2', checked_at: now, worlds_due: due.length, results });
 };
 
 export const config = { schedule: '*/15 * * * *' };
