@@ -61,6 +61,7 @@ function signFreeAgent(state, { clubId, playerId: id, at }) {
   club.player_ids.push(id);
   state.contracts[contractId] = { contract_id: contractId, player_id: id, club_id: clubId, start_at: atIso, end_at: state.calendar.season_end, wage: 1000, status: 'active' };
   player.contract_id = contractId;
+  player.canonical_status = 'contracted';
   state.registrations[id] = { player_id: id, club_id: clubId, registered: false, registered_at: null };
   appendEvent(state, 'free_agent_signed', atIso, { club_id: clubId, player_id: id, contract_id: contractId, reason: 'canonical_registration_repair' });
   registerPlayer(state, { clubId, playerId: id, at: atIso });
