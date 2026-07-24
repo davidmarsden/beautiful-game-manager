@@ -1,13 +1,19 @@
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
-export const CANONICAL_FREE_AGENT_RESERVOIR_VERSION = 'tbg-canonical-free-agent-reservoir-v1.0';
+export const CANONICAL_FREE_AGENT_RESERVOIR_VERSION = 'tbg-canonical-free-agent-reservoir-v1.1';
 
 const playerId = (player) => text(player?.tbg_player_id || player?.player_id || player?.transfermarkt_id || player?.id);
 const clubId = (club) => text(club?.tbg_club_id || club?.club_id || club?.id);
 const ownershipClubId = (ownership) => text(ownership?.club_id || ownership?.owner_club_id || ownership?.tbg_club_id || ownership?.owned_by_club_id);
 const ownershipPlayerId = (ownership) => playerId(ownership);
 const playerReferenceId = (reference) => typeof reference === 'object' ? playerId(reference) : text(reference);
+
+function stable(value) {
+  if (Array.isArray(value)) return value.map(stable);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])]));
+}
 
 function publishedSquadPlayerIds(publicationWorld) {
   const ids = new Set();
@@ -45,6 +51,20 @@ export function canonicalFreeAgentCandidates(publicationWorld, { existingPlayerI
     .map((player, sourceIndex) => ({ player, sourceIndex, id: playerId(player), ownership: ownershipById.get(playerId(player)) || null }))
     .filter(({ id, ownership }) => id && !existing.has(id) && !squadPlayers.has(id) && !ownershipClubId(ownership))
     .map(({ player, ownership, sourceIndex }) => Object.freeze({ source_index: sourceIndex, player: Object.freeze(projectFreeAgent(player, ownership)) })));
+}
+
+export function canonicalFreeAgentReservoirFingerprint(publicationWorld, { existingPlayerIds = [] } = {}) {
+  const candidates = canonicalFreeAgentCandidates(publicationWorld, { existingPlayerIds });
+  const serialized = JSON.stringify(stable(candidates.map((row) => ({
+    source_index: row.source_index,
+    player: row.player
+  }))));
+  let hash = 2166136261;
+  for (const character of serialized) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `fnv1a-${(hash >>> 0).toString(16).padStart(8, '0')}`;
 }
 
 export function importCanonicalFreeAgentReservoir(world, publicationWorld) {
