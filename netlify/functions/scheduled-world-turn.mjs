@@ -1,6 +1,7 @@
 import { executeScheduledTurn, buildScheduledTurnPlan } from '../../src/world/sharedWorldScheduler.js';
 import { executePortalWorldCommand } from '../../src/world/portalWorldControl.js';
 import { loadPersistentWorld, savePersistentWorld } from '../../src/world/persistentSeasonLoop.js';
+import { prepareScheduledTurnViability } from '../../src/world/scheduledTurnViability.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -137,17 +138,26 @@ async function processWorld(stored, now) {
   if (lockRows.length !== 1) return { world_id: worldId, status: 'skipped', reason: 'World was already claimed or changed' };
 
   let runId = null;
+  let seasonId = stored.season_id;
+  let matchday = stored.matchday || 1;
+  let failureDetails = null;
   try {
     let world = loadPersistentWorld(JSON.stringify(stored.save_envelope));
     const commandDisplayWorld = loadPersistentWorld(JSON.stringify(stored.save_envelope));
-    const seasonId = world.squad_cycle.season_id;
-    const matchday = world.matchday_cycle?.current_matchday || 1;
+    seasonId = world.squad_cycle.season_id;
+    matchday = world.matchday_cycle?.current_matchday || 1;
     const appointments = await service(`/rest/v1/manager_appointments?world_id=eq.${encodeURIComponent(worldId)}&status=eq.active&select=world_id,manager_id,club_id,status`);
     const submissions = await service(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(worldId)}&season_id=eq.${encodeURIComponent(seasonId)}&matchday=eq.${matchday}&status=eq.submitted&select=*&order=submitted_at.asc,id.asc`);
     const commands = await service(`/rest/v1/manager_world_commands?world_id=eq.${encodeURIComponent(worldId)}&status=eq.pending&effective_season_id=eq.${encodeURIComponent(seasonId)}&effective_matchday=eq.${matchday}&select=*&order=submitted_at.asc,id.asc`);
 
     const commandRun = applyPendingCommands(world, commands);
     world = commandRun.world;
+    try {
+      failureDetails = prepareScheduledTurnViability(world, { at: world.squad_cycle.calendar?.transfer_windows?.[0]?.opens_at || world.clock });
+    } catch (error) {
+      failureDetails = error.diagnostics || null;
+      throw error;
+    }
     const plan = buildScheduledTurnPlan(world, submissions, {
       appointments,
       scheduledFor: stored.next_turn_at || now,
@@ -228,8 +238,13 @@ async function processWorld(stored, now) {
       body: JSON.stringify({ status: 'complete', next_checksum: envelope.checksum, completed_at: now }),
       headers: { prefer: 'return=minimal' }
     });
-    return { world_id: worldId, status: 'complete', season_id: seasonId, matchday, next_turn_at: nextTurnAt, checksum: envelope.checksum };
+    return { world_id: worldId, status: 'complete', season_id: seasonId, matchday, next_turn_at: nextTurnAt, checksum: envelope.checksum, viability: failureDetails };
   } catch (error) {
+    await service(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(worldId)}&season_id=eq.${encodeURIComponent(seasonId)}&matchday=eq.${matchday}&status=eq.locked`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'submitted', locked_at: null }),
+      headers: { prefer: 'return=minimal' }
+    }).catch(() => {});
     await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&save_checksum=eq.${encodeURIComponent(previousChecksum)}&turn_status=eq.locking`, {
       method: 'PATCH',
       body: JSON.stringify({ turn_status: 'failed', updated_at: now }),
@@ -240,7 +255,7 @@ async function processWorld(stored, now) {
       body: JSON.stringify({ status: 'failed', error_message: error.message, completed_at: now }),
       headers: { prefer: 'return=minimal' }
     }).catch(() => {});
-    return { world_id: worldId, status: 'failed', error: error.message };
+    return { world_id: worldId, status: 'failed', error: error.message, diagnostics: error.diagnostics || failureDetails };
   }
 }
 
@@ -250,7 +265,7 @@ export default async () => {
   const due = await service(`/rest/v1/canonical_world_saves?turn_status=eq.open&next_turn_at=lte.${encodeURIComponent(now)}&select=*`);
   const results = [];
   for (const stored of due) results.push(await processWorld(stored, now));
-  return json({ version: 'tbg-scheduled-world-turn-v1.3', checked_at: now, worlds_due: due.length, results });
+  return json({ version: 'tbg-scheduled-world-turn-v1.4', checked_at: now, worlds_due: due.length, results });
 };
 
 export const config = { schedule: '*/15 * * * *' };
