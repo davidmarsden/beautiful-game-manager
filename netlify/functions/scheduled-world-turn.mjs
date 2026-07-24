@@ -59,21 +59,44 @@ function commandLabel(type) {
   })[type] || 'Manager request';
 }
 
-function outcomeReason(result, row) {
-  if (result.status === 'applied') return `${commandLabel(row.command_type)} was applied to the canonical world.`;
-  return result.error || `${commandLabel(row.command_type)} was rejected.`;
+function playerIdentity(world, row) {
+  const playerId = row.command_payload?.playerId || row.command_payload?.player_id || null;
+  const player = playerId ? world.squad_cycle?.players?.[playerId] : null;
+  return {
+    playerId,
+    playerName: String(player?.display_name || player?.player_name || player?.name || playerId || 'the player').trim()
+  };
 }
 
-function inboxEvent(row, result, now) {
+function clubIdentity(world, clubId) {
+  return String(world.club_profiles?.[clubId]?.club_name || world.club_profiles?.[clubId]?.canonical_name || clubId || 'the club').trim();
+}
+
+function outcomeReason(result, row, world) {
+  const { playerName } = playerIdentity(world, row);
+  const years = Number(row.command_payload?.years || 0);
+  if (result.status === 'applied') {
+    if (row.command_type === 'register_player') return `${playerName} has been registered for competitive selection.`;
+    if (row.command_type === 'unregister_player') return `${playerName} has been removed from the registered squad.`;
+    if (row.command_type === 'renew_contract') return `${playerName}'s contract has been renewed${years ? ` for ${years} season${years === 1 ? '' : 's'}` : ''}.`;
+    return `${commandLabel(row.command_type)} for ${playerName} was applied to the canonical world.`;
+  }
+  const otherClubId = row.command_payload?.otherClubId || row.command_payload?.other_club_id || null;
+  const otherClub = otherClubId ? clubIdentity(world, otherClubId) : null;
+  const context = otherClub ? ` involving ${playerName} and ${otherClub}` : ` for ${playerName}`;
+  return result.error ? `${result.error}${context}.` : `${commandLabel(row.command_type)}${context} was rejected.`;
+}
+
+function inboxEvent(world, row, result, now) {
   const applied = result.status === 'applied';
   const label = commandLabel(row.command_type);
-  const playerId = row.command_payload?.playerId || row.command_payload?.player_id || null;
+  const { playerId, playerName } = playerIdentity(world, row);
   return {
     recipient_manager_id: row.manager_id,
     club_id: row.club_id,
     message_type: 'world_command_outcome',
-    subject: `${label} ${applied ? 'completed' : 'rejected'}`,
-    body: outcomeReason(result, row),
+    subject: `${playerName}: ${label.toLowerCase()} ${applied ? 'completed' : 'rejected'}`,
+    body: outcomeReason(result, row, world),
     related_player_id: playerId,
     priority: applied ? 'normal' : 'high',
     created_at: now
@@ -116,6 +139,7 @@ async function processWorld(stored, now) {
   let runId = null;
   try {
     let world = loadPersistentWorld(JSON.stringify(stored.save_envelope));
+    const commandDisplayWorld = loadPersistentWorld(JSON.stringify(stored.save_envelope));
     const seasonId = world.squad_cycle.season_id;
     const matchday = world.matchday_cycle?.current_matchday || 1;
     const appointments = await service(`/rest/v1/manager_appointments?world_id=eq.${encodeURIComponent(worldId)}&status=eq.active&select=world_id,manager_id,club_id,status`);
@@ -177,7 +201,7 @@ async function processWorld(stored, now) {
     const commandById = new Map(commands.map((row) => [row.id, row]));
     for (const result of commandRun.results) {
       const row = commandById.get(result.id);
-      const reason = outcomeReason(result, row);
+      const reason = outcomeReason(result, row, commandDisplayWorld);
       await service(`/rest/v1/manager_world_commands?id=eq.${encodeURIComponent(result.id)}`, {
         method: 'PATCH',
         body: JSON.stringify({
@@ -190,7 +214,7 @@ async function processWorld(stored, now) {
       });
       await service('/rest/v1/manager_messages', {
         method: 'POST',
-        body: JSON.stringify(inboxEvent(row, result, now)),
+        body: JSON.stringify(inboxEvent(commandDisplayWorld, row, result, now)),
         headers: { prefer: 'return=minimal' }
       });
     }
@@ -226,7 +250,7 @@ export default async () => {
   const due = await service(`/rest/v1/canonical_world_saves?turn_status=eq.open&next_turn_at=lte.${encodeURIComponent(now)}&select=*`);
   const results = [];
   for (const stored of due) results.push(await processWorld(stored, now));
-  return json({ version: 'tbg-scheduled-world-turn-v1.2', checked_at: now, worlds_due: due.length, results });
+  return json({ version: 'tbg-scheduled-world-turn-v1.3', checked_at: now, worlds_due: due.length, results });
 };
 
 export const config = { schedule: '*/15 * * * *' };
