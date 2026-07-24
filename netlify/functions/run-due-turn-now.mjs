@@ -54,10 +54,11 @@ async function adminIdentity(token) {
   return { manager, appointment };
 }
 
-function compact(result, before, after, operationId) {
+function compact(result, before, after, operationId, retrying) {
   return {
     accepted: result.status === 'complete',
     operation_id: operationId,
+    operation: retrying ? 'retry_failed_turn' : 'run_due_turn_now',
     world_id: result.world_id,
     season_id: result.season_id || before.season_id,
     matchday_advanced: result.matchday || before.matchday,
@@ -67,7 +68,8 @@ function compact(result, before, after, operationId) {
     next_turn_at: result.next_turn_at || after?.next_turn_at || null,
     status: result.status,
     reason: result.reason || null,
-    error: result.error || null
+    error: result.error || null,
+    diagnostics: result.diagnostics || null
   };
 }
 
@@ -83,12 +85,29 @@ export default async (request) => {
     const rows = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&select=*`);
     const before = rows[0];
     if (!before) return json({ error: `Canonical world ${worldId} does not exist` }, 404);
-    if (before.turn_status !== 'open') return json({ error: `Canonical world is ${before.turn_status}; duplicate or replayed execution rejected` }, 409);
-    if (!before.next_turn_at || new Date(before.next_turn_at) > new Date(now)) return json({ error: 'Canonical world is not due yet' }, 409);
 
-    const operationId = `scheduled-turn:${worldId}:${before.season_id}:${before.matchday}:${before.save_checksum}`;
+    const retrying = before.turn_status === 'failed';
+    if (!['open', 'failed'].includes(before.turn_status)) return json({ error: `Canonical world is ${before.turn_status}; duplicate or replayed execution rejected` }, 409);
+    if (!retrying && (!before.next_turn_at || new Date(before.next_turn_at) > new Date(now))) return json({ error: 'Canonical world is not due yet' }, 409);
+
+    let retryRun = null;
+    if (retrying) {
+      const failedRuns = await service(`/rest/v1/world_turn_runs?world_id=eq.${encodeURIComponent(worldId)}&previous_checksum=eq.${encodeURIComponent(before.save_checksum)}&status=eq.failed&select=id,completed_at,error_message&order=completed_at.desc&limit=1`);
+      retryRun = failedRuns[0] || null;
+      if (!retryRun) return json({ error: 'Failed world has no matching failed turn record; manual recovery is required' }, 409);
+      const reopened = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&save_checksum=eq.${encodeURIComponent(before.save_checksum)}&turn_status=eq.failed`, {
+        method: 'PATCH',
+        body: JSON.stringify({ turn_status: 'open', updated_at: now }),
+        headers: { prefer: 'return=representation' }
+      });
+      if (reopened.length !== 1) return json({ error: 'Failed world changed before retry; replay rejected' }, 409);
+    }
+
+    const operationId = retrying
+      ? `scheduled-turn-retry:${worldId}:${retryRun.id}:${before.save_checksum}`
+      : `scheduled-turn:${worldId}:${before.season_id}:${before.matchday}:${before.save_checksum}`;
     const existing = await service(`/rest/v1/world_operation_events?operation_id=eq.${encodeURIComponent(operationId)}&select=operation_id,status&limit=1`);
-    if (existing[0]) return json({ error: 'This canonical turn has already been executed or recorded' }, 409);
+    if (existing[0]) return json({ error: 'This canonical turn recovery has already been executed or recorded' }, 409);
 
     const schedulerResponse = await scheduledWorldTurn();
     const schedulerBody = await schedulerResponse.json();
@@ -97,7 +116,7 @@ export default async (request) => {
 
     const afterRows = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&select=*`);
     const after = afterRows[0] || null;
-    const details = compact(result, before, after, operationId);
+    const details = compact(result, before, after, operationId, retrying);
     await service('/rest/v1/world_operation_events', {
       method: 'POST',
       body: JSON.stringify({
@@ -110,10 +129,11 @@ export default async (request) => {
         replacement_checksum: after?.save_checksum || result.checksum || null,
         status: result.status === 'complete' ? 'accepted' : 'rejected',
         details: {
-          action: 'run_due_turn_now',
+          action: retrying ? 'retry_failed_turn' : 'run_due_turn_now',
           production_scheduler_version: schedulerBody.version,
-          before: { season_id: before.season_id, matchday: before.matchday, checksum: before.save_checksum, next_turn_at: before.next_turn_at },
-          after: after ? { season_id: after.season_id, matchday: after.matchday, checksum: after.save_checksum, next_turn_at: after.next_turn_at } : null,
+          recovery_of_run_id: retryRun?.id || null,
+          before: { season_id: before.season_id, matchday: before.matchday, checksum: before.save_checksum, next_turn_at: before.next_turn_at, turn_status: before.turn_status },
+          after: after ? { season_id: after.season_id, matchday: after.matchday, checksum: after.save_checksum, next_turn_at: after.next_turn_at, turn_status: after.turn_status } : null,
           scheduler_result: result
         },
         requested_by: current.manager.id,
@@ -123,7 +143,7 @@ export default async (request) => {
 
     return json(details, result.status === 'complete' ? 200 : 409);
   } catch (error) {
-    const status = /Session|Authentication/.test(error.message) ? 401 : /Administrator/.test(error.message) ? 403 : /already|duplicate|replay|not due|is locking|is failed/.test(error.message) ? 409 : 503;
+    const status = /Session|Authentication/.test(error.message) ? 401 : /Administrator/.test(error.message) ? 403 : /already|duplicate|replay|not due|is locking|manual recovery|changed before retry/.test(error.message) ? 409 : 503;
     return json({ error: error.message }, status);
   }
 };
