@@ -29,18 +29,23 @@ function repairPreviewHtml(preview) {
   const blocked = (preview.blocked || []).map((club) => `<li><strong>${escapeHtml(club.club_name)}</strong>: ${escapeHtml(club.coverage_gaps.map((gap) => `${gap.group} ${gap.registered}/${gap.required}`).join(', '))}</li>`).join('');
   return `
     <p><strong>Preview only — no world data has changed.</strong></p>
+    <p>${preview.reservoir_imported || 0} unattached players imported into the preview reservoir · ${preview.reservoir_available_after_repair || 0} remain available after proposed signings.</p>
     <p>${preview.registrations_added} registrations added · ${preview.registrations_removed} removed · ${preview.free_agents_signed} free agents signed · ${preview.clubs_still_impossible} clubs still impossible.</p>
     ${clubRows ? `<details open><summary>Proposed club changes</summary><ul>${clubRows}</ul></details>` : '<p>No registration changes are required.</p>'}
     ${blocked ? `<details open><summary>Clubs still impossible to repair</summary><ul>${blocked}</ul></details>` : ''}
   `;
 }
 
-async function repairRequest(action, expectedChecksum) {
+async function repairRequest(action, expectedChecksum, expectedReservoirFingerprint) {
   if (!authorization) throw new Error('Portal session is not ready');
   const response = await nativeFetch('/api/repair-canonical-registrations', {
     method: 'POST',
     headers: { authorization, 'content-type': 'application/json' },
-    body: JSON.stringify({ action, expected_checksum: expectedChecksum || null })
+    body: JSON.stringify({
+      action,
+      expected_checksum: expectedChecksum || null,
+      expected_reservoir_fingerprint: expectedReservoirFingerprint || null
+    })
   });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || 'Canonical registration repair failed');
@@ -61,7 +66,7 @@ function mount(bootstrap) {
     </section>
     <section id="registrationRepairCard" class="world-control-card">
       <h3>Canonical squad registration repair</h3>
-      <p>Preview a positionally viable registration plan before changing the canonical checkpoint. Applying requires the exact previewed checksum.</p>
+      <p>Preview a positionally viable registration plan using the published unattached-player reservoir before changing the canonical checkpoint. Applying requires the exact previewed checkpoint and reservoir.</p>
       <div class="world-control-actions">
         <button id="previewRegistrationRepair" type="button">Preview registration repair</button>
         <button id="applyRegistrationRepair" class="primary-action" type="button" disabled>Apply previewed repair</button>
@@ -100,7 +105,7 @@ function mount(bootstrap) {
     previewButton.disabled = true;
     applyButton.disabled = true;
     registrationRepairPreview = null;
-    output.textContent = 'Building a preview from the current canonical checkpoint…';
+    output.textContent = 'Building a preview from the current canonical checkpoint and published free-agent reservoir…';
     try {
       const result = await repairRequest('preview');
       registrationRepairPreview = result.preview;
@@ -117,12 +122,16 @@ function mount(bootstrap) {
     const previewButton = document.getElementById('previewRegistrationRepair');
     const applyButton = document.getElementById('applyRegistrationRepair');
     const output = document.getElementById('registrationRepairResult');
-    if (!registrationRepairPreview?.source_checksum) return;
+    if (!registrationRepairPreview?.source_checksum || !registrationRepairPreview?.reservoir_fingerprint) return;
     previewButton.disabled = true;
     applyButton.disabled = true;
     output.textContent = 'Applying the previewed repair to the unchanged canonical checkpoint…';
     try {
-      const result = await repairRequest('apply', registrationRepairPreview.source_checksum);
+      const result = await repairRequest(
+        'apply',
+        registrationRepairPreview.source_checksum,
+        registrationRepairPreview.reservoir_fingerprint
+      );
       output.textContent = `Registration repair applied. Checkpoint ${String(result.previous_checksum).slice(0, 12)} → ${String(result.replacement_checksum).slice(0, 12)}.`;
       window.dispatchEvent(new CustomEvent('tbg:canonical-registration-repaired', { detail: result }));
       window.location.reload();

@@ -1,8 +1,9 @@
 import { createPersistentLeagueWorld, validatePersistentLeagueWorld } from './persistentLeagueWorld.js';
 import { loadPersistentWorld, savePersistentWorld } from './persistentSeasonLoop.js';
 import { selectViableRegistrationIds } from './viableCanonicalRegistration.js';
+import { importCanonicalFreeAgentReservoir } from './canonicalFreeAgentReservoir.js';
 
-export const CANONICAL_WORLD_INITIALIZATION_VERSION = 'tbg-canonical-world-initialization-v1.2';
+export const CANONICAL_WORLD_INITIALIZATION_VERSION = 'tbg-canonical-world-initialization-v1.3';
 
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -173,6 +174,7 @@ export function buildCanonicalWorldFromPublication(publicationWorld, {
   if (!clubIds.includes(resolvedHumanClubId)) throw new Error(`Administrator club ${resolvedHumanClubId} is not in the published world`);
   const world = createPersistentLeagueWorld({ worldId: resolvedWorldId, divisions, humanClubId: resolvedHumanClubId, seasonStart, seasonEnd, movementCount });
   world.squad_cycle.registration_limit = registrationLimit;
+  const reservoir = importCanonicalFreeAgentReservoir(world, publicationWorld);
   const validation = validatePersistentLeagueWorld(world);
   if (!validation.valid) throw new Error(`Initial canonical world is invalid: ${validation.errors.join('; ')}`);
   const serialized = savePersistentWorld(world);
@@ -190,7 +192,8 @@ export function buildCanonicalWorldFromPublication(publicationWorld, {
       division_count: restored.competition.divisions.length,
       club_count: clubIds.length,
       player_count: Object.keys(restored.squad_cycle.players).length,
-      registered_player_count: Object.values(restored.squad_cycle.clubs).reduce((sum, club) => sum + club.registered_player_ids.length, 0)
+      registered_player_count: Object.values(restored.squad_cycle.clubs).reduce((sum, club) => sum + club.registered_player_ids.length, 0),
+      free_agent_reservoir_count: reservoir.imported_count
     })
   });
 }

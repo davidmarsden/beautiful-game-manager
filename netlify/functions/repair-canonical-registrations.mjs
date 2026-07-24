@@ -1,6 +1,8 @@
 import { planCanonicalRegistrationRepair } from '../../src/world/viableCanonicalRegistration.js';
+import { canonicalFreeAgentReservoirFingerprint, importCanonicalFreeAgentReservoir } from '../../src/world/canonicalFreeAgentReservoir.js';
 import { loadPersistentWorld, savePersistentWorld } from '../../src/world/persistentSeasonLoop.js';
 
+const WORLD_URL = process.env.TBG_WORLD_URL || 'https://raw.githubusercontent.com/davidmarsden/beautiful-game-engine/main/derived/world/world.json';
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -30,6 +32,12 @@ async function service(path, options = {}) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.message || body.error || `Supabase returned ${response.status}`);
   return body;
+}
+
+async function fetchPublicationWorld() {
+  const response = await fetch(WORLD_URL, { headers: { accept: 'application/json' } });
+  if (!response.ok) throw new Error(`World publication returned ${response.status}`);
+  return response.json();
 }
 
 async function adminIdentity(token) {
@@ -69,7 +77,11 @@ export default async (request) => {
     if (before.phase !== 'preseason') return json({ error: `Registration repair is only available in preseason; world phase is ${before.phase}` }, 409);
     if (!['open', 'failed'].includes(before.turn_status)) return json({ error: `Canonical world is ${before.turn_status}; wait for the active operation to finish` }, 409);
 
+    const publication = await fetchPublicationWorld();
     const world = loadPersistentWorld(JSON.stringify(before.save_envelope));
+    const existingPlayerIds = Object.keys(world.squad_cycle.players);
+    const fingerprint = canonicalFreeAgentReservoirFingerprint(publication, { existingPlayerIds });
+    const reservoir = importCanonicalFreeAgentReservoir(world, publication);
     const planned = planCanonicalRegistrationRepair(world, {
       at: world.squad_cycle.calendar?.transfer_windows?.[0]?.opens_at || world.clock
     });
@@ -78,13 +90,18 @@ export default async (request) => {
       world_id: worldId,
       source_checksum: before.save_checksum,
       turn_status: before.turn_status,
-      phase: before.phase
+      phase: before.phase,
+      reservoir_imported: reservoir.imported_count,
+      reservoir_available_after_repair: Object.values(planned.world.squad_cycle.players).filter((player) => !player.club_id).length,
+      reservoir_fingerprint: fingerprint,
+      publication_source: WORLD_URL
     };
     if (action === 'preview') return json({ action: 'preview', preview });
     if (payload.expected_checksum !== before.save_checksum) return json({ error: 'Canonical checkpoint changed after preview; run preview again' }, 409);
+    if (payload.expected_reservoir_fingerprint !== fingerprint) return json({ error: 'Published free-agent reservoir changed after preview; run preview again' }, 409);
     if (!planned.preview.accepted) return json({ error: 'Registration repair cannot be applied while clubs remain impossible to repair', preview }, 409);
 
-    const operationId = `registration-repair:${worldId}:${before.save_checksum}`;
+    const operationId = `registration-repair:${worldId}:${before.save_checksum}:${fingerprint}`;
     const saved = savePersistentWorld(planned.world);
     const envelope = JSON.parse(saved);
     const now = new Date().toISOString();
@@ -110,10 +127,11 @@ export default async (request) => {
       replacement_checksum: envelope.checksum,
       status: 'accepted',
       details: {
-        action: 'repair_canonical_registrations',
+        action: 'repair_canonical_registrations_with_free_agent_reservoir',
         before: { checksum: before.save_checksum, phase: before.phase, turn_status: before.turn_status, matchday: before.matchday },
         after: { checksum: envelope.checksum, phase: planned.world.phase, turn_status: before.turn_status, matchday: replacement.matchday },
-        preview: planned.preview
+        reservoir: { imported_count: reservoir.imported_count, fingerprint, publication_source: WORLD_URL },
+        preview
       },
       requested_by: current.manager.id,
       created_at: now
@@ -143,7 +161,7 @@ export default async (request) => {
       world_id: worldId,
       previous_checksum: before.save_checksum,
       replacement_checksum: envelope.checksum,
-      preview: planned.preview
+      preview
     });
   } catch (error) {
     const status = /Session|Authentication/.test(error.message) ? 401 : /Administrator/.test(error.message) ? 403 : /changed|already|only available|is locking|is processing|remain impossible/.test(error.message) ? 409 : 503;
