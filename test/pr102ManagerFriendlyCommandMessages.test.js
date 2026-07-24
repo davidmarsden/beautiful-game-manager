@@ -10,7 +10,6 @@ test('shared-world command history resolves player and club IDs to display names
   assert.match(endpoint, /function clubName\(world, clubId\)/);
   assert.match(endpoint, /player_name: playerName\(world, playerId\)/);
   assert.match(endpoint, /other_club_name: clubName\(world, otherClubId\)/);
-  assert.match(endpoint, /player_id: playerId, playerId: playerName\(world, playerId\)/);
 });
 
 test('production scheduler persists football-language outcomes', async () => {
@@ -25,7 +24,9 @@ test('production scheduler persists football-language outcomes', async () => {
 test('friendly messages retain raw identifiers for audit and links', async () => {
   const endpoint = await source('netlify/functions/shared-world.mjs');
   const scheduler = await source('netlify/functions/scheduled-world-turn.mjs');
-  assert.match(endpoint, /player_id: playerId/);
+  assert.match(endpoint, /\.\.\.rawPayload/);
+  assert.match(endpoint, /player_id: playerId, player_name: playerName\(world, playerId\)/);
+  assert.doesNotMatch(endpoint, /playerId: playerName\(world, playerId\)/);
   assert.match(endpoint, /other_club_id: otherClubId/);
   assert.match(scheduler, /playerId = row\.command_payload/);
   assert.match(scheduler, /commandDisplayWorld/);
