@@ -1,5 +1,6 @@
 const nativeFetch = window.fetch.bind(window);
 let authorization = '';
+let registrationRepairPreview = null;
 
 window.fetch = async (...args) => {
   const headers = args[1]?.headers || (args[0] instanceof Request ? args[0].headers : null);
@@ -15,6 +16,37 @@ function resultText(result) {
   return `Matchday ${result.matchday_advanced} complete · next matchday ${result.next_matchday ?? 'pending'} · checkpoint ${String(result.replacement_checksum || '').slice(0, 12)} · next turn ${result.next_turn_at ? new Date(result.next_turn_at).toLocaleString() : 'pending'}`;
 }
 
+function repairPreviewHtml(preview) {
+  const changed = (preview.clubs || []).filter((club) => club.registrations_added.length || club.registrations_removed.length || club.free_agents_signed.length);
+  const clubRows = changed.slice(0, 30).map((club) => {
+    const details = [
+      club.registrations_added.length ? `+${club.registrations_added.length} registered` : '',
+      club.registrations_removed.length ? `−${club.registrations_removed.length} removed` : '',
+      club.free_agents_signed.length ? `${club.free_agents_signed.length} free agent${club.free_agents_signed.length === 1 ? '' : 's'} signed` : ''
+    ].filter(Boolean).join(' · ');
+    return `<li><strong>${escapeHtml(club.club_name)}</strong>: ${escapeHtml(details)}</li>`;
+  }).join('');
+  const blocked = (preview.blocked || []).map((club) => `<li><strong>${escapeHtml(club.club_name)}</strong>: ${escapeHtml(club.coverage_gaps.map((gap) => `${gap.group} ${gap.registered}/${gap.required}`).join(', '))}</li>`).join('');
+  return `
+    <p><strong>Preview only — no world data has changed.</strong></p>
+    <p>${preview.registrations_added} registrations added · ${preview.registrations_removed} removed · ${preview.free_agents_signed} free agents signed · ${preview.clubs_still_impossible} clubs still impossible.</p>
+    ${clubRows ? `<details open><summary>Proposed club changes</summary><ul>${clubRows}</ul></details>` : '<p>No registration changes are required.</p>'}
+    ${blocked ? `<details open><summary>Clubs still impossible to repair</summary><ul>${blocked}</ul></details>` : ''}
+  `;
+}
+
+async function repairRequest(action, expectedChecksum) {
+  if (!authorization) throw new Error('Portal session is not ready');
+  const response = await nativeFetch('/api/repair-canonical-registrations', {
+    method: 'POST',
+    headers: { authorization, 'content-type': 'application/json' },
+    body: JSON.stringify({ action, expected_checksum: expectedChecksum || null })
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || 'Canonical registration repair failed');
+  return result;
+}
+
 function mount(bootstrap) {
   if (!bootstrap?.manager?.is_admin || document.getElementById('runDueTurnCard')) return;
   const worldView = document.getElementById('worldView');
@@ -26,7 +58,17 @@ function mount(bootstrap) {
       <p>Run the due canonical turn through the same scheduled production path. The operation rejects early, duplicate and replayed execution.</p>
       <button id="runDueTurnNow" class="primary-action" type="button">Run due turn now</button>
       <p id="runDueTurnResult" class="world-control-message" aria-live="polite"></p>
+    </section>
+    <section id="registrationRepairCard" class="world-control-card">
+      <h3>Canonical squad registration repair</h3>
+      <p>Preview a positionally viable registration plan before changing the canonical checkpoint. Applying requires the exact previewed checksum.</p>
+      <div class="world-control-actions">
+        <button id="previewRegistrationRepair" type="button">Preview registration repair</button>
+        <button id="applyRegistrationRepair" class="primary-action" type="button" disabled>Apply previewed repair</button>
+      </div>
+      <div id="registrationRepairResult" class="world-control-message" aria-live="polite"></div>
     </section>`);
+
   document.getElementById('runDueTurnNow').addEventListener('click', async () => {
     const button = document.getElementById('runDueTurnNow');
     const output = document.getElementById('runDueTurnResult');
@@ -48,6 +90,45 @@ function mount(bootstrap) {
       output.textContent = error.message;
     } finally {
       button.disabled = false;
+    }
+  });
+
+  document.getElementById('previewRegistrationRepair').addEventListener('click', async () => {
+    const previewButton = document.getElementById('previewRegistrationRepair');
+    const applyButton = document.getElementById('applyRegistrationRepair');
+    const output = document.getElementById('registrationRepairResult');
+    previewButton.disabled = true;
+    applyButton.disabled = true;
+    registrationRepairPreview = null;
+    output.textContent = 'Building a preview from the current canonical checkpoint…';
+    try {
+      const result = await repairRequest('preview');
+      registrationRepairPreview = result.preview;
+      output.innerHTML = repairPreviewHtml(result.preview);
+      applyButton.disabled = !result.preview.accepted;
+    } catch (error) {
+      output.textContent = error.message;
+    } finally {
+      previewButton.disabled = false;
+    }
+  });
+
+  document.getElementById('applyRegistrationRepair').addEventListener('click', async () => {
+    const previewButton = document.getElementById('previewRegistrationRepair');
+    const applyButton = document.getElementById('applyRegistrationRepair');
+    const output = document.getElementById('registrationRepairResult');
+    if (!registrationRepairPreview?.source_checksum) return;
+    previewButton.disabled = true;
+    applyButton.disabled = true;
+    output.textContent = 'Applying the previewed repair to the unchanged canonical checkpoint…';
+    try {
+      const result = await repairRequest('apply', registrationRepairPreview.source_checksum);
+      output.textContent = `Registration repair applied. Checkpoint ${String(result.previous_checksum).slice(0, 12)} → ${String(result.replacement_checksum).slice(0, 12)}.`;
+      window.dispatchEvent(new CustomEvent('tbg:canonical-registration-repaired', { detail: result }));
+      window.location.reload();
+    } catch (error) {
+      output.textContent = error.message;
+      previewButton.disabled = false;
     }
   });
 }
