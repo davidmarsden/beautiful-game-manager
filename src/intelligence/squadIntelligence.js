@@ -1,9 +1,10 @@
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
-export const SQUAD_INTELLIGENCE_VERSION = 'tbg-squad-intelligence-v1.2';
+export const SQUAD_INTELLIGENCE_VERSION = 'tbg-squad-intelligence-v1.3';
 export const DEFAULT_HARD_MINIMUM_SQUAD = 18;
 export const DEFAULT_PREFERRED_MINIMUM_SQUAD = 22;
+export const FIRST_TEAM_READY_YOUTH_RATING = 80;
 
 const GROUP_REQUIREMENTS = Object.freeze({
   goalkeeper: 2,
@@ -31,8 +32,20 @@ function playerPosition(player) {
     player?.primary_position ||
     player?.position_group ||
     player?.position_name ||
-    player?.canonical_position
+    player?.canonical_position ||
+    player?.position_detail ||
+    player?.transfermarkt_position ||
+    player?.specific_position
   );
+}
+
+function playerRating(player) {
+  return number(player?.underlying_ability_rating ?? player?.rating ?? player?.overall_rating);
+}
+
+export function countsForFirstTeamViability(player, { youthRatingThreshold = FIRST_TEAM_READY_YOUTH_RATING } = {}) {
+  const age = number(player?.age, 24);
+  return age >= 19 || playerRating(player) >= youthRatingThreshold;
 }
 
 export function positionGroup(position) {
@@ -68,21 +81,19 @@ function contractHorizon(state, endAt, at) {
   const end = new Date(endAt).getTime();
   const now = new Date(at).getTime();
   if (Number.isNaN(end) || Number.isNaN(now)) return 'unknown';
-
   const currentSeasonEnd = new Date(state.calendar?.season_end || at).getTime();
   if (end <= currentSeasonEnd) return 'expiring_this_season';
-
   const nextSeasonEnd = new Date(addDays(state.calendar?.season_end || at, 365)).getTime();
   if (end <= nextSeasonEnd) return 'expiring_next_season';
   return 'secure';
 }
 
-function roleFor({ rank, seniorCount, age, registered }) {
+function roleFor({ rank, firstTeamCount, age, registered }) {
   if (!registered) return age <= 21 ? 'prospect' : 'surplus';
-  if (age <= 21 && rank >= Math.max(11, Math.ceil(seniorCount * 0.6))) return 'prospect';
-  if (rank < Math.min(4, seniorCount)) return 'key_player';
-  if (rank < Math.min(11, seniorCount)) return 'starter';
-  if (rank < Math.min(16, seniorCount)) return 'rotation';
+  if (age <= 21 && rank >= Math.max(11, Math.ceil(firstTeamCount * 0.6))) return 'prospect';
+  if (rank < Math.min(4, firstTeamCount)) return 'key_player';
+  if (rank < Math.min(11, firstTeamCount)) return 'starter';
+  if (rank < Math.min(16, firstTeamCount)) return 'rotation';
   return 'depth';
 }
 
@@ -98,75 +109,87 @@ export function analyseSquad(state, {
   at = state.calendar?.season_start || new Date().toISOString(),
   availability = null,
   hardMinimum = DEFAULT_HARD_MINIMUM_SQUAD,
-  preferredMinimum = DEFAULT_PREFERRED_MINIMUM_SQUAD
+  preferredMinimum = DEFAULT_PREFERRED_MINIMUM_SQUAD,
+  youthRatingThreshold = FIRST_TEAM_READY_YOUTH_RATING
 } = {}) {
   const club = state.clubs?.[text(clubId)];
   if (!club) throw new Error(`Unknown club: ${clubId}`);
 
   const players = club.player_ids.map((id) => state.players[id]).filter(Boolean);
   const registeredIds = new Set(club.registered_player_ids || []);
-  const seniorPlayers = players.filter((player) => number(player.age, 24) >= 19 || !player.youth_intake_season);
-  const ranked = [...seniorPlayers].sort((a, b) => number(b.underlying_ability_rating ?? b.rating) - number(a.underlying_ability_rating ?? a.rating) || playerId(a).localeCompare(playerId(b)));
+  const firstTeamPlayers = players.filter((player) => countsForFirstTeamViability(player, { youthRatingThreshold }));
+  const ranked = [...firstTeamPlayers].sort((a, b) => playerRating(b) - playerRating(a) || playerId(a).localeCompare(playerId(b)));
   const rankById = new Map(ranked.map((player, index) => [playerId(player), index]));
 
   const rows = players.map((player) => {
     const id = playerId(player);
     const position = playerPosition(player);
+    const age = number(player.age, 24);
+    const rating = playerRating(player);
     const registered = registeredIds.has(id);
+    const firstTeamReady = countsForFirstTeamViability(player, { youthRatingThreshold });
     const availabilityRow = availabilityFor(availability, id);
     const contract = contractFor(state, player);
     return Object.freeze({
       player_id: id,
       display_name: text(player.display_name || player.name || id),
-      age: number(player.age, 24),
+      age,
       position,
       position_group: positionGroup(position),
-      rating: number(player.underlying_ability_rating ?? player.rating),
+      rating,
       registered,
+      first_team_ready: firstTeamReady,
+      first_team_ready_youth: age < 19 && firstTeamReady,
       available: registered && availabilityRow.available,
       unavailable_reason: registered && !availabilityRow.available ? availabilityRow.reason : null,
       contract_end_at: contract?.end_at || null,
       contract_horizon: contractHorizon(state, contract?.end_at, at),
-      squad_role: roleFor({ rank: rankById.get(id) ?? ranked.length, seniorCount: ranked.length, age: number(player.age, 24), registered })
+      squad_role: roleFor({ rank: rankById.get(id) ?? ranked.length, firstTeamCount: ranked.length, age, registered })
     });
   });
 
-  const registeredSenior = rows.filter((row) => row.registered && row.age >= 19);
-  const availableSenior = registeredSenior.filter((row) => row.available);
+  const registeredFirstTeam = rows.filter((row) => row.registered && row.first_team_ready);
+  const availableFirstTeam = registeredFirstTeam.filter((row) => row.available);
   const coverage = Object.entries(GROUP_REQUIREMENTS).map(([group, required]) => {
-    const registered = registeredSenior.filter((row) => row.position_group === group).length;
-    const available = availableSenior.filter((row) => row.position_group === group).length;
+    const registered = registeredFirstTeam.filter((row) => row.position_group === group).length;
+    const available = availableFirstTeam.filter((row) => row.position_group === group).length;
     const registeredGap = Math.max(0, required - registered);
     const availableGap = Math.max(0, required - available);
     return Object.freeze({ group, required, registered, available, registered_gap: registeredGap, available_gap: availableGap, severity: severityFor(Math.max(registeredGap, availableGap)) });
   });
 
-  const hardGap = Math.max(0, hardMinimum - registeredSenior.length);
-  const preferredGap = Math.max(0, preferredMinimum - registeredSenior.length);
+  const hardGap = Math.max(0, hardMinimum - registeredFirstTeam.length);
+  const preferredGap = Math.max(0, preferredMinimum - registeredFirstTeam.length);
   const expiringThisSeason = rows.filter((row) => row.contract_horizon === 'expiring_this_season');
   const expiringNextSeason = rows.filter((row) => row.contract_horizon === 'expiring_next_season');
   const needs = [];
 
-  if (hardGap) needs.push(Object.freeze({ type: 'squad_size', severity: 'critical', gap: hardGap, message: `${hardGap} senior registrations below the hard minimum` }));
-  else if (preferredGap) needs.push(Object.freeze({ type: 'squad_size', severity: preferredGap >= 3 ? 'high' : 'medium', gap: preferredGap, message: `${preferredGap} senior registrations below the preferred range` }));
-
+  if (hardGap) needs.push(Object.freeze({ type: 'squad_size', severity: 'critical', gap: hardGap, message: `${hardGap} first-team registrations below the hard minimum` }));
+  else if (preferredGap) needs.push(Object.freeze({ type: 'squad_size', severity: preferredGap >= 3 ? 'high' : 'medium', gap: preferredGap, message: `${preferredGap} first-team registrations below the preferred range` }));
   for (const row of coverage.filter((item) => item.registered_gap > 0)) {
     needs.push(Object.freeze({ type: 'position_group', group: row.group, severity: row.severity, gap: row.registered_gap, message: `${row.group} depth is ${row.registered_gap} below minimum coverage` }));
   }
-
   for (const row of coverage.filter((item) => item.registered_gap === 0 && item.available_gap > 0)) {
     needs.push(Object.freeze({ type: 'temporary_availability', group: row.group, severity: row.severity, gap: row.available_gap, message: `${row.group} availability is temporarily ${row.available_gap} below cover` }));
   }
 
+  const readyYouth = rows.filter((row) => row.first_team_ready_youth);
+  const registeredReadyYouth = readyYouth.filter((row) => row.registered);
   return Object.freeze({
     version: SQUAD_INTELLIGENCE_VERSION,
     club_id: club.club_id,
     at: new Date(at).toISOString(),
+    first_team_readiness: Object.freeze({ youth_rating_threshold: youthRatingThreshold }),
     summary: Object.freeze({
       owned_players: rows.length,
       senior_players: rows.filter((row) => row.age >= 19).length,
-      registered_seniors: registeredSenior.length,
-      available_seniors: availableSenior.length,
+      first_team_players: rows.filter((row) => row.first_team_ready).length,
+      first_team_ready_youth: readyYouth.length,
+      registered_first_team_ready_youth: registeredReadyYouth.length,
+      registered_first_team: registeredFirstTeam.length,
+      available_first_team: availableFirstTeam.length,
+      registered_seniors: registeredFirstTeam.length,
+      available_seniors: availableFirstTeam.length,
       hard_minimum: hardMinimum,
       preferred_minimum: preferredMinimum,
       hard_minimum_gap: hardGap,
