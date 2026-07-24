@@ -148,6 +148,20 @@ function submittedSource(source = {}) {
   });
 }
 
+function backfillLegacyInstructionSources(runtime) {
+  for (const row of runtime.results || []) {
+    for (const side of ['home', 'away']) {
+      const team = row.teams?.[side];
+      if (team && !team.instruction_source?.type) {
+        team.instruction_source = {
+          type: 'deterministic_fallback',
+          inferred_from_legacy_result: true
+        };
+      }
+    }
+  }
+}
+
 function applySubmittedInstruction(team, instruction, club, matchState, availabilityState, matchday) {
   const normalized = normalizeInstruction(instruction);
   const registeredIds = club.players.map((player) => player.tbg_player_id);
@@ -225,6 +239,7 @@ export function advanceIncrementalMatchday(runtime, {
   simulator = simulateMatch
 } = {}) {
   if (runtime.completed) throw new Error(`Season already complete: ${runtime.season_id}`);
+  backfillLegacyInstructionSources(runtime);
   const clubMap = new Map(clubs.map((club) => [club.club_id, club]));
   const fixtures = runtime.fixtures.filter((fixture) => fixture.matchday === runtime.next_matchday);
   if (!fixtures.length) throw new Error(`No fixtures for matchday ${runtime.next_matchday}`);
@@ -330,6 +345,7 @@ export function advanceIncrementalMatchday(runtime, {
 }
 
 export function incrementalSeasonReport(runtime, { clubs } = {}) {
+  backfillLegacyInstructionSources(runtime);
   const standings = finalTable(runtime.table);
   const complete = runtime.completed && runtime.results.length === runtime.fixtures.length;
   const checks = Object.freeze({
