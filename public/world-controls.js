@@ -64,6 +64,10 @@ function mount() {
           <button id="submitWorldTransfer" type="button">Submit request</button>
         </article>
       </section>
+      <section id="worldCommandHistory" class="world-control-card" hidden>
+        <div class="world-control-heading"><div><h3>Request history</h3><p>Every registration, contract and transfer request, with its current status and processing outcome.</p></div></div>
+        <div id="worldCommandHistoryList"></div>
+      </section>
       <p id="worldControlMessage" class="world-control-message" aria-live="polite"></p>
     </div>`);
 
@@ -88,6 +92,41 @@ function countdown(value) {
   return `${new Date(value).toLocaleString()} · ${hours}h ${minutes}m remaining`;
 }
 
+function commandLabel(type) {
+  return ({
+    register_player: 'Player registration',
+    unregister_player: 'Registration removal',
+    renew_contract: 'Contract renewal',
+    transfer_offer: 'Transfer offer',
+    transfer_listing: 'Transfer listing',
+    transfer_response: 'Transfer response'
+  })[type] || type;
+}
+
+function commandSubject(command) {
+  const payload = command.payload || {};
+  const player = payload.playerId || payload.player_id;
+  const years = payload.years ? ` · ${payload.years} season${Number(payload.years) === 1 ? '' : 's'}` : '';
+  return `${commandLabel(command.type)}${player ? ` · ${player}` : ''}${years}`;
+}
+
+function renderCommandHistory() {
+  const history = $('worldCommandHistory');
+  const list = $('worldCommandHistoryList');
+  if (!history || !list) return;
+  const commands = sharedState?.commands || [];
+  history.hidden = !sharedState?.has_world;
+  list.innerHTML = commands.length ? commands.map((command) => {
+    const processed = command.processed_at ? `Processed ${new Date(command.processed_at).toLocaleString()}` : `Submitted ${new Date(command.submitted_at).toLocaleString()}`;
+    const outcome = command.outcome_reason ? `<p>${escapeHtml(command.outcome_reason)}</p>` : '<p>Awaiting the next shared-world checkpoint.</p>';
+    return `<article class="world-command-history-item" data-status="${escapeHtml(command.status)}">
+      <div class="world-control-heading"><div><strong>${escapeHtml(commandSubject(command))}</strong><small>${escapeHtml(processed)}</small></div><span class="world-control-status">${escapeHtml(command.status)}</span></div>
+      ${outcome}
+      <small>Season ${escapeHtml(command.effective_season_id || '—')} · Matchday ${escapeHtml(command.effective_matchday ?? '—')}</small>
+    </article>`;
+  }).join('') : '<p>No registration, contract or transfer requests have been submitted yet.</p>';
+}
+
 function render() {
   const summary = sharedState?.summary;
   const world = sharedState?.world;
@@ -110,6 +149,7 @@ function render() {
   const options = playerOptions();
   $('registrationPlayer').innerHTML = options;
   $('contractPlayer').innerHTML = options;
+  renderCommandHistory();
 }
 
 async function api(body = null) {
