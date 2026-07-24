@@ -87,7 +87,7 @@ export default async (request) => {
     if (!before) return json({ error: `Canonical world ${worldId} does not exist` }, 404);
 
     const retrying = before.turn_status === 'failed';
-    if (!['open', 'failed'].includes(before.turn_status)) return json({ error: `Canonical world is ${before.turn_status}; duplicate or replayed execution rejected` }, 409);
+    if (before.turn_status !== 'open' && before.turn_status !== 'failed') return json({ error: `Canonical world is ${before.turn_status}; duplicate or replayed execution rejected` }, 409);
     if (!retrying && (!before.next_turn_at || new Date(before.next_turn_at) > new Date(now))) return json({ error: 'Canonical world is not due yet' }, 409);
 
     let retryRun = null;
