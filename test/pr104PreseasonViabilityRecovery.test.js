@@ -30,6 +30,9 @@ test('failed unchanged worlds can be retried exactly once by an administrator', 
   assert.match(endpoint, /scheduled-turn-retry:/);
   assert.match(endpoint, /recovery_of_run_id/);
   assert.match(endpoint, /world_operation_events/);
+  const auditCheck = endpoint.indexOf('world_operation_events?operation_id=eq.');
+  const reopen = endpoint.indexOf('turn_status=eq.failed`, {');
+  assert.ok(auditCheck >= 0 && reopen >= 0 && auditCheck < reopen, 'retry audit must be checked before the failed world is reopened');
 });
 
 test('failed processing unlocks manager submissions for a safe retry', async () => {
