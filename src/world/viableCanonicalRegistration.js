@@ -2,7 +2,7 @@ import { analyseSquad, positionGroup } from '../intelligence/squadIntelligence.j
 import { registerPlayer, unregisterPlayer } from '../squadCycle/squadCycle.js';
 import { loadPersistentWorld, savePersistentWorld } from './persistentSeasonLoop.js';
 
-export const VIABLE_CANONICAL_REGISTRATION_VERSION = 'tbg-viable-canonical-registration-v1.0';
+export const VIABLE_CANONICAL_REGISTRATION_VERSION = 'tbg-viable-canonical-registration-v1.1';
 export const CANONICAL_POSITION_REQUIREMENTS = Object.freeze({
   goalkeeper: 2,
   defender: 6,
@@ -13,7 +13,16 @@ export const CANONICAL_POSITION_REQUIREMENTS = Object.freeze({
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const playerId = (player) => text(player?.tbg_player_id || player?.player_id || player?.id);
-const playerPosition = (player) => text(player?.position || player?.primary_position || player?.position_group || player?.position_name || player?.canonical_position);
+const playerPosition = (player) => text(
+  player?.position
+  || player?.primary_position
+  || player?.position_group
+  || player?.position_name
+  || player?.canonical_position
+  || player?.position_detail
+  || player?.transfermarkt_position
+  || player?.specific_position
+);
 const rating = (player) => number(player?.underlying_ability_rating ?? player?.rating ?? player?.overall_rating);
 const playerName = (player) => text(player?.display_name || player?.canonical_name || player?.name || playerId(player));
 
@@ -122,18 +131,31 @@ export function planCanonicalRegistrationRepair(worldInput, { at } = {}) {
 
   const freeAgents = ranked(Object.values(state.players).filter((player) => !player.club_id && number(player.age, 24) >= 19));
   const usedFreeAgents = new Set();
+  const nextFreeAgent = (group = null) => freeAgents.find((entry) => !usedFreeAgents.has(entry.id) && (!group || entry.group === group));
+
   for (const row of clubs) {
     const club = state.clubs[row.club_id];
     let report = analyseSquad(state, { clubId: row.club_id, at: repairAt });
     for (const gap of report.coverage.filter((entry) => entry.registered_gap > 0)) {
       for (let count = 0; count < gap.registered_gap; count += 1) {
-        const candidate = freeAgents.find((entry) => !usedFreeAgents.has(entry.id) && entry.group === gap.group);
+        const candidate = nextFreeAgent(gap.group);
         if (!candidate || club.registered_player_ids.length >= registrationLimit) break;
         usedFreeAgents.add(candidate.id);
         signFreeAgent(state, { clubId: row.club_id, playerId: candidate.id, at: repairAt });
         row.free_agents_signed.push(actionPlayer(state, candidate.id));
       }
     }
+
+    report = analyseSquad(state, { clubId: row.club_id, at: repairAt });
+    while (report.summary.hard_minimum_gap > 0 && club.registered_player_ids.length < registrationLimit) {
+      const candidate = nextFreeAgent();
+      if (!candidate) break;
+      usedFreeAgents.add(candidate.id);
+      signFreeAgent(state, { clubId: row.club_id, playerId: candidate.id, at: repairAt });
+      row.free_agents_signed.push(actionPlayer(state, candidate.id));
+      report = analyseSquad(state, { clubId: row.club_id, at: repairAt });
+    }
+
     report = analyseSquad(state, { clubId: row.club_id, at: repairAt });
     row.final_registered = report.summary.registered_seniors;
     row.final_coverage = report.coverage.map((entry) => ({ group: entry.group, registered: entry.registered, required: entry.required, gap: entry.registered_gap }));
