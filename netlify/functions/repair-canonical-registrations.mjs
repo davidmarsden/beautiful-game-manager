@@ -1,5 +1,5 @@
 import { planCanonicalRegistrationRepair } from '../../src/world/viableCanonicalRegistration.js';
-import { canonicalFreeAgentReservoirFingerprint, importCanonicalFreeAgentReservoir } from '../../src/world/canonicalFreeAgentReservoir.js';
+import { canonicalFreeAgentCandidates, canonicalFreeAgentReservoirFingerprint } from '../../src/world/canonicalFreeAgentReservoir.js';
 import { loadPersistentWorld, savePersistentWorld } from '../../src/world/persistentSeasonLoop.js';
 
 const WORLD_URL = process.env.TBG_WORLD_URL || 'https://raw.githubusercontent.com/davidmarsden/beautiful-game-engine/main/derived/world/world.json';
@@ -7,11 +7,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
-const json = (body, status = 200) => new Response(JSON.stringify(body), {
-  status,
-  headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
-});
-
+const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 const bearerToken = (request) => {
   const header = request.headers.get('authorization') || '';
   return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
@@ -20,14 +16,7 @@ const bearerToken = (request) => {
 async function service(path, options = {}) {
   const response = await fetch(`${SUPABASE_URL}${path}`, {
     ...options,
-    headers: {
-      apikey: SUPABASE_SERVICE_ROLE_KEY,
-      authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      accept: 'application/json',
-      'content-type': 'application/json',
-      prefer: options.prefer || 'return=representation',
-      ...(options.headers || {})
-    }
+    headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, accept: 'application/json', 'content-type': 'application/json', prefer: options.prefer || 'return=representation', ...(options.headers || {}) }
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.message || body.error || `Supabase returned ${response.status}`);
@@ -41,20 +30,14 @@ async function fetchPublicationWorld() {
 }
 
 async function adminIdentity(token) {
-  const userResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-    headers: { apikey: SUPABASE_ANON_KEY, authorization: `Bearer ${token}` }
-  });
+  const userResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SUPABASE_ANON_KEY, authorization: `Bearer ${token}` } });
   if (!userResponse.ok) throw new Error('Session is invalid or expired');
   const user = await userResponse.json();
-  const profileResponse = await fetch(`${SUPABASE_URL}/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id,is_admin&limit=1`, {
-    headers: { apikey: SUPABASE_ANON_KEY, authorization: `Bearer ${token}`, accept: 'application/json' }
-  });
+  const profileResponse = await fetch(`${SUPABASE_URL}/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id,is_admin&limit=1`, { headers: { apikey: SUPABASE_ANON_KEY, authorization: `Bearer ${token}`, accept: 'application/json' } });
   if (!profileResponse.ok) throw new Error('Could not resolve administrator profile');
   const manager = (await profileResponse.json())[0];
   if (!manager?.is_admin) throw new Error('Administrator access required');
-  const appointmentResponse = await fetch(`${SUPABASE_URL}/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=world_id,club_id&limit=1`, {
-    headers: { apikey: SUPABASE_ANON_KEY, authorization: `Bearer ${token}`, accept: 'application/json' }
-  });
+  const appointmentResponse = await fetch(`${SUPABASE_URL}/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=world_id,club_id&limit=1`, { headers: { apikey: SUPABASE_ANON_KEY, authorization: `Bearer ${token}`, accept: 'application/json' } });
   if (!appointmentResponse.ok) throw new Error('Could not resolve administrator appointment');
   const appointment = (await appointmentResponse.json())[0];
   if (!appointment) throw new Error('Administrator has no active world appointment');
@@ -80,10 +63,11 @@ export default async (request) => {
     const publication = await fetchPublicationWorld();
     const world = loadPersistentWorld(JSON.stringify(before.save_envelope));
     const existingPlayerIds = Object.keys(world.squad_cycle.players);
+    const candidates = canonicalFreeAgentCandidates(publication, { existingPlayerIds });
     const fingerprint = canonicalFreeAgentReservoirFingerprint(publication, { existingPlayerIds });
-    const reservoir = importCanonicalFreeAgentReservoir(world, publication);
     const planned = planCanonicalRegistrationRepair(world, {
-      at: world.squad_cycle.calendar?.transfer_windows?.[0]?.opens_at || world.clock
+      at: world.squad_cycle.calendar?.transfer_windows?.[0]?.opens_at || world.clock,
+      freeAgentCandidates: candidates
     });
     const preview = {
       ...planned.preview,
@@ -91,8 +75,9 @@ export default async (request) => {
       source_checksum: before.save_checksum,
       turn_status: before.turn_status,
       phase: before.phase,
-      reservoir_imported: reservoir.imported_count,
-      reservoir_available_after_repair: Object.values(planned.world.squad_cycle.players).filter((player) => !player.club_id).length,
+      reservoir_candidates_considered: candidates.length,
+      reservoir_materialised_in_checkpoint: planned.preview.external_free_agents_materialised,
+      reservoir_candidates_remaining_external: Math.max(0, candidates.length - planned.preview.external_free_agents_materialised),
       reservoir_fingerprint: fingerprint,
       publication_source: WORLD_URL
     };
@@ -102,8 +87,7 @@ export default async (request) => {
     if (!planned.preview.accepted) return json({ error: 'Registration repair cannot be applied while clubs remain impossible to repair', preview }, 409);
 
     const operationId = `registration-repair:${worldId}:${before.save_checksum}:${fingerprint}`;
-    const saved = savePersistentWorld(planned.world);
-    const envelope = JSON.parse(saved);
+    const envelope = JSON.parse(savePersistentWorld(planned.world));
     const now = new Date().toISOString();
     const replacement = {
       save_version: envelope.save_version,
@@ -127,10 +111,10 @@ export default async (request) => {
       replacement_checksum: envelope.checksum,
       status: 'accepted',
       details: {
-        action: 'repair_canonical_registrations_with_free_agent_reservoir',
+        action: 'repair_canonical_registrations_with_selective_free_agents',
         before: { checksum: before.save_checksum, phase: before.phase, turn_status: before.turn_status, matchday: before.matchday },
         after: { checksum: envelope.checksum, phase: planned.world.phase, turn_status: before.turn_status, matchday: replacement.matchday },
-        reservoir: { imported_count: reservoir.imported_count, fingerprint, publication_source: WORLD_URL },
+        reservoir: { candidate_count: candidates.length, materialised_count: planned.preview.external_free_agents_materialised, fingerprint, publication_source: WORLD_URL },
         preview
       },
       requested_by: current.manager.id,
@@ -139,30 +123,14 @@ export default async (request) => {
 
     const atomic = await service('/rest/v1/rpc/apply_canonical_registration_repair', {
       method: 'POST',
-      body: JSON.stringify({
-        p_world_id: worldId,
-        p_expected_checksum: before.save_checksum,
-        p_expected_turn_status: before.turn_status,
-        p_replacement: replacement,
-        p_operation: operation
-      })
+      body: JSON.stringify({ p_world_id: worldId, p_expected_checksum: before.save_checksum, p_expected_turn_status: before.turn_status, p_replacement: replacement, p_operation: operation })
     });
     if (!atomic?.accepted) {
-      const message = atomic?.reason === 'duplicate_operation'
-        ? 'This canonical registration repair has already been recorded'
-        : 'Canonical checkpoint changed before repair could be applied';
+      const message = atomic?.reason === 'duplicate_operation' ? 'This canonical registration repair has already been recorded' : 'Canonical checkpoint changed before repair could be applied';
       return json({ error: message }, 409);
     }
 
-    return json({
-      action: 'applied',
-      accepted: true,
-      operation_id: operationId,
-      world_id: worldId,
-      previous_checksum: before.save_checksum,
-      replacement_checksum: envelope.checksum,
-      preview
-    });
+    return json({ action: 'applied', accepted: true, operation_id: operationId, world_id: worldId, previous_checksum: before.save_checksum, replacement_checksum: envelope.checksum, preview });
   } catch (error) {
     const status = /Session|Authentication/.test(error.message) ? 401 : /Administrator/.test(error.message) ? 403 : /changed|already|only available|is locking|is processing|remain impossible/.test(error.message) ? 409 : 503;
     return json({ error: error.message }, status);

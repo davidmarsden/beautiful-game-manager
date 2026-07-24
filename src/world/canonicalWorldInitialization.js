@@ -1,9 +1,9 @@
 import { createPersistentLeagueWorld, validatePersistentLeagueWorld } from './persistentLeagueWorld.js';
 import { loadPersistentWorld, savePersistentWorld } from './persistentSeasonLoop.js';
-import { selectViableRegistrationIds } from './viableCanonicalRegistration.js';
-import { importCanonicalFreeAgentReservoir } from './canonicalFreeAgentReservoir.js';
+import { planCanonicalRegistrationRepair, selectViableRegistrationIds } from './viableCanonicalRegistration.js';
+import { canonicalFreeAgentCandidates } from './canonicalFreeAgentReservoir.js';
 
-export const CANONICAL_WORLD_INITIALIZATION_VERSION = 'tbg-canonical-world-initialization-v1.3';
+export const CANONICAL_WORLD_INITIALIZATION_VERSION = 'tbg-canonical-world-initialization-v1.4';
 
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -23,52 +23,20 @@ function divisionLevel(value) {
   return null;
 }
 
-function playerId(player) {
-  return text(player?.tbg_player_id || player?.player_id || player?.transfermarkt_id || player?.id);
-}
-
-function playerReferenceId(reference) {
-  if (reference === null || reference === undefined) return '';
-  return typeof reference === 'object' ? playerId(reference) : text(reference);
-}
-
-function clubId(club) {
-  return text(club?.tbg_club_id || club?.club_id || club?.id);
-}
-
-function ownershipClubId(ownership) {
-  return text(ownership?.club_id || ownership?.owner_club_id || ownership?.tbg_club_id || ownership?.owned_by_club_id);
-}
+function playerId(player) { return text(player?.tbg_player_id || player?.player_id || player?.transfermarkt_id || player?.id); }
+function playerReferenceId(reference) { return reference === null || reference === undefined ? '' : typeof reference === 'object' ? playerId(reference) : text(reference); }
+function clubId(club) { return text(club?.tbg_club_id || club?.club_id || club?.id); }
+function ownershipClubId(ownership) { return text(ownership?.club_id || ownership?.owner_club_id || ownership?.tbg_club_id || ownership?.owned_by_club_id); }
 
 function explicitClubDivisionLevel(club) {
-  const candidates = [
-    club?.division_id,
-    club?.division,
-    club?.division_name,
-    club?.division_number,
-    club?.division_level,
-    club?.league_division,
-    club?.tier,
-    club?.level,
-    club?.competition?.division_id,
-    club?.competition?.division,
-    club?.competition?.level
-  ];
-  for (const candidate of candidates) {
-    const level = divisionLevel(candidate);
-    if (level) return level;
-  }
+  const candidates = [club?.division_id, club?.division, club?.division_name, club?.division_number, club?.division_level, club?.league_division, club?.tier, club?.level, club?.competition?.division_id, club?.competition?.division, club?.competition?.level];
+  for (const candidate of candidates) { const level = divisionLevel(candidate); if (level) return level; }
   return null;
 }
 
 function divisionRows(publicationWorld) {
-  const candidates = [
-    publicationWorld?.divisions,
-    publicationWorld?.league_structure?.divisions,
-    publicationWorld?.competition?.divisions,
-    publicationWorld?.competitions?.league?.divisions
-  ];
-  return candidates.flatMap((rows) => Array.isArray(rows) ? rows : []);
+  return [publicationWorld?.divisions, publicationWorld?.league_structure?.divisions, publicationWorld?.competition?.divisions, publicationWorld?.competitions?.league?.divisions]
+    .flatMap((rows) => Array.isArray(rows) ? rows : []);
 }
 
 function membershipDivisionLevel(club, publicationWorld) {
@@ -87,18 +55,14 @@ function membershipDivisionLevel(club, publicationWorld) {
   return null;
 }
 
-function clubDivisionLevel(club, publicationWorld) {
-  return explicitClubDivisionLevel(club) || membershipDivisionLevel(club, publicationWorld);
-}
+function clubDivisionLevel(club, publicationWorld) { return explicitClubDivisionLevel(club) || membershipDivisionLevel(club, publicationWorld); }
 
 function publishedDivisionLevels(publicationWorld, resolvedLevels) {
   const rowLevels = divisionRows(publicationWorld).map((row) => divisionLevel(row?.level ?? row?.division_level ?? row?.division_number ?? row?.division_id ?? row?.id ?? row?.name)).filter(Boolean);
   const clubLevels = [...resolvedLevels.values()].filter(Boolean);
   const levels = [...new Set([...rowLevels, ...clubLevels])].sort((a, b) => a - b);
   if (levels.length < 2) throw new Error(`Published world must contain at least two divisions; found ${levels.length}`);
-  levels.forEach((level, index) => {
-    if (level !== index + 1) throw new Error(`Published divisions must be contiguous from Division 1; found ${levels.join(', ')}`);
-  });
+  levels.forEach((level, index) => { if (level !== index + 1) throw new Error(`Published divisions must be contiguous from Division 1; found ${levels.join(', ')}`); });
   return levels;
 }
 
@@ -120,16 +84,14 @@ function projectClub(sourceClub, playersById, ownershipById, registrationLimit) 
   const id = clubId(sourceClub);
   if (!id) throw new Error('Publication club is missing a stable ID');
   const squadIds = sourceClub.squad?.player_ids || sourceClub.player_ids || [];
-  const players = squadIds
-    .map((playerReference) => {
-      const stableId = playerReferenceId(playerReference);
-      const player = playersById.get(stableId);
-      const ownership = ownershipById.get(stableId);
-      const ownerClubId = ownershipClubId(ownership);
-      if (!player || (ownerClubId && ownerClubId !== id)) return null;
-      return { player, ownership };
-    })
-    .filter(Boolean);
+  const players = squadIds.map((playerReference) => {
+    const stableId = playerReferenceId(playerReference);
+    const player = playersById.get(stableId);
+    const ownership = ownershipById.get(stableId);
+    const ownerClubId = ownershipClubId(ownership);
+    if (!player || (ownerClubId && ownerClubId !== id)) return null;
+    return { player, ownership };
+  }).filter(Boolean);
   if (players.length < 18) throw new Error(`${id} has only ${players.length} authoritatively owned published squad players`);
   const selection = selectViableRegistrationIds(players.map(({ player, ownership }) => ({ ...player, age: number(player.age ?? ownership?.season_start_age ?? player.season_start_age, 24) })), registrationLimit);
   const registeredIds = new Set(selection.selected_ids);
@@ -172,9 +134,24 @@ export function buildCanonicalWorldFromPublication(publicationWorld, {
   const clubIds = divisions.flatMap((division) => division.clubs.map((club) => club.club_id));
   const resolvedHumanClubId = text(humanClubId);
   if (!clubIds.includes(resolvedHumanClubId)) throw new Error(`Administrator club ${resolvedHumanClubId} is not in the published world`);
-  const world = createPersistentLeagueWorld({ worldId: resolvedWorldId, divisions, humanClubId: resolvedHumanClubId, seasonStart, seasonEnd, movementCount });
-  world.squad_cycle.registration_limit = registrationLimit;
-  const reservoir = importCanonicalFreeAgentReservoir(world, publicationWorld);
+
+  const projectedWorld = createPersistentLeagueWorld({ worldId: resolvedWorldId, divisions, humanClubId: resolvedHumanClubId, seasonStart, seasonEnd, movementCount });
+  projectedWorld.squad_cycle.registration_limit = registrationLimit;
+  const candidates = canonicalFreeAgentCandidates(publicationWorld, { existingPlayerIds: Object.keys(projectedWorld.squad_cycle.players) });
+  const planned = planCanonicalRegistrationRepair(projectedWorld, {
+    at: projectedWorld.squad_cycle.calendar?.transfer_windows?.[0]?.opens_at || projectedWorld.clock,
+    freeAgentCandidates: candidates
+  });
+  if (!planned.preview.accepted) throw new Error(`Initial canonical world cannot be made viable: ${planned.preview.blocked.map((row) => row.club_name).join(', ')}`);
+  const world = planned.world;
+  world.canonical_free_agent_reservoir = {
+    version: 'tbg-canonical-free-agent-reservoir-v1.2',
+    candidate_count: candidates.length,
+    materialised_player_ids: planned.preview.clubs.flatMap((club) => club.free_agents_signed.map((player) => player.player_id)),
+    materialised_count: planned.preview.external_free_agents_materialised,
+    publication_world_id: text(publicationWorld?.world_id) || null
+  };
+
   const validation = validatePersistentLeagueWorld(world);
   if (!validation.valid) throw new Error(`Initial canonical world is invalid: ${validation.errors.join('; ')}`);
   const serialized = savePersistentWorld(world);
@@ -193,7 +170,8 @@ export function buildCanonicalWorldFromPublication(publicationWorld, {
       club_count: clubIds.length,
       player_count: Object.keys(restored.squad_cycle.players).length,
       registered_player_count: Object.values(restored.squad_cycle.clubs).reduce((sum, club) => sum + club.registered_player_ids.length, 0),
-      free_agent_reservoir_count: reservoir.imported_count
+      free_agent_candidate_count: candidates.length,
+      free_agent_signing_count: planned.preview.external_free_agents_materialised
     })
   });
 }
