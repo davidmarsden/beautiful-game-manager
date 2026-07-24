@@ -22,7 +22,7 @@ import { executeAiSquadPlan } from '../intelligence/aiSquadManagement.js';
 import { analyseSquad } from '../intelligence/squadIntelligence.js';
 import { appendSeasonArchive, createSeasonArchive } from '../history/seasonArchive.js';
 
-export const PERSISTENT_MATCHDAY_VERSION = 'tbg-persistent-matchday-world-v1.0';
+export const PERSISTENT_MATCHDAY_VERSION = 'tbg-persistent-matchday-world-v1.1';
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const unique = (values) => new Set(values).size === values.length;
@@ -101,6 +101,12 @@ function divisionSnapshots(world) {
   }));
 }
 
+function entriesForDivision(values, division) {
+  return Object.fromEntries(division.club_ids
+    .filter((clubId) => Object.prototype.hasOwnProperty.call(values || {}, clubId))
+    .map((clubId) => [clubId, clone(values[clubId])]));
+}
+
 export function validatePersistentMatchdayWorld(world) {
   const base = validatePersistentLeagueWorld(world);
   const errors = [...base.errors];
@@ -132,13 +138,11 @@ function initializeSeasonCycle(world, { daysBetweenRounds = 7 } = {}) {
   let maximumMatchday = 0;
   for (const division of world.competition.divisions) {
     const clubs = divisionClubs(world, division);
-    const humanClubId = division.club_ids.includes(world.human_club_id) ? world.human_club_id : null;
     const runtime = createIncrementalSeason({
       clubs,
       seasonId: `${world.squad_cycle.season_id}:${division.division_id}`,
       startAt: world.season_start,
-      daysBetweenRounds,
-      humanClubId
+      daysBetweenRounds
     });
     runtimes[division.division_id] = runtime;
     maximumMatchday = Math.max(maximumMatchday, ...runtime.fixtures.map((fixture) => fixture.matchday));
@@ -198,8 +202,7 @@ function completeSeason(world) {
   world.competition.movement_history.push(...movements);
   world.competition.divisions = divisionMembership(rollover.divisions);
 
-  const humanRuntime = Object.values(cycle.runtimes).find((runtime) => runtime.human_club_id === world.human_club_id);
-  const humanReport = divisionReports.find((report) => report.season_id === humanRuntime?.season_id);
+  const humanReport = divisionReports.find((report) => report.standings.some((row) => row.club_id === world.human_club_id));
   world.completed_seasons.push({
     season_id: cycle.season_id,
     division_archive_ids: archives.map((row) => row.archive_id),
@@ -237,7 +240,9 @@ function completeSeason(world) {
 }
 
 export function advancePersistentMatchday(worldInput, {
-  humanInstruction = {},
+  instructionsByClub = {},
+  instructionSourcesByClub = {},
+  humanInstruction = null,
   daysBetweenRounds = 7
 } = {}) {
   const world = loadPersistentWorld(savePersistentWorld(worldInput));
@@ -245,6 +250,11 @@ export function advancePersistentMatchday(worldInput, {
   if (!validation.valid) throw new Error(`Invalid persistent matchday world: ${validation.errors.join('; ')}`);
   if (world.phase === 'preseason') initializeSeasonCycle(world, { daysBetweenRounds });
   if (world.phase !== 'season' || !world.matchday_cycle) throw new Error(`World is not ready for matchday advancement: ${world.phase}`);
+
+  const resolvedInstructions = { ...instructionsByClub };
+  if (humanInstruction && !resolvedInstructions[world.human_club_id]) resolvedInstructions[world.human_club_id] = humanInstruction;
+  const resolvedSources = { ...instructionSourcesByClub };
+  if (humanInstruction && !resolvedSources[world.human_club_id]) resolvedSources[world.human_club_id] = { type: 'manager_submission' };
 
   const cycle = world.matchday_cycle;
   const matchday = cycle.current_matchday;
@@ -256,7 +266,8 @@ export function advancePersistentMatchday(worldInput, {
       division_id: division.division_id,
       ...advanceIncrementalMatchday(runtime, {
         clubs,
-        humanInstruction: runtime.human_club_id ? humanInstruction : {}
+        instructionsByClub: entriesForDivision(resolvedInstructions, division),
+        instructionSourcesByClub: entriesForDivision(resolvedSources, division)
       })
     });
   }
@@ -308,7 +319,14 @@ export function advancePersistentMatchday(worldInput, {
   });
 }
 
-export function runPersistentMatchdays({ world, matchdays, humanInstructionsByMatchday = {}, daysBetweenRounds = 7 } = {}) {
+export function runPersistentMatchdays({
+  world,
+  matchdays,
+  instructionsByMatchdayAndClub = {},
+  instructionSourcesByMatchdayAndClub = {},
+  humanInstructionsByMatchday = {},
+  daysBetweenRounds = 7
+} = {}) {
   if (!Number.isInteger(matchdays) || matchdays < 1) throw new Error('Matchday count must be positive');
   let current = clone(world);
   const reports = [];
@@ -316,8 +334,13 @@ export function runPersistentMatchdays({ world, matchdays, humanInstructionsByMa
   for (let index = 0; index < matchdays; index += 1) {
     const expectedMatchday = current.matchday_cycle?.current_matchday || 1;
     expected.push(expectedMatchday);
+    const keyedInstructions = instructionsByMatchdayAndClub[expectedMatchday] || instructionsByMatchdayAndClub[String(expectedMatchday)] || {};
+    const keyedSources = instructionSourcesByMatchdayAndClub[expectedMatchday] || instructionSourcesByMatchdayAndClub[String(expectedMatchday)] || {};
+    const legacyInstruction = humanInstructionsByMatchday[expectedMatchday] || humanInstructionsByMatchday[String(expectedMatchday)] || null;
     const report = advancePersistentMatchday(current, {
-      humanInstruction: humanInstructionsByMatchday[expectedMatchday] || humanInstructionsByMatchday[String(expectedMatchday)] || {},
+      instructionsByClub: keyedInstructions,
+      instructionSourcesByClub: keyedSources,
+      humanInstruction: legacyInstruction,
       daysBetweenRounds
     });
     reports.push(report);
