@@ -36,10 +36,11 @@ function canonicalWorld({ scheduled = false, played = false } = {}) {
         'tbg-club-002': { club_id: 'tbg-club-002', player_ids: ['player-2'], registered_player_ids: ['player-2'] }
       },
       players: {
-        'player-1': { tbg_player_id: 'player-1', display_name: 'Canonical One', club_id: 'tbg-club-001', age: 24, underlying_ability_rating: 90 },
-        'player-2': { tbg_player_id: 'player-2', display_name: 'Canonical Two', club_id: 'tbg-club-002', age: 25, underlying_ability_rating: 89 }
+        'player-1': { tbg_player_id: 'player-1', display_name: 'Canonical One', club_id: 'tbg-club-001', age: 24, underlying_ability_rating: 90, registered: true },
+        'player-2': { tbg_player_id: 'player-2', display_name: 'Canonical Two', club_id: 'tbg-club-002', age: 25, underlying_ability_rating: 89, registered: true }
       },
-      contracts: {}
+      contracts: {},
+      state: { registrations: { 'player-1': { registered: true }, 'player-2': { registered: true } } }
     },
     competition: {
       divisions: [{ division_id: 'd1', level: 1, club_ids: ['tbg-club-001', 'tbg-club-002'] }]
@@ -104,16 +105,39 @@ test('canonical results, standings and next fixture remain in one season state',
   assert.equal(projection.competition.standings[1].club_name, 'Ealing United');
 });
 
+test('portal registration follows live squad-cycle registration rather than stale player data', () => {
+  const world = canonicalWorld();
+  world.squad_cycle.clubs['tbg-club-001'].registered_player_ids = [];
+  world.squad_cycle.state.registrations['player-1'] = { registered: false };
+  world.squad_cycle.players['player-1'].registered = true;
+  const projection = projectManagerPortal(world, 'tbg-club-001');
+  assert.equal(projection.squad[0].registered, false);
+  assert.equal(projection.squad[0].registration_status, 'unregistered');
+  assert.deepEqual(projection.club.squad.registered_player_ids, []);
+});
+
 test('production bootstrap cannot read legacy publication, fixture or standings state', async () => {
   const source = await readFile(new URL('../netlify/functions/bootstrap.mjs', import.meta.url), 'utf8');
   assert.match(source, /canonical_world_saves/);
   assert.match(source, /projectManagerPortal\(world, appointment\.club_id\)/);
   assert.match(source, /canonicalFixtureIds\(world\)/);
   assert.match(source, /manager_turn_submissions/);
+  assert.match(source, /matchday=eq\.\$\{currentMatchday\}/);
   assert.doesNotMatch(source, /TBG_WORLD_URL|WORLD_URL/);
   assert.doesNotMatch(source, /\/rest\/v1\/fixtures/);
   assert.doesNotMatch(source, /competition_standings/);
   assert.doesNotMatch(source, /manager_match_views/);
+  assert.doesNotMatch(source, /\/rest\/v1\/manager_submissions/);
+});
+
+test('team decisions are persisted through the canonical turn ledger', async () => {
+  const source = await readFile(new URL('../netlify/functions/decisions.mjs', import.meta.url), 'utf8');
+  assert.match(source, /canonical_world_saves/);
+  assert.match(source, /buildManagerTurnSubmission/);
+  assert.match(source, /manager_turn_submissions\?on_conflict=world_id,season_id,matchday,club_id/);
+  assert.match(source, /Fixture is not the canonical next fixture/);
+  assert.doesNotMatch(source, /TBG_WORLD_URL|WORLD_URL/);
+  assert.doesNotMatch(source, /\/rest\/v1\/fixtures/);
   assert.doesNotMatch(source, /\/rest\/v1\/manager_submissions/);
 });
 
