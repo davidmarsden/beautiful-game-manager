@@ -194,12 +194,13 @@ function metrics(runtime, clubs) {
   });
 }
 
-export function createIncrementalSeason({ clubs, seasonId, startAt, daysBetweenRounds = 7 } = {}) {
+export function createIncrementalSeason({ clubs, seasonId, startAt, daysBetweenRounds = 7, humanClubId = null } = {}) {
   if (!Array.isArray(clubs) || clubs.length < 4) throw new Error('Incremental season requires clubs');
   const fixtures = buildDoubleRoundRobin(clubs.map((club) => club.club_id), { seasonId, startAt, daysBetweenRounds });
   return {
     version: INCREMENTAL_SEASON_VERSION,
     season_id: seasonId,
+    ...(humanClubId ? { human_club_id: humanClubId } : {}),
     fixtures: fixtures.map((row) => ({ ...row })),
     next_matchday: 1,
     completed: false,
@@ -220,12 +221,19 @@ export function advanceIncrementalMatchday(runtime, {
   clubs,
   instructionsByClub = {},
   instructionSourcesByClub = {},
+  humanInstruction = null,
   simulator = simulateMatch
 } = {}) {
   if (runtime.completed) throw new Error(`Season already complete: ${runtime.season_id}`);
   const clubMap = new Map(clubs.map((club) => [club.club_id, club]));
   const fixtures = runtime.fixtures.filter((fixture) => fixture.matchday === runtime.next_matchday);
   if (!fixtures.length) throw new Error(`No fixtures for matchday ${runtime.next_matchday}`);
+  const resolvedInstructions = { ...instructionsByClub };
+  const resolvedSources = { ...instructionSourcesByClub };
+  if (humanInstruction && runtime.human_club_id && !resolvedInstructions[runtime.human_club_id]) {
+    resolvedInstructions[runtime.human_club_id] = humanInstruction;
+    resolvedSources[runtime.human_club_id] ||= { type: 'manager_submission' };
+  }
 
   for (const fixture of fixtures) {
     const homeClub = clubMap.get(fixture.home_club_id);
@@ -246,12 +254,12 @@ export function advanceIncrementalMatchday(runtime, {
 
     const matchState = contractState(runtime.state, teams);
     const instructions = {
-      home: instructionsByClub[fixture.home_club_id],
-      away: instructionsByClub[fixture.away_club_id]
+      home: resolvedInstructions[fixture.home_club_id],
+      away: resolvedInstructions[fixture.away_club_id]
     };
     const instructionSources = {
-      home: instructions.home ? submittedSource(instructionSourcesByClub[fixture.home_club_id]) : fallbackSource(),
-      away: instructions.away ? submittedSource(instructionSourcesByClub[fixture.away_club_id]) : fallbackSource()
+      home: instructions.home ? submittedSource(resolvedSources[fixture.home_club_id]) : fallbackSource(),
+      away: instructions.away ? submittedSource(resolvedSources[fixture.away_club_id]) : fallbackSource()
     };
     for (const side of ['home', 'away']) {
       if (!instructions[side]) continue;
