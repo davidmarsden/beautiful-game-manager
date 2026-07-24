@@ -43,7 +43,18 @@ function decorateFixture(world, clubId, fixture, result = null) {
   };
 }
 
-function projectPlayer(world, playerId, index) {
+function currentRegistration(world, club, playerId, player) {
+  if (Array.isArray(club?.registered_player_ids)) return club.registered_player_ids.includes(playerId);
+  const registration = world.squad_cycle?.state?.registrations?.[playerId];
+  if (typeof registration === 'boolean') return registration;
+  if (registration && typeof registration === 'object') {
+    if (typeof registration.registered === 'boolean') return registration.registered;
+    if (registration.status) return registration.status === 'registered';
+  }
+  return Boolean(player?.registered);
+}
+
+function projectPlayer(world, club, playerId, index) {
   const player = world.squad_cycle.players[playerId];
   const contract = player?.contract_id ? world.squad_cycle.contracts?.[player.contract_id] : null;
   const runtime = runtimeForClub(world, player?.club_id);
@@ -52,8 +63,11 @@ function projectPlayer(world, playerId, index) {
   const currentMatchday = world.matchday_cycle?.current_matchday || 1;
   const injured = Number(availability.injury_until_matchday || 0) >= currentMatchday;
   const suspended = Number(availability.suspension_until_matchday || 0) >= currentMatchday;
+  const registered = currentRegistration(world, club, playerId, player);
   return {
     ...player,
+    registered,
+    registration_status: registered ? 'registered' : 'unregistered',
     squad_number: number(player?.squad_number, index + 1),
     specific_position: text(player?.specific_position || player?.position || player?.primary_position || player?.position_group) || 'Unknown',
     fitness: number(condition.fitness, 100),
@@ -89,7 +103,7 @@ export function projectManagerPortal(world, clubId) {
     club_name: clubName(world, row.club_id),
     is_managed_club: row.club_id === clubId
   }));
-  const squad = (club.player_ids || []).map((playerId, index) => projectPlayer(world, playerId, index));
+  const squad = (club.player_ids || []).map((playerId, index) => projectPlayer(world, club, playerId, index));
   const phase = text(world.phase) || 'preseason';
   const preseason = !world.matchday_cycle || fixtures.length === 0;
 
@@ -113,6 +127,7 @@ export function projectManagerPortal(world, clubId) {
       strength: profile.strength || {},
       squad: {
         player_ids: [...(club.player_ids || [])],
+        registered_player_ids: [...(club.registered_player_ids || [])],
         first_team_capacity: world.squad_cycle.registration_limit || 25,
         youth_team_capacity: 20
       }
