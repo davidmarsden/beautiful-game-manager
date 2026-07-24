@@ -36,20 +36,11 @@ test('reservoir contains only genuinely unattached publication players', () => {
   assert.ok(candidates.every((row) => row.player.contract_id === null));
 });
 
-test('reservoir import preserves stable IDs and does not duplicate canonical players', () => {
-  const world = {
-    squad_cycle: {
-      players: { 'free-gk': { tbg_player_id: 'free-gk', club_id: null } },
-      registrations: { 'free-gk': { player_id: 'free-gk', club_id: null, registered: false } }
-    }
-  };
+test('legacy reservoir import preserves stable IDs and does not duplicate canonical players', () => {
+  const world = { squad_cycle: { players: { 'free-gk': { tbg_player_id: 'free-gk', club_id: null } }, registrations: { 'free-gk': { player_id: 'free-gk', club_id: null, registered: false } } } };
   const result = importCanonicalFreeAgentReservoir(world, publication());
   assert.equal(result.imported_count, 1);
   assert.deepEqual(result.imported_player_ids, ['free-mid']);
-  assert.equal(world.squad_cycle.players['free-mid'].display_name, 'Free Midfielder');
-  assert.deepEqual(world.squad_cycle.registrations['free-mid'], {
-    player_id: 'free-mid', club_id: null, registered: false, registered_at: null
-  });
 });
 
 test('reservoir fingerprint changes when any plan-affecting candidate field changes', () => {
@@ -68,24 +59,24 @@ test('reservoir fingerprint changes when any plan-affecting candidate field chan
   }
 });
 
-test('future canonical initialization persists the publication reservoir', async () => {
+test('future canonical initialization uses the external catalogue and persists only selected signings', async () => {
   const initializer = await source('src/world/canonicalWorldInitialization.js');
-  assert.match(initializer, /importCanonicalFreeAgentReservoir\(world, publicationWorld\)/);
-  assert.match(initializer, /free_agent_reservoir_count/);
+  assert.match(initializer, /canonicalFreeAgentCandidates\(publicationWorld/);
+  assert.match(initializer, /planCanonicalRegistrationRepair\(projectedWorld/);
+  assert.match(initializer, /free_agent_signing_count/);
+  assert.doesNotMatch(initializer, /importCanonicalFreeAgentReservoir\(world, publicationWorld\)/);
 });
 
-test('live repair imports reservoir before planning and pins apply to its fingerprint', async () => {
+test('live repair keeps candidates external until planning and pins apply to its fingerprint', async () => {
   const [endpoint, control] = await Promise.all([
     source('netlify/functions/repair-canonical-registrations.mjs'),
     source('public/admin-turn-control.js')
   ]);
-  assert.match(endpoint, /fetchPublicationWorld\(\)/);
-  assert.match(endpoint, /canonicalFreeAgentReservoirFingerprint\(publication, \{ existingPlayerIds \}\)/);
-  assert.match(endpoint, /importCanonicalFreeAgentReservoir\(world, publication\)/);
+  assert.match(endpoint, /canonicalFreeAgentCandidates\(publication, \{ existingPlayerIds \}\)/);
+  assert.match(endpoint, /freeAgentCandidates: candidates/);
+  assert.doesNotMatch(endpoint, /importCanonicalFreeAgentReservoir\(world, publication\)/);
   assert.match(endpoint, /expected_reservoir_fingerprint !== fingerprint/);
-  assert.match(endpoint, /Published free-agent reservoir changed after preview/);
-  assert.match(endpoint, /reservoir_imported/);
-  assert.match(control, /expected_reservoir_fingerprint/);
-  assert.match(control, /reservoir_fingerprint/);
-  assert.match(control, /unattached players imported into the preview reservoir/);
+  assert.match(endpoint, /reservoir_materialised_in_checkpoint/);
+  assert.match(control, /only .* selected signings would be added to the canonical checkpoint/);
+  assert.match(control, /total registrations before/);
 });
