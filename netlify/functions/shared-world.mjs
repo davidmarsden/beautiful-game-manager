@@ -57,6 +57,10 @@ async function readSubmission(token, current, turn) {
   return rows[0] || null;
 }
 
+async function readCommandHistory(token, current) {
+  return supabase(`/rest/v1/manager_world_commands?world_id=eq.${encodeURIComponent(current.appointment.world_id)}&manager_id=eq.${encodeURIComponent(current.manager.id)}&select=id,command_type,command_payload,status,effective_season_id,effective_matchday,submitted_at,processed_at,outcome_reason,outcome_details,superseded_by&order=submitted_at.desc,id.desc&limit=100`, token);
+}
+
 function assertAppointment(world, appointment) {
   if (world.world_id !== appointment.world_id) throw new Error('Appointment world does not match the canonical world');
   if (!world.squad_cycle?.clubs?.[appointment.club_id]) throw new Error('Appointment club is not present in the canonical world');
@@ -88,6 +92,22 @@ function commandType(type) {
   return type;
 }
 
+function commandSummary(row) {
+  return {
+    id: row.id,
+    type: row.command_type,
+    payload: row.command_payload || {},
+    status: row.status,
+    effective_season_id: row.effective_season_id,
+    effective_matchday: row.effective_matchday,
+    submitted_at: row.submitted_at,
+    processed_at: row.processed_at,
+    outcome_reason: row.outcome_reason || null,
+    outcome_details: row.outcome_details || {},
+    superseded_by: row.superseded_by || null
+  };
+}
+
 export default async (request) => {
   try {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return json({ error: 'Supabase is not configured' }, 503);
@@ -106,7 +126,10 @@ export default async (request) => {
     const world = loadPersistentWorld(JSON.stringify(stored.save_envelope));
     assertAppointment(world, current.appointment);
     const turn = currentTurnIdentity(world);
-    const existing = await readSubmission(token, current, turn);
+    const [existing, commandRows] = await Promise.all([
+      readSubmission(token, current, turn),
+      readCommandHistory(token, current)
+    ]);
     const summary = appointmentSummary(world, current.appointment.club_id);
     const appointment = { ...current.appointment, club_name: summary.club_name, division_name: summary.division_name };
 
@@ -130,7 +153,8 @@ export default async (request) => {
           instruction: existing.instruction,
           submitted_at: existing.submitted_at,
           locked_at: existing.locked_at
-        } : null
+        } : null,
+        commands: commandRows.map(commandSummary)
       });
     }
 
@@ -168,7 +192,7 @@ export default async (request) => {
         effective_matchday: turn.matchday
       };
       const rows = await supabase('/rest/v1/manager_world_commands', token, { method: 'POST', body: JSON.stringify(payload) });
-      return json({ accepted: true, command: type, request: rows[0] || payload, turn, summary });
+      return json({ accepted: true, command: type, request: commandSummary(rows[0] || payload), turn, summary });
     }
 
     return json({ error: 'Managers cannot save, load, import, restore or advance the shared world' }, 403);
