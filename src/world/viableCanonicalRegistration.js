@@ -95,7 +95,7 @@ export function planCanonicalRegistrationRepair(worldInput, { at, freeAgentCandi
   }
 
   const existingFreeAgents = Object.values(state.players).filter((player) => !player.club_id && number(player.age, 24) >= 19);
-  const externalPlayers = freeAgentCandidates.map((row) => row?.player || row).filter(Boolean);
+  const externalPlayers = freeAgentCandidates.map((row) => row?.player || row).filter((player) => player && number(player.age, 24) >= 19);
   const existingIds = new Set(existingFreeAgents.map(playerId));
   const freeAgents = ranked([...existingFreeAgents, ...externalPlayers.filter((player) => !existingIds.has(playerId(player)))]);
   const externalIds = new Set(externalPlayers.map(playerId));
