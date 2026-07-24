@@ -44,10 +44,6 @@ export function commandForDomain(row) {
   if (row.command_type === 'register_player') return { type: 'register_player', playerId: payload.playerId || payload.player_id };
   if (row.command_type === 'unregister_player') return { type: 'unregister_player', playerId: payload.playerId || payload.player_id };
   if (row.command_type === 'renew_contract') return { type: 'renew_contract', playerId: payload.playerId || payload.player_id, years: payload.years, wage: payload.wage };
-
-  // Listings, offers and responses are negotiation records, not authority to move a player.
-  // A transfer may only become a domain command after a separate agreement resolver has
-  // matched the required parties and emitted an explicitly authorised transaction.
   if (row.command_type === 'transfer_offer' || row.command_type === 'transfer_listing' || row.command_type === 'transfer_response') return null;
   return null;
 }
@@ -90,12 +86,17 @@ async function processWorld(stored, now) {
     let world = loadPersistentWorld(JSON.stringify(stored.save_envelope));
     const seasonId = world.squad_cycle.season_id;
     const matchday = world.matchday_cycle?.current_matchday || 1;
-    const submissions = await service(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(worldId)}&season_id=eq.${encodeURIComponent(seasonId)}&matchday=eq.${matchday}&status=eq.submitted&select=*`);
+    const appointments = await service(`/rest/v1/manager_appointments?world_id=eq.${encodeURIComponent(worldId)}&status=eq.active&select=world_id,manager_id,club_id,status`);
+    const submissions = await service(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(worldId)}&season_id=eq.${encodeURIComponent(seasonId)}&matchday=eq.${matchday}&status=eq.submitted&select=*&order=submitted_at.asc,id.asc`);
     const commands = await service(`/rest/v1/manager_world_commands?world_id=eq.${encodeURIComponent(worldId)}&status=eq.pending&effective_season_id=eq.${encodeURIComponent(seasonId)}&effective_matchday=eq.${matchday}&select=*&order=submitted_at.asc`);
 
     const commandRun = applyPendingCommands(world, commands);
     world = commandRun.world;
-    const plan = buildScheduledTurnPlan(world, submissions, { scheduledFor: stored.next_turn_at || now, nextTurnAt: nextScheduledTurn(new Date(now)) });
+    const plan = buildScheduledTurnPlan(world, submissions, {
+      appointments,
+      scheduledFor: stored.next_turn_at || now,
+      nextTurnAt: nextScheduledTurn(new Date(now))
+    });
 
     const runRows = await service('/rest/v1/world_turn_runs', {
       method: 'POST',
@@ -180,7 +181,7 @@ export default async () => {
   const due = await service(`/rest/v1/canonical_world_saves?turn_status=eq.open&next_turn_at=lte.${encodeURIComponent(now)}&select=*`);
   const results = [];
   for (const stored of due) results.push(await processWorld(stored, now));
-  return json({ version: 'tbg-scheduled-world-turn-v1.0', checked_at: now, worlds_due: due.length, results });
+  return json({ version: 'tbg-scheduled-world-turn-v1.1', checked_at: now, worlds_due: due.length, results });
 };
 
 export const config = { schedule: '*/15 * * * *' };

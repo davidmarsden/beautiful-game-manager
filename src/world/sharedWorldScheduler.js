@@ -1,7 +1,7 @@
 import { advancePersistentMatchday, validatePersistentMatchdayWorld } from './persistentMatchdayWorld.js';
 import { loadPersistentWorld, savePersistentWorld } from './persistentSeasonLoop.js';
 
-export const SHARED_WORLD_SCHEDULER_VERSION = 'tbg-shared-world-scheduler-v1.0';
+export const SHARED_WORLD_SCHEDULER_VERSION = 'tbg-shared-world-scheduler-v1.2';
 
 const text = (value) => String(value ?? '').trim();
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -57,28 +57,66 @@ export function buildManagerTurnSubmission(world, {
   return Object.freeze(submission);
 }
 
-export function selectTurnInstructions(world, submissions = []) {
+function activeAppointmentMap(world, appointments = []) {
+  const worldClubIds = new Set(Object.keys(world.squad_cycle.clubs || {}));
+  const byClub = new Map();
+  for (const appointment of appointments) {
+    if (appointment.status !== 'active') continue;
+    if (text(appointment.world_id) !== text(world.world_id)) continue;
+    const clubId = text(appointment.club_id);
+    const managerId = text(appointment.manager_id);
+    if (!clubId || !managerId || !worldClubIds.has(clubId)) continue;
+    byClub.set(clubId, managerId);
+  }
+  return byClub;
+}
+
+export function selectTurnInstructions(world, submissions = [], appointments = []) {
   const turn = currentTurnIdentity(world);
+  const appointedManagerByClub = activeAppointmentMap(world, appointments);
   const matching = submissions
     .filter((row) => row.world_id === turn.world_id && row.season_id === turn.season_id && Number(row.matchday) === turn.matchday)
     .filter((row) => row.status === 'submitted' || row.status === 'locked')
-    .sort((a, b) => String(a.submitted_at).localeCompare(String(b.submitted_at)));
+    .filter((row) => appointedManagerByClub.get(text(row.club_id)) === text(row.manager_id))
+    .filter((row) => validateManagerTurnSubmission(world, row).valid)
+    .sort((a, b) => String(a.submitted_at).localeCompare(String(b.submitted_at)) || String(a.id || '').localeCompare(String(b.id || '')));
   const byClub = {};
-  for (const submission of matching) byClub[submission.club_id] = clone(submission.instruction || {});
-  return Object.freeze({ turn, by_club: Object.freeze(byClub), submission_count: Object.keys(byClub).length });
+  const selectedSubmissions = {};
+  for (const submission of matching) {
+    byClub[submission.club_id] = clone(submission.instruction || {});
+    selectedSubmissions[submission.club_id] = {
+      submission_id: submission.id || null,
+      manager_id: submission.manager_id,
+      submitted_at: submission.submitted_at
+    };
+  }
+  return Object.freeze({
+    turn,
+    by_club: Object.freeze(byClub),
+    selected_submissions: Object.freeze(selectedSubmissions),
+    appointed_club_ids: Object.freeze([...appointedManagerByClub.keys()].sort()),
+    submission_count: Object.keys(byClub).length
+  });
 }
 
 export function buildScheduledTurnPlan(worldInput, submissions = [], {
+  appointments = [],
   scheduledFor = new Date().toISOString(),
   nextTurnAt = null
 } = {}) {
   const world = loadPersistentWorld(savePersistentWorld(worldInput));
   const validation = validatePersistentMatchdayWorld(world);
   if (!validation.valid) throw new Error(`Canonical world is invalid: ${validation.errors.join('; ')}`);
-  const selected = selectTurnInstructions(world, submissions);
+  const selected = selectTurnInstructions(world, submissions, appointments);
   const allClubIds = Object.keys(world.squad_cycle.clubs || {}).sort();
   const submittedClubIds = Object.keys(selected.by_club).sort();
-  const missingClubIds = allClubIds.filter((id) => !submittedClubIds.includes(id));
+  const fallbackClubIds = allClubIds.filter((id) => !submittedClubIds.includes(id));
+  const instructionSourcesByClub = Object.fromEntries(allClubIds.map((clubId) => {
+    const selectedSubmission = selected.selected_submissions[clubId];
+    return [clubId, selectedSubmission
+      ? { type: 'manager_submission', ...clone(selectedSubmission) }
+      : { type: 'deterministic_fallback' }];
+  }));
   return Object.freeze({
     version: SHARED_WORLD_SCHEDULER_VERSION,
     world_id: world.world_id,
@@ -87,10 +125,13 @@ export function buildScheduledTurnPlan(worldInput, submissions = [], {
     scheduled_for: scheduledFor,
     next_turn_at: nextTurnAt,
     instructions_by_club: selected.by_club,
+    instruction_sources_by_club: Object.freeze(instructionSourcesByClub),
+    selected_submissions: selected.selected_submissions,
+    appointed_club_ids: selected.appointed_club_ids,
     submitted_club_ids: Object.freeze(submittedClubIds),
-    fallback_club_ids: Object.freeze(missingClubIds),
+    fallback_club_ids: Object.freeze(fallbackClubIds),
     submission_count: submittedClubIds.length,
-    fallback_count: missingClubIds.length
+    fallback_count: fallbackClubIds.length
   });
 }
 
@@ -101,11 +142,10 @@ export function executeScheduledTurn(worldInput, plan) {
     throw new Error('Scheduled turn plan is stale');
   }
 
-  // The current matchday engine has one designated human-control slot. The shared scheduler
-  // chooses that club's submitted instruction while retaining every club submission in the
-  // immutable turn ledger. Missing or unsupported submissions fall back to deterministic AI.
-  const designatedInstruction = plan.instructions_by_club[world.human_club_id] || {};
-  const advance = advancePersistentMatchday(world, { humanInstruction: designatedInstruction });
+  const advance = advancePersistentMatchday(world, {
+    instructionsByClub: plan.instructions_by_club,
+    instructionSourcesByClub: plan.instruction_sources_by_club
+  });
   if (!advance.accepted) throw new Error('Scheduled matchday advance was rejected');
 
   advance.world.shared_turn_history ||= [];
@@ -115,8 +155,11 @@ export function executeScheduledTurn(worldInput, plan) {
     season_id: plan.season_id,
     matchday: plan.matchday,
     scheduled_for: plan.scheduled_for,
+    appointed_club_ids: [...plan.appointed_club_ids],
     submitted_club_ids: [...plan.submitted_club_ids],
     fallback_club_ids: [...plan.fallback_club_ids],
+    instruction_sources_by_club: clone(plan.instruction_sources_by_club),
+    selected_submissions: clone(plan.selected_submissions),
     submission_count: plan.submission_count,
     fallback_count: plan.fallback_count,
     checkpoint_id: advance.checkpoint.checkpoint_id

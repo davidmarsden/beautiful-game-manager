@@ -9,12 +9,13 @@ import {
 } from './squadAvailability.js';
 import { buildDoubleRoundRobin } from './seasonSimulation.js';
 
-export const INCREMENTAL_SEASON_VERSION = 'tbg-incremental-season-v1.0';
+export const INCREMENTAL_SEASON_VERSION = 'tbg-incremental-season-v1.1';
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
 const round = (value, places = 4) => Number(Number(value).toFixed(places));
 const text = (value) => String(value ?? '').trim();
 const unique = (values) => new Set(values).size === values.length;
+const clone = (value) => JSON.parse(JSON.stringify(value));
 const SUPPORTED_FORMATIONS = new Set(['4-3-3-wide', '4-2-3-1', '4-4-2', '4-1-4-1', '3-5-2', '3-4-3', '5-3-2']);
 const ALLOWED_TACTICS = Object.freeze({
   style: new Set(['possession', 'counter_transition', 'direct', 'high_press', 'low_block', 'balanced']),
@@ -134,7 +135,34 @@ function normalizeInstruction(instruction = {}) {
   };
 }
 
-function applyHumanInstruction(team, instruction, club, matchState, availabilityState, matchday) {
+function fallbackSource() {
+  return Object.freeze({ type: 'deterministic_fallback' });
+}
+
+function submittedSource(source = {}) {
+  return Object.freeze({
+    type: 'manager_submission',
+    manager_id: source.manager_id || null,
+    submission_id: source.submission_id || null,
+    submitted_at: source.submitted_at || null
+  });
+}
+
+function backfillLegacyInstructionSources(runtime) {
+  for (const row of runtime.results || []) {
+    for (const side of ['home', 'away']) {
+      const team = row.teams?.[side];
+      if (team && !team.instruction_source?.type) {
+        team.instruction_source = {
+          type: 'deterministic_fallback',
+          inferred_from_legacy_result: true
+        };
+      }
+    }
+  }
+}
+
+function applySubmittedInstruction(team, instruction, club, matchState, availabilityState, matchday) {
   const normalized = normalizeInstruction(instruction);
   const registeredIds = club.players.map((player) => player.tbg_player_id);
   const eligibleIds = registeredIds.filter((id) => availabilityForPlayer(availabilityState, id, matchday).available);
@@ -186,7 +214,7 @@ export function createIncrementalSeason({ clubs, seasonId, startAt, daysBetweenR
   return {
     version: INCREMENTAL_SEASON_VERSION,
     season_id: seasonId,
-    human_club_id: humanClubId,
+    ...(humanClubId ? { human_club_id: humanClubId } : {}),
     fixtures: fixtures.map((row) => ({ ...row })),
     next_matchday: 1,
     completed: false,
@@ -203,11 +231,24 @@ export function createIncrementalSeason({ clubs, seasonId, startAt, daysBetweenR
   };
 }
 
-export function advanceIncrementalMatchday(runtime, { clubs, humanInstruction = {}, simulator = simulateMatch } = {}) {
+export function advanceIncrementalMatchday(runtime, {
+  clubs,
+  instructionsByClub = {},
+  instructionSourcesByClub = {},
+  humanInstruction = null,
+  simulator = simulateMatch
+} = {}) {
   if (runtime.completed) throw new Error(`Season already complete: ${runtime.season_id}`);
+  backfillLegacyInstructionSources(runtime);
   const clubMap = new Map(clubs.map((club) => [club.club_id, club]));
   const fixtures = runtime.fixtures.filter((fixture) => fixture.matchday === runtime.next_matchday);
   if (!fixtures.length) throw new Error(`No fixtures for matchday ${runtime.next_matchday}`);
+  const resolvedInstructions = { ...instructionsByClub };
+  const resolvedSources = { ...instructionSourcesByClub };
+  if (humanInstruction && runtime.human_club_id && !resolvedInstructions[runtime.human_club_id]) {
+    resolvedInstructions[runtime.human_club_id] = humanInstruction;
+    resolvedSources[runtime.human_club_id] ||= { type: 'manager_submission' };
+  }
 
   for (const fixture of fixtures) {
     const homeClub = clubMap.get(fixture.home_club_id);
@@ -226,18 +267,28 @@ export function advanceIncrementalMatchday(runtime, { clubs, humanInstruction = 
     runtime.counters.tactical_adjustments += Number(JSON.stringify(teams.home.tactics) !== JSON.stringify(homeClub.tactics));
     runtime.counters.tactical_adjustments += Number(JSON.stringify(teams.away.tactics) !== JSON.stringify(awayClub.tactics));
 
-    const humanSide = fixture.home_club_id === runtime.human_club_id ? 'home' : fixture.away_club_id === runtime.human_club_id ? 'away' : null;
     const matchState = contractState(runtime.state, teams);
-    if (humanSide) {
-      const humanClub = humanSide === 'home' ? homeClub : awayClub;
-      applyHumanInstruction(teams[humanSide], humanInstruction, humanClub, matchState, runtime.state.availability, fixture.matchday);
+    const instructions = {
+      home: resolvedInstructions[fixture.home_club_id],
+      away: resolvedInstructions[fixture.away_club_id]
+    };
+    const instructionSources = {
+      home: instructions.home ? submittedSource(resolvedSources[fixture.home_club_id]) : fallbackSource(),
+      away: instructions.away ? submittedSource(resolvedSources[fixture.away_club_id]) : fallbackSource()
+    };
+    for (const side of ['home', 'away']) {
+      if (!instructions[side]) continue;
+      const club = side === 'home' ? homeClub : awayClub;
+      applySubmittedInstruction(teams[side], instructions[side], club, matchState, runtime.state.availability, fixture.matchday);
       runtime.human_decisions.push({
         fixture_id: fixture.fixture_id,
         matchday: fixture.matchday,
-        side: humanSide,
-        formation: teams[humanSide].formation,
-        tactics: { ...teams[humanSide].tactics },
-        starting_xi: [...teams[humanSide].starting_xi]
+        club_id: club.club_id,
+        side,
+        formation: teams[side].formation,
+        tactics: { ...teams[side].tactics },
+        starting_xi: [...teams[side].starting_xi],
+        instruction_source: clone(instructionSources[side])
       });
     }
 
@@ -272,8 +323,8 @@ export function advanceIncrementalMatchday(runtime, { clubs, humanInstruction = 
       fixture: { ...fixture }, score: result.score, outcome: result.outcome, statistics: result.statistics,
       events: (result.events || []).map((row) => ({ ...row })), lineup_state: result.lineup_state,
       teams: {
-        home: { starting_xi: [...teams.home.starting_xi], bench: [...teams.home.bench], formation: teams.home.formation, tactics: { ...teams.home.tactics }, manager_decision: { ...teams.home.manager_decision } },
-        away: { starting_xi: [...teams.away.starting_xi], bench: [...teams.away.bench], formation: teams.away.formation, tactics: { ...teams.away.tactics }, manager_decision: { ...teams.away.manager_decision } }
+        home: { starting_xi: [...teams.home.starting_xi], bench: [...teams.home.bench], formation: teams.home.formation, tactics: { ...teams.home.tactics }, manager_decision: { ...teams.home.manager_decision }, instruction_source: clone(instructionSources.home) },
+        away: { starting_xi: [...teams.away.starting_xi], bench: [...teams.away.bench], formation: teams.away.formation, tactics: { ...teams.away.tactics }, manager_decision: { ...teams.away.manager_decision }, instruction_source: clone(instructionSources.away) }
       },
       unavailable_before_selection: beforeSelection.unavailable,
       availability_changes: availabilityChanges
@@ -294,6 +345,7 @@ export function advanceIncrementalMatchday(runtime, { clubs, humanInstruction = 
 }
 
 export function incrementalSeasonReport(runtime, { clubs } = {}) {
+  backfillLegacyInstructionSources(runtime);
   const standings = finalTable(runtime.table);
   const complete = runtime.completed && runtime.results.length === runtime.fixtures.length;
   const checks = Object.freeze({
@@ -306,7 +358,8 @@ export function incrementalSeasonReport(runtime, { clubs } = {}) {
     no_duplicate_state_application: unique(runtime.state.applied_run_keys) && runtime.state.applied_run_keys.length === runtime.results.length,
     unavailable_players_are_never_selected: runtime.counters.unavailable_selections === 0,
     manager_decision_for_every_team: runtime.counters.manager_decisions === runtime.fixtures.length * 2,
-    every_club_fields_eleven: runtime.results.every((row) => row.teams.home.starting_xi.length === 11 && row.teams.away.starting_xi.length === 11)
+    every_club_fields_eleven: runtime.results.every((row) => row.teams.home.starting_xi.length === 11 && row.teams.away.starting_xi.length === 11),
+    instruction_source_for_every_team: runtime.results.every((row) => row.teams.home.instruction_source?.type && row.teams.away.instruction_source?.type)
   });
   const lastMatchday = Math.max(...runtime.fixtures.map((row) => row.matchday));
   return Object.freeze({
