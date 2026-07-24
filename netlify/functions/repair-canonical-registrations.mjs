@@ -85,9 +85,6 @@ export default async (request) => {
     if (!planned.preview.accepted) return json({ error: 'Registration repair cannot be applied while clubs remain impossible to repair', preview }, 409);
 
     const operationId = `registration-repair:${worldId}:${before.save_checksum}`;
-    const existing = await service(`/rest/v1/world_operation_events?operation_id=eq.${encodeURIComponent(operationId)}&select=operation_id,status&limit=1`);
-    if (existing[0]) return json({ error: 'This canonical registration repair has already been recorded' }, 409);
-
     const saved = savePersistentWorld(planned.world);
     const envelope = JSON.parse(saved);
     const now = new Date().toISOString();
@@ -103,34 +100,41 @@ export default async (request) => {
       turn_status: before.turn_status,
       updated_at: now
     };
-    const replaced = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&save_checksum=eq.${encodeURIComponent(before.save_checksum)}&turn_status=eq.${encodeURIComponent(before.turn_status)}`, {
-      method: 'PATCH',
-      body: JSON.stringify(replacement),
-      headers: { prefer: 'return=representation' }
-    });
-    if (replaced.length !== 1) return json({ error: 'Canonical checkpoint changed before repair could be applied' }, 409);
+    const operation = {
+      operation_id: operationId,
+      operation_type: 'registration_repair',
+      world_id: worldId,
+      manager_id: null,
+      club_id: null,
+      previous_checksum: before.save_checksum,
+      replacement_checksum: envelope.checksum,
+      status: 'accepted',
+      details: {
+        action: 'repair_canonical_registrations',
+        before: { checksum: before.save_checksum, phase: before.phase, turn_status: before.turn_status, matchday: before.matchday },
+        after: { checksum: envelope.checksum, phase: planned.world.phase, turn_status: before.turn_status, matchday: replacement.matchday },
+        preview: planned.preview
+      },
+      requested_by: current.manager.id,
+      created_at: now
+    };
 
-    await service('/rest/v1/world_operation_events', {
+    const atomic = await service('/rest/v1/rpc/apply_canonical_registration_repair', {
       method: 'POST',
       body: JSON.stringify({
-        operation_id: operationId,
-        operation_type: 'registration_repair',
-        world_id: worldId,
-        manager_id: null,
-        club_id: null,
-        previous_checksum: before.save_checksum,
-        replacement_checksum: envelope.checksum,
-        status: 'accepted',
-        details: {
-          action: 'repair_canonical_registrations',
-          before: { checksum: before.save_checksum, phase: before.phase, turn_status: before.turn_status, matchday: before.matchday },
-          after: { checksum: envelope.checksum, phase: planned.world.phase, turn_status: before.turn_status, matchday: replacement.matchday },
-          preview: planned.preview
-        },
-        requested_by: current.manager.id,
-        created_at: now
+        p_world_id: worldId,
+        p_expected_checksum: before.save_checksum,
+        p_expected_turn_status: before.turn_status,
+        p_replacement: replacement,
+        p_operation: operation
       })
     });
+    if (!atomic?.accepted) {
+      const message = atomic?.reason === 'duplicate_operation'
+        ? 'This canonical registration repair has already been recorded'
+        : 'Canonical checkpoint changed before repair could be applied';
+      return json({ error: message }, 409);
+    }
 
     return json({
       action: 'applied',
