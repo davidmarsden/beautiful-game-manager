@@ -48,12 +48,12 @@ begin
       save_checksum = p_replacement->>'save_checksum',
       save_envelope = p_replacement->'save_envelope',
       season_id = p_replacement->>'season_id',
-      season_number = (p_replacement->>'season_number')::integer,
+      season_number = nullif(p_replacement->>'season_number', '')::integer,
       phase = p_replacement->>'phase',
-      matchday = (p_replacement->>'matchday')::integer,
-      next_turn_at = (p_replacement->>'next_turn_at')::timestamptz,
+      matchday = nullif(p_replacement->>'matchday', '')::integer,
+      next_turn_at = nullif(p_replacement->>'next_turn_at', '')::timestamptz,
       turn_status = p_replacement->>'turn_status',
-      updated_at = (p_replacement->>'updated_at')::timestamptz
+      updated_at = nullif(p_replacement->>'updated_at', '')::timestamptz
   where world_id = p_world_id
     and save_checksum = p_expected_checksum
     and turn_status = p_expected_turn_status
@@ -86,7 +86,7 @@ begin
     p_operation->>'status',
     coalesce(p_operation->'details', '{}'::jsonb),
     nullif(p_operation->>'requested_by', '')::uuid,
-    (p_operation->>'created_at')::timestamptz
+    nullif(p_operation->>'created_at', '')::timestamptz
   );
 
   return jsonb_build_object(
@@ -99,4 +99,6 @@ end;
 $$;
 
 revoke all on function public.apply_canonical_registration_repair(text,text,text,jsonb,jsonb) from public;
+revoke all on function public.apply_canonical_registration_repair(text,text,text,jsonb,jsonb) from anon;
+revoke all on function public.apply_canonical_registration_repair(text,text,text,jsonb,jsonb) from authenticated;
 grant execute on function public.apply_canonical_registration_repair(text,text,text,jsonb,jsonb) to service_role;
