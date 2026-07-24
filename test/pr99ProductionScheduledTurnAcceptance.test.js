@@ -29,6 +29,12 @@ test('administrator receives a compact observable pre and post checkpoint result
   assert.match(endpoint, /after:/);
 });
 
+test('scheduled turn audit migration permits the explicit advance operation type', async () => {
+  const migration = await source('supabase/migrations/20260724_pr99_scheduled_turn_operation_type.sql');
+  assert.match(migration, /world_operation_events_operation_type_check/);
+  assert.match(migration, /'advance'/);
+});
+
 test('portal exposes administrator-only Run due turn now control and reloads canonical fixture state', async () => {
   const [control, index] = await Promise.all([
     source('public/admin-turn-control.js'),
