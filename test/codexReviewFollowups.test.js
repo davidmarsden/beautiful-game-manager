@@ -4,13 +4,22 @@ import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('bootstrap never returns hidden raw score fields and sanitises all result messages', async () => {
-  const source = await read('netlify/functions/bootstrap.mjs');
-  assert.match(source, /const \{ home_score: homeScore, away_score: awayScore, \.\.\.safeRow \} = row/);
-  assert.match(source, /\.\.\.\(revealed \? \{ home_score: homeScore, away_score: awayScore \} : \{\}\)/);
-  assert.match(source, /resultMessageFixtureIds/);
-  assert.match(source, /message\.message_type === 'match_result'/);
-  assert.doesNotMatch(source, /const hiddenFixtureIds = new Set\(history/);
+test('bootstrap cannot return legacy score state and manager messages are limited to the canonical world', async () => {
+  const bootstrap = await read('netlify/functions/bootstrap.mjs');
+  const projection = await read('src/world/managerPortalProjection.js');
+
+  assert.match(bootstrap, /projectManagerPortal\(world, appointment\.club_id\)/);
+  assert.match(bootstrap, /canonicalFixtureIds\(world\)/);
+  assert.match(bootstrap, /message\.related_fixture_id/);
+  assert.doesNotMatch(bootstrap, /\/rest\/v1\/fixtures/);
+  assert.doesNotMatch(bootstrap, /competition_standings/);
+  assert.doesNotMatch(bootstrap, /manager_match_views/);
+  assert.doesNotMatch(bootstrap, /home_score|away_score/);
+
+  assert.match(projection, /const score = result\?\.score \|\| null/);
+  assert.match(projection, /home_score: score\?\.home \?\? null/);
+  assert.match(projection, /away_score: score\?\.away \?\? null/);
+  assert.match(projection, /result_revealed: Boolean\(result\)/);
 });
 
 test('skip to full time suppresses replay-completed auto finish', async () => {

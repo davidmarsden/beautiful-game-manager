@@ -1,6 +1,6 @@
 import { buildManagerTurnSubmission, currentTurnIdentity } from '../../src/world/sharedWorldScheduler.js';
 import { loadPersistentWorld } from '../../src/world/persistentSeasonLoop.js';
-import { portalWorldSummary } from '../../src/world/portalWorldControl.js';
+import { projectManagerPortal } from '../../src/world/managerPortalProjection.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
@@ -62,6 +62,26 @@ function assertAppointment(world, appointment) {
   if (!world.squad_cycle?.clubs?.[appointment.club_id]) throw new Error('Appointment club is not present in the canonical world');
 }
 
+function appointmentSummary(world, clubId) {
+  const projection = projectManagerPortal(world, clubId);
+  const club = world.squad_cycle.clubs[clubId];
+  return {
+    world_id: world.world_id,
+    season_id: world.squad_cycle.season_id,
+    season_number: world.season_number,
+    phase: world.phase,
+    clock: world.clock,
+    human_club_id: clubId,
+    club_name: projection.club.canonical_name,
+    division_name: projection.club.division_name,
+    owned_players: club.player_ids.length,
+    registered_players: club.registered_player_ids.length,
+    current_matchday: world.matchday_cycle?.current_matchday || null,
+    maximum_matchday: world.matchday_cycle?.maximum_matchday || null,
+    next_fixture: projection.next_fixture
+  };
+}
+
 function commandType(type) {
   const allowed = new Set(['register_player','unregister_player','renew_contract','transfer_offer','transfer_listing','transfer_response']);
   if (!allowed.has(type)) throw new Error(`Unsupported shared-world command: ${type}`);
@@ -87,12 +107,15 @@ export default async (request) => {
     assertAppointment(world, current.appointment);
     const turn = currentTurnIdentity(world);
     const existing = await readSubmission(token, current, turn);
+    const summary = appointmentSummary(world, current.appointment.club_id);
+    const appointment = { ...current.appointment, club_name: summary.club_name, division_name: summary.division_name };
 
     if (request.method === 'GET') {
       return json({
         configured: true,
         has_world: true,
-        summary: portalWorldSummary(world),
+        is_admin: Boolean(current.manager.is_admin),
+        summary,
         world: {
           world_id: stored.world_id,
           checksum: stored.save_checksum,
@@ -100,7 +123,7 @@ export default async (request) => {
           next_turn_at: stored.next_turn_at,
           turn_status: stored.turn_status
         },
-        appointment: current.appointment,
+        appointment,
         turn,
         submission: existing ? {
           status: existing.status,
@@ -128,7 +151,7 @@ export default async (request) => {
         body: JSON.stringify(submission),
         headers: { prefer: 'resolution=merge-duplicates,return=representation' }
       });
-      return json({ accepted: true, command: 'submit_turn', submission: rows[0] || submission, turn, summary: portalWorldSummary(world) });
+      return json({ accepted: true, command: 'submit_turn', submission: rows[0] || submission, turn, summary });
     }
 
     if (body.type === 'submit_command') {
@@ -145,7 +168,7 @@ export default async (request) => {
         effective_matchday: turn.matchday
       };
       const rows = await supabase('/rest/v1/manager_world_commands', token, { method: 'POST', body: JSON.stringify(payload) });
-      return json({ accepted: true, command: type, request: rows[0] || payload, turn, summary: portalWorldSummary(world) });
+      return json({ accepted: true, command: type, request: rows[0] || payload, turn, summary });
     }
 
     return json({ error: 'Managers cannot save, load, import, restore or advance the shared world' }, 403);
