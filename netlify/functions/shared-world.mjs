@@ -66,6 +66,15 @@ function assertAppointment(world, appointment) {
   if (!world.squad_cycle?.clubs?.[appointment.club_id]) throw new Error('Appointment club is not present in the canonical world');
 }
 
+function playerName(world, playerId) {
+  const player = world.squad_cycle?.players?.[playerId];
+  return String(player?.display_name || player?.player_name || player?.name || playerId || 'Unknown player').trim();
+}
+
+function clubName(world, clubId) {
+  return String(world.club_profiles?.[clubId]?.club_name || world.club_profiles?.[clubId]?.canonical_name || clubId || 'Unknown club').trim();
+}
+
 function appointmentSummary(world, clubId) {
   const projection = projectManagerPortal(world, clubId);
   const club = world.squad_cycle.clubs[clubId];
@@ -92,11 +101,25 @@ function commandType(type) {
   return type;
 }
 
-function commandSummary(row) {
+function commandSummaryImpl(world, row) {
+  const rawPayload = row.command_payload || {};
+  const playerId = rawPayload.playerId || rawPayload.player_id || null;
+  const otherClubId = rawPayload.otherClubId || rawPayload.other_club_id || null;
   return {
     id: row.id,
     type: row.command_type,
-    payload: row.command_payload || {},
+    payload: {
+      ...rawPayload,
+      ...(playerId ? { player_id: playerId, player_name: playerName(world, playerId) } : {}),
+      ...(otherClubId ? { other_club_id: otherClubId, other_club_name: clubName(world, otherClubId) } : {})
+    },
+    display: {
+      player_id: playerId,
+      player_name: playerId ? playerName(world, playerId) : null,
+      other_club_id: otherClubId,
+      other_club_name: otherClubId ? clubName(world, otherClubId) : null,
+      manager_club_name: clubName(world, row.club_id)
+    },
     status: row.status,
     effective_season_id: row.effective_season_id,
     effective_matchday: row.effective_matchday,
@@ -132,6 +155,7 @@ export default async (request) => {
     ]);
     const summary = appointmentSummary(world, current.appointment.club_id);
     const appointment = { ...current.appointment, club_name: summary.club_name, division_name: summary.division_name };
+    const commandSummary = (row) => commandSummaryImpl(world, row);
 
     if (request.method === 'GET') {
       return json({
@@ -192,7 +216,7 @@ export default async (request) => {
         effective_matchday: turn.matchday
       };
       const rows = await supabase('/rest/v1/manager_world_commands', token, { method: 'POST', body: JSON.stringify(payload) });
-      return json({ accepted: true, command: type, request: commandSummary(rows[0] || payload), turn, summary });
+      return json({ accepted: true, command: type, request: commandSummaryImpl(world, rows[0] || payload), turn, summary });
     }
 
     return json({ error: 'Managers cannot save, load, import, restore or advance the shared world' }, 403);
