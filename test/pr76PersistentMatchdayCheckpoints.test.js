@@ -25,6 +25,11 @@ function canonical(value) {
   return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]));
 }
 
+function runtimeForClub(worldState, clubId) {
+  return Object.values(worldState.matchday_cycle.runtimes)
+    .find((runtime) => Object.prototype.hasOwnProperty.call(runtime.state.clubs, clubId));
+}
+
 test('advances exactly one matchday across all five divisions and persists the cursor', () => {
   const report = advancePersistentMatchday(world());
   assert.equal(report.accepted, true);
@@ -87,11 +92,16 @@ test('rejects duplicate persisted checkpoint identities', () => {
 
 test('rejects an unavailable player in the human starting XI before saving matchday two', () => {
   const first = advancePersistentMatchday(world());
-  const humanRuntime = Object.values(first.world.matchday_cycle.runtimes).find((runtime) => runtime.human_club_id);
-  const unavailableId = Object.entries(humanRuntime.state.availability.players)
-    .find(([, row]) => row.injury_until_matchday >= 2 || row.suspension_until_matchday >= 2)?.[0];
+  const humanClubId = first.world.human_club_id;
+  const humanRuntime = runtimeForClub(first.world, humanClubId);
+  assert.ok(humanRuntime);
+  assert.equal(Object.prototype.hasOwnProperty.call(humanRuntime, 'human_club_id'), false);
+  const registered = first.world.squad_cycle.clubs[humanClubId].registered_player_ids;
+  const unavailableId = registered.find((playerId) => {
+    const row = humanRuntime.state.availability.players[playerId];
+    return row && (row.injury_until_matchday >= 2 || row.suspension_until_matchday >= 2);
+  });
   assert.ok(unavailableId);
-  const registered = first.world.squad_cycle.clubs[first.world.human_club_id].registered_player_ids;
   const startingXi = [unavailableId, ...registered.filter((id) => id !== unavailableId).slice(0, 10)];
   assert.throws(
     () => advancePersistentMatchday(first.world, { humanInstruction: { starting_xi: startingXi } }),
@@ -100,16 +110,21 @@ test('rejects an unavailable player in the human starting XI before saving match
 });
 
 test('records one human decision at each human-club matchday', () => {
+  const source = world();
   const run = runPersistentMatchdays({
-    world: world(),
+    world: source,
     matchdays: 2,
     humanInstructionsByMatchday: {
       1: { formation: '4-2-3-1', tactics: { mentality: 'positive' } },
       2: { formation: '4-3-3-wide', tactics: { pressing: 'high' } }
     }
   });
-  const humanRuntime = Object.values(run.final_world.matchday_cycle.runtimes).find((runtime) => runtime.human_club_id);
+  const humanRuntime = runtimeForClub(run.final_world, source.human_club_id);
+  assert.ok(humanRuntime);
+  assert.equal(Object.prototype.hasOwnProperty.call(humanRuntime, 'human_club_id'), false);
   assert.equal(humanRuntime.human_decisions.length, 2);
+  assert.equal(humanRuntime.human_decisions[0].club_id, source.human_club_id);
   assert.equal(humanRuntime.human_decisions[0].formation, '4-2-3-1');
+  assert.equal(humanRuntime.human_decisions[1].club_id, source.human_club_id);
   assert.equal(humanRuntime.human_decisions[1].formation, '4-3-3-wide');
 });
