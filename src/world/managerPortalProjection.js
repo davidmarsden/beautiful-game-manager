@@ -1,10 +1,30 @@
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = null) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
-function orderedStandings(table = {}) {
+function resultForClub(result, clubId) {
+  const fixture = result?.fixture;
+  const score = result?.score;
+  if (!fixture || !score || ![fixture.home_club_id, fixture.away_club_id].includes(clubId)) return null;
+  const own = fixture.home_club_id === clubId ? score.home : score.away;
+  const opponent = fixture.home_club_id === clubId ? score.away : score.home;
+  return own > opponent ? 'W' : own < opponent ? 'L' : 'D';
+}
+
+function orderedStandings(table = {}, results = []) {
   return Object.values(table)
-    .map((row) => ({ ...row }))
-    .sort((a, b) => b.points - a.points || b.gd - a.gd || b.gf - a.gf || a.club_id.localeCompare(b.club_id))
+    .map((row) => ({
+      ...row,
+      goals_for: number(row.goals_for ?? row.gf, 0),
+      goals_against: number(row.goals_against ?? row.ga, 0),
+      goal_difference: number(row.goal_difference ?? row.gd, 0),
+      form: results
+        .filter((result) => [result?.fixture?.home_club_id, result?.fixture?.away_club_id].includes(row.club_id))
+        .sort((a, b) => number(a.fixture?.matchday, 0) - number(b.fixture?.matchday, 0))
+        .slice(-5)
+        .map((result) => resultForClub(result, row.club_id))
+        .filter(Boolean)
+    }))
+    .sort((a, b) => b.points - a.points || b.goal_difference - a.goal_difference || b.goals_for - a.goals_for || a.club_id.localeCompare(b.club_id))
     .map((row, index) => ({ position: index + 1, ...row }));
 }
 
@@ -27,7 +47,10 @@ function decorateFixture(world, clubId, fixture, result = null) {
   const score = result?.score || null;
   return {
     ...fixture,
+    id: fixture.fixture_id,
     fixture_id: fixture.fixture_id,
+    home_club_name: clubName(world, fixture.home_club_id),
+    away_club_name: clubName(world, fixture.away_club_id),
     opponent_id: opponentId,
     opponent_name: clubName(world, opponentId),
     venue: fixture.home_club_id === clubId ? 'home' : 'away',
@@ -93,12 +116,13 @@ export function projectManagerPortal(world, clubId) {
   const division = clubDivision(world, clubId);
   const runtime = runtimeForClub(world, clubId);
   const fixtures = (runtime?.fixtures || []).filter((fixture) => fixture.home_club_id === clubId || fixture.away_club_id === clubId);
-  const resultsByFixture = new Map((runtime?.results || []).map((result) => [String(result.fixture.fixture_id), result]));
+  const results = runtime?.results || [];
+  const resultsByFixture = new Map(results.map((result) => [String(result.fixture.fixture_id), result]));
   const completed = fixtures.filter((fixture) => resultsByFixture.has(String(fixture.fixture_id)));
   const scheduled = fixtures.filter((fixture) => !resultsByFixture.has(String(fixture.fixture_id)));
-  const next = scheduled.sort((a, b) => a.matchday - b.matchday || String(a.kickoff_at).localeCompare(String(b.kickoff_at)))[0] || null;
-  const last = completed.sort((a, b) => b.matchday - a.matchday || String(b.kickoff_at).localeCompare(String(a.kickoff_at)))[0] || null;
-  const standings = orderedStandings(runtime?.table || {}).map((row) => ({
+  const next = [...scheduled].sort((a, b) => a.matchday - b.matchday || String(a.kickoff_at).localeCompare(String(b.kickoff_at)))[0] || null;
+  const last = [...completed].sort((a, b) => b.matchday - a.matchday || String(b.kickoff_at).localeCompare(String(a.kickoff_at)))[0] || null;
+  const standings = orderedStandings(runtime?.table || {}, results).map((row) => ({
     ...row,
     club_name: clubName(world, row.club_id),
     is_managed_club: row.club_id === clubId
@@ -106,6 +130,9 @@ export function projectManagerPortal(world, clubId) {
   const squad = (club.player_ids || []).map((playerId, index) => projectPlayer(world, club, playerId, index));
   const phase = text(world.phase) || 'preseason';
   const preseason = !world.matchday_cycle || fixtures.length === 0;
+  const decoratedFixtures = fixtures
+    .map((fixture) => decorateFixture(world, clubId, fixture, resultsByFixture.get(String(fixture.fixture_id))))
+    .sort((a, b) => a.matchday - b.matchday || String(a.kickoff_at).localeCompare(String(b.kickoff_at)));
 
   return {
     world: {
@@ -114,7 +141,14 @@ export function projectManagerPortal(world, clubId) {
       season_id: world.squad_cycle.season_id,
       season_number: world.season_number,
       phase,
+      fixture_count: fixtures.length,
       status: preseason ? 'Preseason — fixtures have not been generated yet' : `Season ${world.season_number} · Matchday ${world.matchday_cycle.current_matchday}`
+    },
+    season: {
+      season_id: world.squad_cycle.season_id,
+      fixture_count: fixtures.length,
+      current_matchday: world.matchday_cycle?.current_matchday || null,
+      maximum_matchday: world.matchday_cycle?.maximum_matchday || null
     },
     club: {
       ...profile,
@@ -133,6 +167,8 @@ export function projectManagerPortal(world, clubId) {
       }
     },
     squad,
+    fixtures: decoratedFixtures,
+    schedule: decoratedFixtures,
     next_fixture: next ? decorateFixture(world, clubId, next) : null,
     last_fixture: last ? decorateFixture(world, clubId, last, resultsByFixture.get(String(last.fixture_id))) : null,
     fixture_history: completed
@@ -141,6 +177,9 @@ export function projectManagerPortal(world, clubId) {
     competition: {
       competition_id: division?.division_id || null,
       season_id: world.squad_cycle.season_id,
+      fixture_count: fixtures.length,
+      fixtures: decoratedFixtures,
+      results: completed.map((fixture) => decorateFixture(world, clubId, fixture, resultsByFixture.get(String(fixture.fixture_id)))),
       standings
     },
     preseason
