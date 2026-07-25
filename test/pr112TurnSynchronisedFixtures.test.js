@@ -27,6 +27,22 @@ test('canonical calendar alternates Tuesday and Friday production turns', () => 
   ]);
 });
 
+test('canonical calendar honours a configured Monday and Thursday 18:00 cadence', () => {
+  const rows = canonicalMatchdayKickoffs({
+    firstMatchday: 2,
+    firstKickoffAt: '2026-07-27T18:00:00.000Z',
+    lastMatchday: 5,
+    weekdaysUtc: [1, 4],
+    hourUtc: 18
+  });
+  assert.deepEqual([...rows.entries()], [
+    [2, '2026-07-27T18:00:00.000Z'],
+    [3, '2026-07-30T18:00:00.000Z'],
+    [4, '2026-08-03T18:00:00.000Z'],
+    [5, '2026-08-06T18:00:00.000Z']
+  ]);
+});
+
 test('calendar repair preserves completed fixtures and realigns only current and future matchdays', () => {
   const world = {
     matchday_cycle: {
@@ -98,6 +114,16 @@ test('portal schedule projects the current canonical deadline and twice-weekly f
   assert.equal(projection.fixtures.find((row) => row.matchday === 1).kickoff_at, '2026-08-01T00:00:00.000Z');
 });
 
+test('portal schedule uses the configured cadence for future matchdays', () => {
+  const projection = projectManagerPortal(portalWorld(), 'real-madrid', {
+    nextTurnAt: '2026-07-27T18:00:00.000Z',
+    weekdaysUtc: [1, 4],
+    hourUtc: 18
+  });
+  assert.equal(projection.next_fixture.kickoff_at, '2026-07-27T18:00:00.000Z');
+  assert.equal(projection.fixtures.find((row) => row.matchday === 3).kickoff_at, '2026-07-30T18:00:00.000Z');
+});
+
 test('scheduler persists repaired dates and dashboard exposes a live kickoff countdown', async () => {
   const [scheduler, bootstrap, model, portal] = await Promise.all([
     source('src/world/sharedWorldScheduler.js'),
@@ -108,7 +134,12 @@ test('scheduler persists repaired dates and dashboard exposes a live kickoff cou
   assert.match(scheduler, /alignCanonicalFixtureKickoffs\(world/);
   assert.match(scheduler, /currentTurnAt: plan\.scheduled_for/);
   assert.match(scheduler, /currentTurnAt: plan\.next_turn_at/);
-  assert.match(bootstrap, /projectManagerPortal\(world, appointment\.club_id, \{ nextTurnAt: stored\.next_turn_at \}\)/);
+  assert.match(scheduler, /turn_calendar: configuredTurnCalendar/);
+  assert.match(scheduler, /weekdaysUtc: cadence\.weekdays_utc/);
+  assert.match(scheduler, /hourUtc: cadence\.hour_utc/);
+  assert.match(bootstrap, /projectManagerPortal\(world, appointment\.club_id, \{/);
+  assert.match(bootstrap, /weekdaysUtc: TURN_DAYS/);
+  assert.match(bootstrap, /hourUtc: TURN_HOUR_UTC/);
   assert.match(model, /next_kickoff_at/);
   assert.match(portal, /until kick-off/);
   assert.match(portal, /Intl\.DateTimeFormat\('en-GB'/);
