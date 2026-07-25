@@ -64,6 +64,7 @@ function decorateEvent(world, result, event, index) {
     : commentary;
   return {
     ...event,
+    event_type: event.event_type || event.type || event.payload?.event_type || event.payload?.type || null,
     ...(attributedCommentary ? { commentary: attributedCommentary } : {}),
     player_id: event.player_id || playerId,
     player_name: resolvedName,
