@@ -49,3 +49,11 @@ test('failed status is reopened only after a verified recovery source is selecte
   assert.match(endpoint, /save_checksum=eq\.\$\{encodeURIComponent\(before\.save_checksum\)\}/);
   assert.match(endpoint, /Failed world changed before retry; replay rejected/);
 });
+
+test('failed turn history does not block one replacement attempt for the same canonical turn', async () => {
+  const migration = await source('supabase/migrations/20260725_pr109_allow_failed_turn_retry.sql');
+  assert.match(migration, /drop constraint if exists world_turn_runs_world_id_season_id_matchday_key/);
+  assert.match(migration, /create unique index if not exists world_turn_runs_one_nonfailed_attempt_per_turn/);
+  assert.match(migration, /on public\.world_turn_runs \(world_id, season_id, matchday\)/);
+  assert.match(migration, /where status <> 'failed'/);
+});
