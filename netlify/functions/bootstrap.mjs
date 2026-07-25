@@ -54,7 +54,6 @@ function hideCompletedScore(fixture) {
 
 function spoilerSafeProjection(projection) {
   const fixtures = (projection.fixtures || []).map(hideCompletedScore);
-  const schedule = (projection.schedule || []).map(hideCompletedScore);
   const fixtureHistory = (projection.fixture_history || []).map(hideCompletedScore);
   const competition = projection.competition ? {
     ...projection.competition,
@@ -64,7 +63,7 @@ function spoilerSafeProjection(projection) {
   return {
     ...projection,
     fixtures,
-    schedule,
+    schedule: projection.schedule || [],
     fixture_history: fixtureHistory,
     last_fixture: hideCompletedScore(projection.last_fixture),
     competition

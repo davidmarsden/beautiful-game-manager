@@ -89,7 +89,7 @@ test('canonical match centre maps embedded fallback teams by fixture side', asyn
 test('competition UI renders full schedule and supports canonical match-report links', async () => {
   const source = await readFile(new URL('../public/phase2d3.js', import.meta.url), 'utf8');
   assert.match(source, /function renderSchedule/);
-  assert.match(source, /data\.fixtures \|\| data\.schedule \|\| data\.competition\?\.fixtures/);
+  assert.match(source, /data\.schedule \|\| data\.fixtures \|\| data\.competition\?\.fixtures/);
   assert.match(source, /goals_for \?\? row\.gf/);
   assert.match(source, /data-match-centre/);
 });

@@ -3,6 +3,7 @@ let competitionState = null;
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>\"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[character]));
 const formatDate = (value) => value ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value)) : '—';
+const hasScore = (fixture) => fixture?.own_score != null && fixture?.opponent_score != null;
 const resultClass = (fixture) => fixture.own_score > fixture.opponent_score ? 'win' : fixture.own_score < fixture.opponent_score ? 'loss' : 'draw';
 const resultLetter = (fixture) => resultClass(fixture) === 'win' ? 'W' : resultClass(fixture) === 'loss' ? 'L' : 'D';
 
@@ -49,8 +50,9 @@ function renderSchedule(fixtures = []) {
   if (!view) return;
   const rows = fixtures.map((fixture) => {
     const played = fixture.status === 'played';
-    const score = played ? `${escapeHtml(fixture.own_score)}–${escapeHtml(fixture.opponent_score)}` : '—';
-    const outcome = played ? `<span class="result-pill ${resultClass(fixture)}">${resultLetter(fixture)}</span>` : '<span class="badge neutral">Scheduled</span>';
+    const scoreKnown = played && hasScore(fixture);
+    const score = scoreKnown ? `${escapeHtml(fixture.own_score)}–${escapeHtml(fixture.opponent_score)}` : '—';
+    const outcome = scoreKnown ? `<span class="result-pill ${resultClass(fixture)}">${resultLetter(fixture)}</span>` : played ? '<span class="badge neutral">Played</span>' : '<span class="badge neutral">Scheduled</span>';
     const report = played ? `<button type="button" class="match-centre-link" data-match-centre="${escapeHtml(fixture.fixture_id || fixture.id)}">Match report</button>` : '';
     return `<tr><td>${escapeHtml(fixture.matchday ?? '—')}</td><td>${formatDate(fixture.kickoff_at)}</td><td>${escapeHtml(fixture.venue)}</td><td>${escapeHtml(fixture.opponent_name)}</td><td><strong>${score}</strong></td><td>${outcome}</td><td>${report}</td></tr>`;
   }).join('');
@@ -62,7 +64,7 @@ function renderCompetition(data) {
   renderLastFixture(data.last_fixture);
   renderHistory(data.fixture_history || []);
   renderStandings(data.competition?.standings || []);
-  renderSchedule(data.fixtures || data.schedule || data.competition?.fixtures || []);
+  renderSchedule(data.schedule || data.fixtures || data.competition?.fixtures || []);
   const title = document.getElementById('competitionTitle');
   if (title) title.textContent = data.club?.division_name || String(data.competition?.competition_id || 'Competition').replace(/^d(\d+)$/, 'Division $1').replace('division-', 'Division ');
 }
