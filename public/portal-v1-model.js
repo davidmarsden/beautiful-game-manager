@@ -86,6 +86,13 @@ function fixtureDeadline(data) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function fixtureKickoff(data) {
+  const value = data?.next_fixture?.kickoff_at || data?.canonical_source?.next_turn_at;
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function daysUntil(date, now) {
   return Math.ceil((date.getTime() - now.getTime()) / 86400000);
 }
@@ -124,6 +131,7 @@ export function buildPortalViewModel(data, { now = new Date() } = {}) {
   const clubId = text(data?.club?.tbg_club_id || data?.club?.club_id || data?.club?.id);
   const tableRow = standings.find((row) => text(row.club_id || row.tbg_club_id || row.id) === clubId) || null;
   const deadline = fixtureDeadline(data);
+  const kickoff = fixtureKickoff(data);
   const submission = data?.current_submission || data?.submission || data?.next_fixture?.submission;
   const hasNextFixture = Boolean(data?.next_fixture);
 
@@ -154,6 +162,7 @@ export function buildPortalViewModel(data, { now = new Date() } = {}) {
       progress_percent: progressKnown ? Math.min(100, Math.round((played / total) * 100)) : null,
       has_next_fixture: hasNextFixture,
       next_opponent: text(data?.next_fixture?.opponent_name || data?.next_fixture?.opponent || 'Schedule pending'),
+      next_kickoff_at: kickoff?.toISOString() || null,
       deadline_at: deadline?.toISOString() || null,
       submitted: Boolean(submission)
     }),

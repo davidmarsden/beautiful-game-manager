@@ -1,3 +1,5 @@
+import { canonicalMatchdayKickoffs } from './canonicalTurnCalendar.js';
+
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = null) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
@@ -109,15 +111,38 @@ export function canonicalFixtureIds(world) {
   return new Set(Object.values(world.matchday_cycle?.runtimes || {}).flatMap((runtime) => runtime.fixtures || []).map((fixture) => String(fixture.fixture_id)));
 }
 
-export function projectManagerPortal(world, clubId) {
+function projectedFixtures(world, fixtures, resultsByFixture, nextTurnAt, { weekdaysUtc, hourUtc } = {}) {
+  const currentMatchday = Number(world.matchday_cycle?.current_matchday || 1);
+  const maximumMatchday = Number(world.matchday_cycle?.maximum_matchday || currentMatchday);
+  const persistedCalendar = world.matchday_cycle?.turn_calendar || {};
+  const resolvedWeekdays = weekdaysUtc || persistedCalendar.weekdays_utc;
+  const resolvedHour = hourUtc ?? persistedCalendar.hour_utc;
+  const kickoffByMatchday = nextTurnAt && maximumMatchday >= currentMatchday
+    ? canonicalMatchdayKickoffs({
+      firstMatchday: currentMatchday,
+      firstKickoffAt: nextTurnAt,
+      lastMatchday: maximumMatchday,
+      ...(resolvedWeekdays ? { weekdaysUtc: resolvedWeekdays } : {}),
+      ...(resolvedHour != null ? { hourUtc: resolvedHour } : {})
+    })
+    : new Map();
+  return fixtures.map((fixture) => {
+    if (resultsByFixture.has(String(fixture.fixture_id))) return fixture;
+    const kickoffAt = kickoffByMatchday.get(Number(fixture.matchday));
+    return kickoffAt ? { ...fixture, kickoff_at: kickoffAt } : fixture;
+  });
+}
+
+export function projectManagerPortal(world, clubId, { nextTurnAt = null, weekdaysUtc = null, hourUtc = null } = {}) {
   const club = world.squad_cycle?.clubs?.[clubId];
   const profile = world.club_profiles?.[clubId];
   if (!club || !profile) throw new Error(`Appointment club ${clubId} is not present in the canonical world`);
   const division = clubDivision(world, clubId);
   const runtime = runtimeForClub(world, clubId);
-  const fixtures = (runtime?.fixtures || []).filter((fixture) => fixture.home_club_id === clubId || fixture.away_club_id === clubId);
+  const rawFixtures = (runtime?.fixtures || []).filter((fixture) => fixture.home_club_id === clubId || fixture.away_club_id === clubId);
   const results = runtime?.results || [];
   const resultsByFixture = new Map(results.map((result) => [String(result.fixture.fixture_id), result]));
+  const fixtures = projectedFixtures(world, rawFixtures, resultsByFixture, nextTurnAt, { weekdaysUtc, hourUtc });
   const completed = fixtures.filter((fixture) => resultsByFixture.has(String(fixture.fixture_id)));
   const scheduled = fixtures.filter((fixture) => !resultsByFixture.has(String(fixture.fixture_id)));
   const next = [...scheduled].sort((a, b) => a.matchday - b.matchday || String(a.kickoff_at).localeCompare(String(b.kickoff_at)))[0] || null;
