@@ -57,3 +57,12 @@ test('failed turn history does not block one replacement attempt for the same ca
   assert.match(migration, /on public\.world_turn_runs \(world_id, season_id, matchday\)/);
   assert.match(migration, /where status <> 'failed'/);
 });
+
+test('a rejected recovery can be retried after the canonical checkpoint state changes', async () => {
+  const endpoint = await source('netlify/functions/run-due-turn-now.mjs');
+  assert.match(endpoint, /function recoveryCheckpointToken\(before\)/);
+  assert.match(endpoint, /before\.updated_at \|\| before\.next_turn_at/);
+  assert.match(endpoint, /scheduled-turn-recovery:\$\{worldId\}:\$\{recovery\.failedRun\.id\}:\$\{before\.save_checksum\}:\$\{recoveryCheckpointToken\(before\)\}/);
+  assert.match(endpoint, /recovery_checkpoint_token/);
+  assert.match(endpoint, /already been executed or recorded for the current checkpoint state/);
+});
