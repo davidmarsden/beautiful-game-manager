@@ -1,12 +1,22 @@
 import { advancePersistentMatchday, validatePersistentMatchdayWorld } from './persistentMatchdayWorld.js';
 import { loadPersistentWorld, savePersistentWorld } from './persistentSeasonLoop.js';
-import { alignCanonicalFixtureKickoffs } from './canonicalTurnCalendar.js';
+import { alignCanonicalFixtureKickoffs, DEFAULT_TURN_HOUR_UTC, DEFAULT_TURN_WEEKDAYS_UTC } from './canonicalTurnCalendar.js';
 
 export const SHARED_WORLD_SCHEDULER_VERSION = 'tbg-shared-world-scheduler-v1.3';
 
 const text = (value) => String(value ?? '').trim();
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const unique = (values) => new Set(values).size === values.length;
+
+function configuredTurnCalendar(world, override = null) {
+  const persisted = world.matchday_cycle?.turn_calendar || {};
+  const environment = typeof process !== 'undefined' ? process.env || {} : {};
+  const environmentDays = String(environment.TBG_TURN_DAYS || '').split(',').map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6);
+  const environmentHour = Number(environment.TBG_TURN_HOUR_UTC);
+  const weekdaysUtc = override?.weekdaysUtc || environmentDays.length && environmentDays || persisted.weekdays_utc || DEFAULT_TURN_WEEKDAYS_UTC;
+  const hourUtc = override?.hourUtc ?? (Number.isFinite(environmentHour) ? environmentHour : persisted.hour_utc ?? DEFAULT_TURN_HOUR_UTC);
+  return Object.freeze({ weekdays_utc: [...weekdaysUtc], hour_utc: Number(hourUtc) });
+}
 
 export function currentTurnIdentity(world) {
   return Object.freeze({
@@ -103,7 +113,8 @@ export function selectTurnInstructions(world, submissions = [], appointments = [
 export function buildScheduledTurnPlan(worldInput, submissions = [], {
   appointments = [],
   scheduledFor = new Date().toISOString(),
-  nextTurnAt = null
+  nextTurnAt = null,
+  turnCalendar = null
 } = {}) {
   const world = loadPersistentWorld(savePersistentWorld(worldInput));
   const validation = validatePersistentMatchdayWorld(world);
@@ -125,6 +136,7 @@ export function buildScheduledTurnPlan(worldInput, submissions = [], {
     matchday: selected.turn.matchday,
     scheduled_for: scheduledFor,
     next_turn_at: nextTurnAt,
+    turn_calendar: configuredTurnCalendar(world, turnCalendar),
     instructions_by_club: selected.by_club,
     instruction_sources_by_club: Object.freeze(instructionSourcesByClub),
     selected_submissions: selected.selected_submissions,
@@ -142,12 +154,15 @@ export function executeScheduledTurn(worldInput, plan) {
   if (plan.world_id !== current.world_id || plan.season_id !== current.season_id || Number(plan.matchday) !== current.matchday) {
     throw new Error('Scheduled turn plan is stale');
   }
+  const cadence = plan.turn_calendar || configuredTurnCalendar(world);
 
   if (world.matchday_cycle) {
     alignCanonicalFixtureKickoffs(world, {
       currentMatchday: current.matchday,
       currentTurnAt: plan.scheduled_for,
-      nextTurnAt: plan.next_turn_at
+      nextTurnAt: plan.next_turn_at,
+      weekdaysUtc: cadence.weekdays_utc,
+      hourUtc: cadence.hour_utc
     });
   }
 
@@ -160,7 +175,9 @@ export function executeScheduledTurn(worldInput, plan) {
   if (advance.world.matchday_cycle && plan.next_turn_at) {
     alignCanonicalFixtureKickoffs(advance.world, {
       currentMatchday: advance.world.matchday_cycle.current_matchday,
-      currentTurnAt: plan.next_turn_at
+      currentTurnAt: plan.next_turn_at,
+      weekdaysUtc: cadence.weekdays_utc,
+      hourUtc: cadence.hour_utc
     });
   }
 
@@ -172,6 +189,7 @@ export function executeScheduledTurn(worldInput, plan) {
     matchday: plan.matchday,
     scheduled_for: plan.scheduled_for,
     next_turn_at: plan.next_turn_at,
+    turn_calendar: clone(cadence),
     appointed_club_ids: [...plan.appointed_club_ids],
     submitted_club_ids: [...plan.submitted_club_ids],
     fallback_club_ids: [...plan.fallback_club_ids],
