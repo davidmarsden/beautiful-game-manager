@@ -40,6 +40,37 @@ function managerMessages(rows, world, canonicalCreatedAt) {
   });
 }
 
+function hideCompletedScore(fixture) {
+  if (!fixture || fixture.status !== 'played') return fixture;
+  return {
+    ...fixture,
+    home_score: null,
+    away_score: null,
+    own_score: null,
+    opponent_score: null,
+    result_revealed: false
+  };
+}
+
+function spoilerSafeProjection(projection) {
+  const fixtures = (projection.fixtures || []).map(hideCompletedScore);
+  const schedule = (projection.schedule || []).map(hideCompletedScore);
+  const fixtureHistory = (projection.fixture_history || []).map(hideCompletedScore);
+  const competition = projection.competition ? {
+    ...projection.competition,
+    fixtures: (projection.competition.fixtures || []).map(hideCompletedScore),
+    results: (projection.competition.results || []).map(hideCompletedScore)
+  } : projection.competition;
+  return {
+    ...projection,
+    fixtures,
+    schedule,
+    fixture_history: fixtureHistory,
+    last_fixture: hideCompletedScore(projection.last_fixture),
+    competition
+  };
+}
+
 export default async (request) => {
   try {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return json({ error: 'Supabase is not configured' }, 503);
@@ -69,11 +100,11 @@ export default async (request) => {
 
     const world = loadPersistentWorld(JSON.stringify(stored.save_envelope));
     if (world.world_id !== appointment.world_id) throw new Error('Appointment world does not match the canonical save');
-    const projection = projectManagerPortal(world, appointment.club_id, {
+    const projection = spoilerSafeProjection(projectManagerPortal(world, appointment.club_id, {
       nextTurnAt: stored.next_turn_at,
       weekdaysUtc: TURN_DAYS,
       hourUtc: TURN_HOUR_UTC
-    });
+    }));
     const messages = managerMessages(rawMessages, world, stored.created_at);
     const currentMatchday = world.matchday_cycle?.current_matchday || 1;
     const turnSubmissionRows = await supabase(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(world.world_id)}&season_id=eq.${encodeURIComponent(world.squad_cycle.season_id)}&matchday=eq.${currentMatchday}&manager_id=eq.${encodeURIComponent(manager.id)}&club_id=eq.${encodeURIComponent(appointment.club_id)}&select=*&order=submitted_at.desc&limit=1`, token).catch(() => []);
