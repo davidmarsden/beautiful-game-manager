@@ -68,6 +68,24 @@ test('canonical match centre reads persisted world rather than legacy fixture ta
   assert.doesNotMatch(source, /TBG_WORLD_URL|WORLD_URL/);
 });
 
+test('canonical match centre reads singular persisted instruction payloads', async () => {
+  const source = await readFile(new URL('../netlify/functions/match-centre.mjs', import.meta.url), 'utf8');
+  assert.match(source, /submission\.instruction \|\| submission\.instructions \|\| \{\}/);
+  assert.match(source, /instruction\.starting_xi/);
+  assert.match(source, /instruction\.bench/);
+  assert.match(source, /instruction\.formation/);
+  assert.match(source, /instruction\.captain_id/);
+});
+
+test('canonical match centre maps embedded fallback teams by fixture side', async () => {
+  const source = await readFile(new URL('../netlify/functions/match-centre.mjs', import.meta.url), 'utf8');
+  assert.match(source, /clubId === fixture\.home_club_id \? 'home'/);
+  assert.match(source, /clubId === fixture\.away_club_id \? 'away'/);
+  assert.match(source, /result\.teams\?\.\[side\]/);
+  assert.match(source, /club_id: clubId/);
+  assert.match(source, /deterministic_fallback/);
+});
+
 test('competition UI renders full schedule and supports canonical match-report links', async () => {
   const source = await readFile(new URL('../public/phase2d3.js', import.meta.url), 'utf8');
   assert.match(source, /function renderSchedule/);
