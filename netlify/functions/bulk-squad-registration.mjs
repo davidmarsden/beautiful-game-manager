@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { loadPersistentWorld } from '../../src/world/persistentSeasonLoop.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
@@ -92,29 +92,6 @@ export function buildRegistrationDiff(currentIds, requestedIds, ownedSeniorIds, 
   };
 }
 
-function requestKey({ worldId, managerId, batchId, commandType, playerIdValue }) {
-  return createHash('sha256').update([worldId, managerId, batchId, commandType, playerIdValue].join('|')).digest('hex');
-}
-
-async function submitCommand({ token, world, managerId, clubId, batchId, commandType, playerIdValue }) {
-  const seasonId = world.squad_cycle.season_id;
-  const matchday = world.matchday_cycle?.current_matchday || 1;
-  const key = requestKey({ worldId: world.world_id, managerId, batchId, commandType, playerIdValue });
-  return supabase('/rest/v1/rpc/submit_manager_world_command', token, {
-    method: 'POST',
-    body: JSON.stringify({
-      p_world_id: world.world_id,
-      p_manager_id: managerId,
-      p_club_id: clubId,
-      p_command_type: commandType,
-      p_command_payload: { playerId: playerIdValue, batch_id: batchId, client_request_id: key },
-      p_effective_season_id: seasonId,
-      p_effective_matchday: matchday,
-      p_request_key: key
-    })
-  });
-}
-
 export default async (request) => {
   try {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return json({ error: 'Supabase is not configured' }, 503);
@@ -136,30 +113,29 @@ export default async (request) => {
 
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
     const body = await request.json().catch(() => ({}));
-    const requestedIds = Array.isArray(body.player_ids) ? body.player_ids : [];
+    const requestedIds = Array.isArray(body.player_ids) ? [...new Set(body.player_ids.map(String))] : [];
     const currentIds = roster.players.filter((player) => player.registered).map((player) => player.player_id);
     const ownedSeniorIds = roster.players.map((player) => player.player_id);
-    const diff = buildRegistrationDiff(currentIds, requestedIds, ownedSeniorIds, roster.registration_limit);
+    buildRegistrationDiff(currentIds, requestedIds, ownedSeniorIds, roster.registration_limit);
     const batchId = String(body.batch_id || randomUUID());
-    const submitted = [];
 
-    for (const id of diff.unregister) {
-      await submitCommand({ token, world, managerId: current.manager.id, clubId: current.appointment.club_id, batchId, commandType: 'unregister_player', playerIdValue: id });
-      submitted.push({ player_id: id, action: 'remove' });
-    }
-    for (const id of diff.register) {
-      await submitCommand({ token, world, managerId: current.manager.id, clubId: current.appointment.club_id, batchId, commandType: 'register_player', playerIdValue: id });
-      submitted.push({ player_id: id, action: 'register' });
-    }
-
-    return json({
-      accepted: true,
-      batch_id: batchId,
-      requested_count: requestedIds.length,
-      command_count: submitted.length,
-      unchanged_count: requestedIds.length - diff.register.length,
-      submitted
+    const result = await supabase('/rest/v1/rpc/submit_bulk_registration_commands', token, {
+      method: 'POST',
+      body: JSON.stringify({
+        p_world_id: world.world_id,
+        p_manager_id: current.manager.id,
+        p_club_id: current.appointment.club_id,
+        p_requested_player_ids: requestedIds,
+        p_current_registered_ids: currentIds,
+        p_owned_senior_ids: ownedSeniorIds,
+        p_registration_limit: roster.registration_limit,
+        p_effective_season_id: world.squad_cycle.season_id,
+        p_effective_matchday: world.matchday_cycle?.current_matchday || 1,
+        p_batch_id: batchId
+      })
     });
+
+    return json(Array.isArray(result) ? result[0] : result);
   } catch (error) {
     const status = /Authentication|Session/.test(error.message) ? 401 : /limit|owned|appointment|locked|world/i.test(error.message) ? 409 : 503;
     return json({ error: error.message }, status);
