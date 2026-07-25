@@ -24,7 +24,7 @@ test('production retry validates explicit repaired-checkpoint lineage', async ()
   assert.match(endpoint, /operation_type=eq\.registration_repair/);
   assert.match(endpoint, /superseded_failed_run_id/);
   assert.match(endpoint, /world_turn_runs\?id=eq\./);
-  assert.match(endpoint, /failedRun\.previous_checksum !== lineage\.failed_checksum/);
+  assert.match(endpoint, /failedRun\.previous_checksum !== explicit\.failed_checksum/);
   assert.match(endpoint, /retry_repaired_failed_turn/);
   assert.match(endpoint, /scheduled-turn-recovery:/);
   assert.match(endpoint, /repair_operation_id/);
