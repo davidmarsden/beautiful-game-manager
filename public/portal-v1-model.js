@@ -74,7 +74,9 @@ function standingsRows(data) {
 }
 
 function resultIsComplete(row) {
-  return Boolean(row?.completed || row?.status === 'complete' || row?.status === 'played' || row?.score || row?.home_score !== undefined);
+  const status = text(row?.status).toLowerCase();
+  const hasExplicitScore = row?.home_score != null && row?.away_score != null;
+  return Boolean(row?.completed || status === 'complete' || status === 'played' || row?.score || hasExplicitScore);
 }
 
 function fixtureDeadline(data) {
