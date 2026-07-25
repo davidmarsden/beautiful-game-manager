@@ -1,7 +1,8 @@
 import { advancePersistentMatchday, validatePersistentMatchdayWorld } from './persistentMatchdayWorld.js';
 import { loadPersistentWorld, savePersistentWorld } from './persistentSeasonLoop.js';
+import { alignCanonicalFixtureKickoffs } from './canonicalTurnCalendar.js';
 
-export const SHARED_WORLD_SCHEDULER_VERSION = 'tbg-shared-world-scheduler-v1.2';
+export const SHARED_WORLD_SCHEDULER_VERSION = 'tbg-shared-world-scheduler-v1.3';
 
 const text = (value) => String(value ?? '').trim();
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -142,11 +143,26 @@ export function executeScheduledTurn(worldInput, plan) {
     throw new Error('Scheduled turn plan is stale');
   }
 
+  if (world.matchday_cycle) {
+    alignCanonicalFixtureKickoffs(world, {
+      currentMatchday: current.matchday,
+      currentTurnAt: plan.scheduled_for,
+      nextTurnAt: plan.next_turn_at
+    });
+  }
+
   const advance = advancePersistentMatchday(world, {
     instructionsByClub: plan.instructions_by_club,
     instructionSourcesByClub: plan.instruction_sources_by_club
   });
   if (!advance.accepted) throw new Error('Scheduled matchday advance was rejected');
+
+  if (advance.world.matchday_cycle && plan.next_turn_at) {
+    alignCanonicalFixtureKickoffs(advance.world, {
+      currentMatchday: advance.world.matchday_cycle.current_matchday,
+      currentTurnAt: plan.next_turn_at
+    });
+  }
 
   advance.world.shared_turn_history ||= [];
   advance.world.shared_turn_history.push({
@@ -155,6 +171,7 @@ export function executeScheduledTurn(worldInput, plan) {
     season_id: plan.season_id,
     matchday: plan.matchday,
     scheduled_for: plan.scheduled_for,
+    next_turn_at: plan.next_turn_at,
     appointed_club_ids: [...plan.appointed_club_ids],
     submitted_club_ids: [...plan.submitted_club_ids],
     fallback_club_ids: [...plan.fallback_club_ids],
