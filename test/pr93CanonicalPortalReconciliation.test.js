@@ -119,7 +119,8 @@ test('portal registration follows live squad-cycle registration rather than stal
 test('production bootstrap cannot read legacy publication, fixture or standings state', async () => {
   const source = await readFile(new URL('../netlify/functions/bootstrap.mjs', import.meta.url), 'utf8');
   assert.match(source, /canonical_world_saves/);
-  assert.match(source, /projectManagerPortal\(world, appointment\.club_id\)/);
+  assert.match(source, /projectManagerPortal\(world, appointment\.club_id, \{/);
+  assert.match(source, /nextTurnAt: stored\.next_turn_at/);
   assert.match(source, /canonicalFixtureIds\(world\)/);
   assert.match(source, /manager_turn_submissions/);
   assert.match(source, /matchday=eq\.\$\{currentMatchday\}/);
