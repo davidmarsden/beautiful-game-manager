@@ -109,6 +109,10 @@ function compact(result, before, after, operationId, recovery) {
   };
 }
 
+function recoveryCheckpointToken(before) {
+  return before.updated_at || before.next_turn_at || `${before.season_id}:${before.matchday}`;
+}
+
 export default async (request) => {
   try {
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -144,10 +148,10 @@ export default async (request) => {
     if (!recovery && (!before.next_turn_at || new Date(before.next_turn_at) > new Date(now))) return json({ error: 'Canonical world is not due yet' }, 409);
 
     const operationId = recovery
-      ? `scheduled-turn-recovery:${worldId}:${recovery.failedRun.id}:${before.save_checksum}`
+      ? `scheduled-turn-recovery:${worldId}:${recovery.failedRun.id}:${before.save_checksum}:${recoveryCheckpointToken(before)}`
       : `scheduled-turn:${worldId}:${before.season_id}:${before.matchday}:${before.save_checksum}`;
     const existing = await service(`/rest/v1/world_operation_events?operation_id=eq.${encodeURIComponent(operationId)}&select=operation_id,status&limit=1`);
-    if (existing[0]) return json({ error: 'This canonical turn recovery has already been executed or recorded' }, 409);
+    if (existing[0]) return json({ error: 'This canonical turn recovery has already been executed or recorded for the current checkpoint state' }, 409);
 
     if (failedStatus) {
       const reopened = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&save_checksum=eq.${encodeURIComponent(before.save_checksum)}&turn_status=eq.failed`, {
@@ -184,6 +188,7 @@ export default async (request) => {
           repair_operation_id: recovery?.repairOperationId || null,
           recovery_failed_checksum: recovery?.failedRun?.previous_checksum || null,
           recovery_lineage_inferred: recovery?.legacyInferred || false,
+          recovery_checkpoint_token: recovery ? recoveryCheckpointToken(before) : null,
           before: { season_id: before.season_id, matchday: before.matchday, checksum: before.save_checksum, next_turn_at: before.next_turn_at, turn_status: before.turn_status },
           after: after ? { season_id: after.season_id, matchday: after.matchday, checksum: after.save_checksum, next_turn_at: after.next_turn_at, turn_status: after.turn_status } : null,
           scheduler_result: result
