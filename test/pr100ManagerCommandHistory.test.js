@@ -16,7 +16,7 @@ test('shared-world GET returns full command history for the authenticated manage
   const endpoint = await source('netlify/functions/shared-world.mjs');
   assert.match(endpoint, /readCommandHistory/);
   assert.match(endpoint, /manager_world_commands/);
-  assert.match(endpoint, /commands: commandRows\.map\(commandSummary\)/);
+  assert.match(endpoint, /commands: commandRows\.map\(\(row\) => commandSummaryImpl\(world, row\)\)/);
   assert.match(endpoint, /outcome_reason/);
   assert.match(endpoint, /processed_at/);
   assert.match(endpoint, /negotiation_state/);
