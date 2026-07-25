@@ -1,0 +1,58 @@
+.bulk-registration-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .55rem;
+  margin: .75rem 0;
+}
+
+.bulk-registration-list {
+  display: grid;
+  gap: .45rem;
+  max-height: 28rem;
+  margin: .75rem 0 1rem;
+  overflow: auto;
+  padding-right: .25rem;
+}
+
+.bulk-registration-player {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .7rem;
+  margin: 0;
+  padding: .65rem .7rem;
+  border: 1px solid rgba(120, 180, 220, .2);
+  border-radius: .45rem;
+  background: rgba(255, 255, 255, .025);
+  cursor: pointer;
+}
+
+.bulk-registration-player:hover {
+  border-color: rgba(48, 164, 221, .55);
+}
+
+.bulk-registration-player input {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0;
+}
+
+.bulk-registration-player span {
+  display: grid;
+  gap: .15rem;
+}
+
+.bulk-registration-player small {
+  opacity: .75;
+}
+
+.bulk-registration-player em {
+  color: #8bcf9b;
+  font-size: .72rem;
+  font-style: normal;
+  text-transform: uppercase;
+}
+
+#bulkRegistrationCount {
+  white-space: nowrap;
+}
