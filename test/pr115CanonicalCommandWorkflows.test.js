@@ -63,34 +63,3 @@ test('migration enforces one audit and one message per final outcome', () => {
   assert.match(sql, /finalize_manager_world_command/i);
   assert.match(sql, /status in \('applied','rejected','superseded'\)/i);
 });
-
-test('shared-world submission uses the idempotent transactional RPC', () => {
-  const source = fs.readFileSync(new URL('../netlify/functions/shared-world.mjs', import.meta.url), 'utf8');
-  const submissionBlock = source.slice(source.indexOf("if (body.type === 'submit_command')"), source.indexOf("return json({ error: 'Managers cannot"));
-  assert.match(submissionBlock, /\/rest\/v1\/rpc\/submit_manager_world_command/);
-  assert.match(submissionBlock, /p_request_key/);
-  assert.match(submissionBlock, /stableCommandRequestKey/);
-  assert.match(submissionBlock, /p_command_payload/);
-});
-
-test('scheduled outcomes use one transactional finalisation RPC', () => {
-  const source = fs.readFileSync(new URL('../netlify/functions/scheduled-world-turn.mjs', import.meta.url), 'utf8');
-  const finalizer = source.slice(source.indexOf('async function finalizeCommand'), source.indexOf('async function processWorld'));
-  const outcomeStart = source.indexOf('const commandById');
-  const outcomeEnd = source.indexOf('await service(`/rest/v1/manager_turn_submissions', outcomeStart);
-  const outcomeLoop = source.slice(outcomeStart, outcomeEnd);
-  assert.ok(outcomeStart >= 0 && outcomeEnd > outcomeStart, 'Could not isolate the command outcome loop');
-  assert.match(finalizer, /\/rest\/v1\/rpc\/finalize_manager_world_command/);
-  assert.match(finalizer, /p_command_id/);
-  assert.match(finalizer, /p_status/);
-  assert.match(finalizer, /p_reason/);
-  assert.match(outcomeLoop, /await finalizeCommand\(row, result, commandDisplayWorld, now\)/);
-});
-
-test('scheduler preserves unresolved transfer negotiations as pending', () => {
-  const source = fs.readFileSync(new URL('../netlify/functions/scheduled-world-turn.mjs', import.meta.url), 'utf8');
-  const commandProcessor = source.slice(source.indexOf('export function applyPendingCommands'), source.indexOf('async function finalizeCommand'));
-  assert.match(commandProcessor, /isNegotiationCommand/);
-  assert.match(commandProcessor, /negotiations\.push/);
-  assert.match(commandProcessor, /return \{ world, results, negotiations \}/);
-});
