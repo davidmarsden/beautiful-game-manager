@@ -1,4 +1,4 @@
-export const CANONICAL_TURN_CALENDAR_VERSION = 'tbg-canonical-turn-calendar-v1.0';
+export const CANONICAL_TURN_CALENDAR_VERSION = 'tbg-canonical-turn-calendar-v1.1';
 export const DEFAULT_TURN_WEEKDAYS_UTC = Object.freeze([2, 5]);
 export const DEFAULT_TURN_HOUR_UTC = 20;
 
@@ -12,6 +12,34 @@ function normalizedWeekdays(values = DEFAULT_TURN_WEEKDAYS_UTC) {
   const days = [...new Set((values || []).map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))].sort((a, b) => a - b);
   if (!days.length) throw new Error('Canonical turn calendar requires at least one weekday');
   return days;
+}
+
+export function completedMatchdayKickoff(world, matchday) {
+  const seasonId = world?.matchday_cycle?.season_id || world?.squad_cycle?.season_id || null;
+  const row = [...(world?.shared_turn_history || [])]
+    .reverse()
+    .find((entry) => Number(entry?.matchday) === Number(matchday)
+      && (!seasonId || !entry?.season_id || String(entry.season_id) === String(seasonId))
+      && entry?.scheduled_for);
+  if (!row) return null;
+  const date = new Date(row.scheduled_for);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+export function repairCompletedFixtureKickoffs(world) {
+  if (!world?.matchday_cycle?.runtimes) return world;
+  for (const runtime of Object.values(world.matchday_cycle.runtimes)) {
+    const completedIds = new Set((runtime.results || []).map((result) => String(result?.fixture?.fixture_id || '')));
+    for (const fixture of runtime.fixtures || []) {
+      if (!completedIds.has(String(fixture.fixture_id))) continue;
+      const kickoffAt = completedMatchdayKickoff(world, fixture.matchday);
+      if (!kickoffAt) continue;
+      fixture.kickoff_at = kickoffAt;
+      const result = (runtime.results || []).find((row) => String(row?.fixture?.fixture_id) === String(fixture.fixture_id));
+      if (result?.fixture) result.fixture.kickoff_at = kickoffAt;
+    }
+  }
+  return world;
 }
 
 export function nextCanonicalTurn(after, {
