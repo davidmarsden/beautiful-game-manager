@@ -68,9 +68,16 @@ function signFreeAgent(state, { clubId, playerId: id, at }) {
   return player;
 }
 
-function actionPlayer(state, id) {
+function actionPlayer(state, id, youthRatingThreshold) {
   const player = state.players[id];
-  return { player_id: id, player_name: playerName(player), position_group: positionGroup(playerPosition(player)), rating: rating(player), age: number(player?.age, 24), first_team_ready_youth: number(player?.age, 24) < 19 && countsForFirstTeamViability(player) };
+  return {
+    player_id: id,
+    player_name: playerName(player),
+    position_group: positionGroup(playerPosition(player)),
+    rating: rating(player),
+    age: number(player?.age, 24),
+    first_team_ready_youth: number(player?.age, 24) < 19 && countsForFirstTeamViability(player, { youthRatingThreshold })
+  };
 }
 
 export function planCanonicalRegistrationRepair(worldInput, { at, freeAgentCandidates = [], youthRatingThreshold = FIRST_TEAM_READY_YOUTH_RATING } = {}) {
@@ -87,8 +94,8 @@ export function planCanonicalRegistrationRepair(worldInput, { at, freeAgentCandi
     const selection = selectViableRegistrationIds(owned, registrationLimit, CANONICAL_POSITION_REQUIREMENTS, { youthRatingThreshold });
     const desired = new Set(selection.selected_ids);
     const current = new Set(club.registered_player_ids);
-    const removed = [...current].filter((id) => !desired.has(id)).map((id) => actionPlayer(state, id));
-    const added = [...desired].filter((id) => !current.has(id)).map((id) => actionPlayer(state, id));
+    const removed = [...current].filter((id) => !desired.has(id)).map((id) => actionPlayer(state, id, youthRatingThreshold));
+    const added = [...desired].filter((id) => !current.has(id)).map((id) => actionPlayer(state, id, youthRatingThreshold));
     for (const row of removed) unregisterPlayer(state, { clubId, playerId: row.player_id, at: repairAt, reason: 'canonical_registration_rebalance' });
     for (const row of added) registerPlayer(state, { clubId, playerId: row.player_id, at: repairAt });
     clubs.push({ club_id: clubId, club_name: text(world.club_profiles?.[clubId]?.club_name || club.club_name || clubId), registered_before: current.size, registrations_added: added, registrations_removed: removed, free_agents_signed: [], initial_missing: selection.missing });
@@ -107,7 +114,7 @@ export function planCanonicalRegistrationRepair(worldInput, { at, freeAgentCandi
     if (externalIds.has(candidate.id) && materialiseCandidate(state, candidate.player)) materialisedExternalIds.add(candidate.id);
     usedFreeAgents.add(candidate.id);
     signFreeAgent(state, { clubId: row.club_id, playerId: candidate.id, at: repairAt });
-    row.free_agents_signed.push(actionPlayer(state, candidate.id));
+    row.free_agents_signed.push(actionPlayer(state, candidate.id, youthRatingThreshold));
   };
 
   for (const row of clubs) {
