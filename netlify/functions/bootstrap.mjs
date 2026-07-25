@@ -67,7 +67,7 @@ export default async (request) => {
 
     const world = loadPersistentWorld(JSON.stringify(stored.save_envelope));
     if (world.world_id !== appointment.world_id) throw new Error('Appointment world does not match the canonical save');
-    const projection = projectManagerPortal(world, appointment.club_id);
+    const projection = projectManagerPortal(world, appointment.club_id, { nextTurnAt: stored.next_turn_at });
     const messages = managerMessages(rawMessages, world, stored.created_at);
     const currentMatchday = world.matchday_cycle?.current_matchday || 1;
     const turnSubmissionRows = await supabase(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(world.world_id)}&season_id=eq.${encodeURIComponent(world.squad_cycle.season_id)}&matchday=eq.${currentMatchday}&manager_id=eq.${encodeURIComponent(manager.id)}&club_id=eq.${encodeURIComponent(appointment.club_id)}&select=*&order=submitted_at.desc&limit=1`, token).catch(() => []);
@@ -81,7 +81,8 @@ export default async (request) => {
       canonical_source: {
         world_id: stored.world_id,
         checksum: stored.save_checksum,
-        updated_at: stored.updated_at
+        updated_at: stored.updated_at,
+        next_turn_at: stored.next_turn_at
       },
       ...projection,
       squad_rules: {
