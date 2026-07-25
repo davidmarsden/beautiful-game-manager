@@ -97,12 +97,29 @@ test('completed matches always open spoiler-safe and reveal only after replay or
   assert.match(client, /headerReplayScore">0-0/);
 });
 
+test('portal bootstrap suppresses completed scores before replay reveal', async () => {
+  const bootstrap = await source('netlify/functions/bootstrap.mjs');
+  assert.match(bootstrap, /function hideCompletedScore/);
+  assert.match(bootstrap, /home_score: null/);
+  assert.match(bootstrap, /opponent_score: null/);
+  assert.match(bootstrap, /result_revealed: false/);
+  assert.match(bootstrap, /spoilerSafeProjection\(projectManagerPortal/);
+});
+
 test('saved anonymous commentary is attributed from canonical team line-ups', async () => {
   const endpoint = await source('netlify/functions/match-centre.mjs');
   assert.match(endpoint, /function eventPlayerId/);
   assert.match(endpoint, /result\?\.teams\?\.\[side\]/);
   assert.match(endpoint, /commentary\.replace\(\/\^A player\\b\/i, resolvedName\)/);
   assert.match(endpoint, /player_name: resolvedName/);
+});
+
+test('canonical event type is normalized for replay scoring and full time', async () => {
+  const endpoint = await source('netlify/functions/match-centre.mjs');
+  const client = await source('public/phase2d4.js');
+  assert.match(endpoint, /event_type: event\.event_type \|\| event\.type/);
+  assert.match(client, /event\.event_type === 'goal'/);
+  assert.match(client, /event\.event_type === 'full_time'/);
 });
 
 test('scheduled execution persists repaired completed dates before advancing', async () => {
