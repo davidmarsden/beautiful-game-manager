@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
   FITNESS_DIALS,
+  canonicalSlotRole,
   fitnessBand,
   projectedKickoffFitness,
   projectedPostMatchFitness,
@@ -25,12 +26,20 @@ test('recovery projection uses the canonical nine points per rest day', () => {
 
 test('post-match projection follows canonical workload dials', () => {
   assert.equal(FITNESS_DIALS.match_cost_per_90, 35);
-  const normalCentreForward = projectedPostMatchFitness({ currentFitness: 100, role: 'CF', pressing: 'mid', tempo: 'normal', workRate: 50 });
-  const highPressWingBack = projectedPostMatchFitness({ currentFitness: 100, role: 'LWB', pressing: 'high', tempo: 'fast', workRate: 80 });
-  const goalkeeper = projectedPostMatchFitness({ currentFitness: 100, role: 'GK', pressing: 'mid', tempo: 'normal', workRate: 50 });
+  const normalCentreForward = projectedPostMatchFitness({ currentFitness: 100, role: 'st', pressing: 'mid', tempo: 'normal', workRate: 50 });
+  const highPressWingBack = projectedPostMatchFitness({ currentFitness: 100, role: 'wing_back', pressing: 'high', tempo: 'fast', workRate: 80 });
+  const goalkeeper = projectedPostMatchFitness({ currentFitness: 100, role: 'gk', pressing: 'mid', tempo: 'normal', workRate: 50 });
   assert.equal(normalCentreForward, 65);
   assert.ok(highPressWingBack < normalCentreForward);
   assert.ok(goalkeeper > normalCentreForward);
+});
+
+test('formation slots match the engine canonical role mapping', () => {
+  assert.equal(canonicalSlotRole('4-3-3-wide', 5), 'dm');
+  assert.equal(canonicalSlotRole('4-3-3-wide', 8), 'wing');
+  assert.equal(canonicalSlotRole('3-5-2', 5), 'cm');
+  assert.equal(canonicalSlotRole('3-5-2', 6), 'dm');
+  assert.equal(canonicalSlotRole('3-5-2', 8), 'wing_back');
 });
 
 test('team selection loads fitness UI for pitch, bench, warnings and sorting', () => {
@@ -40,7 +49,8 @@ test('team selection loads fitness UI for pitch, bench, warnings and sorting', (
   assert.match(html, /team-selection-fitness\.css/);
   assert.match(html, /team-selection-fitness\.js/);
   assert.match(script, /#formationPitch \.formation-slot, #formationBench \.bench-slot/);
-  assert.match(script, /Kick-off .*After 90m/s);
+  assert.match(script, /<small>Kick-off \$\{rounded\(projection\.kickoff\)\}% · \$\{postLabel\} \$\{rounded\(projection\.post\)\}%<\/small>/);
+  assert.match(script, /canonicalSlotRole\(currentFormation\(\), slot\.dataset\.index\)/);
   assert.match(script, /fitnessSort/);
   assert.match(script, /Fitness warning:/);
   assert.match(script, /recovery days/);
