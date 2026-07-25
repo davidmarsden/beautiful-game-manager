@@ -11,6 +11,20 @@ window.fetch = async (...args) => {
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
 
+async function responseJson(response, fallbackMessage) {
+  const text = await response.text();
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    try {
+      return JSON.parse(text || '{}');
+    } catch {
+      throw new Error(fallbackMessage);
+    }
+  }
+  if (!response.ok) throw new Error(`${fallbackMessage} (HTTP ${response.status})`);
+  throw new Error(fallbackMessage);
+}
+
 function resultText(result) {
   if (!result?.accepted) return result?.error || 'Turn was not advanced.';
   return `Matchday ${result.matchday_advanced} complete · next matchday ${result.next_matchday ?? 'pending'} · checkpoint ${String(result.replacement_checksum || '').slice(0, 12)} · next turn ${result.next_turn_at ? new Date(result.next_turn_at).toLocaleString() : 'pending'}`;
@@ -49,7 +63,7 @@ async function repairRequest(action, expectedChecksum, expectedReservoirFingerpr
     headers: { authorization, 'content-type': 'application/json' },
     body: JSON.stringify({ action, expected_checksum: expectedChecksum || null, expected_reservoir_fingerprint: expectedReservoirFingerprint || null })
   });
-  const result = await response.json();
+  const result = await responseJson(response, 'Canonical registration repair returned an invalid response');
   if (!response.ok) throw new Error(result.error || 'Canonical registration repair failed');
   return result;
 }
@@ -84,7 +98,14 @@ function mount(bootstrap) {
     try {
       if (!authorization) throw new Error('Portal session is not ready');
       const response = await nativeFetch('/api/run-due-turn-now', { method: 'POST', headers: { authorization, 'content-type': 'application/json' }, body: '{}' });
-      const result = await response.json();
+      let result;
+      try {
+        result = await responseJson(response, 'Production turn response was interrupted; refreshing the canonical world state…');
+      } catch (error) {
+        output.textContent = error.message;
+        window.setTimeout(() => window.location.reload(), 1200);
+        return;
+      }
       if (!response.ok) throw new Error(result.error || 'Production turn failed');
       output.innerHTML = escapeHtml(resultText(result));
       window.dispatchEvent(new CustomEvent('tbg:canonical-turn-complete', { detail: result }));
