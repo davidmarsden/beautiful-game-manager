@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { analyseSquad, countsForFirstTeamViability, FIRST_TEAM_READY_YOUTH_RATING } from '../src/intelligence/squadIntelligence.js';
-import { selectViableRegistrationIds } from '../src/world/viableCanonicalRegistration.js';
+import { createPersistentLeagueWorld } from '../src/world/persistentLeagueWorld.js';
+import { planCanonicalRegistrationRepair, selectViableRegistrationIds } from '../src/world/viableCanonicalRegistration.js';
 
 function player(id, position, age, rating) {
   return { tbg_player_id: id, display_name: id, position, age, underlying_ability_rating: rating, club_id: 'club-a', contract_id: null };
@@ -26,6 +27,35 @@ function squad(youthRating) {
       contracts: {}
     }
   };
+}
+
+function persistentClub(id, includeYouth = false) {
+  const players = [
+    ...Array.from({ length: 2 }, (_, index) => ({ ...player(`${id}-gk-${index + 1}`, 'GK', 24, 75 - index), club_id: id, registered: true })),
+    ...Array.from({ length: 6 }, (_, index) => ({ ...player(`${id}-def-${index + 1}`, 'CB', 24, 78 - index), club_id: id, registered: true })),
+    ...Array.from({ length: 5 }, (_, index) => ({ ...player(`${id}-mid-${index + 1}`, 'CM', 24, 77 - index), club_id: id, registered: true })),
+    ...Array.from({ length: 5 }, (_, index) => ({ ...player(`${id}-att-${index + 1}`, 'CF', 24, 76 - index), club_id: id, registered: true }))
+  ];
+  if (includeYouth) {
+    players[players.length - 1] = { ...player(`${id}-youth`, 'CF', 18, 82), club_id: id, registered: true };
+  }
+  return { club_id: id, club_name: id, formation: '4-3-3-wide', players };
+}
+
+function persistentWorldWithYouth() {
+  const divisions = [1, 2].map((level) => ({
+    division_id: `d${level}`,
+    level,
+    clubs: Array.from({ length: 4 }, (_, index) => persistentClub(`d${level}-club-${index + 1}`, level === 1 && index === 0))
+  }));
+  return createPersistentLeagueWorld({
+    worldId: 'custom-threshold-preview-test',
+    divisions,
+    humanClubId: 'd1-club-1',
+    seasonStart: '2026-08-01T00:00:00.000Z',
+    seasonEnd: '2027-06-30T23:59:59.000Z',
+    movementCount: 1
+  });
 }
 
 test('first-team readiness applies the governed 80-rating youth boundary', () => {
@@ -71,4 +101,14 @@ test('external free-agent selection prefers a higher-rated ready youth over an a
   const adult = player('adult-gk', 'GK', 27, 80);
   const selection = selectViableRegistrationIds([readyYouth, adult], 2, { goalkeeper: 1 });
   assert.deepEqual(selection.selected_ids, ['ready-youth-gk', 'adult-gk']);
+});
+
+test('preview action rows honour a configured youth readiness threshold', () => {
+  const result = planCanonicalRegistrationRepair(persistentWorldWithYouth(), { youthRatingThreshold: 85 });
+  const club = result.preview.clubs.find((row) => row.club_id === 'd1-club-1');
+  const removedYouth = club.registrations_removed.find((row) => row.player_id === 'd1-club-1-youth');
+  assert.ok(removedYouth);
+  assert.equal(result.preview.first_team_ready_youth_rating, 85);
+  assert.equal(removedYouth.first_team_ready_youth, false);
+  assert.equal(club.first_team_ready_youth, 0);
 });
