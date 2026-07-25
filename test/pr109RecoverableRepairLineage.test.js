@@ -24,7 +24,7 @@ test('production retry validates explicit repaired-checkpoint lineage', async ()
   assert.match(endpoint, /operation_type=eq\.registration_repair/);
   assert.match(endpoint, /superseded_failed_run_id/);
   assert.match(endpoint, /world_turn_runs\?id=eq\./);
-  assert.match(endpoint, /failedRun\.previous_checksum !== explicit\.failed_checksum/);
+  assert.match(endpoint, /failedRun\.previous_checksum !== lineage\.failed_checksum/);
   assert.match(endpoint, /retry_repaired_failed_turn/);
   assert.match(endpoint, /scheduled-turn-recovery:/);
   assert.match(endpoint, /repair_operation_id/);
@@ -43,7 +43,7 @@ test('current legacy repaired failed checkpoint can recover through immutable au
 test('failed status is reopened only after a verified recovery source is selected', async () => {
   const endpoint = await source('netlify/functions/run-due-turn-now.mjs');
   const recoveryIndex = endpoint.indexOf("recovery = { mode: 'retry_repaired_failed_turn'");
-  const reopenIndex = endpoint.indexOf("turn_status=eq.failed");
+  const reopenIndex = endpoint.indexOf('turn_status=eq.failed');
   assert.ok(recoveryIndex >= 0);
   assert.ok(reopenIndex > recoveryIndex);
   assert.match(endpoint, /save_checksum=eq\.\$\{encodeURIComponent\(before\.save_checksum\)\}/);
