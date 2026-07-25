@@ -55,16 +55,22 @@ test('registration roster includes senior players only and preserves current sel
   });
 });
 
-test('portal loads the bulk registration UI and submits one batch action', () => {
+test('portal submits one atomic pending-aware roster batch', () => {
   const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
   const ui = fs.readFileSync(new URL('../public/bulk-squad-registration.js', import.meta.url), 'utf8');
   const endpoint = fs.readFileSync(new URL('../netlify/functions/bulk-squad-registration.mjs', import.meta.url), 'utf8');
+  const migration = fs.readFileSync(new URL('../supabase/migrations/20260725_pr116_atomic_bulk_registration.sql', import.meta.url), 'utf8');
   assert.match(html, /bulk-squad-registration\.css/);
   assert.match(html, /bulk-squad-registration\.js/);
   assert.match(ui, /Submit senior squad registration/);
   assert.match(ui, /player_ids: playerIds/);
-  assert.match(endpoint, /buildRegistrationDiff/);
-  assert.match(endpoint, /submit_manager_world_command/);
-  assert.match(endpoint, /for \(const id of diff\.unregister\)/);
-  assert.match(endpoint, /for \(const id of diff\.register\)/);
+  assert.match(endpoint, /submit_bulk_registration_commands/);
+  assert.doesNotMatch(endpoint, /for \(const id of diff\./);
+  assert.match(migration, /status = 'pending'/);
+  assert.match(migration, /pending_type = 'unregister_player'/);
+  assert.match(migration, /effective_registered is distinct from desired_registered/);
+  assert.match(migration, /perform public\.submit_manager_world_command/);
+  assert.match(migration, /for phase in 0\.\.1 loop/);
+  assert.match(migration, /security definer/);
+  assert.match(migration, /grant execute on function public\.submit_bulk_registration_commands/);
 });
