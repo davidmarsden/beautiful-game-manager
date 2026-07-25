@@ -40,11 +40,26 @@ export function nextScheduledTurn(after = new Date()) {
   throw new Error('Could not resolve the next scheduled turn');
 }
 
+function responseValue(payload) {
+  return String(payload?.response || '').trim().toLowerCase();
+}
+
 export function commandForDomain(row) {
   const payload = row.command_payload || {};
   if (row.command_type === 'register_player') return { type: 'register_player', playerId: payload.playerId || payload.player_id };
   if (row.command_type === 'unregister_player') return { type: 'unregister_player', playerId: payload.playerId || payload.player_id };
   if (row.command_type === 'renew_contract') return { type: 'renew_contract', playerId: payload.playerId || payload.player_id, years: payload.years, wage: payload.wage };
+  if (row.command_type === 'transfer_response' && responseValue(payload) === 'accepted') {
+    return {
+      type: 'transfer_player',
+      playerId: payload.playerId || payload.player_id,
+      direction: payload.direction,
+      otherClubId: payload.otherClubId || payload.other_club_id,
+      fee: payload.fee,
+      contractYears: payload.contractYears || payload.contract_years,
+      wage: payload.wage
+    };
+  }
   return null;
 }
 
@@ -83,6 +98,7 @@ function outcomeReason(result, row, world) {
     if (row.command_type === 'register_player') return `${playerName} has been registered for competitive selection.`;
     if (row.command_type === 'unregister_player') return `${playerName} has been removed from the registered squad.`;
     if (row.command_type === 'renew_contract') return `${playerName}'s contract has been renewed${years ? ` for ${years} season${years === 1 ? '' : 's'}` : ''}.`;
+    if (row.command_type === 'transfer_response') return `${playerName}'s accepted transfer has been applied to the canonical world.`;
     return `${commandLabel(row.command_type)} for ${playerName} was applied to the canonical world.`;
   }
   const otherClubId = row.command_payload?.otherClubId || row.command_payload?.other_club_id || null;
@@ -103,6 +119,19 @@ export function applyPendingCommands(worldInput, rows) {
   const negotiations = [];
 
   for (const row of rows) {
+    const payload = row.command_payload || {};
+    const transferResponse = row.command_type === 'transfer_response' ? responseValue(payload) : '';
+
+    if (row.command_type === 'transfer_response' && ['declined', 'rejected'].includes(transferResponse)) {
+      results.push({
+        id: row.id,
+        status: 'rejected',
+        negotiation_state: 'declined',
+        error: 'The transfer proposal was declined'
+      });
+      continue;
+    }
+
     const command = commandForDomain(row);
     if (!command && isNegotiationCommand(row)) {
       negotiations.push({
@@ -120,9 +149,19 @@ export function applyPendingCommands(worldInput, rows) {
       world.human_club_id = row.club_id;
       const execution = executePortalWorldCommand(world, command);
       world = execution.world;
-      results.push({ id: row.id, status: 'applied', result: execution.result });
+      results.push({
+        id: row.id,
+        status: 'applied',
+        negotiation_state: row.command_type === 'transfer_response' ? 'accepted_applied' : row.negotiation_state || null,
+        result: execution.result
+      });
     } catch (error) {
-      results.push({ id: row.id, status: 'rejected', error: error.message });
+      results.push({
+        id: row.id,
+        status: 'rejected',
+        negotiation_state: row.command_type === 'transfer_response' ? 'accepted_application_failed' : row.negotiation_state || null,
+        error: error.message
+      });
     }
   }
 
@@ -143,7 +182,7 @@ async function finalizeCommand(row, result, world, now) {
       p_status: result.status,
       p_reason: reason,
       p_details: details,
-      p_negotiation_state: row.negotiation_state || null,
+      p_negotiation_state: result.negotiation_state || row.negotiation_state || null,
       p_subject: commandOutcomeSubject(world, row, result),
       p_priority: result.status === 'applied' ? 'normal' : 'high',
       p_processed_at: now,
@@ -175,7 +214,7 @@ async function processWorld(stored, now) {
     matchday = world.matchday_cycle?.current_matchday || 1;
     const appointments = await service(`/rest/v1/manager_appointments?world_id=eq.${encodeURIComponent(worldId)}&status=eq.active&select=world_id,manager_id,club_id,status`);
     const submissions = await service(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(worldId)}&season_id=eq.${encodeURIComponent(seasonId)}&matchday=eq.${matchday}&status=eq.submitted&select=*&order=submitted_at.asc,id.asc`);
-    const commands = await service(`/rest/v1/manager_world_commands?world_id=eq.${encodeURIComponent(worldId)}&status=eq.pending&effective_season_id=eq.${encodeURIComponent(seasonId)}&effective_matchday=eq.${matchday}&select=*&order=submitted_at.asc,id.asc`);
+    const commands = await service(`/rest/v1/manager_world_commands?world_id=eq.${encodeURIComponent(worldId)}&status=eq.pending&effective_season_id=eq.${encodeURIComponent(seasonId)}&effective_matchday=lte.${matchday}&select=*&order=submitted_at.asc,id.asc`);
 
     const commandRun = applyPendingCommands(world, commands);
     world = commandRun.world;
@@ -291,7 +330,7 @@ export default async () => {
   const due = await service(`/rest/v1/canonical_world_saves?turn_status=eq.open&next_turn_at=lte.${encodeURIComponent(now)}&select=*`);
   const results = [];
   for (const stored of due) results.push(await processWorld(stored, now));
-  return json({ version: 'tbg-scheduled-world-turn-v1.5', checked_at: now, worlds_due: due.length, results });
+  return json({ version: 'tbg-scheduled-world-turn-v1.6', checked_at: now, worlds_due: due.length, results });
 };
 
 export const config = { schedule: '*/15 * * * *' };
