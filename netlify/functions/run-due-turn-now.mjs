@@ -57,15 +57,34 @@ async function adminIdentity(token) {
 async function repairedFailureLineage(worldId, checksum) {
   const repairs = await service(`/rest/v1/world_operation_events?world_id=eq.${encodeURIComponent(worldId)}&replacement_checksum=eq.${encodeURIComponent(checksum)}&operation_type=eq.registration_repair&status=eq.accepted&select=operation_id,details,created_at&order=created_at.desc&limit=1`);
   const repair = repairs[0] || null;
-  const lineage = repair?.details?.recovery_lineage || null;
-  if (!lineage?.reopened_for_retry || !lineage?.superseded_failed_run_id) return null;
+  if (!repair) return null;
 
-  const failedRuns = await service(`/rest/v1/world_turn_runs?id=eq.${encodeURIComponent(lineage.superseded_failed_run_id)}&world_id=eq.${encodeURIComponent(worldId)}&status=eq.failed&select=id,previous_checksum,completed_at,error_message&limit=1`);
+  const explicit = repair.details?.recovery_lineage || null;
+  if (explicit?.reopened_for_retry && explicit?.superseded_failed_run_id) {
+    const failedRuns = await service(`/rest/v1/world_turn_runs?id=eq.${encodeURIComponent(explicit.superseded_failed_run_id)}&world_id=eq.${encodeURIComponent(worldId)}&status=eq.failed&select=id,previous_checksum,completed_at,error_message&limit=1`);
+    const failedRun = failedRuns[0] || null;
+    if (!failedRun) throw new Error('Repaired checkpoint recovery lineage does not resolve to a failed turn record; manual recovery is required');
+    if (explicit.failed_checksum && failedRun.previous_checksum !== explicit.failed_checksum) throw new Error('Repaired checkpoint recovery lineage checksum does not match its failed turn record; manual recovery is required');
+    return { repair_operation_id: repair.operation_id, failed_run: failedRun, lineage: explicit, legacy_inferred: false };
+  }
+
+  const legacyFailedChecksum = repair.details?.before?.turn_status === 'failed' ? repair.details?.before?.checksum : null;
+  if (!legacyFailedChecksum) return null;
+  const failedRuns = await service(`/rest/v1/world_turn_runs?world_id=eq.${encodeURIComponent(worldId)}&previous_checksum=eq.${encodeURIComponent(legacyFailedChecksum)}&status=eq.failed&select=id,previous_checksum,completed_at,error_message&order=completed_at.desc&limit=1`);
   const failedRun = failedRuns[0] || null;
-  if (!failedRun) throw new Error('Repaired checkpoint recovery lineage does not resolve to a failed turn record; manual recovery is required');
-  if (lineage.failed_checksum && failedRun.previous_checksum !== lineage.failed_checksum) throw new Error('Repaired checkpoint recovery lineage checksum does not match its failed turn record; manual recovery is required');
-
-  return { repair_operation_id: repair.operation_id, failed_run: failedRun, lineage };
+  if (!failedRun) throw new Error('Legacy repaired checkpoint does not resolve to its superseded failed turn record; manual recovery is required');
+  return {
+    repair_operation_id: repair.operation_id,
+    failed_run: failedRun,
+    legacy_inferred: true,
+    lineage: {
+      reopened_for_retry: true,
+      superseded_failed_run_id: failedRun.id,
+      failed_checksum: failedRun.previous_checksum,
+      failure_completed_at: failedRun.completed_at || null,
+      failure_error: failedRun.error_message || null
+    }
+  };
 }
 
 function compact(result, before, after, operationId, recovery) {
@@ -75,6 +94,7 @@ function compact(result, before, after, operationId, recovery) {
     operation: recovery?.mode || 'run_due_turn_now',
     recovery_of_run_id: recovery?.failedRun?.id || null,
     repair_operation_id: recovery?.repairOperationId || null,
+    recovery_lineage_inferred: recovery?.legacyInferred || false,
     world_id: result.world_id,
     season_id: result.season_id || before.season_id,
     matchday_advanced: result.matchday || before.matchday,
@@ -102,18 +122,23 @@ export default async (request) => {
     const before = rows[0];
     if (!before) return json({ error: `Canonical world ${worldId} does not exist` }, 404);
 
-    const directFailedRetry = before.turn_status === 'failed';
-    if (before.turn_status !== 'open' && !directFailedRetry) return json({ error: `Canonical world is ${before.turn_status}; duplicate or replayed execution rejected` }, 409);
+    const failedStatus = before.turn_status === 'failed';
+    if (before.turn_status !== 'open' && !failedStatus) return json({ error: `Canonical world is ${before.turn_status}; duplicate or replayed execution rejected` }, 409);
 
     let recovery = null;
-    if (directFailedRetry) {
+    if (failedStatus) {
       const failedRuns = await service(`/rest/v1/world_turn_runs?world_id=eq.${encodeURIComponent(worldId)}&previous_checksum=eq.${encodeURIComponent(before.save_checksum)}&status=eq.failed&select=id,previous_checksum,completed_at,error_message&order=completed_at.desc&limit=1`);
       const failedRun = failedRuns[0] || null;
-      if (!failedRun) return json({ error: 'Failed world has no matching failed turn record; manual recovery is required' }, 409);
-      recovery = { mode: 'retry_failed_turn', failedRun, repairOperationId: null };
+      if (failedRun) {
+        recovery = { mode: 'retry_failed_turn', failedRun, repairOperationId: null, legacyInferred: false };
+      } else {
+        const repaired = await repairedFailureLineage(worldId, before.save_checksum);
+        if (!repaired) return json({ error: 'Failed world has no matching failed turn or repaired-checkpoint lineage; manual recovery is required' }, 409);
+        recovery = { mode: 'retry_repaired_failed_turn', failedRun: repaired.failed_run, repairOperationId: repaired.repair_operation_id, legacyInferred: repaired.legacy_inferred };
+      }
     } else {
       const repaired = await repairedFailureLineage(worldId, before.save_checksum);
-      if (repaired) recovery = { mode: 'retry_repaired_failed_turn', failedRun: repaired.failed_run, repairOperationId: repaired.repair_operation_id };
+      if (repaired) recovery = { mode: 'retry_repaired_failed_turn', failedRun: repaired.failed_run, repairOperationId: repaired.repair_operation_id, legacyInferred: repaired.legacy_inferred };
     }
 
     if (!recovery && (!before.next_turn_at || new Date(before.next_turn_at) > new Date(now))) return json({ error: 'Canonical world is not due yet' }, 409);
@@ -124,7 +149,7 @@ export default async (request) => {
     const existing = await service(`/rest/v1/world_operation_events?operation_id=eq.${encodeURIComponent(operationId)}&select=operation_id,status&limit=1`);
     if (existing[0]) return json({ error: 'This canonical turn recovery has already been executed or recorded' }, 409);
 
-    if (directFailedRetry) {
+    if (failedStatus) {
       const reopened = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&save_checksum=eq.${encodeURIComponent(before.save_checksum)}&turn_status=eq.failed`, {
         method: 'PATCH',
         body: JSON.stringify({ turn_status: 'open', updated_at: now }),
@@ -158,6 +183,7 @@ export default async (request) => {
           recovery_of_run_id: recovery?.failedRun?.id || null,
           repair_operation_id: recovery?.repairOperationId || null,
           recovery_failed_checksum: recovery?.failedRun?.previous_checksum || null,
+          recovery_lineage_inferred: recovery?.legacyInferred || false,
           before: { season_id: before.season_id, matchday: before.matchday, checksum: before.save_checksum, next_turn_at: before.next_turn_at, turn_status: before.turn_status },
           after: after ? { season_id: after.season_id, matchday: after.matchday, checksum: after.save_checksum, next_turn_at: after.next_turn_at, turn_status: after.turn_status } : null,
           scheduler_result: result
@@ -169,7 +195,7 @@ export default async (request) => {
 
     return json(details, result.status === 'complete' ? 200 : 409);
   } catch (error) {
-    const status = /Session|Authentication/.test(error.message) ? 401 : /Administrator/.test(error.message) ? 403 : /already|duplicate|replay|not due|is locking|manual recovery|changed before retry|recovery lineage/.test(error.message) ? 409 : 503;
+    const status = /Session|Authentication/.test(error.message) ? 401 : /Administrator/.test(error.message) ? 403 : /already|duplicate|replay|not due|is locking|manual recovery|changed before retry|recovery lineage|Legacy repaired checkpoint/.test(error.message) ? 409 : 503;
     return json({ error: error.message }, status);
   }
 };
