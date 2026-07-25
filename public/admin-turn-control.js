@@ -23,6 +23,7 @@ function repairPreviewHtml(preview) {
       club.registrations_added.length ? `+${club.registrations_added.length} owned player${club.registrations_added.length === 1 ? '' : 's'} registered` : '',
       club.registrations_removed.length ? `−${club.registrations_removed.length} removed` : '',
       club.free_agents_signed.length ? `${club.free_agents_signed.length} free agent${club.free_agents_signed.length === 1 ? '' : 's'} signed` : '',
+      club.first_team_ready_youth ? `${club.first_team_ready_youth} first-team-ready youth` : '',
       `${club.registered_before} → ${club.final_registered} total registrations`
     ].filter(Boolean).join(' · ');
     return `<li><strong>${escapeHtml(club.club_name)}</strong>: ${escapeHtml(details)}</li>`;
@@ -32,6 +33,7 @@ function repairPreviewHtml(preview) {
   const deltaText = delta === 0 ? 'no overall change' : `${delta > 0 ? '+' : ''}${delta} overall`;
   return `
     <p><strong>Preview only — no world data has changed.</strong></p>
+    <p>Under-19 players rated ${preview.first_team_ready_youth_rating || 80}+ count towards first-team squad size and positional cover. ${preview.registered_first_team_ready_youth || 0} such youths would remain registered.</p>
     <p>${preview.reservoir_candidates_considered || 0} external free-agent candidates considered · only ${preview.reservoir_materialised_in_checkpoint || 0} selected signings would be added to the canonical checkpoint · ${preview.reservoir_candidates_remaining_external || 0} remain outside it.</p>
     <p>${preview.registered_before} total registrations before · ${preview.registered_after} after (${deltaText}).</p>
     <p>${preview.registrations_added} owned registrations added · ${preview.registrations_removed} removed · ${preview.free_agents_signed} free agents signed · ${preview.clubs_still_impossible} clubs still impossible.</p>
@@ -66,7 +68,7 @@ function mount(bootstrap) {
     </section>
     <section id="registrationRepairCard" class="world-control-card">
       <h3>Canonical squad registration repair</h3>
-      <p>Preview a positionally viable registration plan against the external published free-agent catalogue. Only selected signings enter the canonical checkpoint.</p>
+      <p>Preview a positionally viable registration plan against the external published free-agent catalogue. High-rated youth count when they are first-team ready; only selected signings enter the canonical checkpoint.</p>
       <div class="world-control-actions">
         <button id="previewRegistrationRepair" type="button">Preview registration repair</button>
         <button id="applyRegistrationRepair" class="primary-action" type="button" disabled>Apply previewed repair</button>

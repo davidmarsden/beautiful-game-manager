@@ -1,8 +1,8 @@
-import { analyseSquad, positionGroup } from '../intelligence/squadIntelligence.js';
+import { analyseSquad, countsForFirstTeamViability, FIRST_TEAM_READY_YOUTH_RATING, positionGroup } from '../intelligence/squadIntelligence.js';
 import { registerPlayer, unregisterPlayer } from '../squadCycle/squadCycle.js';
 import { loadPersistentWorld, savePersistentWorld } from './persistentSeasonLoop.js';
 
-export const VIABLE_CANONICAL_REGISTRATION_VERSION = 'tbg-viable-canonical-registration-v1.2';
+export const VIABLE_CANONICAL_REGISTRATION_VERSION = 'tbg-viable-canonical-registration-v1.3';
 export const CANONICAL_POSITION_REQUIREMENTS = Object.freeze({ goalkeeper: 2, defender: 6, midfielder: 5, attacker: 3 });
 
 const text = (value) => String(value ?? '').trim();
@@ -18,8 +18,8 @@ function ranked(players) {
     .sort((a, b) => b.rating - a.rating || a.sourceIndex - b.sourceIndex || a.id.localeCompare(b.id));
 }
 
-export function selectViableRegistrationIds(players, registrationLimit = 25, requirements = CANONICAL_POSITION_REQUIREMENTS) {
-  const rows = ranked(players).filter((row) => number(row.player.age, 24) >= 19);
+export function selectViableRegistrationIds(players, registrationLimit = 25, requirements = CANONICAL_POSITION_REQUIREMENTS, { youthRatingThreshold = FIRST_TEAM_READY_YOUTH_RATING } = {}) {
+  const rows = ranked(players).filter((row) => countsForFirstTeamViability(row.player, { youthRatingThreshold }));
   const selected = [];
   const selectedIds = new Set();
   const missing = {};
@@ -68,12 +68,19 @@ function signFreeAgent(state, { clubId, playerId: id, at }) {
   return player;
 }
 
-function actionPlayer(state, id) {
+function actionPlayer(state, id, youthRatingThreshold) {
   const player = state.players[id];
-  return { player_id: id, player_name: playerName(player), position_group: positionGroup(playerPosition(player)), rating: rating(player) };
+  return {
+    player_id: id,
+    player_name: playerName(player),
+    position_group: positionGroup(playerPosition(player)),
+    rating: rating(player),
+    age: number(player?.age, 24),
+    first_team_ready_youth: number(player?.age, 24) < 19 && countsForFirstTeamViability(player, { youthRatingThreshold })
+  };
 }
 
-export function planCanonicalRegistrationRepair(worldInput, { at, freeAgentCandidates = [] } = {}) {
+export function planCanonicalRegistrationRepair(worldInput, { at, freeAgentCandidates = [], youthRatingThreshold = FIRST_TEAM_READY_YOUTH_RATING } = {}) {
   const world = loadPersistentWorld(savePersistentWorld(worldInput));
   const state = world.squad_cycle;
   const repairAt = at || state.calendar?.transfer_windows?.[0]?.opens_at || world.clock;
@@ -84,18 +91,19 @@ export function planCanonicalRegistrationRepair(worldInput, { at, freeAgentCandi
   for (const clubId of Object.keys(state.clubs).sort()) {
     const club = state.clubs[clubId];
     const owned = club.player_ids.map((id) => state.players[id]).filter(Boolean);
-    const selection = selectViableRegistrationIds(owned, registrationLimit);
+    const selection = selectViableRegistrationIds(owned, registrationLimit, CANONICAL_POSITION_REQUIREMENTS, { youthRatingThreshold });
     const desired = new Set(selection.selected_ids);
     const current = new Set(club.registered_player_ids);
-    const removed = [...current].filter((id) => !desired.has(id)).map((id) => actionPlayer(state, id));
-    const added = [...desired].filter((id) => !current.has(id)).map((id) => actionPlayer(state, id));
+    const removed = [...current].filter((id) => !desired.has(id)).map((id) => actionPlayer(state, id, youthRatingThreshold));
+    const added = [...desired].filter((id) => !current.has(id)).map((id) => actionPlayer(state, id, youthRatingThreshold));
     for (const row of removed) unregisterPlayer(state, { clubId, playerId: row.player_id, at: repairAt, reason: 'canonical_registration_rebalance' });
     for (const row of added) registerPlayer(state, { clubId, playerId: row.player_id, at: repairAt });
     clubs.push({ club_id: clubId, club_name: text(world.club_profiles?.[clubId]?.club_name || club.club_name || clubId), registered_before: current.size, registrations_added: added, registrations_removed: removed, free_agents_signed: [], initial_missing: selection.missing });
   }
 
-  const existingFreeAgents = Object.values(state.players).filter((player) => !player.club_id && number(player.age, 24) >= 19);
-  const externalPlayers = freeAgentCandidates.map((row) => row?.player || row).filter((player) => player && number(player.age, 24) >= 19);
+  const eligible = (player) => countsForFirstTeamViability(player, { youthRatingThreshold });
+  const existingFreeAgents = Object.values(state.players).filter((player) => !player.club_id && eligible(player));
+  const externalPlayers = freeAgentCandidates.map((row) => row?.player || row).filter((player) => player && eligible(player));
   const existingIds = new Set(existingFreeAgents.map(playerId));
   const freeAgents = ranked([...existingFreeAgents, ...externalPlayers.filter((player) => !existingIds.has(playerId(player)))]);
   const externalIds = new Set(externalPlayers.map(playerId));
@@ -106,12 +114,12 @@ export function planCanonicalRegistrationRepair(worldInput, { at, freeAgentCandi
     if (externalIds.has(candidate.id) && materialiseCandidate(state, candidate.player)) materialisedExternalIds.add(candidate.id);
     usedFreeAgents.add(candidate.id);
     signFreeAgent(state, { clubId: row.club_id, playerId: candidate.id, at: repairAt });
-    row.free_agents_signed.push(actionPlayer(state, candidate.id));
+    row.free_agents_signed.push(actionPlayer(state, candidate.id, youthRatingThreshold));
   };
 
   for (const row of clubs) {
     const club = state.clubs[row.club_id];
-    let report = analyseSquad(state, { clubId: row.club_id, at: repairAt });
+    let report = analyseSquad(state, { clubId: row.club_id, at: repairAt, youthRatingThreshold });
     for (const gap of report.coverage.filter((entry) => entry.registered_gap > 0)) {
       for (let count = 0; count < gap.registered_gap; count += 1) {
         const candidate = nextFreeAgent(gap.group);
@@ -119,33 +127,37 @@ export function planCanonicalRegistrationRepair(worldInput, { at, freeAgentCandi
         signCandidate(row, candidate);
       }
     }
-    report = analyseSquad(state, { clubId: row.club_id, at: repairAt });
+    report = analyseSquad(state, { clubId: row.club_id, at: repairAt, youthRatingThreshold });
     while (report.summary.hard_minimum_gap > 0 && club.registered_player_ids.length < registrationLimit) {
       const candidate = nextFreeAgent();
       if (!candidate) break;
       signCandidate(row, candidate);
-      report = analyseSquad(state, { clubId: row.club_id, at: repairAt });
+      report = analyseSquad(state, { clubId: row.club_id, at: repairAt, youthRatingThreshold });
     }
-    report = analyseSquad(state, { clubId: row.club_id, at: repairAt });
+    report = analyseSquad(state, { clubId: row.club_id, at: repairAt, youthRatingThreshold });
     row.final_registered = club.registered_player_ids.length;
     row.final_registered_seniors = report.summary.registered_seniors;
+    row.final_registered_first_team = report.summary.registered_first_team;
+    row.first_team_ready_youth = report.summary.registered_first_team_ready_youth;
     row.registration_delta = row.final_registered - row.registered_before;
     row.final_coverage = report.coverage.map((entry) => ({ group: entry.group, registered: entry.registered, required: entry.required, gap: entry.registered_gap }));
     row.viable = report.viable;
   }
 
-  const blocked = clubs.filter((row) => !row.viable).map((row) => ({ club_id: row.club_id, club_name: row.club_name, registered_seniors: row.final_registered_seniors, coverage_gaps: row.final_coverage.filter((entry) => entry.gap > 0) }));
+  const blocked = clubs.filter((row) => !row.viable).map((row) => ({ club_id: row.club_id, club_name: row.club_name, registered_seniors: row.final_registered_seniors, registered_first_team: row.final_registered_first_team, coverage_gaps: row.final_coverage.filter((entry) => entry.gap > 0) }));
   const registeredAfter = Object.values(state.clubs).reduce((sum, club) => sum + club.registered_player_ids.length, 0);
   const preview = Object.freeze({
     version: VIABLE_CANONICAL_REGISTRATION_VERSION,
     repair_at: new Date(repairAt).toISOString(),
     registration_limit: registrationLimit,
+    first_team_ready_youth_rating: youthRatingThreshold,
     registered_before: registeredBefore,
     registered_after: registeredAfter,
     net_registration_change: registeredAfter - registeredBefore,
     registrations_added: clubs.reduce((sum, row) => sum + row.registrations_added.length, 0),
     registrations_removed: clubs.reduce((sum, row) => sum + row.registrations_removed.length, 0),
     free_agents_signed: clubs.reduce((sum, row) => sum + row.free_agents_signed.length, 0),
+    registered_first_team_ready_youth: clubs.reduce((sum, row) => sum + row.first_team_ready_youth, 0),
     external_free_agents_considered: externalPlayers.length,
     external_free_agents_materialised: materialisedExternalIds.size,
     clubs_still_impossible: blocked.length,
