@@ -55,9 +55,35 @@ test('final outcome and manager history are stable and explicit', () => {
 
 test('migration enforces one audit and one message per final outcome', () => {
   const sql = fs.readFileSync(new URL('../supabase/migrations/20260725_pr115_canonical_command_workflows.sql', import.meta.url), 'utf8');
+  const metadataSql = fs.readFileSync(new URL('../supabase/migrations/20260725_pr114a_manager_message_metadata.sql', import.meta.url), 'utf8');
+  assert.match(metadataSql, /add column if not exists metadata jsonb/i);
   assert.match(sql, /unique\(command_id\)/i);
   assert.match(sql, /manager_messages_command_outcome_uidx/i);
   assert.match(sql, /on conflict \(command_id\) do nothing/i);
   assert.match(sql, /finalize_manager_world_command/i);
   assert.match(sql, /status in \('applied','rejected','superseded'\)/i);
+});
+
+test('shared-world submission uses the idempotent transactional RPC', () => {
+  const source = fs.readFileSync(new URL('../netlify/functions/shared-world.mjs', import.meta.url), 'utf8');
+  assert.match(source, /\/rest\/v1\/rpc\/submit_manager_world_command/);
+  assert.match(source, /p_request_key/);
+  assert.match(source, /stableCommandRequestKey/);
+  assert.doesNotMatch(source, /supabase\('\/rest\/v1\/manager_world_commands'/);
+});
+
+test('scheduled outcomes use one transactional finalisation RPC', () => {
+  const source = fs.readFileSync(new URL('../netlify/functions/scheduled-world-turn.mjs', import.meta.url), 'utf8');
+  assert.match(source, /\/rest\/v1\/rpc\/finalize_manager_world_command/);
+  assert.match(source, /p_command_id/);
+  assert.match(source, /p_status/);
+  assert.doesNotMatch(source, /service\('\/rest\/v1\/manager_messages'/);
+  assert.doesNotMatch(source, /manager_world_commands\?id=eq/);
+});
+
+test('scheduler preserves unresolved transfer negotiations as pending', () => {
+  const source = fs.readFileSync(new URL('../netlify/functions/scheduled-world-turn.mjs', import.meta.url), 'utf8');
+  assert.match(source, /isNegotiationCommand/);
+  assert.match(source, /negotiations\.push/);
+  assert.doesNotMatch(source, /Command requires negotiation resolution before application/);
 });
