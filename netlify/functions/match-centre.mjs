@@ -45,16 +45,29 @@ function decorateEvent(world, event) {
 }
 
 function decorateSubmission(world, submission) {
-  const startingXi = submission.starting_xi || submission.instructions?.starting_xi || [];
-  const bench = submission.bench || submission.instructions?.bench || [];
+  const instruction = submission.instruction || submission.instructions || {};
+  const startingXi = submission.starting_xi || instruction.starting_xi || [];
+  const bench = submission.bench || instruction.bench || [];
   return {
     ...submission,
-    formation: submission.formation || submission.instructions?.formation || null,
-    tactics: submission.tactics || submission.instructions?.tactics || {},
+    formation: submission.formation || instruction.formation || null,
+    tactics: submission.tactics || instruction.tactics || {},
     submission_source: submission.submission_source || submission.source || 'canonical_turn_submission',
     starting_xi: startingXi.map((id) => ({ id, name: playerName(world, id) })),
     bench: bench.map((id) => ({ id, name: playerName(world, id) })),
-    captain_name: playerName(world, submission.captain_id || submission.instructions?.captain_id)
+    captain_name: playerName(world, submission.captain_id || instruction.captain_id)
+  };
+}
+
+function embeddedSubmission(result, fixture, clubId) {
+  const side = clubId === fixture.home_club_id ? 'home' : clubId === fixture.away_club_id ? 'away' : null;
+  if (!side) return null;
+  const team = result.teams?.[side];
+  if (!team) return null;
+  return {
+    club_id: clubId,
+    ...team,
+    submission_source: team.submission_source || team.source || 'deterministic_fallback'
   };
 }
 
@@ -88,9 +101,10 @@ export default async (request) => {
       const submissionRows = await service(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(world.world_id)}&season_id=eq.${encodeURIComponent(world.squad_cycle.season_id)}&matchday=eq.${encodeURIComponent(fixture.matchday)}&club_id=in.(${encodeURIComponent(fixture.home_club_id)},${encodeURIComponent(fixture.away_club_id)})&select=*&order=submitted_at.desc`).catch(() => []);
       const latestByClub = new Map();
       for (const row of submissionRows) if (!latestByClub.has(row.club_id)) latestByClub.set(row.club_id, row);
-      const embeddedTeams = result.teams || {};
       for (const clubId of [fixture.home_club_id, fixture.away_club_id]) {
-        if (!latestByClub.has(clubId) && embeddedTeams[clubId]) latestByClub.set(clubId, { club_id: clubId, ...embeddedTeams[clubId], submission_source: embeddedTeams[clubId].submission_source || 'deterministic_fallback' });
+        if (latestByClub.has(clubId)) continue;
+        const fallback = embeddedSubmission(result, fixture, clubId);
+        if (fallback) latestByClub.set(clubId, fallback);
       }
 
       const score = result.score || {};
