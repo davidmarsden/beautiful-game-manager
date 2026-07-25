@@ -16,18 +16,25 @@ test('shared-world GET returns full command history for the authenticated manage
   const endpoint = await source('netlify/functions/shared-world.mjs');
   assert.match(endpoint, /readCommandHistory/);
   assert.match(endpoint, /manager_world_commands/);
-  assert.match(endpoint, /commands: commandRows\.map\(commandSummary\)/);
+  assert.match(endpoint, /commands: commandRows\.map\(\(row\) => commandSummaryImpl\(world, row\)\)/);
   assert.match(endpoint, /outcome_reason/);
   assert.match(endpoint, /processed_at/);
+  assert.match(endpoint, /negotiation_state/);
+  assert.match(endpoint, /terminal_at/);
 });
 
-test('scheduled processing persists outcomes and creates manager inbox events', async () => {
+test('scheduled processing finalises outcomes and inbox events transactionally', async () => {
   const scheduler = await source('netlify/functions/scheduled-world-turn.mjs');
-  assert.match(scheduler, /outcome_reason: reason/);
-  assert.match(scheduler, /outcome_details:/);
-  assert.match(scheduler, /\/rest\/v1\/manager_messages/);
-  assert.match(scheduler, /world_command_outcome/);
-  assert.match(scheduler, /requires negotiation resolution before application/);
+  const workflowMigration = await source('supabase/migrations/20260725_pr115_canonical_command_workflows.sql');
+  assert.match(scheduler, /\/rest\/v1\/rpc\/finalize_manager_world_command/);
+  assert.match(scheduler, /p_reason: reason/);
+  assert.match(scheduler, /p_details: details/);
+  assert.match(scheduler, /p_related_player_id: playerId/);
+  assert.doesNotMatch(scheduler, /\/rest\/v1\/manager_messages/);
+  assert.doesNotMatch(scheduler, /requires negotiation resolution before application/);
+  assert.match(workflowMigration, /'world_command_outcome'/);
+  assert.match(workflowMigration, /insert into public\.manager_messages/);
+  assert.match(workflowMigration, /on conflict do nothing/);
 });
 
 test('World view renders pending and processed request history', async () => {

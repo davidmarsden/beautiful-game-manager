@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { buildManagerTurnSubmission, currentTurnIdentity } from '../../src/world/sharedWorldScheduler.js';
 import { loadPersistentWorld } from '../../src/world/persistentSeasonLoop.js';
 import { projectManagerPortal } from '../../src/world/managerPortalProjection.js';
@@ -58,7 +59,12 @@ async function readSubmission(token, current, turn) {
 }
 
 async function readCommandHistory(token, current) {
-  return supabase(`/rest/v1/manager_world_commands?world_id=eq.${encodeURIComponent(current.appointment.world_id)}&manager_id=eq.${encodeURIComponent(current.manager.id)}&select=id,command_type,command_payload,status,effective_season_id,effective_matchday,submitted_at,processed_at,outcome_reason,outcome_details,superseded_by&order=submitted_at.desc,id.desc&limit=100`, token);
+  const fields = [
+    'id','command_type','command_payload','status','negotiation_state',
+    'effective_season_id','effective_matchday','submitted_at','processed_at','terminal_at',
+    'outcome_reason','outcome_details','superseded_by','request_key','final_outcome_key'
+  ].join(',');
+  return supabase(`/rest/v1/manager_world_commands?world_id=eq.${encodeURIComponent(current.appointment.world_id)}&manager_id=eq.${encodeURIComponent(current.manager.id)}&select=${fields}&order=submitted_at.desc,id.desc&limit=100`, token);
 }
 
 function assertAppointment(world, appointment) {
@@ -101,6 +107,19 @@ function commandType(type) {
   return type;
 }
 
+function stableCommandRequestKey({ worldId, managerId, commandType: type, payload, seasonId, matchday, suppliedKey }) {
+  const supplied = String(suppliedKey || payload?.client_request_id || '').trim();
+  if (supplied) return supplied;
+  return createHash('sha256').update(JSON.stringify({
+    world_id: worldId,
+    manager_id: managerId,
+    command_type: type,
+    command_payload: payload || {},
+    effective_season_id: seasonId,
+    effective_matchday: matchday
+  })).digest('hex');
+}
+
 function commandSummaryImpl(world, row) {
   const rawPayload = row.command_payload || {};
   const playerId = rawPayload.playerId || rawPayload.player_id || null;
@@ -121,13 +140,17 @@ function commandSummaryImpl(world, row) {
       manager_club_name: clubName(world, row.club_id)
     },
     status: row.status,
+    negotiation_state: row.negotiation_state || null,
     effective_season_id: row.effective_season_id,
     effective_matchday: row.effective_matchday,
     submitted_at: row.submitted_at,
     processed_at: row.processed_at,
+    terminal_at: row.terminal_at || null,
     outcome_reason: row.outcome_reason || null,
     outcome_details: row.outcome_details || {},
-    superseded_by: row.superseded_by || null
+    superseded_by: row.superseded_by || null,
+    request_key: row.request_key || null,
+    final_outcome_key: row.final_outcome_key || null
   };
 }
 
@@ -146,6 +169,7 @@ export default async (request) => {
       is_admin: Boolean(current.manager.is_admin),
       message: 'The shared-world database is ready, but this world has not yet been initialized.'
     });
+
     const world = loadPersistentWorld(JSON.stringify(stored.save_envelope));
     assertAppointment(world, current.appointment);
     const turn = currentTurnIdentity(world);
@@ -155,32 +179,29 @@ export default async (request) => {
     ]);
     const summary = appointmentSummary(world, current.appointment.club_id);
     const appointment = { ...current.appointment, club_name: summary.club_name, division_name: summary.division_name };
-    const commandSummary = (row) => commandSummaryImpl(world, row);
 
-    if (request.method === 'GET') {
-      return json({
-        configured: true,
-        has_world: true,
-        is_admin: Boolean(current.manager.is_admin),
-        summary,
-        world: {
-          world_id: stored.world_id,
-          checksum: stored.save_checksum,
-          updated_at: stored.updated_at,
-          next_turn_at: stored.next_turn_at,
-          turn_status: stored.turn_status
-        },
-        appointment,
-        turn,
-        submission: existing ? {
-          status: existing.status,
-          instruction: existing.instruction,
-          submitted_at: existing.submitted_at,
-          locked_at: existing.locked_at
-        } : null,
-        commands: commandRows.map(commandSummary)
-      });
-    }
+    if (request.method === 'GET') return json({
+      configured: true,
+      has_world: true,
+      is_admin: Boolean(current.manager.is_admin),
+      summary,
+      world: {
+        world_id: stored.world_id,
+        checksum: stored.save_checksum,
+        updated_at: stored.updated_at,
+        next_turn_at: stored.next_turn_at,
+        turn_status: stored.turn_status
+      },
+      appointment,
+      turn,
+      submission: existing ? {
+        status: existing.status,
+        instruction: existing.instruction,
+        submitted_at: existing.submitted_at,
+        locked_at: existing.locked_at
+      } : null,
+      commands: commandRows.map((row) => commandSummaryImpl(world, row))
+    });
 
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
     const body = await request.json().catch(() => ({}));
@@ -205,18 +226,31 @@ export default async (request) => {
     if (body.type === 'submit_command') {
       if (stored.turn_status !== 'open') return json({ error: `World commands are locked while turn is ${stored.turn_status}` }, 409);
       const type = commandType(body.command_type);
-      const payload = {
-        world_id: world.world_id,
-        manager_id: current.manager.id,
-        club_id: current.appointment.club_id,
-        command_type: type,
-        command_payload: body.command_payload || {},
-        status: 'pending',
-        effective_season_id: turn.season_id,
-        effective_matchday: turn.matchday
-      };
-      const rows = await supabase('/rest/v1/manager_world_commands', token, { method: 'POST', body: JSON.stringify(payload) });
-      return json({ accepted: true, command: type, request: commandSummaryImpl(world, rows[0] || payload), turn, summary });
+      const commandPayload = body.command_payload || {};
+      const requestKey = stableCommandRequestKey({
+        worldId: world.world_id,
+        managerId: current.manager.id,
+        commandType: type,
+        payload: commandPayload,
+        seasonId: turn.season_id,
+        matchday: turn.matchday,
+        suppliedKey: body.request_key || body.client_request_id
+      });
+      const rows = await supabase('/rest/v1/rpc/submit_manager_world_command', token, {
+        method: 'POST',
+        body: JSON.stringify({
+          p_world_id: world.world_id,
+          p_manager_id: current.manager.id,
+          p_club_id: current.appointment.club_id,
+          p_command_type: type,
+          p_command_payload: { ...commandPayload, client_request_id: requestKey },
+          p_effective_season_id: turn.season_id,
+          p_effective_matchday: turn.matchday,
+          p_request_key: requestKey
+        })
+      });
+      const row = Array.isArray(rows) ? rows[0] : rows;
+      return json({ accepted: true, command: type, request: commandSummaryImpl(world, row), turn, summary });
     }
 
     return json({ error: 'Managers cannot save, load, import, restore or advance the shared world' }, 403);
