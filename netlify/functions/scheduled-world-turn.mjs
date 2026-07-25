@@ -45,8 +45,11 @@ export function commandForDomain(row) {
   if (row.command_type === 'register_player') return { type: 'register_player', playerId: payload.playerId || payload.player_id };
   if (row.command_type === 'unregister_player') return { type: 'unregister_player', playerId: payload.playerId || payload.player_id };
   if (row.command_type === 'renew_contract') return { type: 'renew_contract', playerId: payload.playerId || payload.player_id, years: payload.years, wage: payload.wage };
-  if (row.command_type === 'transfer_offer' || row.command_type === 'transfer_listing' || row.command_type === 'transfer_response') return null;
   return null;
+}
+
+function isNegotiationCommand(row) {
+  return ['transfer_offer', 'transfer_listing', 'transfer_response'].includes(row.command_type);
 }
 
 function commandLabel(type) {
@@ -88,43 +91,64 @@ function outcomeReason(result, row, world) {
   return result.error ? `${result.error}${context}.` : `${commandLabel(row.command_type)}${context} was rejected.`;
 }
 
-function inboxEvent(world, row, result, now) {
-  const applied = result.status === 'applied';
-  const label = commandLabel(row.command_type);
-  const { playerId, playerName } = playerIdentity(world, row);
-  return {
-    recipient_manager_id: row.manager_id,
-    club_id: row.club_id,
-    message_type: 'world_command_outcome',
-    subject: `${playerName}: ${label.toLowerCase()} ${applied ? 'completed' : 'rejected'}`,
-    body: outcomeReason(result, row, world),
-    related_player_id: playerId,
-    priority: applied ? 'normal' : 'high',
-    created_at: now
-  };
+function commandOutcomeSubject(world, row, result) {
+  const { playerName } = playerIdentity(world, row);
+  return `${playerName}: ${commandLabel(row.command_type).toLowerCase()} ${result.status === 'applied' ? 'completed' : 'rejected'}`;
 }
 
-function applyPendingCommands(worldInput, rows) {
+export function applyPendingCommands(worldInput, rows) {
   let world = loadPersistentWorld(savePersistentWorld(worldInput));
   const originalHumanClubId = world.human_club_id;
   const results = [];
+  const negotiations = [];
+
   for (const row of rows) {
     const command = commandForDomain(row);
+    if (!command && isNegotiationCommand(row)) {
+      negotiations.push({
+        id: row.id,
+        command_type: row.command_type,
+        negotiation_state: row.negotiation_state || (row.command_type === 'transfer_listing' ? 'listed' : 'awaiting_response')
+      });
+      continue;
+    }
     if (!command) {
-      results.push({ id: row.id, status: 'rejected', error: `Command requires negotiation resolution before application: ${row.command_type}` });
+      results.push({ id: row.id, status: 'rejected', error: `Unsupported shared-world command: ${row.command_type}` });
       continue;
     }
     try {
       world.human_club_id = row.club_id;
-      const result = executePortalWorldCommand(world, command);
-      world = result.world;
-      results.push({ id: row.id, status: 'applied', result: result.result });
+      const execution = executePortalWorldCommand(world, command);
+      world = execution.world;
+      results.push({ id: row.id, status: 'applied', result: execution.result });
     } catch (error) {
       results.push({ id: row.id, status: 'rejected', error: error.message });
     }
   }
+
   world.human_club_id = originalHumanClubId;
-  return { world, results };
+  return { world, results, negotiations };
+}
+
+async function finalizeCommand(row, result, world, now) {
+  const reason = outcomeReason(result, row, world);
+  const details = result.status === 'applied'
+    ? { command_type: row.command_type, result: result.result || {} }
+    : { command_type: row.command_type, error: result.error || reason };
+  const response = await service('/rest/v1/rpc/finalize_manager_world_command', {
+    method: 'POST',
+    body: JSON.stringify({
+      p_command_id: row.id,
+      p_status: result.status,
+      p_reason: reason,
+      p_details: details,
+      p_negotiation_state: row.negotiation_state || null,
+      p_subject: commandOutcomeSubject(world, row, result),
+      p_priority: result.status === 'applied' ? 'normal' : 'high',
+      p_processed_at: now
+    })
+  });
+  return Array.isArray(response) ? response[0] : response;
 }
 
 async function processWorld(stored, now) {
@@ -141,6 +165,7 @@ async function processWorld(stored, now) {
   let seasonId = stored.season_id;
   let matchday = stored.matchday || 1;
   let failureDetails = null;
+
   try {
     let world = loadPersistentWorld(JSON.stringify(stored.save_envelope));
     const commandDisplayWorld = loadPersistentWorld(JSON.stringify(stored.save_envelope));
@@ -158,6 +183,7 @@ async function processWorld(stored, now) {
       failureDetails = error.diagnostics || null;
       throw error;
     }
+
     const plan = buildScheduledTurnPlan(world, submissions, {
       appointments,
       scheduledFor: stored.next_turn_at || now,
@@ -211,23 +237,10 @@ async function processWorld(stored, now) {
     const commandById = new Map(commands.map((row) => [row.id, row]));
     for (const result of commandRun.results) {
       const row = commandById.get(result.id);
-      const reason = outcomeReason(result, row, commandDisplayWorld);
-      await service(`/rest/v1/manager_world_commands?id=eq.${encodeURIComponent(result.id)}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          status: result.status,
-          processed_at: now,
-          outcome_reason: reason,
-          outcome_details: result.status === 'applied' ? { result: result.result || {} } : { error: result.error || reason }
-        }),
-        headers: { prefer: 'return=minimal' }
-      });
-      await service('/rest/v1/manager_messages', {
-        method: 'POST',
-        body: JSON.stringify(inboxEvent(commandDisplayWorld, row, result, now)),
-        headers: { prefer: 'return=minimal' }
-      });
+      if (!row) throw new Error(`Missing command ledger row for outcome ${result.id}`);
+      await finalizeCommand(row, result, commandDisplayWorld, now);
     }
+
     await service(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(worldId)}&season_id=eq.${encodeURIComponent(seasonId)}&matchday=eq.${matchday}&status=eq.locked`, {
       method: 'PATCH',
       body: JSON.stringify({ status: 'consumed', consumed_at: now }),
@@ -238,7 +251,18 @@ async function processWorld(stored, now) {
       body: JSON.stringify({ status: 'complete', next_checksum: envelope.checksum, completed_at: now }),
       headers: { prefer: 'return=minimal' }
     });
-    return { world_id: worldId, status: 'complete', season_id: seasonId, matchday, next_turn_at: nextTurnAt, checksum: envelope.checksum, viability: failureDetails };
+
+    return {
+      world_id: worldId,
+      status: 'complete',
+      season_id: seasonId,
+      matchday,
+      next_turn_at: nextTurnAt,
+      checksum: envelope.checksum,
+      command_outcomes: commandRun.results.length,
+      negotiations_pending: commandRun.negotiations.length,
+      viability: failureDetails
+    };
   } catch (error) {
     await service(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(worldId)}&season_id=eq.${encodeURIComponent(seasonId)}&matchday=eq.${matchday}&status=eq.locked`, {
       method: 'PATCH',
@@ -265,7 +289,7 @@ export default async () => {
   const due = await service(`/rest/v1/canonical_world_saves?turn_status=eq.open&next_turn_at=lte.${encodeURIComponent(now)}&select=*`);
   const results = [];
   for (const stored of due) results.push(await processWorld(stored, now));
-  return json({ version: 'tbg-scheduled-world-turn-v1.4', checked_at: now, worlds_due: due.length, results });
+  return json({ version: 'tbg-scheduled-world-turn-v1.5', checked_at: now, worlds_due: due.length, results });
 };
 
 export const config = { schedule: '*/15 * * * *' };
