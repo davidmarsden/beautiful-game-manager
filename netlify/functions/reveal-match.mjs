@@ -1,3 +1,5 @@
+import { loadPersistentWorld } from '../../src/world/persistentSeasonLoop.js';
+
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -7,19 +9,27 @@ const bearer = (request) => {
   const value = request.headers.get('authorization') || '';
   return value.toLowerCase().startsWith('bearer ') ? value.slice(7).trim() : '';
 };
-async function service(path, options = {}) {
+async function service(path) {
   const response = await fetch(`${SUPABASE_URL}${path}`, {
-    ...options,
     headers: {
       apikey: SUPABASE_SERVICE_ROLE_KEY,
       authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      accept: 'application/json',
-      ...(options.headers || {})
+      accept: 'application/json'
     }
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.message || body.error || `Supabase returned ${response.status}`);
   return body;
+}
+
+function canonicalPlayedFixture(world, fixtureId) {
+  for (const runtime of Object.values(world.matchday_cycle?.runtimes || {})) {
+    const fixture = (runtime.fixtures || []).find((row) => String(row.fixture_id) === fixtureId);
+    if (!fixture) continue;
+    const result = (runtime.results || []).find((row) => String(row.fixture?.fixture_id) === fixtureId);
+    if (result) return fixture;
+  }
+  return null;
 }
 
 export default async (request) => {
@@ -39,19 +49,20 @@ export default async (request) => {
     const profiles = await service(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id&limit=1`);
     const manager = profiles[0];
     if (!manager) return json({ error: 'Manager profile not found' }, 403);
-    const fixtures = await service(`/rest/v1/fixtures?id=eq.${encodeURIComponent(fixtureId)}&status=eq.played&select=id,world_id,home_club_id,away_club_id&limit=1`);
-    const fixture = fixtures[0];
-    if (!fixture) return json({ error: 'Played fixture not found' }, 404);
-    const appointments = await service(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&world_id=eq.${encodeURIComponent(fixture.world_id)}&status=eq.active&select=club_id`);
-    if (!appointments.some((row) => [fixture.home_club_id, fixture.away_club_id].includes(row.club_id))) return json({ error: 'You do not have access to this fixture' }, 403);
+    const appointments = await service(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=world_id,club_id`);
+    if (!appointments.length) return json({ error: 'Manager has no active world appointment' }, 403);
 
-    const now = new Date().toISOString();
-    await service('/rest/v1/manager_match_views?on_conflict=manager_id,fixture_id', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', prefer: 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify({ manager_id: manager.id, fixture_id: fixtureId, revealed_at: now, reveal_method: method, replay_completed: method === 'replay_completed', updated_at: now })
-    });
-    return json({ fixture_id: fixtureId, revealed: true, reveal_method: method, revealed_at: now });
+    for (const appointment of appointments) {
+      const saves = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(appointment.world_id)}&select=save_envelope&limit=1`);
+      if (!saves[0]?.save_envelope) continue;
+      const world = loadPersistentWorld(JSON.stringify(saves[0].save_envelope));
+      const fixture = canonicalPlayedFixture(world, fixtureId);
+      if (!fixture) continue;
+      if (![fixture.home_club_id, fixture.away_club_id].includes(appointment.club_id)) return json({ error: 'You do not have access to this fixture' }, 403);
+      return json({ fixture_id: fixtureId, revealed: true, reveal_method: method, revealed_at: new Date().toISOString() });
+    }
+
+    return json({ error: 'Played fixture not found' }, 404);
   } catch (error) {
     return json({ error: error.message }, 500);
   }

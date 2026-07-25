@@ -1,4 +1,4 @@
-import { canonicalMatchdayKickoffs } from './canonicalTurnCalendar.js';
+import { canonicalMatchdayKickoffs, completedMatchdayKickoff } from './canonicalTurnCalendar.js';
 
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = null) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -127,7 +127,10 @@ function projectedFixtures(world, fixtures, resultsByFixture, nextTurnAt, { week
     })
     : new Map();
   return fixtures.map((fixture) => {
-    if (resultsByFixture.has(String(fixture.fixture_id))) return fixture;
+    if (resultsByFixture.has(String(fixture.fixture_id))) {
+      const kickoffAt = completedMatchdayKickoff(world, fixture.matchday);
+      return kickoffAt ? { ...fixture, kickoff_at: kickoffAt } : fixture;
+    }
     const kickoffAt = kickoffByMatchday.get(Number(fixture.matchday));
     return kickoffAt ? { ...fixture, kickoff_at: kickoffAt } : fixture;
   });
