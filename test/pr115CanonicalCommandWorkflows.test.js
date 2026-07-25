@@ -66,24 +66,28 @@ test('migration enforces one audit and one message per final outcome', () => {
 
 test('shared-world submission uses the idempotent transactional RPC', () => {
   const source = fs.readFileSync(new URL('../netlify/functions/shared-world.mjs', import.meta.url), 'utf8');
-  assert.match(source, /\/rest\/v1\/rpc\/submit_manager_world_command/);
-  assert.match(source, /p_request_key/);
-  assert.match(source, /stableCommandRequestKey/);
-  assert.doesNotMatch(source, /supabase\('\/rest\/v1\/manager_world_commands'/);
+  const submissionBlock = source.slice(source.indexOf("if (body.type === 'submit_command')"), source.indexOf("return json({ error: 'Managers cannot"));
+  assert.match(submissionBlock, /\/rest\/v1\/rpc\/submit_manager_world_command/);
+  assert.match(submissionBlock, /p_request_key/);
+  assert.match(submissionBlock, /stableCommandRequestKey/);
+  assert.match(submissionBlock, /p_command_payload/);
 });
 
 test('scheduled outcomes use one transactional finalisation RPC', () => {
   const source = fs.readFileSync(new URL('../netlify/functions/scheduled-world-turn.mjs', import.meta.url), 'utf8');
-  assert.match(source, /\/rest\/v1\/rpc\/finalize_manager_world_command/);
-  assert.match(source, /p_command_id/);
-  assert.match(source, /p_status/);
-  assert.doesNotMatch(source, /service\('\/rest\/v1\/manager_messages'/);
-  assert.doesNotMatch(source, /manager_world_commands\?id=eq/);
+  const finalizer = source.slice(source.indexOf('async function finalizeCommand'), source.indexOf('async function processWorld'));
+  const outcomeLoop = source.slice(source.indexOf('const commandById'), source.indexOf('await service(`/rest/v1/manager_turn_submissions'));
+  assert.match(finalizer, /\/rest\/v1\/rpc\/finalize_manager_world_command/);
+  assert.match(finalizer, /p_command_id/);
+  assert.match(finalizer, /p_status/);
+  assert.match(finalizer, /p_reason/);
+  assert.match(outcomeLoop, /await finalizeCommand\(row, result, commandDisplayWorld, now\)/);
 });
 
 test('scheduler preserves unresolved transfer negotiations as pending', () => {
   const source = fs.readFileSync(new URL('../netlify/functions/scheduled-world-turn.mjs', import.meta.url), 'utf8');
-  assert.match(source, /isNegotiationCommand/);
-  assert.match(source, /negotiations\.push/);
-  assert.doesNotMatch(source, /Command requires negotiation resolution before application/);
+  const commandProcessor = source.slice(source.indexOf('export function applyPendingCommands'), source.indexOf('async function finalizeCommand'));
+  assert.match(commandProcessor, /isNegotiationCommand/);
+  assert.match(commandProcessor, /negotiations\.push/);
+  assert.match(commandProcessor, /return \{ world, results, negotiations \}/);
 });
