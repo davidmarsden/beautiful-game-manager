@@ -106,6 +106,17 @@ test('portal bootstrap suppresses completed scores before replay reveal', async 
   assert.match(bootstrap, /spoilerSafeProjection\(projectManagerPortal/);
 });
 
+test('schedule keeps completed scores visible while spoiler surfaces stay hidden', async () => {
+  const [bootstrap, competition] = await Promise.all([
+    source('netlify/functions/bootstrap.mjs'),
+    source('public/phase2d3.js')
+  ]);
+  assert.match(bootstrap, /schedule: projection\.schedule \|\| \[\]/);
+  assert.doesNotMatch(bootstrap, /const schedule = \(projection\.schedule \|\| \[\]\)\.map\(hideCompletedScore\)/);
+  assert.match(competition, /renderSchedule\(data\.schedule \|\| data\.fixtures/);
+  assert.match(competition, /const scoreKnown = played && hasScore\(fixture\)/);
+});
+
 test('saved anonymous commentary is attributed from canonical team line-ups', async () => {
   const endpoint = await source('netlify/functions/match-centre.mjs');
   assert.match(endpoint, /function eventPlayerId/);
