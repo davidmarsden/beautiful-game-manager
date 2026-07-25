@@ -54,11 +54,27 @@ async function adminIdentity(token) {
   return { manager, appointment };
 }
 
-function compact(result, before, after, operationId, retrying) {
+async function repairedFailureLineage(worldId, checksum) {
+  const repairs = await service(`/rest/v1/world_operation_events?world_id=eq.${encodeURIComponent(worldId)}&replacement_checksum=eq.${encodeURIComponent(checksum)}&operation_type=eq.registration_repair&status=eq.accepted&select=operation_id,details,created_at&order=created_at.desc&limit=1`);
+  const repair = repairs[0] || null;
+  const lineage = repair?.details?.recovery_lineage || null;
+  if (!lineage?.reopened_for_retry || !lineage?.superseded_failed_run_id) return null;
+
+  const failedRuns = await service(`/rest/v1/world_turn_runs?id=eq.${encodeURIComponent(lineage.superseded_failed_run_id)}&world_id=eq.${encodeURIComponent(worldId)}&status=eq.failed&select=id,previous_checksum,completed_at,error_message&limit=1`);
+  const failedRun = failedRuns[0] || null;
+  if (!failedRun) throw new Error('Repaired checkpoint recovery lineage does not resolve to a failed turn record; manual recovery is required');
+  if (lineage.failed_checksum && failedRun.previous_checksum !== lineage.failed_checksum) throw new Error('Repaired checkpoint recovery lineage checksum does not match its failed turn record; manual recovery is required');
+
+  return { repair_operation_id: repair.operation_id, failed_run: failedRun, lineage };
+}
+
+function compact(result, before, after, operationId, recovery) {
   return {
     accepted: result.status === 'complete',
     operation_id: operationId,
-    operation: retrying ? 'retry_failed_turn' : 'run_due_turn_now',
+    operation: recovery?.mode || 'run_due_turn_now',
+    recovery_of_run_id: recovery?.failedRun?.id || null,
+    repair_operation_id: recovery?.repairOperationId || null,
     world_id: result.world_id,
     season_id: result.season_id || before.season_id,
     matchday_advanced: result.matchday || before.matchday,
@@ -86,24 +102,29 @@ export default async (request) => {
     const before = rows[0];
     if (!before) return json({ error: `Canonical world ${worldId} does not exist` }, 404);
 
-    const retrying = before.turn_status === 'failed';
-    if (before.turn_status !== 'open' && before.turn_status !== 'failed') return json({ error: `Canonical world is ${before.turn_status}; duplicate or replayed execution rejected` }, 409);
-    if (!retrying && (!before.next_turn_at || new Date(before.next_turn_at) > new Date(now))) return json({ error: 'Canonical world is not due yet' }, 409);
+    const directFailedRetry = before.turn_status === 'failed';
+    if (before.turn_status !== 'open' && !directFailedRetry) return json({ error: `Canonical world is ${before.turn_status}; duplicate or replayed execution rejected` }, 409);
 
-    let retryRun = null;
-    if (retrying) {
-      const failedRuns = await service(`/rest/v1/world_turn_runs?world_id=eq.${encodeURIComponent(worldId)}&previous_checksum=eq.${encodeURIComponent(before.save_checksum)}&status=eq.failed&select=id,completed_at,error_message&order=completed_at.desc&limit=1`);
-      retryRun = failedRuns[0] || null;
-      if (!retryRun) return json({ error: 'Failed world has no matching failed turn record; manual recovery is required' }, 409);
+    let recovery = null;
+    if (directFailedRetry) {
+      const failedRuns = await service(`/rest/v1/world_turn_runs?world_id=eq.${encodeURIComponent(worldId)}&previous_checksum=eq.${encodeURIComponent(before.save_checksum)}&status=eq.failed&select=id,previous_checksum,completed_at,error_message&order=completed_at.desc&limit=1`);
+      const failedRun = failedRuns[0] || null;
+      if (!failedRun) return json({ error: 'Failed world has no matching failed turn record; manual recovery is required' }, 409);
+      recovery = { mode: 'retry_failed_turn', failedRun, repairOperationId: null };
+    } else {
+      const repaired = await repairedFailureLineage(worldId, before.save_checksum);
+      if (repaired) recovery = { mode: 'retry_repaired_failed_turn', failedRun: repaired.failed_run, repairOperationId: repaired.repair_operation_id };
     }
 
-    const operationId = retrying
-      ? `scheduled-turn-retry:${worldId}:${retryRun.id}:${before.save_checksum}`
+    if (!recovery && (!before.next_turn_at || new Date(before.next_turn_at) > new Date(now))) return json({ error: 'Canonical world is not due yet' }, 409);
+
+    const operationId = recovery
+      ? `scheduled-turn-recovery:${worldId}:${recovery.failedRun.id}:${before.save_checksum}`
       : `scheduled-turn:${worldId}:${before.season_id}:${before.matchday}:${before.save_checksum}`;
     const existing = await service(`/rest/v1/world_operation_events?operation_id=eq.${encodeURIComponent(operationId)}&select=operation_id,status&limit=1`);
     if (existing[0]) return json({ error: 'This canonical turn recovery has already been executed or recorded' }, 409);
 
-    if (retrying) {
+    if (directFailedRetry) {
       const reopened = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&save_checksum=eq.${encodeURIComponent(before.save_checksum)}&turn_status=eq.failed`, {
         method: 'PATCH',
         body: JSON.stringify({ turn_status: 'open', updated_at: now }),
@@ -119,7 +140,7 @@ export default async (request) => {
 
     const afterRows = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&select=*`);
     const after = afterRows[0] || null;
-    const details = compact(result, before, after, operationId, retrying);
+    const details = compact(result, before, after, operationId, recovery);
     await service('/rest/v1/world_operation_events', {
       method: 'POST',
       body: JSON.stringify({
@@ -132,9 +153,11 @@ export default async (request) => {
         replacement_checksum: after?.save_checksum || result.checksum || null,
         status: result.status === 'complete' ? 'accepted' : 'rejected',
         details: {
-          action: retrying ? 'retry_failed_turn' : 'run_due_turn_now',
+          action: recovery?.mode || 'run_due_turn_now',
           production_scheduler_version: schedulerBody.version,
-          recovery_of_run_id: retryRun?.id || null,
+          recovery_of_run_id: recovery?.failedRun?.id || null,
+          repair_operation_id: recovery?.repairOperationId || null,
+          recovery_failed_checksum: recovery?.failedRun?.previous_checksum || null,
           before: { season_id: before.season_id, matchday: before.matchday, checksum: before.save_checksum, next_turn_at: before.next_turn_at, turn_status: before.turn_status },
           after: after ? { season_id: after.season_id, matchday: after.matchday, checksum: after.save_checksum, next_turn_at: after.next_turn_at, turn_status: after.turn_status } : null,
           scheduler_result: result
@@ -146,7 +169,7 @@ export default async (request) => {
 
     return json(details, result.status === 'complete' ? 200 : 409);
   } catch (error) {
-    const status = /Session|Authentication/.test(error.message) ? 401 : /Administrator/.test(error.message) ? 403 : /already|duplicate|replay|not due|is locking|manual recovery|changed before retry/.test(error.message) ? 409 : 503;
+    const status = /Session|Authentication/.test(error.message) ? 401 : /Administrator/.test(error.message) ? 403 : /already|duplicate|replay|not due|is locking|manual recovery|changed before retry|recovery lineage/.test(error.message) ? 409 : 503;
     return json({ error: error.message }, status);
   }
 };
