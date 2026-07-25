@@ -132,9 +132,10 @@ export function applyPendingCommands(worldInput, rows) {
 
 async function finalizeCommand(row, result, world, now) {
   const reason = outcomeReason(result, row, world);
+  const { playerId } = playerIdentity(world, row);
   const details = result.status === 'applied'
-    ? { command_type: row.command_type, result: result.result || {} }
-    : { command_type: row.command_type, error: result.error || reason };
+    ? { command_type: row.command_type, player_id: playerId, result: result.result || {} }
+    : { command_type: row.command_type, player_id: playerId, error: result.error || reason };
   const response = await service('/rest/v1/rpc/finalize_manager_world_command', {
     method: 'POST',
     body: JSON.stringify({
@@ -145,7 +146,8 @@ async function finalizeCommand(row, result, world, now) {
       p_negotiation_state: row.negotiation_state || null,
       p_subject: commandOutcomeSubject(world, row, result),
       p_priority: result.status === 'applied' ? 'normal' : 'high',
-      p_processed_at: now
+      p_processed_at: now,
+      p_related_player_id: playerId
     })
   });
   return Array.isArray(response) ? response[0] : response;
