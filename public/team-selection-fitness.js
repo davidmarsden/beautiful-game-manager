@@ -5,28 +5,11 @@ export const FITNESS_DIALS = Object.freeze({
 });
 
 const ROLE_DEMAND = Object.freeze({
-  GK: 0.62,
-  CB: 0.92,
-  LCB: 0.92,
-  RCB: 0.92,
-  LB: 1.06,
-  RB: 1.06,
-  LWB: 1.16,
-  RWB: 1.16,
-  LDM: 1,
-  RDM: 1,
-  CM: 1.06,
-  LCM: 1.06,
-  RCM: 1.06,
-  AM: 1.05,
-  LM: 1.1,
-  RM: 1.1,
-  LW: 1.1,
-  RW: 1.1,
-  CF: 1,
-  LCF: 1,
-  RCF: 1,
-  BENCH: 1
+  GK: 0.62, CB: 0.92, LCB: 0.92, RCB: 0.92,
+  LB: 1.06, RB: 1.06, LWB: 1.16, RWB: 1.16,
+  LDM: 1, RDM: 1, CM: 1.06, LCM: 1.06, RCM: 1.06,
+  AM: 1.05, LM: 1.1, RM: 1.1, LW: 1.1, RW: 1.1,
+  CF: 1, LCF: 1, RCF: 1, BENCH: 1
 });
 
 const PRESSING_DEMAND = Object.freeze({ low: 0.92, mid: 1, high: 1.18 });
@@ -67,11 +50,10 @@ let portalState = null;
 let playersById = new Map();
 let refreshTimer = null;
 let observer = null;
+let observedTarget = null;
 let originalTrayOrder = [];
 
-function rounded(value) {
-  return Math.round(number(value, 0));
-}
+const rounded = (value) => Math.round(number(value, 0));
 
 function currentTactics() {
   return {
@@ -81,7 +63,10 @@ function currentTactics() {
 }
 
 function fixtureRecoveryDays() {
-  return recoveryDays(portalState?.last_fixture?.kickoff_at || portalState?.last_fixture?.played_at, portalState?.next_fixture?.kickoff_at);
+  return recoveryDays(
+    portalState?.last_fixture?.kickoff_at || portalState?.last_fixture?.played_at,
+    portalState?.next_fixture?.kickoff_at
+  );
 }
 
 function playerProjection(player, role = 'BENCH') {
@@ -210,12 +195,21 @@ function sortTray() {
   buttons.forEach((button) => tray.appendChild(button));
 }
 
+function observeBoard() {
+  if (observer && observedTarget) observer.observe(observedTarget, { childList: true, subtree: true });
+}
+
 function refreshFitnessLayer() {
   if (!portalState || !document.getElementById('interactiveFormationBoard')) return;
-  ensureSortControl();
-  decoratePitchAndBench();
-  decorateTray();
-  renderRecoverySummary();
+  observer?.disconnect();
+  try {
+    ensureSortControl();
+    decoratePitchAndBench();
+    decorateTray();
+    renderRecoverySummary();
+  } finally {
+    observeBoard();
+  }
 }
 
 function scheduleRefresh() {
@@ -225,9 +219,9 @@ function scheduleRefresh() {
 
 function startObserver() {
   if (observer || typeof MutationObserver === 'undefined') return;
-  const target = document.getElementById('tacticsView') || document.body;
+  observedTarget = document.getElementById('tacticsView') || document.body;
   observer = new MutationObserver(scheduleRefresh);
-  observer.observe(target, { childList: true, subtree: true });
+  observeBoard();
 }
 
 function install(state) {
