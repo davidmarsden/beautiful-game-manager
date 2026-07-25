@@ -73,11 +73,7 @@ function renderMatchCentre(data) {
 async function revealMatch(data, method) {
   const response = await fetch('/api/reveal-match', { method: 'POST', headers: { authorization: matchCentreAuth, 'content-type': 'application/json' }, body: JSON.stringify({ fixture_id: data.fixture.id, method }) });
   if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.error || 'Could not reveal match'); }
-  matchRevealChanged = true;
-  const refreshed = await fetch(`/api/match-centre?fixture_id=${encodeURIComponent(data.fixture.id)}`, { headers: { authorization: matchCentreAuth } });
-  const fullData = await refreshed.json();
-  if (!refreshed.ok) throw new Error(fullData.error || 'Could not load revealed match');
-  renderMatchCentre(fullData);
+  renderMatchCentre({ ...data, revealed: true, reveal: { reveal_method: method } });
 }
 function setupReplay(data, revealRequired) {
   const events = [...(data.events || [])].sort((a, b) => Number(a.minute) - Number(b.minute));
