@@ -15,7 +15,10 @@ test('bootstrap cannot return legacy score state and manager messages are limite
   assert.doesNotMatch(bootstrap, /\/rest\/v1\/fixtures/);
   assert.doesNotMatch(bootstrap, /competition_standings/);
   assert.doesNotMatch(bootstrap, /manager_match_views/);
-  assert.doesNotMatch(bootstrap, /home_score|away_score/);
+  assert.match(bootstrap, /function hideCompletedScore/);
+  assert.match(bootstrap, /home_score: null/);
+  assert.match(bootstrap, /away_score: null/);
+  assert.match(bootstrap, /result_revealed: false/);
 
   assert.match(projection, /const score = result\?\.score \|\| null/);
   assert.match(projection, /home_score: score\?\.home \?\? null/);
