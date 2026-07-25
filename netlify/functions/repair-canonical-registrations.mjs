@@ -44,6 +44,19 @@ async function adminIdentity(token) {
   return { manager, appointment };
 }
 
+async function failedTurnLineage(worldId, checksum) {
+  const rows = await service(`/rest/v1/world_turn_runs?world_id=eq.${encodeURIComponent(worldId)}&previous_checksum=eq.${encodeURIComponent(checksum)}&status=eq.failed&select=id,previous_checksum,completed_at,error_message&order=completed_at.desc&limit=1`);
+  const failedRun = rows[0] || null;
+  if (!failedRun) throw new Error('Failed world has no matching failed turn record; repair cannot create a controlled recovery');
+  return {
+    reopened_for_retry: true,
+    superseded_failed_run_id: failedRun.id,
+    failed_checksum: failedRun.previous_checksum || checksum,
+    failure_completed_at: failedRun.completed_at || null,
+    failure_error: failedRun.error_message || null
+  };
+}
+
 export default async (request) => {
   try {
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -60,6 +73,7 @@ export default async (request) => {
     if (before.phase !== 'preseason') return json({ error: `Registration repair is only available in preseason; world phase is ${before.phase}` }, 409);
     if (!['open', 'failed'].includes(before.turn_status)) return json({ error: `Canonical world is ${before.turn_status}; wait for the active operation to finish` }, 409);
 
+    const recoveryLineage = before.turn_status === 'failed' ? await failedTurnLineage(worldId, before.save_checksum) : null;
     const publication = await fetchPublicationWorld();
     const world = loadPersistentWorld(JSON.stringify(before.save_envelope));
     const existingPlayerIds = Object.keys(world.squad_cycle.players);
@@ -74,6 +88,8 @@ export default async (request) => {
       world_id: worldId,
       source_checksum: before.save_checksum,
       turn_status: before.turn_status,
+      replacement_turn_status: recoveryLineage ? 'open' : before.turn_status,
+      recovery_lineage: recoveryLineage,
       phase: before.phase,
       reservoir_candidates_considered: candidates.length,
       reservoir_materialised_in_checkpoint: planned.preview.external_free_agents_materialised,
@@ -89,6 +105,7 @@ export default async (request) => {
     const operationId = `registration-repair:${worldId}:${before.save_checksum}:${fingerprint}`;
     const envelope = JSON.parse(savePersistentWorld(planned.world));
     const now = new Date().toISOString();
+    const replacementTurnStatus = recoveryLineage ? 'open' : before.turn_status;
     const replacement = {
       save_version: envelope.save_version,
       save_checksum: envelope.checksum,
@@ -98,7 +115,7 @@ export default async (request) => {
       phase: planned.world.phase,
       matchday: planned.world.matchday_cycle?.current_matchday || before.matchday,
       next_turn_at: before.next_turn_at,
-      turn_status: before.turn_status,
+      turn_status: replacementTurnStatus,
       updated_at: now
     };
     const operation = {
@@ -113,7 +130,8 @@ export default async (request) => {
       details: {
         action: 'repair_canonical_registrations_with_selective_free_agents',
         before: { checksum: before.save_checksum, phase: before.phase, turn_status: before.turn_status, matchday: before.matchday },
-        after: { checksum: envelope.checksum, phase: planned.world.phase, turn_status: before.turn_status, matchday: replacement.matchday },
+        after: { checksum: envelope.checksum, phase: planned.world.phase, turn_status: replacementTurnStatus, matchday: replacement.matchday },
+        recovery_lineage: recoveryLineage,
         reservoir: { candidate_count: candidates.length, materialised_count: planned.preview.external_free_agents_materialised, fingerprint, publication_source: WORLD_URL },
         preview
       },
@@ -130,9 +148,9 @@ export default async (request) => {
       return json({ error: message }, 409);
     }
 
-    return json({ action: 'applied', accepted: true, operation_id: operationId, world_id: worldId, previous_checksum: before.save_checksum, replacement_checksum: envelope.checksum, preview });
+    return json({ action: 'applied', accepted: true, operation_id: operationId, world_id: worldId, previous_checksum: before.save_checksum, replacement_checksum: envelope.checksum, replacement_turn_status: replacementTurnStatus, recovery_lineage: recoveryLineage, preview });
   } catch (error) {
-    const status = /Session|Authentication/.test(error.message) ? 401 : /Administrator/.test(error.message) ? 403 : /changed|already|only available|is locking|is processing|remain impossible/.test(error.message) ? 409 : 503;
+    const status = /Session|Authentication/.test(error.message) ? 401 : /Administrator/.test(error.message) ? 403 : /changed|already|only available|is locking|is processing|remain impossible|controlled recovery/.test(error.message) ? 409 : 503;
     return json({ error: error.message }, status);
   }
 };
