@@ -8,7 +8,8 @@ test('bootstrap cannot return legacy score state and manager messages are limite
   const bootstrap = await read('netlify/functions/bootstrap.mjs');
   const projection = await read('src/world/managerPortalProjection.js');
 
-  assert.match(bootstrap, /projectManagerPortal\(world, appointment\.club_id\)/);
+  assert.match(bootstrap, /projectManagerPortal\(world, appointment\.club_id, \{/);
+  assert.match(bootstrap, /nextTurnAt: stored\.next_turn_at/);
   assert.match(bootstrap, /canonicalFixtureIds\(world\)/);
   assert.match(bootstrap, /message\.related_fixture_id/);
   assert.doesNotMatch(bootstrap, /\/rest\/v1\/fixtures/);
