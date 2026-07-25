@@ -4,12 +4,28 @@ export const FITNESS_DIALS = Object.freeze({
   warning_threshold: 70
 });
 
+export const FORMATION_SLOTS = Object.freeze({
+  '4-4-2': Object.freeze(['gk','fb','cb','cb','fb','wide_mid','cm','cm','wide_mid','st','st']),
+  '4-3-3-wide': Object.freeze(['gk','fb','cb','cb','fb','dm','cm','cm','wing','st','wing']),
+  '4-2-3-1': Object.freeze(['gk','fb','cb','cb','fb','dm','dm','wing','am','wing','st']),
+  '4-1-4-1': Object.freeze(['gk','fb','cb','cb','fb','dm','wide_mid','cm','cm','wide_mid','st']),
+  '3-5-2': Object.freeze(['gk','cb','cb','cb','wing_back','cm','dm','cm','wing_back','st','st']),
+  '3-4-3': Object.freeze(['gk','cb','cb','cb','wing_back','cm','cm','wing_back','wing','st','wing']),
+  '5-3-2': Object.freeze(['gk','wing_back','cb','cb','cb','wing_back','dm','cm','cm','st','st'])
+});
+
 const ROLE_DEMAND = Object.freeze({
-  GK: 0.62, CB: 0.92, LCB: 0.92, RCB: 0.92,
-  LB: 1.06, RB: 1.06, LWB: 1.16, RWB: 1.16,
-  LDM: 1, RDM: 1, CM: 1.06, LCM: 1.06, RCM: 1.06,
-  AM: 1.05, LM: 1.1, RM: 1.1, LW: 1.1, RW: 1.1,
-  CF: 1, LCF: 1, RCF: 1, BENCH: 1
+  gk: 0.62,
+  cb: 0.92,
+  fb: 1.06,
+  wing_back: 1.16,
+  dm: 1,
+  cm: 1.06,
+  am: 1.05,
+  wide_mid: 1.1,
+  wing: 1.1,
+  st: 1,
+  bench: 1
 });
 
 const PRESSING_DEMAND = Object.freeze({ low: 0.92, mid: 1, high: 1.18 });
@@ -17,6 +33,10 @@ const TEMPO_DEMAND = Object.freeze({ slow: 0.93, normal: 1, fast: 1.1 });
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const playerId = (player) => String(player?.tbg_player_id || player?.player_id || player?.id || '');
+
+export function canonicalSlotRole(formation, slotIndex) {
+  return FORMATION_SLOTS[String(formation || '4-3-3-wide')]?.[Number(slotIndex)] || 'bench';
+}
 
 export function fitnessBand(value) {
   const fitness = clamp(number(value, 100), 0, 100);
@@ -36,9 +56,9 @@ export function projectedKickoffFitness(currentFitness, days) {
   return clamp(number(currentFitness, 100) + Math.max(0, number(days)) * FITNESS_DIALS.recovery_per_rest_day, 0, 100);
 }
 
-export function projectedPostMatchFitness({ currentFitness, days = 0, role = 'BENCH', pressing = 'mid', tempo = 'normal', workRate = 50 } = {}) {
+export function projectedPostMatchFitness({ currentFitness, days = 0, role = 'bench', pressing = 'mid', tempo = 'normal', workRate = 50 } = {}) {
   const kickoffFitness = projectedKickoffFitness(currentFitness, days);
-  const roleDemand = ROLE_DEMAND[String(role || 'BENCH').toUpperCase()] ?? 1;
+  const roleDemand = ROLE_DEMAND[String(role || 'bench').toLowerCase()] ?? 1;
   const pressingDemand = PRESSING_DEMAND[String(pressing || 'mid').toLowerCase()] ?? 1;
   const tempoDemand = TEMPO_DEMAND[String(tempo || 'normal').toLowerCase()] ?? 1;
   const workRateDemand = 0.9 + clamp(number(workRate, 50), 0, 100) / 500;
@@ -62,6 +82,10 @@ function currentTactics() {
   };
 }
 
+function currentFormation() {
+  return document.getElementById('formation')?.value || '4-3-3-wide';
+}
+
 function fixtureRecoveryDays() {
   return recoveryDays(
     portalState?.last_fixture?.kickoff_at || portalState?.last_fixture?.played_at,
@@ -69,7 +93,7 @@ function fixtureRecoveryDays() {
   );
 }
 
-function playerProjection(player, role = 'BENCH') {
+function playerProjection(player, role = 'bench') {
   const days = fixtureRecoveryDays();
   const current = clamp(number(player?.fitness, 100), 0, 100);
   const kickoff = projectedKickoffFitness(current, days);
@@ -101,9 +125,10 @@ function decoratePitchAndBench() {
     const player = playersById.get(String(id || ''));
     if (!token || !player) return;
     token.querySelector('[data-fitness-metrics]')?.remove();
-    const role = slot.dataset.role || 'BENCH';
+    const isBench = slot.classList.contains('bench-slot');
+    const role = isBench ? 'bench' : canonicalSlotRole(currentFormation(), slot.dataset.index);
     const projection = playerProjection(player, role);
-    token.insertAdjacentHTML('beforeend', metricMarkup(player, role, slot.classList.contains('bench-slot')));
+    token.insertAdjacentHTML('beforeend', metricMarkup(player, role, isBench));
     slot.classList.toggle('low-fitness-selection', projection.kickoff < FITNESS_DIALS.warning_threshold);
     slot.title = `${player.display_name || player.name || id}: ${rounded(projection.current)}% now, ${rounded(projection.kickoff)}% projected at kick-off, ${rounded(projection.post)}% after 90 minutes`;
   });
@@ -120,8 +145,8 @@ function decorateTray() {
     const player = playersById.get(String(button.dataset.playerId || ''));
     if (!player) return;
     button.querySelector('[data-fitness-metrics]')?.remove();
-    const projection = playerProjection(player, 'BENCH');
-    button.insertAdjacentHTML('beforeend', metricMarkup(player, 'BENCH', true));
+    const projection = playerProjection(player, 'bench');
+    button.insertAdjacentHTML('beforeend', metricMarkup(player, 'bench', true));
     button.dataset.fitness = String(projection.current);
     button.dataset.kickoffFitness = String(projection.kickoff);
     button.classList.toggle('low-fitness-selection', projection.kickoff < FITNESS_DIALS.warning_threshold);
