@@ -1,6 +1,11 @@
 import { advancePersistentMatchday, validatePersistentMatchdayWorld } from './persistentMatchdayWorld.js';
 import { loadPersistentWorld, savePersistentWorld } from './persistentSeasonLoop.js';
-import { alignCanonicalFixtureKickoffs, DEFAULT_TURN_HOUR_UTC, DEFAULT_TURN_WEEKDAYS_UTC } from './canonicalTurnCalendar.js';
+import {
+  alignCanonicalFixtureKickoffs,
+  DEFAULT_TURN_HOUR_UTC,
+  DEFAULT_TURN_WEEKDAYS_UTC,
+  repairCompletedFixtureKickoffs
+} from './canonicalTurnCalendar.js';
 
 export const SHARED_WORLD_SCHEDULER_VERSION = 'tbg-shared-world-scheduler-v1.3';
 
@@ -38,7 +43,7 @@ export function validateManagerTurnSubmission(world, submission, { now = new Dat
   if (!worldClubIds.includes(text(submission.club_id))) errors.push('Submission club is not in the canonical world');
   if (nextTurnAt && new Date(now) >= new Date(nextTurnAt)) errors.push('The turn deadline has passed');
   const instruction = submission.instruction || {};
-  if (instruction.starting_xi && (!Array.isArray(instruction.starting_xi) || instruction.starting_xi.length !== 11 || !unique(instruction.starting_xi))) {
+  if (instruction.starting_xi && (!Array.isArray(instruction.starting_xi) || submission.instruction.starting_xi.length !== 11 || !unique(submission.instruction.starting_xi))) {
     errors.push('Starting XI must contain exactly eleven unique players');
   }
   return Object.freeze({ valid: errors.length === 0, errors: Object.freeze(errors), turn });
@@ -156,6 +161,7 @@ export function executeScheduledTurn(worldInput, plan) {
   }
   const cadence = plan.turn_calendar || configuredTurnCalendar(world);
 
+  repairCompletedFixtureKickoffs(world);
   if (world.matchday_cycle) {
     alignCanonicalFixtureKickoffs(world, {
       currentMatchday: current.matchday,
