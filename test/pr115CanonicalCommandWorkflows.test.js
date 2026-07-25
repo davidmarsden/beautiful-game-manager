@@ -76,7 +76,10 @@ test('shared-world submission uses the idempotent transactional RPC', () => {
 test('scheduled outcomes use one transactional finalisation RPC', () => {
   const source = fs.readFileSync(new URL('../netlify/functions/scheduled-world-turn.mjs', import.meta.url), 'utf8');
   const finalizer = source.slice(source.indexOf('async function finalizeCommand'), source.indexOf('async function processWorld'));
-  const outcomeLoop = source.slice(source.indexOf('const commandById'), source.indexOf('await service(`/rest/v1/manager_turn_submissions'));
+  const outcomeStart = source.indexOf('const commandById');
+  const outcomeEnd = source.indexOf('await service(`/rest/v1/manager_turn_submissions', outcomeStart);
+  const outcomeLoop = source.slice(outcomeStart, outcomeEnd);
+  assert.ok(outcomeStart >= 0 && outcomeEnd > outcomeStart, 'Could not isolate the command outcome loop');
   assert.match(finalizer, /\/rest\/v1\/rpc\/finalize_manager_world_command/);
   assert.match(finalizer, /p_command_id/);
   assert.match(finalizer, /p_status/);
