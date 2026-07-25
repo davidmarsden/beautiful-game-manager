@@ -1,18 +1,61 @@
+import { loadPersistentWorld } from '../../src/world/persistentSeasonLoop.js';
+
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const WORLD_URL = process.env.TBG_WORLD_URL || 'https://raw.githubusercontent.com/davidmarsden/beautiful-game-engine/main/derived/world/world.json';
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 const bearer = (request) => {
   const value = request.headers.get('authorization') || '';
   return value.toLowerCase().startsWith('bearer ') ? value.slice(7).trim() : '';
 };
+
 async function service(path) {
   const response = await fetch(`${SUPABASE_URL}${path}`, { headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, accept: 'application/json' } });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.message || body.error || `Supabase returned ${response.status}`);
   return body;
+}
+
+function canonicalFixture(world, fixtureId) {
+  for (const [divisionId, runtime] of Object.entries(world.matchday_cycle?.runtimes || {})) {
+    const fixture = (runtime.fixtures || []).find((row) => String(row.fixture_id) === fixtureId);
+    if (!fixture) continue;
+    const result = (runtime.results || []).find((row) => String(row.fixture?.fixture_id) === fixtureId) || null;
+    return { divisionId, runtime, fixture, result };
+  }
+  return null;
+}
+
+function clubName(world, clubId) {
+  return world.club_profiles?.[clubId]?.club_name || clubId;
+}
+
+function playerName(world, playerId) {
+  const player = world.squad_cycle?.players?.[playerId];
+  return player?.display_name || player?.player_name || player?.canonical_name || playerId || null;
+}
+
+function decorateEvent(world, event) {
+  return {
+    ...event,
+    player_name: event.player_name || playerName(world, event.player_id),
+    assist_player_name: event.assist_player_name || playerName(world, event.assist_player_id)
+  };
+}
+
+function decorateSubmission(world, submission) {
+  const startingXi = submission.starting_xi || submission.instructions?.starting_xi || [];
+  const bench = submission.bench || submission.instructions?.bench || [];
+  return {
+    ...submission,
+    formation: submission.formation || submission.instructions?.formation || null,
+    tactics: submission.tactics || submission.instructions?.tactics || {},
+    submission_source: submission.submission_source || submission.source || 'canonical_turn_submission',
+    starting_xi: startingXi.map((id) => ({ id, name: playerName(world, id) })),
+    bench: bench.map((id) => ({ id, name: playerName(world, id) })),
+    captain_name: playerName(world, submission.captain_id || submission.instructions?.captain_id)
+  };
 }
 
 export default async (request) => {
@@ -30,48 +73,54 @@ export default async (request) => {
     const manager = profiles[0];
     if (!manager) return json({ error: 'Manager profile not found' }, 403);
     const appointments = await service(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=world_id,club_id`);
-    const fixtureRows = await service(`/rest/v1/fixtures?id=eq.${encodeURIComponent(fixtureId)}&select=*&limit=1`);
-    const fixture = fixtureRows[0];
-    if (!fixture) return json({ error: 'Fixture not found' }, 404);
-    const appointment = appointments.find((row) => row.world_id === fixture.world_id && [fixture.home_club_id, fixture.away_club_id].includes(row.club_id));
-    if (!appointment) return json({ error: 'You do not have access to this fixture' }, 403);
-    if (fixture.status !== 'played') return json({ error: 'Match reports are available only after full time' }, 409);
+    if (!appointments.length) return json({ error: 'Manager has no active world appointment' }, 403);
 
-    const views = await service(`/rest/v1/manager_match_views?manager_id=eq.${encodeURIComponent(manager.id)}&fixture_id=eq.${encodeURIComponent(fixtureId)}&select=revealed_at,reveal_method,replay_completed&limit=1`).catch(() => []);
-    const revealed = Boolean(views[0]?.revealed_at);
-    const [events, runs, worldResponse] = await Promise.all([
-      service(`/rest/v1/match_events?fixture_id=eq.${encodeURIComponent(fixtureId)}&select=*&order=minute.asc,event_id.asc`),
-      service(`/rest/v1/match_runs?fixture_id=eq.${encodeURIComponent(fixtureId)}&select=result_payload,request_payload&limit=1`),
-      fetch(WORLD_URL, { headers: { accept: 'application/json' } })
-    ]);
-    if (!worldResponse.ok) throw new Error(`World source returned ${worldResponse.status}`);
-    const world = await worldResponse.json();
-    const clubs = new Map((world.clubs || []).map((club) => [club.tbg_club_id, club]));
-    const players = new Map((world.players || []).map((player) => [player.tbg_player_id, player]));
-    const playerName = (id) => {
-      const player = players.get(id);
-      return player?.display_name || player?.player_name || player?.canonical_name || id || null;
-    };
-    const decoratedEvents = events.map((event) => ({ ...event, player_name: playerName(event.player_id), assist_player_name: playerName(event.assist_player_id) }));
-    const publicFixture = {
-      id: fixture.id,
-      world_id: fixture.world_id,
-      competition_id: fixture.competition_id,
-      matchday: fixture.matchday,
-      played_at: fixture.played_at,
-      home_club_id: fixture.home_club_id,
-      away_club_id: fixture.away_club_id,
-      home_club_name: clubs.get(fixture.home_club_id)?.canonical_name || fixture.home_club_id,
-      away_club_name: clubs.get(fixture.away_club_id)?.canonical_name || fixture.away_club_id,
-      managed_club_id: appointment.club_id,
-      ...(revealed ? { home_score: fixture.home_score, away_score: fixture.away_score } : {})
-    };
-    if (!revealed) return json({ fixture: publicFixture, events: decoratedEvents, revealed: false, reveal: null });
+    for (const appointment of appointments) {
+      const saves = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(appointment.world_id)}&select=save_envelope&limit=1`);
+      if (!saves[0]?.save_envelope) continue;
+      const world = loadPersistentWorld(JSON.stringify(saves[0].save_envelope));
+      const canonical = canonicalFixture(world, fixtureId);
+      if (!canonical) continue;
+      const { divisionId, fixture, result } = canonical;
+      if (![fixture.home_club_id, fixture.away_club_id].includes(appointment.club_id)) return json({ error: 'You do not have access to this fixture' }, 403);
+      if (!result) return json({ error: 'Match reports are available only after full time' }, 409);
 
-    const submissions = await service(`/rest/v1/manager_submissions?fixture_id=eq.${encodeURIComponent(fixtureId)}&select=club_id,formation,starting_xi,bench,captain_id,tactics,set_piece_takers,submission_source,version`);
-    const decorateSubmission = (submission) => ({ ...submission, starting_xi: (submission.starting_xi || []).map((id) => ({ id, name: playerName(id) })), bench: (submission.bench || []).map((id) => ({ id, name: playerName(id) })), captain_name: playerName(submission.captain_id) });
-    const run = runs[0] || {};
-    return json({ fixture: publicFixture, events: decoratedEvents, submissions: submissions.map(decorateSubmission), result: run.result_payload || fixture.result_payload || {}, engine_contract: run.request_payload || null, revealed: true, reveal: views[0] });
+      const submissionRows = await service(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(world.world_id)}&season_id=eq.${encodeURIComponent(world.squad_cycle.season_id)}&matchday=eq.${encodeURIComponent(fixture.matchday)}&club_id=in.(${encodeURIComponent(fixture.home_club_id)},${encodeURIComponent(fixture.away_club_id)})&select=*&order=submitted_at.desc`).catch(() => []);
+      const latestByClub = new Map();
+      for (const row of submissionRows) if (!latestByClub.has(row.club_id)) latestByClub.set(row.club_id, row);
+      const embeddedTeams = result.teams || {};
+      for (const clubId of [fixture.home_club_id, fixture.away_club_id]) {
+        if (!latestByClub.has(clubId) && embeddedTeams[clubId]) latestByClub.set(clubId, { club_id: clubId, ...embeddedTeams[clubId], submission_source: embeddedTeams[clubId].submission_source || 'deterministic_fallback' });
+      }
+
+      const score = result.score || {};
+      const publicFixture = {
+        id: fixture.fixture_id,
+        fixture_id: fixture.fixture_id,
+        world_id: world.world_id,
+        competition_id: divisionId,
+        matchday: fixture.matchday,
+        played_at: fixture.kickoff_at,
+        home_club_id: fixture.home_club_id,
+        away_club_id: fixture.away_club_id,
+        home_club_name: clubName(world, fixture.home_club_id),
+        away_club_name: clubName(world, fixture.away_club_id),
+        managed_club_id: appointment.club_id,
+        home_score: score.home ?? null,
+        away_score: score.away ?? null
+      };
+      return json({
+        fixture: publicFixture,
+        events: (result.events || []).map((event) => decorateEvent(world, event)),
+        submissions: [...latestByClub.values()].map((submission) => decorateSubmission(world, submission)),
+        result,
+        engine_contract: result.engine_contract || result.request_payload || null,
+        revealed: true,
+        reveal: { reveal_method: 'canonical_result', revealed_at: fixture.kickoff_at }
+      });
+    }
+
+    return json({ error: 'Fixture not found' }, 404);
   } catch (error) {
     return json({ error: error.message }, 500);
   }
