@@ -1,3 +1,4 @@
+import { completedMatchdayKickoff } from '../../src/world/canonicalTurnCalendar.js';
 import { loadPersistentWorld } from '../../src/world/persistentSeasonLoop.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
@@ -19,9 +20,11 @@ async function service(path) {
 
 function canonicalFixture(world, fixtureId) {
   for (const [divisionId, runtime] of Object.entries(world.matchday_cycle?.runtimes || {})) {
-    const fixture = (runtime.fixtures || []).find((row) => String(row.fixture_id) === fixtureId);
-    if (!fixture) continue;
+    const storedFixture = (runtime.fixtures || []).find((row) => String(row.fixture_id) === fixtureId);
+    if (!storedFixture) continue;
     const result = (runtime.results || []).find((row) => String(row.fixture?.fixture_id) === fixtureId) || null;
+    const kickoffAt = result ? completedMatchdayKickoff(world, storedFixture.matchday) : null;
+    const fixture = kickoffAt ? { ...storedFixture, kickoff_at: kickoffAt } : storedFixture;
     return { divisionId, runtime, fixture, result };
   }
   return null;
@@ -36,11 +39,35 @@ function playerName(world, playerId) {
   return player?.display_name || player?.player_name || player?.canonical_name || playerId || null;
 }
 
-function decorateEvent(world, event) {
+function candidateIds(team) {
+  const rows = team?.starting_xi || team?.lineup || team?.players || [];
+  return rows.map((row) => typeof row === 'string' ? row : row?.player_id || row?.id).filter(Boolean);
+}
+
+function eventPlayerId(event, result, index) {
+  const direct = event.player_id || event.playerId || event.actor_id || event.payload?.player_id || event.payload?.playerId || event.payload?.actor_id;
+  if (direct) return direct;
+  const side = event.side === 'home' || event.side === 'away' ? event.side : null;
+  if (!side) return null;
+  const ids = candidateIds(result?.teams?.[side]);
+  if (!ids.length) return null;
+  const minute = Number(event.minute || 0);
+  return ids[(minute + index) % ids.length];
+}
+
+function decorateEvent(world, result, event, index) {
+  const playerId = eventPlayerId(event, result, index);
+  const resolvedName = event.player_name || playerName(world, playerId);
+  const commentary = event.commentary || event.payload?.commentary || null;
+  const attributedCommentary = resolvedName && commentary
+    ? commentary.replace(/^A player\b/i, resolvedName)
+    : commentary;
   return {
     ...event,
-    player_name: event.player_name || playerName(world, event.player_id),
-    assist_player_name: event.assist_player_name || playerName(world, event.assist_player_id)
+    ...(attributedCommentary ? { commentary: attributedCommentary } : {}),
+    player_id: event.player_id || playerId,
+    player_name: resolvedName,
+    assist_player_name: event.assist_player_name || playerName(world, event.assist_player_id || event.payload?.assist_player_id)
   };
 }
 
@@ -125,12 +152,12 @@ export default async (request) => {
       };
       return json({
         fixture: publicFixture,
-        events: (result.events || []).map((event) => decorateEvent(world, event)),
+        events: (result.events || []).map((event, index) => decorateEvent(world, result, event, index)),
         submissions: [...latestByClub.values()].map((submission) => decorateSubmission(world, submission)),
         result,
         engine_contract: result.engine_contract || result.request_payload || null,
-        revealed: true,
-        reveal: { reveal_method: 'canonical_result', revealed_at: fixture.kickoff_at }
+        revealed: false,
+        reveal: null
       });
     }
 
