@@ -2,6 +2,7 @@ import { buildPortalViewModel } from './portal-v1-model.js';
 
 const $ = (id) => document.getElementById(id);
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
+let nextFixtureCountdownTimer = null;
 
 function mountPortalWorkspace() {
   if (!document.querySelector('link[href="./portal-v1.css"]')) {
@@ -61,6 +62,36 @@ function showView(name) {
   document.querySelector(`#${name}View`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+function kickoffDateTime(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  }).format(date);
+}
+
+function kickoffCountdown(value, now = new Date()) {
+  if (!value) return null;
+  const kickoff = new Date(value);
+  if (Number.isNaN(kickoff.getTime())) return null;
+  const milliseconds = kickoff.getTime() - now.getTime();
+  if (milliseconds <= 0) return 'Kick-off due';
+  const totalMinutes = Math.ceil(milliseconds / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  if (days) return `${days}d ${hours}h until kick-off`;
+  if (hours) return `${hours}h ${minutes}m until kick-off`;
+  return `${minutes}m until kick-off`;
+}
+
+function fixtureTimingText(model) {
+  const date = kickoffDateTime(model.summary.next_kickoff_at);
+  const countdown = kickoffCountdown(model.summary.next_kickoff_at);
+  return [date, countdown].filter(Boolean).join(' · ');
+}
+
 function renderSummary(model) {
   if (!$('portalOverview')) return;
   const position = model.summary.table_position ? `${model.summary.table_position}` : '—';
@@ -68,13 +99,13 @@ function renderSummary(model) {
   const progressDetail = model.summary.progress_known ? `${model.summary.progress_percent}% complete` : 'Total schedule unavailable';
   const fixtureLabel = model.summary.has_next_fixture ? 'Next opponent' : 'Fixture status';
   const fixtureDetail = model.summary.has_next_fixture
-    ? (model.summary.submitted ? 'Team submitted' : 'Selection required')
+    ? (fixtureTimingText(model) || (model.summary.submitted ? 'Team submitted' : 'Selection required'))
     : 'No selection needed';
   $('portalOverview').innerHTML = `
     <article><span>League position</span><strong>${position}</strong><small>${model.summary.points ?? '—'} pts</small></article>
     <article><span>Season progress</span><strong>${progress}</strong><small>${progressDetail}</small></article>
     <article><span>Registered squad</span><strong>${model.summary.registered}</strong><small>${model.summary.available} available</small></article>
-    <article><span>${fixtureLabel}</span><strong>${escapeHtml(model.summary.next_opponent)}</strong><small>${fixtureDetail}</small></article>`;
+    <article><span>${fixtureLabel}</span><strong>${escapeHtml(model.summary.next_opponent)}</strong><small id="portalNextKickoff">${escapeHtml(fixtureDetail)}</small></article>`;
 }
 
 function renderLegacyNextFixture(model) {
@@ -93,10 +124,24 @@ function renderLegacyNextFixture(model) {
     }
 
     card.textContent = model.summary.next_opponent;
-    summary.textContent = model.summary.submitted ? 'Team submitted' : 'No team submitted';
+    const timing = fixtureTimingText(model);
+    const submission = model.summary.submitted ? 'Team submitted' : 'No team submitted';
+    summary.textContent = timing ? `${timing} · ${submission}` : submission;
     button.hidden = false;
     button.disabled = false;
   });
+}
+
+function startNextFixtureCountdown(model) {
+  clearInterval(nextFixtureCountdownTimer);
+  if (!model.summary.next_kickoff_at) return;
+  nextFixtureCountdownTimer = setInterval(() => {
+    const timing = fixtureTimingText(model);
+    const overview = $('portalNextKickoff');
+    if (overview && timing) overview.textContent = timing;
+    const summary = $('submissionSummary');
+    if (summary && timing) summary.textContent = `${timing} · ${model.summary.submitted ? 'Team submitted' : 'No team submitted'}`;
+  }, 60000);
 }
 
 function renderAlerts(model) {
@@ -156,6 +201,7 @@ function renderPortal(data) {
     const model = buildPortalViewModel(data);
     renderSummary(model);
     renderLegacyNextFixture(model);
+    startNextFixtureCountdown(model);
     renderAlerts(model);
     renderDepth(model);
     renderContracts(model);
