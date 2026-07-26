@@ -41,6 +41,40 @@ function liveDivisions(world, managedClubId) {
   }).sort((a, b) => a.level - b.level);
 }
 
+function clubDirectory(world) {
+  const divisionByClub = new Map((world.competition?.divisions || []).flatMap((division) =>
+    (division.club_ids || []).map((clubId) => [clubId, division])));
+  return Object.fromEntries([...divisionByClub.entries()].map(([clubId, division]) => {
+    const profile = world.club_profiles?.[clubId] || {};
+    const club = world.squad_cycle?.clubs?.[clubId] || {};
+    const players = (club.player_ids || []).map((playerId) => {
+      const player = world.squad_cycle?.players?.[playerId] || {};
+      return {
+        player_id: playerId,
+        display_name: playerName(world, playerId),
+        position: text(player.specific_position || player.position || player.primary_position || player.position_group) || 'Unknown',
+        age: number(player.age, null),
+        rating: number(player.underlying_ability_rating ?? player.rating, null),
+        registered: Array.isArray(club.registered_player_ids) ? club.registered_player_ids.includes(playerId) : Boolean(player.registered),
+        transfer_listed: Boolean(player.transfer_listed),
+        loan_listed: Boolean(player.loan_listed)
+      };
+    }).sort((a, b) => number(b.rating, -1) - number(a.rating, -1) || a.display_name.localeCompare(b.display_name));
+    return [clubId, {
+      club_id: clubId,
+      club_name: clubName(world, clubId),
+      division_id: division.division_id,
+      division_name: `Division ${division.level}`,
+      level: division.level,
+      country: text(profile.country || profile.nation),
+      stadium: text(profile.stadium_name || profile.stadium),
+      reputation: number(profile.reputation ?? profile.club_reputation, null),
+      player_count: players.length,
+      players
+    }];
+  }));
+}
+
 function parentSeasonId(archive) {
   return text(archive.season_id).replace(/:(?:d|division-)\d+$/, '');
 }
@@ -112,10 +146,7 @@ function seasonGroups(world, reportBundles = []) {
         level,
         name: `Division ${level}`,
         archived_at: archive.archived_at,
-        summary: {
-          ...archive.summary,
-          champion_club_name: clubName(world, archive.summary?.champion_club_id)
-        },
+        summary: { ...archive.summary, champion_club_name: clubName(world, archive.summary?.champion_club_id) },
         standings: (archive.clubs || []).map((row) => ({ ...row, club_name: clubName(world, row.club_id) })),
         awards: Object.fromEntries(Object.entries(archive.awards || {}).map(([key, value]) => [key, decorateAward(world, value)])),
         records: Object.fromEntries(Object.entries(archive.records || {}).map(([key, value]) => [key, decorateAward(world, value)])),
@@ -166,6 +197,7 @@ export function projectPersistentHistory(world, { managedClubId = null, reportBu
     current_season_id: world.squad_cycle?.season_id,
     current_season_number: world.season_number,
     live_divisions: liveDivisions(world, managedClubId),
+    clubs: clubDirectory(world),
     seasons,
     movement_history: movements,
     managed_club_history: managedClubId ? clubHistory(world, managedClubId, seasons, movements) : null,
