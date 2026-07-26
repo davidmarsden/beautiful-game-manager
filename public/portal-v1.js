@@ -92,6 +92,27 @@ function fixtureTimingText(model) {
   return [date, countdown].filter(Boolean).join(' · ');
 }
 
+function clubLinkMarkup(clubId, clubName) {
+  return clubId
+    ? `<span role="link" tabindex="0" class="portal-club-link" data-club-id="${escapeHtml(clubId)}">${escapeHtml(clubName)}</span>`
+    : escapeHtml(clubName);
+}
+
+function applyClubIdentity(element, clubId) {
+  if (!element) return;
+  if (clubId) {
+    element.dataset.clubId = clubId;
+    element.classList.add('portal-club-link');
+    element.setAttribute('role', 'link');
+    element.tabIndex = 0;
+  } else {
+    delete element.dataset.clubId;
+    element.classList.remove('portal-club-link');
+    element.removeAttribute('role');
+    element.removeAttribute('tabindex');
+  }
+}
+
 function renderSummary(model) {
   if (!$('portalOverview')) return;
   const position = model.summary.table_position ? `${model.summary.table_position}` : '—';
@@ -105,18 +126,22 @@ function renderSummary(model) {
     <article><span>League position</span><strong>${position}</strong><small>${model.summary.points ?? '—'} pts</small></article>
     <article><span>Season progress</span><strong>${progress}</strong><small>${progressDetail}</small></article>
     <article><span>Registered squad</span><strong>${model.summary.registered}</strong><small>${model.summary.available} available</small></article>
-    <article><span>${fixtureLabel}</span><strong>${escapeHtml(model.summary.next_opponent)}</strong><small id="portalNextKickoff">${escapeHtml(fixtureDetail)}</small></article>`;
+    <article><span>${fixtureLabel}</span><strong>${clubLinkMarkup(model.summary.next_opponent_id, model.summary.next_opponent)}</strong><small id="portalNextKickoff">${escapeHtml(fixtureDetail)}</small></article>`;
 }
 
 function renderLegacyNextFixture(model) {
   window.requestAnimationFrame(() => {
     const card = $('nextFixtureCard');
+    const strip = $('nextOpponent');
     const summary = $('submissionSummary');
     const button = card?.closest('.panel')?.querySelector('button[data-view="tactics"]');
     if (!card || !summary || !button) return;
 
     if (!model.summary.has_next_fixture) {
       card.textContent = 'Schedule pending';
+      if (strip) strip.textContent = 'No fixture scheduled';
+      applyClubIdentity(card, '');
+      applyClubIdentity(strip, '');
       summary.textContent = 'No selection needed';
       button.hidden = true;
       button.disabled = true;
@@ -124,6 +149,9 @@ function renderLegacyNextFixture(model) {
     }
 
     card.textContent = model.summary.next_opponent;
+    if (strip) strip.textContent = model.summary.next_opponent;
+    applyClubIdentity(card, model.summary.next_opponent_id);
+    applyClubIdentity(strip, model.summary.next_opponent_id);
     const timing = fixtureTimingText(model);
     const submission = model.summary.submitted ? 'Team submitted' : 'No team submitted';
     summary.textContent = timing ? `${timing} · ${submission}` : submission;
