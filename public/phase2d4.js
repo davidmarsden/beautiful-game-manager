@@ -114,5 +114,5 @@ async function openMatchCentre(fixtureId) {
   if (!response.ok) { modal.querySelector('#matchCentreContent').innerHTML = `<div class="match-centre-error">${mcEscape(data.error || 'Could not load match report')}</div>`; return; }
   renderMatchCentre(data);
 }
-document.addEventListener('click', (event) => { const target = event.target.closest('[data-match-centre]'); if (!target) return; event.preventDefault(); openMatchCentre(target.dataset.matchCentre); });
-document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeMatchCentre(); const target = event.target.closest?.('[data-match-centre]'); if (target && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); openMatchCentre(target.dataset.matchCentre); } });
+document.addEventListener('click', (event) => { if (event.target.closest('[data-club-id]')) return; const target = event.target.closest('[data-match-centre]'); if (!target) return; event.preventDefault(); openMatchCentre(target.dataset.matchCentre); });
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeMatchCentre(); if (event.target.closest?.('[data-club-id]')) return; const target = event.target.closest?.('[data-match-centre]'); if (target && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); openMatchCentre(target.dataset.matchCentre); } });
