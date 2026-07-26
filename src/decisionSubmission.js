@@ -1,3 +1,5 @@
+import { findWorldFixture, ineligibleLoanPlayerIds } from './world/loanEligibility.js';
+
 const text = (value) => String(value ?? "").trim();
 export const MANAGER_DECISION_VERSION = "tbg-manager-decision-v0.1";
 export const ALLOWED_FORMATIONS = new Set(["4-4-2","4-3-3-wide","4-2-3-1","4-1-4-1","3-5-2","3-4-3","5-3-2"]);
@@ -28,6 +30,11 @@ export function validateManagerDecision(decision, world) {
   if(!club) errors.push(`club not found: ${clubId||"blank"}`);
   const invalid=[...startingXi,...bench].filter((id)=>!squadIds.has(id));
   if(invalid.length) errors.push(`players are not registered to this club: ${invalid.join(", ")}`);
+  const fixture=findWorldFixture(world,fixtureId);
+  if(fixture){
+    const restricted=ineligibleLoanPlayerIds({playerIds:[...startingXi,...bench],clubId,fixture,world});
+    if(restricted.length) errors.push(`loan players cannot face their parent club in this competition: ${restricted.join(", ")}`);
+  }
   if(captainId&&!startingXi.includes(captainId)) errors.push("captain_id must be in the starting XI");
   for(const [key,allowed] of Object.entries(ALLOWED_TACTIC_VALUES)){
     const value=text(tactics[key]); if(!allowed.has(value)) errors.push(`invalid tactics.${key}: ${value||"blank"}`);

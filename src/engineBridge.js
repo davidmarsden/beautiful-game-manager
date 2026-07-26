@@ -1,3 +1,5 @@
+import { ineligibleLoanPlayerIds } from './world/loanEligibility.js';
+
 const text = (value) => String(value ?? '').trim();
 
 export function loadFixtureSubmissions(fixture, submissions) {
@@ -19,6 +21,18 @@ export function loadFixtureSubmissions(fixture, submissions) {
   return { home, away };
 }
 
+function validateLoanEligibility(fixture, submission, world) {
+  const ineligible = ineligibleLoanPlayerIds({
+    playerIds: [...submission.starting_xi, ...submission.bench],
+    clubId: submission.club_id,
+    fixture,
+    world
+  });
+  if (ineligible.length) {
+    throw new Error(`Locked submission for ${submission.club_id} contains loan players ineligible against their parent club: ${ineligible.join(', ')}`);
+  }
+}
+
 function teamContract(side, clubId, submission) {
   return {
     side,
@@ -38,6 +52,8 @@ function teamContract(side, clubId, submission) {
 
 export function buildEngineMatchContract({ fixture, submissions, world }) {
   const { home, away } = loadFixtureSubmissions(fixture, submissions);
+  validateLoanEligibility(fixture, home, world);
+  validateLoanEligibility(fixture, away, world);
   const worldId = text(fixture.world_id || world?.world_id);
   const seasonId = text(fixture.season_id || world?.active_season_id);
   if (!worldId) throw new Error('Fixture/world does not provide a world_id');
