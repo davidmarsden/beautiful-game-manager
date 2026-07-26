@@ -48,7 +48,7 @@ test('summary and lineups expose ratings and key contributions', async () => {
 
 test('dark-theme semantic event treatments remain responsive', async () => {
   const source = await read('../public/phase2d4.css');
-  for (const className of ['event-goal', 'event-assist', 'event-yellow', 'event-red', 'event-penalty-awarded', 'event-penalty-missed', 'event-free-kick', 'event-foul', 'event-save', 'event-defensive', 'event-substitution', 'event-injury']) {
+  for (const className of ['event-goal', 'event-assist', 'event-yellow', 'event-red', 'event-penalty-awarded', 'event-penalty-missed', 'event-free-kick', 'event-foul', 'event-save', 'event-defensive-action', 'event-substitution', 'event-injury']) {
     assert.match(source, new RegExp(`\\.${className}(?:,|\\{)`));
   }
   assert.match(source, /match-summary-grid/);
