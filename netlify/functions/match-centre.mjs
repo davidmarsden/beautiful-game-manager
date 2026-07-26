@@ -132,8 +132,8 @@ export default async (request) => {
         submissions: [...latestByClub.values()].map((submission) => decorateSubmission(world, submission)),
         result,
         engine_contract: result.engine_contract || result.request_payload || null,
-        revealed: true,
-        reveal: { reveal_method: 'competition_results', revealed_at: fixture.kickoff_at }
+        revealed: false,
+        reveal: null
       });
     }
     return json({ error: 'Fixture not found' }, 404);
