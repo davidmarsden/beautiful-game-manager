@@ -50,6 +50,10 @@ function archiveDivisionId(archive) {
   return match?.[1]?.replace('division-', 'd') || null;
 }
 
+function seasonNumber(seasonId) {
+  return number(text(seasonId).match(/season-(\d+)/)?.[1], 0);
+}
+
 function decorateAward(world, award) {
   if (!award) return null;
   return {
@@ -79,7 +83,17 @@ function decorateResult(world, result) {
   };
 }
 
-function seasonGroups(world) {
+function reportMap(reportBundles = []) {
+  const map = new Map();
+  for (const bundle of reportBundles || []) {
+    const key = text(bundle.report_store_key || bundle.archive_id || bundle.season_id);
+    if (key) map.set(key, bundle.reports || bundle.results || []);
+  }
+  return map;
+}
+
+function seasonGroups(world, reportBundles = []) {
+  const reportsByKey = reportMap(reportBundles);
   const groups = new Map();
   for (const archive of world.history?.archives || []) {
     const seasonId = parentSeasonId(archive);
@@ -91,6 +105,7 @@ function seasonGroups(world) {
     const divisions = archives.map((archive) => {
       const divisionId = archiveDivisionId(archive);
       const level = number(divisionId?.replace('d', ''), 1);
+      const storedResults = reportsByKey.get(text(archive.report_store_key)) || [];
       return {
         archive_id: archive.archive_id,
         division_id: divisionId || 'd1',
@@ -104,13 +119,13 @@ function seasonGroups(world) {
         standings: (archive.clubs || []).map((row) => ({ ...row, club_name: clubName(world, row.club_id) })),
         awards: Object.fromEntries(Object.entries(archive.awards || {}).map(([key, value]) => [key, decorateAward(world, value)])),
         records: Object.fromEntries(Object.entries(archive.records || {}).map(([key, value]) => [key, decorateAward(world, value)])),
-        results: (archive.results || []).map((result) => decorateResult(world, result)),
-        legacy_result_count: archive.results ? 0 : (archive.source_fixture_ids || []).length
+        results: storedResults.map((result) => decorateResult(world, result)),
+        legacy_result_count: storedResults.length ? 0 : (archive.source_fixture_ids || []).length
       };
     }).sort((a, b) => a.level - b.level);
     return {
       season_id: seasonId,
-      season_number: number(seasonId.match(/season-(\d+)/)?.[1], 0),
+      season_number: seasonNumber(seasonId),
       archived_at: divisions.map((row) => row.archived_at).filter(Boolean).sort().at(-1) || null,
       divisions,
       movement_ids: completed?.movement_ids || []
@@ -123,8 +138,9 @@ function movementHistory(world) {
     ...row,
     club_name: clubName(world, row.club_id),
     from_division_name: row.from_division_id ? `Division ${text(row.from_division_id).replace(/\D/g, '')}` : null,
-    to_division_name: row.to_division_id ? `Division ${text(row.to_division_id).replace(/\D/g, '')}` : null
-  })).sort((a, b) => text(b.season_id).localeCompare(text(a.season_id)) || text(a.club_id).localeCompare(text(b.club_id)));
+    to_division_name: row.to_division_id ? `Division ${text(row.to_division_id).replace(/\D/g, '')}` : null,
+    season_number: seasonNumber(row.season_id)
+  })).sort((a, b) => b.season_number - a.season_number || text(a.club_id).localeCompare(text(b.club_id)));
 }
 
 function clubHistory(world, clubId, seasons, movements) {
@@ -142,8 +158,8 @@ function clubHistory(world, clubId, seasons, movements) {
   };
 }
 
-export function projectPersistentHistory(world, { managedClubId = null } = {}) {
-  const seasons = seasonGroups(world);
+export function projectPersistentHistory(world, { managedClubId = null, reportBundles = [] } = {}) {
+  const seasons = seasonGroups(world, reportBundles);
   const movements = movementHistory(world);
   return {
     world_id: world.world_id,
