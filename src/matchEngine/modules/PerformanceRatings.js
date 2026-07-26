@@ -61,11 +61,61 @@ function scoreTimeline(events) {
 }
 
 function meaningfulEvent(event, playerId) {
-  return event.player_id === playerId && ['goal', 'big_chance', 'penalty', 'yellow_card', 'red_card', 'injury'].includes(event.type)
-    || event.assist_player_id === playerId;
+  const attributable = event.player_id === playerId;
+  if (event.assist_player_id === playerId) return true;
+  if (!attributable) return false;
+  if (event.type === 'foul' && event.subtype === 'penalty_foul') return true;
+  return ['goal', 'big_chance', 'penalty', 'yellow_card', 'red_card', 'injury'].includes(event.type);
 }
 
-function contributionForPlayer({ playerId, side, role, events, opponentGoalkeeperId, timeline }) {
+function goalkeeperEvidence(context, resolution, quality, side) {
+  const qualityById = sideQuality(quality, side);
+  const startingGoalkeeper = quality?.[side]?.starters?.find((row) => row.required_role === 'gk')?.player_id || null;
+  let activeGoalkeeper = startingGoalkeeper ? String(startingGoalkeeper) : null;
+  const evidence = new Map();
+  const yellowCards = new Map();
+  const ensure = (playerId) => {
+    if (!playerId) return null;
+    const key = String(playerId);
+    if (!evidence.has(key)) evidence.set(key, { saves: 0, penalty_saves: 0 });
+    return evidence.get(key);
+  };
+  if (activeGoalkeeper) ensure(activeGoalkeeper);
+
+  for (const event of resolution.official_event_stream || []) {
+    if (event.side === side && event.type === 'substitution') {
+      const outgoing = event.player_out_id ? String(event.player_out_id) : null;
+      const incoming = event.player_in_id ? String(event.player_in_id) : null;
+      if (outgoing === activeGoalkeeper) activeGoalkeeper = null;
+      const incomingRole = incoming ? playerRole(context.playersById.get(incoming) || {}, qualityById.get(incoming) || null) : 'unknown';
+      if (incomingRole === 'goalkeeper') {
+        activeGoalkeeper = incoming;
+        ensure(incoming);
+      }
+      continue;
+    }
+
+    if (event.side === side && event.type === 'yellow_card' && event.player_id) {
+      const playerId = String(event.player_id);
+      const count = (yellowCards.get(playerId) || 0) + 1;
+      yellowCards.set(playerId, count);
+      if (playerId === activeGoalkeeper && count >= 2) activeGoalkeeper = null;
+      continue;
+    }
+    if (event.side === side && event.type === 'red_card' && String(event.player_id || '') === activeGoalkeeper) {
+      activeGoalkeeper = null;
+      continue;
+    }
+
+    if (!activeGoalkeeper || event.side === side) continue;
+    const row = ensure(activeGoalkeeper);
+    if (['shot', 'big_chance'].includes(event.type) && event.on_target === true && event.outcome !== 'goal') row.saves += 1;
+    if (event.type === 'penalty' && event.subtype === 'penalty_attempt' && event.outcome === 'saved') row.penalty_saves += 1;
+  }
+  return evidence;
+}
+
+function contributionForPlayer({ playerId, side, role, events, goalkeeperEvidenceById, timeline }) {
   let outcomes = 0;
   let chance = 0;
   let defensive = 0;
@@ -78,6 +128,9 @@ function contributionForPlayer({ playerId, side, role, events, opponentGoalkeepe
   const goals = own.filter((event) => event.type === 'goal' && event.player_id === playerId);
   const assists = own.filter((event) => event.assist_player_id === playerId);
   const shots = own.filter((event) => ['shot', 'big_chance'].includes(event.type) && event.player_id === playerId);
+  const yellowCards = own.filter((event) => event.type === 'yellow_card' && event.player_id === playerId).length;
+  const straightRed = own.some((event) => event.type === 'red_card' && event.player_id === playerId);
+  const secondYellowDismissal = !straightRed && yellowCards >= 2;
 
   for (const event of own) {
     if (event.type === 'goal' && event.player_id === playerId) {
@@ -96,13 +149,13 @@ function contributionForPlayer({ playerId, side, role, events, opponentGoalkeepe
       if (event.outcome === 'saved' || event.outcome === 'missed') outcomes -= 0.8;
     }
   }
+  if (secondYellowDismissal) discipline -= 1.25;
 
-  const saves = events.filter((event) => event.side !== side && ['shot', 'big_chance'].includes(event.type) && event.on_target === true && event.outcome !== 'goal').length;
-  const penaltySaves = events.filter((event) => event.side !== side && event.type === 'penalty' && event.subtype === 'penalty_attempt' && event.outcome === 'saved').length;
-  if (role === 'goalkeeper' && playerId === opponentGoalkeeperId) {
-    defensive += Math.min(0.8, saves * 0.14) + penaltySaves * 1.25;
-    if (saves) highlights.push(`${saves} save${saves === 1 ? '' : 's'}`);
-    if (penaltySaves) highlights.push(`${penaltySaves} penalty saved`);
+  if (role === 'goalkeeper') {
+    const keeperEvidence = goalkeeperEvidenceById.get(playerId) || { saves: 0, penalty_saves: 0 };
+    defensive += Math.min(0.8, keeperEvidence.saves * 0.14) + keeperEvidence.penalty_saves * 1.25;
+    if (keeperEvidence.saves) highlights.push(`${keeperEvidence.saves} save${keeperEvidence.saves === 1 ? '' : 's'}`);
+    if (keeperEvidence.penalty_saves) highlights.push(`${keeperEvidence.penalty_saves} penalty saved`);
   }
 
   if (role === 'defender') {
@@ -115,8 +168,8 @@ function contributionForPlayer({ playerId, side, role, events, opponentGoalkeepe
   if (goals.length) highlights.push(`${goals.length} goal${goals.length === 1 ? '' : 's'}`);
   if (assists.length) highlights.push(`${assists.length} assist${assists.length === 1 ? '' : 's'}`);
   if (shots.filter((event) => event.type === 'big_chance' && event.outcome !== 'goal').length) highlights.push('major chance missed');
-  if (own.some((event) => event.type === 'red_card' && event.player_id === playerId)) highlights.push('sent off');
-  else if (own.some((event) => event.type === 'yellow_card' && event.player_id === playerId)) highlights.push('booked');
+  if (straightRed || secondYellowDismissal) highlights.push('sent off');
+  else if (yellowCards) highlights.push('booked');
 
   return {
     outcomes: clamp(outcomes, -2, 2.5), chance: clamp(chance, -1, 1), defensive: clamp(defensive, -1, 1),
@@ -150,15 +203,14 @@ function rateSide(context, resolution, quality, side, timeline) {
   const minutes = lineupMinutes(resolution, side);
   const qualityById = sideQuality(quality, side);
   const players = context.playersById;
-  const opponent = side === 'home' ? 'away' : 'home';
-  const opponentGoalkeeperId = quality?.[side]?.starters?.find((row) => row.required_role === 'gk')?.player_id || null;
+  const keeperEvidence = goalkeeperEvidence(context, resolution, quality, side);
   const teamResult = resultAdjustment(resolution, side, quality);
 
   return [...minutes.entries()].map(([playerId, played]) => {
     const qualityRow = qualityById.get(playerId) || null;
     const player = players.get(playerId) || {};
     const role = playerRole(player, qualityRow);
-    const realised = contributionForPlayer({ playerId, side, role, events: resolution.official_event_stream, opponentGoalkeeperId, timeline });
+    const realised = contributionForPlayer({ playerId, side, role, events: resolution.official_event_stream, goalkeeperEvidenceById: keeperEvidence, timeline });
     const hasMeaningfulEvent = resolution.official_event_stream.some((event) => meaningfulEvent(event, playerId));
     if (played < 10 && !hasMeaningfulEvent) return deepFreeze({ player_id: playerId, side, minutes_played: played, role, rating: null, components: null, highlights: [] });
 
