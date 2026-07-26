@@ -44,6 +44,25 @@ test('missing ratings stay null instead of becoming fake zero ratings', async ()
   assert.match(client, /mcNumber\(rating\) === null \? ''/);
 });
 
+test('legacy matches explain why performance ratings are unavailable', async () => {
+  const source = await read('../public/phase2d4.js');
+  assert.match(source, /This match was simulated before player performance ratings were introduced\./);
+  assert.match(source, /performance_ratings_version/);
+  assert.match(source, /No eligible player ratings were produced for this match\./);
+});
+
+test('closing a revealed report preserves the current session and refreshes the listener target', async () => {
+  const client = await read('../public/phase2d4.js');
+  const divisionUi = await read('../public/phase2d3.js');
+  const closeBody = client.match(/function closeMatchCentre\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
+  assert.doesNotMatch(closeBody, /window\.location\.reload/);
+  assert.match(client, /document\.dispatchEvent\(new CustomEvent\('tbg:match-revealed'/);
+  assert.doesNotMatch(client, /window\.dispatchEvent\(new CustomEvent\('tbg:match-revealed'/);
+  assert.match(divisionUi, /document\.addEventListener\('tbg:match-revealed'/);
+  assert.match(divisionUi, /loadDivisionRounds\(\{ force: true \}\)/);
+  assert.doesNotMatch(client, /matchRevealChanged/);
+});
+
 test('canonical event subtype and outcome drive semantic display types', async () => {
   const source = await read('../netlify/functions/match-centre.mjs');
   assert.match(source, /const subtype = eventToken\(event\.subtype/);
