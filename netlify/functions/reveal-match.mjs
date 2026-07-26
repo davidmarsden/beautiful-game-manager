@@ -58,7 +58,6 @@ export default async (request) => {
       const world = loadPersistentWorld(JSON.stringify(saves[0].save_envelope));
       const fixture = canonicalPlayedFixture(world, fixtureId);
       if (!fixture) continue;
-      if (![fixture.home_club_id, fixture.away_club_id].includes(appointment.club_id)) return json({ error: 'You do not have access to this fixture' }, 403);
       return json({ fixture_id: fixtureId, revealed: true, reveal_method: method, revealed_at: new Date().toISOString() });
     }
 
