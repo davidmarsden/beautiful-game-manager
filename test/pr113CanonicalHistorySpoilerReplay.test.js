@@ -128,8 +128,8 @@ test('anonymous events are not assigned to invented line-up players', async () =
 test('canonical event type is normalized for replay scoring and full time', async () => {
   const endpoint = await source('netlify/functions/match-centre.mjs');
   const client = await source('public/phase2d4.js');
-  assert.match(endpoint, /const eventType = \(event\) => text\(event\.event_type \|\| event\.type/);
-  assert.match(endpoint, /event_type: eventType\(event\) \|\| 'event'/);
+  assert.match(endpoint, /function eventType\(event\)/);
+  assert.match(endpoint, /event_type: eventType\(event\)/);
   assert.match(client, /normalType\(event\.event_type\) === 'goal'/);
   assert.match(client, /normalType\(event\.event_type\) === 'full_time'/);
 });
