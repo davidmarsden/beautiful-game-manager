@@ -89,7 +89,7 @@ function renderMatchCentre(data) {
 async function revealMatch(data, method) {
   const response = await fetch('/api/reveal-match', { method: 'POST', headers: { authorization: matchCentreAuth, 'content-type': 'application/json' }, body: JSON.stringify({ fixture_id: data.fixture.id, method }) });
   if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.error || 'Could not reveal match'); }
-  window.dispatchEvent(new CustomEvent('tbg:match-revealed', { detail: { fixture_id: data.fixture.id, method } }));
+  document.dispatchEvent(new CustomEvent('tbg:match-revealed', { detail: { fixture_id: data.fixture.id, method } }));
   renderMatchCentre({ ...data, revealed: true, reveal: { reveal_method: method } });
 }
 function setupReplay(data, revealRequired) {
