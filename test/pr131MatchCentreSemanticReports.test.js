@@ -14,6 +14,17 @@ test('match centre resolves canonical player names without invented minute-based
   assert.doesNotMatch(source, /\(Number\(event\.minute \|\| 0\) \+ index\) % ids\.length/);
 });
 
+test('embedded canonical player IDs are replaced inside event commentary', async () => {
+  const source = await read('../netlify/functions/match-centre.mjs');
+  assert.match(source, /function canonicalPlayerName/);
+  assert.match(source, /function resolveCommentaryPlayerIds/);
+  assert.match(source, /\\btbg\[-_:\]\[a-z0-9:_-\]\+\\b/);
+  assert.match(source, /canonicalPlayerName\(world, lookup, playerId\) \|\| 'an unnamed player'/);
+  assert.match(source, /player_on_id/);
+  assert.match(source, /player_off_id/);
+  assert.match(source, /resolvedCommentary\.replace\(\/\^A player\\b\/i, playerName\)/);
+});
+
 test('match centre projects scorers, cards and normalized player performances', async () => {
   const source = await read('../netlify/functions/match-centre.mjs');
   assert.match(source, /player_performances/);
@@ -23,6 +34,14 @@ test('match centre projects scorers, cards and normalized player performances', 
   assert.match(source, /cards: \{/);
   assert.match(source, /function rawRatingRows/);
   assert.match(source, /minutes_played/);
+});
+
+test('missing ratings stay null instead of becoming fake zero ratings', async () => {
+  const endpoint = await read('../netlify/functions/match-centre.mjs');
+  const client = await read('../public/phase2d4.js');
+  assert.match(endpoint, /value === null \|\| value === undefined \|\| value === '' \? fallback/);
+  assert.match(client, /value === null \|\| value === undefined \|\| value === '' \? null/);
+  assert.match(client, /mcNumber\(rating\) === null \? ''/);
 });
 
 test('canonical event subtype and outcome drive semantic display types', async () => {
