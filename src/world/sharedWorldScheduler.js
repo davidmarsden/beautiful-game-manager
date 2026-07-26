@@ -63,12 +63,32 @@ function activeAppointmentMap(world, appointments = []) {
   return byClub;
 }
 
+function fixtureForClubTurn(world, clubId, matchday) {
+  const selectedClubId = text(clubId);
+  const targetMatchday = Number(matchday);
+  for (const runtime of Object.values(world.matchday_cycle?.runtimes || {})) {
+    const fixture = (runtime?.fixtures || []).find((row) =>
+      Number(row.matchday) === targetMatchday &&
+      [text(row.home_club_id), text(row.away_club_id)].includes(selectedClubId)
+    );
+    if (fixture) return fixture;
+  }
+  return null;
+}
+
 function lockInstruction(world, submission, lockAt) {
   const instruction = clone(submission.instruction || {});
-  const fixture = findWorldFixture(world, instruction.fixture_id);
-  if (!fixture) return null;
-  const eligibilityFixture = { ...fixture, eligibility_checkpoint_at: fixture.eligibility_checkpoint_at || fixture.lock_at || lockAt || fixture.kickoff_at };
   const playerIds = [...(instruction.starting_xi || []), ...(instruction.bench || [])];
+
+  // Formation/tactics-only submissions contain no player eligibility decision.
+  // Preserve the established shared-turn contract and defer team selection to the engine.
+  if (!playerIds.length) return instruction;
+
+  const fixture = findWorldFixture(world, instruction.fixture_id)
+    || fixtureForClubTurn(world, submission.club_id, submission.matchday);
+  if (!fixture) return null;
+
+  const eligibilityFixture = { ...fixture, eligibility_checkpoint_at: fixture.eligibility_checkpoint_at || fixture.lock_at || lockAt || fixture.kickoff_at };
   const snapshot = createLoanEligibilitySnapshot({ playerIds, clubId: submission.club_id, fixture: eligibilityFixture, world });
   const restricted = ineligibleLoanPlayerIds({ playerIds, clubId: submission.club_id, fixture: eligibilityFixture, world, snapshot });
   if (restricted.length) return null;
@@ -90,7 +110,12 @@ export function selectTurnInstructions(world, submissions = [], appointments = [
     const instruction = lockInstruction(world, submission, lockAt);
     if (!instruction) continue;
     byClub[submission.club_id] = instruction;
-    selectedSubmissions[submission.club_id] = { submission_id: submission.id || null, manager_id: submission.manager_id, submitted_at: submission.submitted_at, loan_eligibility_snapshot: clone(instruction.loan_eligibility_snapshot) };
+    selectedSubmissions[submission.club_id] = {
+      submission_id: submission.id || null,
+      manager_id: submission.manager_id,
+      submitted_at: submission.submitted_at,
+      ...(instruction.loan_eligibility_snapshot ? { loan_eligibility_snapshot: clone(instruction.loan_eligibility_snapshot) } : {})
+    };
   }
   return Object.freeze({ turn, by_club: Object.freeze(byClub), selected_submissions: Object.freeze(selectedSubmissions), appointed_club_ids: Object.freeze([...appointedManagerByClub.keys()].sort()), submission_count: Object.keys(byClub).length });
 }
