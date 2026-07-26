@@ -3,7 +3,7 @@ import { loadPersistentWorld, savePersistentWorld } from './persistentSeasonLoop
 import { planCanonicalRegistrationRepair, selectViableRegistrationIds } from './viableCanonicalRegistration.js';
 import { canonicalFreeAgentCandidates } from './canonicalFreeAgentReservoir.js';
 
-export const CANONICAL_WORLD_INITIALIZATION_VERSION = 'tbg-canonical-world-initialization-v1.4';
+export const CANONICAL_WORLD_INITIALIZATION_VERSION = 'tbg-canonical-world-initialization-v1.5';
 
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -27,6 +27,21 @@ function playerId(player) { return text(player?.tbg_player_id || player?.player_
 function playerReferenceId(reference) { return reference === null || reference === undefined ? '' : typeof reference === 'object' ? playerId(reference) : text(reference); }
 function clubId(club) { return text(club?.tbg_club_id || club?.club_id || club?.id); }
 function ownershipClubId(ownership) { return text(ownership?.club_id || ownership?.owner_club_id || ownership?.tbg_club_id || ownership?.owned_by_club_id); }
+
+function publishedClubMetadata(sourceClub) {
+  const stadium = sourceClub?.stadium;
+  const stadiumName = sourceClub?.stadium_name
+    ?? sourceClub?.stadiumName
+    ?? (typeof stadium === 'object' ? stadium?.name : stadium);
+  const country = sourceClub?.country ?? sourceClub?.nation;
+  const nation = sourceClub?.nation ?? sourceClub?.country;
+  return {
+    ...(text(country) ? { country: text(country) } : {}),
+    ...(text(nation) ? { nation: text(nation) } : {}),
+    ...(text(stadiumName) ? { stadium_name: text(stadiumName) } : {}),
+    ...(stadium !== null && stadium !== undefined && stadium !== '' ? { stadium } : {})
+  };
+}
 
 function explicitClubDivisionLevel(club) {
   const candidates = [club?.division_id, club?.division, club?.division_name, club?.division_number, club?.division_level, club?.league_division, club?.tier, club?.level, club?.competition?.division_id, club?.competition?.division, club?.competition?.level];
@@ -136,6 +151,10 @@ export function buildCanonicalWorldFromPublication(publicationWorld, {
   if (!clubIds.includes(resolvedHumanClubId)) throw new Error(`Administrator club ${resolvedHumanClubId} is not in the published world`);
 
   const projectedWorld = createPersistentLeagueWorld({ worldId: resolvedWorldId, divisions, humanClubId: resolvedHumanClubId, seasonStart, seasonEnd, movementCount });
+  for (const sourceClub of publicationWorld.clubs) {
+    const profile = projectedWorld.club_profiles?.[clubId(sourceClub)];
+    if (profile) Object.assign(profile, publishedClubMetadata(sourceClub));
+  }
   projectedWorld.squad_cycle.registration_limit = registrationLimit;
   const candidates = canonicalFreeAgentCandidates(publicationWorld, { existingPlayerIds: Object.keys(projectedWorld.squad_cycle.players) });
   const planned = planCanonicalRegistrationRepair(projectedWorld, {
