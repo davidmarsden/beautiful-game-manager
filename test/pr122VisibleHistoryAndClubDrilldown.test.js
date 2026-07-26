@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { projectPersistentHistory } from '../src/world/persistentHistoryProjection.js';
 
+
 test('history navigation installs a visible History tab', () => {
   const source = fs.readFileSync(new URL('../public/portal-navigation.js', import.meta.url), 'utf8');
   assert.match(source, /tabs\.querySelector\('\[data-view="history"\]'\)/);
@@ -26,8 +27,18 @@ test('history projection exposes all club squads for drill-down', () => {
   };
   const result = projectPersistentHistory(world);
   assert.equal(result.clubs.a.club_name, 'Alpha');
+  assert.equal(result.clubs.a.country, 'England');
   assert.equal(result.clubs.a.players[0].display_name, 'Player One');
   assert.equal(result.clubs.a.players[0].rating, 88);
+});
+
+test('canonical initialization preserves published country and stadium metadata', () => {
+  const source = fs.readFileSync(new URL('../src/world/canonicalWorldInitialization.js', import.meta.url), 'utf8');
+  assert.match(source, /function publishedClubMetadata/);
+  assert.match(source, /sourceClub\?\.country \?\? sourceClub\?\.nation/);
+  assert.match(source, /sourceClub\?\.stadium_name/);
+  assert.match(source, /Object\.assign\(profile, publishedClubMetadata\(sourceClub\)\)/);
+  assert.match(source, /CANONICAL_WORLD_INITIALIZATION_VERSION = 'tbg-canonical-world-initialization-v1\.5'/);
 });
 
 test('history UI makes club rows clickable', () => {
