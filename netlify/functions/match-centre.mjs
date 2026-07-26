@@ -10,7 +10,6 @@ const bearer = (request) => {
   const value = request.headers.get('authorization') || '';
   return value.toLowerCase().startsWith('bearer ') ? value.slice(7).trim() : '';
 };
-
 async function service(path) {
   const response = await fetch(`${SUPABASE_URL}${path}`, { headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, accept: 'application/json' } });
   const body = await response.json().catch(() => ({}));
@@ -25,53 +24,40 @@ function canonicalFixture(world, fixtureId) {
     const result = (runtime.results || []).find((row) => String(row.fixture?.fixture_id) === fixtureId) || null;
     const kickoffAt = result ? completedMatchdayKickoff(world, storedFixture.matchday) : null;
     const fixture = kickoffAt ? { ...storedFixture, kickoff_at: kickoffAt } : storedFixture;
-    return { divisionId, runtime, fixture, result };
+    return { divisionId, fixture, result };
   }
   return null;
 }
-
-function clubName(world, clubId) {
-  return world.club_profiles?.[clubId]?.club_name || clubId;
-}
-
-function playerName(world, playerId) {
+const clubName = (world, clubId) => world.club_profiles?.[clubId]?.club_name || clubId;
+const playerName = (world, playerId) => {
   const player = world.squad_cycle?.players?.[playerId];
   return player?.display_name || player?.player_name || player?.canonical_name || playerId || null;
-}
-
+};
 function candidateIds(team) {
   const rows = team?.starting_xi || team?.lineup || team?.players || [];
   return rows.map((row) => typeof row === 'string' ? row : row?.player_id || row?.id).filter(Boolean);
 }
-
 function eventPlayerId(event, result, index) {
   const direct = event.player_id || event.playerId || event.actor_id || event.payload?.player_id || event.payload?.playerId || event.payload?.actor_id;
   if (direct) return direct;
   const side = event.side === 'home' || event.side === 'away' ? event.side : null;
   if (!side) return null;
   const ids = candidateIds(result?.teams?.[side]);
-  if (!ids.length) return null;
-  const minute = Number(event.minute || 0);
-  return ids[(minute + index) % ids.length];
+  return ids.length ? ids[(Number(event.minute || 0) + index) % ids.length] : null;
 }
-
 function decorateEvent(world, result, event, index) {
   const playerId = eventPlayerId(event, result, index);
   const resolvedName = event.player_name || playerName(world, playerId);
   const commentary = event.commentary || event.payload?.commentary || null;
-  const attributedCommentary = resolvedName && commentary
-    ? commentary.replace(/^A player\b/i, resolvedName)
-    : commentary;
   return {
     ...event,
     event_type: event.event_type || event.type || event.payload?.event_type || event.payload?.type || null,
-    ...(attributedCommentary ? { commentary: attributedCommentary } : {}),
+    ...(commentary ? { commentary: resolvedName ? commentary.replace(/^A player\b/i, resolvedName) : commentary } : {}),
     player_id: event.player_id || playerId,
     player_name: resolvedName,
     assist_player_name: event.assist_player_name || playerName(world, event.assist_player_id || event.payload?.assist_player_id)
   };
 }
-
 function decorateSubmission(world, submission) {
   const instruction = submission.instruction || submission.instructions || {};
   const startingXi = submission.starting_xi || instruction.starting_xi || [];
@@ -86,17 +72,10 @@ function decorateSubmission(world, submission) {
     captain_name: playerName(world, submission.captain_id || instruction.captain_id)
   };
 }
-
 function embeddedSubmission(result, fixture, clubId) {
   const side = clubId === fixture.home_club_id ? 'home' : clubId === fixture.away_club_id ? 'away' : null;
-  if (!side) return null;
-  const team = result.teams?.[side];
-  if (!team) return null;
-  return {
-    club_id: clubId,
-    ...team,
-    submission_source: team.submission_source || team.source || 'deterministic_fallback'
-  };
+  const team = side ? result.teams?.[side] : null;
+  return team ? { club_id: clubId, ...team, submission_source: team.submission_source || team.source || 'deterministic_fallback' } : null;
 }
 
 export default async (request) => {
@@ -111,9 +90,8 @@ export default async (request) => {
     if (!fixtureId) return json({ error: 'fixture_id is required' }, 400);
 
     const profiles = await service(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id&limit=1`);
-    const manager = profiles[0];
-    if (!manager) return json({ error: 'Manager profile not found' }, 403);
-    const appointments = await service(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=world_id,club_id`);
+    if (!profiles[0]) return json({ error: 'Manager profile not found' }, 403);
+    const appointments = await service(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(profiles[0].id)}&status=eq.active&select=world_id,club_id`);
     if (!appointments.length) return json({ error: 'Manager has no active world appointment' }, 403);
 
     for (const appointment of appointments) {
@@ -123,45 +101,41 @@ export default async (request) => {
       const canonical = canonicalFixture(world, fixtureId);
       if (!canonical) continue;
       const { divisionId, fixture, result } = canonical;
-      if (![fixture.home_club_id, fixture.away_club_id].includes(appointment.club_id)) return json({ error: 'You do not have access to this fixture' }, 403);
       if (!result) return json({ error: 'Match reports are available only after full time' }, 409);
 
       const submissionRows = await service(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(world.world_id)}&season_id=eq.${encodeURIComponent(world.squad_cycle.season_id)}&matchday=eq.${encodeURIComponent(fixture.matchday)}&club_id=in.(${encodeURIComponent(fixture.home_club_id)},${encodeURIComponent(fixture.away_club_id)})&select=*&order=submitted_at.desc`).catch(() => []);
       const latestByClub = new Map();
       for (const row of submissionRows) if (!latestByClub.has(row.club_id)) latestByClub.set(row.club_id, row);
-      for (const clubId of [fixture.home_club_id, fixture.away_club_id]) {
-        if (latestByClub.has(clubId)) continue;
+      for (const clubId of [fixture.home_club_id, fixture.away_club_id]) if (!latestByClub.has(clubId)) {
         const fallback = embeddedSubmission(result, fixture, clubId);
         if (fallback) latestByClub.set(clubId, fallback);
       }
 
       const score = result.score || {};
-      const publicFixture = {
-        id: fixture.fixture_id,
-        fixture_id: fixture.fixture_id,
-        world_id: world.world_id,
-        competition_id: divisionId,
-        matchday: fixture.matchday,
-        played_at: fixture.kickoff_at,
-        home_club_id: fixture.home_club_id,
-        away_club_id: fixture.away_club_id,
-        home_club_name: clubName(world, fixture.home_club_id),
-        away_club_name: clubName(world, fixture.away_club_id),
-        managed_club_id: appointment.club_id,
-        home_score: score.home ?? null,
-        away_score: score.away ?? null
-      };
       return json({
-        fixture: publicFixture,
+        fixture: {
+          id: fixture.fixture_id,
+          fixture_id: fixture.fixture_id,
+          world_id: world.world_id,
+          competition_id: divisionId,
+          matchday: fixture.matchday,
+          played_at: fixture.kickoff_at,
+          home_club_id: fixture.home_club_id,
+          away_club_id: fixture.away_club_id,
+          home_club_name: clubName(world, fixture.home_club_id),
+          away_club_name: clubName(world, fixture.away_club_id),
+          managed_club_id: appointment.club_id,
+          home_score: score.home ?? null,
+          away_score: score.away ?? null
+        },
         events: (result.events || []).map((event, index) => decorateEvent(world, result, event, index)),
         submissions: [...latestByClub.values()].map((submission) => decorateSubmission(world, submission)),
         result,
         engine_contract: result.engine_contract || result.request_payload || null,
-        revealed: false,
-        reveal: null
+        revealed: true,
+        reveal: { reveal_method: 'competition_results', revealed_at: fixture.kickoff_at }
       });
     }
-
     return json({ error: 'Fixture not found' }, 404);
   } catch (error) {
     return json({ error: error.message }, 500);
