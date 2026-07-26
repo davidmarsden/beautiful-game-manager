@@ -28,6 +28,7 @@ test('competition UI switches division and opens completed scores in match centr
 test('match centre permits authenticated managers to replay any completed fixture in their world', async () => {
   const source = await read('../netlify/functions/match-centre.mjs');
   assert.doesNotMatch(source, /You do not have access to this fixture/);
-  assert.match(source, /revealed: true/);
-  assert.match(source, /competition_results/);
+  assert.match(source, /revealed: false/);
+  assert.match(source, /reveal: null/);
+  assert.match(source, /Match reports are available only after full time/);
 });
