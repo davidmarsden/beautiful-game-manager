@@ -29,9 +29,13 @@ export default async (request) => {
     if (!appointment) return json({ error: 'No active club appointment' }, 409);
     const saves = await supabase(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(appointment.world_id)}&select=save_envelope,save_checksum,updated_at&limit=1`, token);
     if (!saves[0]) return json({ error: 'Canonical world has not been initialized' }, 409);
+    const reportRows = await supabase(`/rest/v1/season_match_report_bundles?world_id=eq.${encodeURIComponent(appointment.world_id)}&select=report_store_key,season_id,reports&order=season_id.desc`, token).catch(() => []);
     const world = loadPersistentWorld(JSON.stringify(saves[0].save_envelope));
     return json({
-      ...projectPersistentHistory(world, { managedClubId: appointment.club_id }),
+      ...projectPersistentHistory(world, {
+        managedClubId: appointment.club_id,
+        reportBundles: reportRows.map((row) => ({ ...row, reports: row.reports || [] }))
+      }),
       canonical_source: { checksum: saves[0].save_checksum, updated_at: saves[0].updated_at }
     });
   } catch (error) {
