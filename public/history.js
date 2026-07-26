@@ -38,7 +38,7 @@ function table(rows = []) {
 function openClubPanel(content, clubId) {
   const club = state?.clubs?.[clubId];
   if (!club) return;
-  document.getElementById('historyClubPanel')?.remove();
+  content.querySelector('.history-club-host')?.remove();
   const host = document.createElement('div');
   host.className = 'history-club-host';
   content.prepend(host);
