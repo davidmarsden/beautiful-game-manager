@@ -1,7 +1,7 @@
 import { loadPersistentWorld } from '../../src/world/persistentSeasonLoop.js';
 import { projectManagerPortal } from '../../src/world/managerPortalProjection.js';
 import { buildManagerTurnSubmission } from '../../src/world/sharedWorldScheduler.js';
-import { findWorldFixture, ineligibleLoanPlayerIds } from '../../src/world/loanEligibility.js';
+import { createLoanEligibilitySnapshot, findWorldFixture, ineligibleLoanPlayerIds } from '../../src/world/loanEligibility.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
@@ -54,15 +54,27 @@ export default async (request) => {
 
     const canonicalFixture = findWorldFixture(world, fixture.fixture_id);
     if (!canonicalFixture) return response({ error: 'Canonical fixture could not be resolved for eligibility validation' }, 409);
-    const restrictedLoanPlayers = ineligibleLoanPlayerIds({
-      playerIds: [...(payload.starting_xi || []), ...(payload.bench || [])],
+    const eligibilityFixture = {
+      ...canonicalFixture,
+      eligibility_checkpoint_at: canonicalFixture.eligibility_checkpoint_at || canonicalFixture.lock_at || stored.next_turn_at || canonicalFixture.kickoff_at
+    };
+    const selectedPlayerIds = [...(payload.starting_xi || []), ...(payload.bench || [])];
+    const loanEligibilitySnapshot = createLoanEligibilitySnapshot({
+      playerIds: selectedPlayerIds,
       clubId: appointment.club_id,
-      fixture: canonicalFixture,
+      fixture: eligibilityFixture,
       world
+    });
+    const restrictedLoanPlayers = ineligibleLoanPlayerIds({
+      playerIds: selectedPlayerIds,
+      clubId: appointment.club_id,
+      fixture: eligibilityFixture,
+      world,
+      snapshot: loanEligibilitySnapshot
     });
     if (restrictedLoanPlayers.length) {
       const error = new Error(`Loan players cannot face their parent club in this competition: ${restrictedLoanPlayers.join(', ')}`);
-      error.validationErrors = restrictedLoanPlayers.map((playerId) => ({ code: 'parent_club_fixture', player_id: playerId }));
+      error.validationErrors = restrictedLoanPlayers.map((playerId) => ({ code: 'parent_club_fixture', player_id: playerId, checkpoint: loanEligibilitySnapshot.checkpoint }));
       throw error;
     }
 
@@ -79,7 +91,8 @@ export default async (request) => {
         bench: payload.bench,
         captain_id: payload.captain_id,
         set_piece_takers: payload.set_piece_takers || {},
-        tactics: payload.tactics || {}
+        tactics: payload.tactics || {},
+        loan_eligibility_snapshot: loanEligibilitySnapshot
       }
     });
 
@@ -92,26 +105,10 @@ export default async (request) => {
     await rest('/rest/v1/manager_messages', token, {
       method: 'POST',
       headers: { 'content-type': 'application/json', prefer: 'return=minimal' },
-      body: JSON.stringify({
-        recipient_manager_id: manager.id,
-        club_id: appointment.club_id,
-        message_type: 'submission_confirmation',
-        subject: 'Team submission received',
-        body: `Your team and tactics have been saved for ${fixture.opponent_name}.`,
-        related_fixture_id: fixture.fixture_id,
-        priority: 'normal'
-      })
+      body: JSON.stringify({ recipient_manager_id: manager.id, club_id: appointment.club_id, message_type: 'submission_confirmation', subject: 'Team submission received', body: `Your team and tactics have been saved for ${fixture.opponent_name}.`, related_fixture_id: fixture.fixture_id, priority: 'normal' })
     }).catch(() => null);
 
-    return response({
-      ...payload,
-      saved: true,
-      canonical: true,
-      submission: saved[0] || submission,
-      submitted_at: submission.submitted_at,
-      matchday: submission.matchday,
-      season_id: submission.season_id
-    }, 200);
+    return response({ ...payload, saved: true, canonical: true, submission: saved[0] || submission, submitted_at: submission.submitted_at, matchday: submission.matchday, season_id: submission.season_id });
   } catch (error) {
     return response({ error: error.message, validation_errors: error.validationErrors || [] }, error.validationErrors ? 400 : /deadline|Turn|canonical|fixture|world/i.test(error.message) ? 409 : 500);
   }
