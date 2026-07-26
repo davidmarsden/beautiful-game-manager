@@ -5,7 +5,7 @@ let replayState = null;
 let matchRevealChanged = false;
 
 const mcEscape = (value) => String(value ?? '').replace(/[&<>\"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[character]));
-const mcNumber = (value) => Number.isFinite(Number(value)) ? Number(value) : null;
+const mcNumber = (value) => value === null || value === undefined || value === '' ? null : Number.isFinite(Number(value)) ? Number(value) : null;
 const normalType = (type) => String(type || 'event').trim().toLowerCase().replaceAll(' ', '_').replaceAll('-', '_');
 const eventTypeMeta = (type) => {
   const key = normalType(type);
