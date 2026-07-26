@@ -130,8 +130,8 @@ test('canonical event type is normalized for replay scoring and full time', asyn
   const client = await source('public/phase2d4.js');
   assert.match(endpoint, /const eventType = \(event\) => text\(event\.event_type \|\| event\.type/);
   assert.match(endpoint, /event_type: eventType\(event\) \|\| 'event'/);
-  assert.match(client, /event\.event_type === 'goal'/);
-  assert.match(client, /event\.event_type === 'full_time'/);
+  assert.match(client, /normalType\(event\.event_type\) === 'goal'/);
+  assert.match(client, /normalType\(event\.event_type\) === 'full_time'/);
 });
 
 test('scheduled execution persists repaired completed dates before advancing', async () => {
