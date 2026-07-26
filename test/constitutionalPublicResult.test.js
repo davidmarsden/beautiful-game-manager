@@ -23,8 +23,11 @@ test('constitutional mode preserves the public 2d5-v1 envelope', () => {
   assert.equal(result.events.filter((event) => event.type === 'goal' && event.side === 'home').length, result.score.home);
   assert.equal(result.events.filter((event) => event.type === 'goal' && event.side === 'away').length, result.score.away);
   assert.equal(result.statistics.home.possession + result.statistics.away.possession, 100);
-  assert.equal(result.model.simulator, 'tbg-constitutional-engine-a-f');
+  assert.equal(result.model.simulator, 'tbg-constitutional-engine-a-g');
+  assert.equal(result.model.performance_ratings_version, 'tbg-performance-ratings-v0.1');
   assert.equal(result.model.calibrated_profile, 'pr39-baseline-v0.1');
+  assert.ok(Array.isArray(result.player_ratings.home));
+  assert.ok(Array.isArray(result.player_ratings.away));
   assert.ok(result.report.headline);
   assert.ok(result.report.summary);
 });
@@ -38,10 +41,13 @@ test('constitutional public results are deterministic for the same fixture input
   assert.deepEqual(first.events, second.events);
   assert.deepEqual(first.statistics, second.statistics);
   assert.deepEqual(first.report, second.report);
+  assert.deepEqual(first.player_ratings, second.player_ratings);
+  assert.deepEqual(first.player_of_the_match, second.player_of_the_match);
   assert.equal(first.model.seed_commitment, second.model.seed_commitment);
 });
 
 test('constitutional mode is the default after cutover', () => {
   const result = simulateMatch(goldenCases[0].contract, goldenWorld);
-  assert.equal(result.model.simulator, 'tbg-constitutional-engine-a-f');
+  assert.equal(result.model.simulator, 'tbg-constitutional-engine-a-g');
+  assert.equal(result.model.performance_ratings_version, 'tbg-performance-ratings-v0.1');
 });
