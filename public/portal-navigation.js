@@ -12,13 +12,17 @@ const VIEW_ALIASES = new Map([
   ['world', 'world']
 ]);
 
+function installStylesheet(href) {
+  if (document.querySelector(`link[href$="${href.replace('./', '')}"]`)) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = href;
+  document.head.append(link);
+}
+
 function installHistoryShell() {
-  if (!document.querySelector('link[href$="history.css"]')) {
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = './history.css';
-    document.head.append(link);
-  }
+  installStylesheet('./history.css');
+  installStylesheet('./read-only-squad.css');
   const workspace = document.querySelector('.workspace');
   const tabs = workspace?.querySelector('.tabs');
   if (tabs && !tabs.querySelector('[data-view="history"]')) {
