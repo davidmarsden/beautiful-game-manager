@@ -1,6 +1,7 @@
 import { loadPersistentWorld } from '../../src/world/persistentSeasonLoop.js';
 import { projectManagerPortal } from '../../src/world/managerPortalProjection.js';
 import { buildManagerTurnSubmission } from '../../src/world/sharedWorldScheduler.js';
+import { findWorldFixture, ineligibleLoanPlayerIds } from '../../src/world/loanEligibility.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
@@ -50,6 +51,20 @@ export default async (request) => {
     const projection = projectManagerPortal(world, appointment.club_id);
     const fixture = projection.next_fixture;
     if (!fixture || String(fixture.fixture_id) !== String(payload.fixture_id)) return response({ error: 'Fixture is not the canonical next fixture for this club' }, 409);
+
+    const canonicalFixture = findWorldFixture(world, fixture.fixture_id);
+    if (!canonicalFixture) return response({ error: 'Canonical fixture could not be resolved for eligibility validation' }, 409);
+    const restrictedLoanPlayers = ineligibleLoanPlayerIds({
+      playerIds: [...(payload.starting_xi || []), ...(payload.bench || [])],
+      clubId: appointment.club_id,
+      fixture: canonicalFixture,
+      world
+    });
+    if (restrictedLoanPlayers.length) {
+      const error = new Error(`Loan players cannot face their parent club in this competition: ${restrictedLoanPlayers.join(', ')}`);
+      error.validationErrors = restrictedLoanPlayers.map((playerId) => ({ code: 'parent_club_fixture', player_id: playerId }));
+      throw error;
+    }
 
     const submittedAt = new Date().toISOString();
     const submission = buildManagerTurnSubmission(world, {
