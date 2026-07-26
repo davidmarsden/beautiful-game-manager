@@ -4,6 +4,7 @@ const originalFetch = window.fetch.bind(window);
 let competitionState = null;
 let competitionAuth = '';
 let divisionRounds = null;
+let selectedDivisionId = null;
 let roundMode = 'results';
 let selectedMatchday = null;
 
@@ -62,19 +63,21 @@ function renderSchedule(fixtures = []) {
 function roundFor(matchday) {
   return divisionRounds?.rounds?.find((round) => Number(round.matchday) === Number(matchday)) || null;
 }
-
 function availableMatchdays(mode) {
   return (divisionRounds?.rounds || []).filter((round) => mode === 'results'
     ? round.fixtures.some((fixture) => fixture.status === 'played')
     : round.fixtures.some((fixture) => fixture.status !== 'played')).map((round) => Number(round.matchday));
 }
-
+function scorerMarkup(scorers = []) {
+  return scorers.length ? `<div class="round-scorers">${scorers.map((scorer) => `<span>${escapeHtml(scorer.player_name)} ${escapeHtml(scorer.minute)}'${scorer.own_goal ? ' (og)' : ''}</span>`).join('')}</div>` : '';
+}
 function scoreMarkup(fixture) {
   if (fixture.status !== 'played') return `<span class="round-kickoff">${formatTime(fixture.kickoff_at)}</span>`;
-  if (!fixture.result_revealed) return fixture.managed_fixture
-    ? `<button type="button" class="round-score match-centre-link result-hidden" data-match-centre="${escapeHtml(fixture.fixture_id)}">MATCH READY</button>`
-    : '<span class="round-score result-hidden">RESULT HIDDEN</span>';
-  return `<span class="round-score">${escapeHtml(fixture.home_score)}–${escapeHtml(fixture.away_score)}</span>`;
+  return `<button type="button" class="round-score match-centre-link" data-match-centre="${escapeHtml(fixture.fixture_id)}" aria-label="Open match replay and report">${escapeHtml(fixture.home_score)}–${escapeHtml(fixture.away_score)}<small>Replay</small></button>`;
+}
+function divisionSelector() {
+  const options = (divisionRounds?.divisions || []).map((division) => `<option value="${escapeHtml(division.division_id)}" ${division.division_id === divisionRounds.division?.division_id ? 'selected' : ''}>${escapeHtml(division.name)}${division.managed ? ' · Your division' : ''}</option>`).join('');
+  return `<label class="division-selector">Division<select data-division-select>${options}</select></label>`;
 }
 
 function renderDivisionRound() {
@@ -83,7 +86,7 @@ function renderDivisionRound() {
   if (!divisionRounds) { card.innerHTML = '<div class="competition-round-loading">Loading division fixtures…</div>'; return; }
   const matchdays = availableMatchdays(roundMode);
   if (!matchdays.length) {
-    card.innerHTML = `<div class="competition-round-tabs"><button class="${roundMode === 'results' ? 'active' : ''}" data-round-mode="results">Results</button><button class="${roundMode === 'fixtures' ? 'active' : ''}" data-round-mode="fixtures">Fixtures</button></div><p class="empty-state">No ${roundMode} are available yet.</p>`;
+    card.innerHTML = `<div class="competition-round-header"><div><h2>Division Matchdays</h2>${divisionSelector()}</div><div class="competition-round-tabs"><button class="${roundMode === 'results' ? 'active' : ''}" data-round-mode="results">Results</button><button class="${roundMode === 'fixtures' ? 'active' : ''}" data-round-mode="fixtures">Fixtures</button></div></div><p class="empty-state">No ${roundMode} are available yet.</p>`;
     return;
   }
   if (!matchdays.includes(Number(selectedMatchday))) selectedMatchday = roundMode === 'results' ? Math.max(...matchdays) : Math.min(...matchdays);
@@ -91,17 +94,20 @@ function renderDivisionRound() {
   const visibleFixtures = (round?.fixtures || []).filter((fixture) => roundMode === 'results' ? fixture.status === 'played' : fixture.status !== 'played');
   const currentIndex = matchdays.indexOf(Number(selectedMatchday));
   const date = visibleFixtures[0]?.played_at || visibleFixtures[0]?.kickoff_at;
-  card.innerHTML = `<div class="competition-round-header"><div><h2>Division Matchdays</h2><p>Complete ${roundMode} for every club in ${escapeHtml(divisionRounds.division?.name || 'the division')}.</p></div><div class="competition-round-tabs"><button class="${roundMode === 'results' ? 'active' : ''}" data-round-mode="results">Results</button><button class="${roundMode === 'fixtures' ? 'active' : ''}" data-round-mode="fixtures">Fixtures</button></div></div><div class="round-navigation"><button type="button" data-round-step="-1" ${currentIndex <= 0 ? 'disabled' : ''}>‹ Previous</button><div><strong>Matchday ${escapeHtml(selectedMatchday)}</strong><span>${formatDate(date)}</span></div><button type="button" data-round-step="1" ${currentIndex >= matchdays.length - 1 ? 'disabled' : ''}>Next ›</button></div><div class="division-round-list">${visibleFixtures.map((fixture) => `<article class="division-round-fixture ${fixture.managed_fixture ? 'managed-fixture' : ''}"><div class="round-club home">${clubLink(fixture.home_club_id, fixture.home_club_name)}</div>${scoreMarkup(fixture)}<div class="round-club away">${clubLink(fixture.away_club_id, fixture.away_club_name)}</div></article>`).join('')}</div><div class="round-count">Matchday ${escapeHtml(selectedMatchday)} of ${escapeHtml(divisionRounds.maximum_matchday || Math.max(...matchdays))}</div>`;
+  const fixturesMarkup = visibleFixtures.map((fixture) => `<article class="division-round-fixture ${fixture.managed_fixture ? 'managed-fixture' : ''}"><div class="round-team home"><div class="round-club">${clubLink(fixture.home_club_id, fixture.home_club_name)}</div>${scorerMarkup(fixture.home_scorers)}</div>${scoreMarkup(fixture)}<div class="round-team away"><div class="round-club">${clubLink(fixture.away_club_id, fixture.away_club_name)}</div>${scorerMarkup(fixture.away_scorers)}</div></article>`).join('');
+  card.innerHTML = `<div class="competition-round-header"><div><h2>Division Matchdays</h2><p>Complete ${roundMode} for every club in ${escapeHtml(divisionRounds.division?.name || 'the division')}.</p>${divisionSelector()}</div><div class="competition-round-tabs"><button class="${roundMode === 'results' ? 'active' : ''}" data-round-mode="results">Results</button><button class="${roundMode === 'fixtures' ? 'active' : ''}" data-round-mode="fixtures">Fixtures</button></div></div><div class="round-navigation"><button type="button" data-round-step="-1" ${currentIndex <= 0 ? 'disabled' : ''}>‹ Previous</button><div><strong>Matchday ${escapeHtml(selectedMatchday)}</strong><span>${formatDate(date)}</span></div><button type="button" data-round-step="1" ${currentIndex >= matchdays.length - 1 ? 'disabled' : ''}>Next ›</button></div><div class="division-round-list">${fixturesMarkup}</div><div class="round-count">Matchday ${escapeHtml(selectedMatchday)} of ${escapeHtml(divisionRounds.maximum_matchday || Math.max(...matchdays))}</div>`;
 }
 
-async function loadDivisionRounds() {
-  if (divisionRounds) { renderDivisionRound(); return; }
+async function loadDivisionRounds({ force = false } = {}) {
+  if (divisionRounds && !force) { renderDivisionRound(); return; }
   renderDivisionRound();
   try {
-    const response = await originalFetch('/api/competition-rounds', { headers: competitionAuth ? { authorization: competitionAuth } : {} });
+    const query = selectedDivisionId ? `?division_id=${encodeURIComponent(selectedDivisionId)}` : '';
+    const response = await originalFetch(`/api/competition-rounds${query}`, { headers: competitionAuth ? { authorization: competitionAuth } : {} });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Could not load division fixtures');
     divisionRounds = data;
+    selectedDivisionId = data.division?.division_id || selectedDivisionId;
     const completed = availableMatchdays('results');
     selectedMatchday = completed.length ? Math.max(...completed) : Number(data.current_matchday || 1);
     renderDivisionRound();
@@ -146,6 +152,14 @@ window.fetch = async (...args) => {
   return response;
 };
 
+document.addEventListener('change', (event) => {
+  const select = event.target.closest('[data-division-select]');
+  if (!select) return;
+  selectedDivisionId = select.value;
+  divisionRounds = null;
+  selectedMatchday = null;
+  loadDivisionRounds({ force: true });
+});
 document.addEventListener('click', (event) => {
   const modeButton = event.target.closest('[data-round-mode]');
   if (modeButton) {
@@ -163,7 +177,7 @@ document.addEventListener('click', (event) => {
     renderDivisionRound();
   }
 });
-document.addEventListener('tbg:match-revealed', () => { divisionRounds = null; loadDivisionRounds(); });
+document.addEventListener('tbg:match-revealed', () => { divisionRounds = null; loadDivisionRounds({ force: true }); });
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('clubNav')?.addEventListener('click', (event) => {
     const link = event.target.closest('a');
