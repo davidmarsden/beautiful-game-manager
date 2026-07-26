@@ -32,3 +32,12 @@ test('match centre permits authenticated managers to replay any completed fixtur
   assert.match(source, /reveal: null/);
   assert.match(source, /Match reports are available only after full time/);
 });
+
+test('cross-club replay reveal completes for any played fixture in the authenticated world', async () => {
+  const source = await read('../netlify/functions/reveal-match.mjs');
+  assert.match(source, /canonicalPlayedFixture\(world, fixtureId\)/);
+  assert.doesNotMatch(source, /\[fixture\.home_club_id, fixture\.away_club_id\]\.includes\(appointment\.club_id\)/);
+  assert.doesNotMatch(source, /You do not have access to this fixture/);
+  assert.match(source, /revealed: true/);
+  assert.match(source, /reveal_method: method/);
+});
