@@ -56,6 +56,7 @@ function mountBulkRegistration() {
   if (!card) return;
   card.id = 'bulkRegistrationCard';
   card.innerHTML = `
+    <select id="registrationPlayer" hidden aria-hidden="true" tabindex="-1"></select>
     <div class="world-control-heading">
       <div><h3>Senior squad registration</h3><p>Select the complete senior squad for the next checkpoint. Players aged 21 or younger are youth-eligible and do not appear here.</p></div>
       <strong id="bulkRegistrationCount">Loading…</strong>
