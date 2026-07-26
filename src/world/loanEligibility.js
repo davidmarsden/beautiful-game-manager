@@ -5,7 +5,8 @@ export const DEFAULT_LOAN_ELIGIBILITY_RULES = Object.freeze({ parentClubRestrict
 const playerId = (player) => text(player?.tbg_player_id || player?.player_id || player?.id);
 const ownershipRow = (playerOrId, world = {}) => {
   const id = typeof playerOrId === 'string' ? text(playerOrId) : playerId(playerOrId);
-  return (world.player_ownership || []).find((row) => text(row.tbg_player_id || row.player_id || row.id) === id) || null;
+  const rows = world.player_ownership || world.squad_cycle?.player_ownership || [];
+  return rows.find((row) => text(row.tbg_player_id || row.player_id || row.id) === id) || null;
 };
 const ownerClubId = (player, ownership = {}) => text(ownership.parent_club_id || ownership.owner_club_id || ownership.owning_club_id || ownership.club_id || player?.parent_club_id || player?.owner_club_id || player?.owning_club_id);
 const loanClubId = (player, ownership = {}) => {
@@ -31,19 +32,25 @@ export function fixtureOpponentClubId(fixture = {}, clubId) {
   return '';
 }
 
+function runtimeFixtures(world = {}) {
+  return Object.values(world.matchday_cycle?.runtimes || {}).flatMap((runtime) => runtime?.fixtures || []);
+}
+
 export function findWorldFixture(world = {}, fixtureId) {
   const id = text(fixtureId);
   const collections = [
     world.fixtures,
     world.schedule,
     world.competition?.fixtures,
-    ...(world.divisions || []).map((division) => division.fixtures)
+    ...(world.divisions || []).map((division) => division.fixtures),
+    runtimeFixtures(world)
   ].filter(Array.isArray);
   return collections.flat().find((fixture) => text(fixture.id || fixture.fixture_id) === id) || null;
 }
 
 export function loanEligibility({ player, player_id, club_id, fixture, world = {}, competition_rules = null } = {}) {
-  const selectedPlayer = player || (world.players || []).find((row) => playerId(row) === text(player_id));
+  const players = world.players || Object.values(world.squad_cycle?.players || {});
+  const selectedPlayer = player || players.find((row) => playerId(row) === text(player_id));
   const selectedPlayerId = playerId(selectedPlayer) || text(player_id);
   const selectedClubId = text(club_id);
   const ownership = ownershipRow(selectedPlayerId, world) || {};
