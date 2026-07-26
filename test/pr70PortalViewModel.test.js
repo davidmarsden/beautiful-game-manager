@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { buildPortalViewModel, positionGroup } from '../public/portal-v1-model.js';
 
 function bootstrap(overrides = {}) {
   return {
     club: { tbg_club_id: 'club-1', canonical_name: 'Club One', table_position: 4 },
-    next_fixture: { opponent_name: 'Club Two', submission_deadline_at: '2026-08-08T12:00:00.000Z' },
+    next_fixture: { opponent_id: 'club-2', opponent_name: 'Club Two', submission_deadline_at: '2026-08-08T12:00:00.000Z' },
     standings: [{ club_id: 'club-1', position: 4, points: 7 }],
     fixtures: [
       { fixture_id: 'f1', completed: true, score: { home: 2, away: 1 } },
@@ -44,9 +45,17 @@ test('builds a deterministic tablet overview from bootstrap data', () => {
   assert.equal(first.summary.progress_known, true);
   assert.equal(first.summary.progress_percent, 50);
   assert.equal(first.summary.has_next_fixture, true);
+  assert.equal(first.summary.next_opponent_id, 'club-2');
   assert.equal(first.summary.registered, 16);
   assert.equal(first.coverage.every((row) => row.gap === 0), true);
   assert.ok(first.alerts.some((row) => row.title === 'Team selection not submitted'));
+});
+
+test('wires both next-fixture cards and overview to the shared club inspection identity', () => {
+  const source = fs.readFileSync(new URL('../public/portal-v1.js', import.meta.url), 'utf8');
+  assert.match(source, /applyClubIdentity\(card, model\.summary\.next_opponent_id\)/);
+  assert.match(source, /applyClubIdentity\(strip, model\.summary\.next_opponent_id\)/);
+  assert.match(source, /clubLinkMarkup\(model\.summary\.next_opponent_id, model\.summary\.next_opponent\)/);
 });
 
 test('surfaces structural, temporary and contract alerts without inventing archive awards', () => {
@@ -106,6 +115,7 @@ test('shows played count without inventing a percentage when schedule total is u
   assert.equal(model.summary.progress_known, false);
   assert.equal(model.summary.progress_percent, null);
   assert.equal(model.summary.has_next_fixture, false);
+  assert.equal(model.summary.next_opponent_id, '');
   assert.equal(model.summary.next_opponent, 'Schedule pending');
   assert.equal(model.alerts.some((row) => row.title === 'Team selection not submitted'), false);
   assert.equal(model.alerts.length, 1);

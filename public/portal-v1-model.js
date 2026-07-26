@@ -161,6 +161,7 @@ export function buildPortalViewModel(data, { now = new Date() } = {}) {
       progress_known: progressKnown,
       progress_percent: progressKnown ? Math.min(100, Math.round((played / total) * 100)) : null,
       has_next_fixture: hasNextFixture,
+      next_opponent_id: text(data?.next_fixture?.opponent_id || data?.next_fixture?.opponent_club_id),
       next_opponent: text(data?.next_fixture?.opponent_name || data?.next_fixture?.opponent || 'Schedule pending'),
       next_kickoff_at: kickoff?.toISOString() || null,
       deadline_at: deadline?.toISOString() || null,
