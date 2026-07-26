@@ -1,3 +1,5 @@
+import { mountReadOnlySquadView } from './squad-view.js';
+
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>\"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[character]));
 let loaded = false;
 let state = null;
@@ -33,27 +35,28 @@ function table(rows = []) {
   return `<div class="table-wrap"><table class="competition-table"><thead><tr><th>Pos</th><th>Club</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr></thead><tbody>${rows.map((row) => `<tr class="${row.is_managed_club ? 'managed-club-row' : ''}"><td>${row.position}</td><td>${clubButton(row)}</td><td>${row.played}</td><td>${row.won}</td><td>${row.drawn}</td><td>${row.lost}</td><td>${row.goals_for}</td><td>${row.goals_against}</td><td>${row.goal_difference > 0 ? '+' : ''}${row.goal_difference}</td><td><strong>${row.points}</strong></td></tr>`).join('')}</tbody></table></div>`;
 }
 
-function clubPanel(clubId) {
+function openClubPanel(content, clubId) {
   const club = state?.clubs?.[clubId];
-  if (!club) return '';
-  return `<section class="competition-card history-club-panel" id="historyClubPanel"><div class="section-heading"><div><h3>${escapeHtml(club.club_name)}</h3><p>${escapeHtml(club.division_name)}${club.country ? ` · ${escapeHtml(club.country)}` : ''}${club.stadium ? ` · ${escapeHtml(club.stadium)}` : ''}</p></div><button type="button" data-close-club>Close</button></div><p>${club.player_count} players in the canonical squad.</p><div class="table-wrap"><table class="competition-table"><thead><tr><th>Player</th><th>Position</th><th>Age</th><th>TBG</th><th>Status</th></tr></thead><tbody>${club.players.map((player) => `<tr><td>${escapeHtml(player.display_name)}</td><td>${escapeHtml(player.position)}</td><td>${player.age ?? '—'}</td><td><strong>${player.rating ?? '—'}</strong></td><td>${player.transfer_listed ? 'Transfer listed' : player.loan_listed ? 'Loan listed' : player.registered ? 'Registered' : 'Unregistered'}</td></tr>`).join('')}</tbody></table></div></section>`;
+  if (!club) return;
+  document.getElementById('historyClubPanel')?.remove();
+  const host = document.createElement('div');
+  host.className = 'history-club-host';
+  content.prepend(host);
+  mountReadOnlySquadView(host, club);
+  const panel = host.querySelector('#historyClubPanel');
+  panel?.querySelector('[data-close-club]')?.addEventListener('click', () => host.remove());
+  panel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function bindClubLinks(content) {
-  content.querySelectorAll('[data-club-id]').forEach((button) => button.addEventListener('click', () => {
-    document.getElementById('historyClubPanel')?.remove();
-    content.insertAdjacentHTML('afterbegin', clubPanel(button.dataset.clubId));
-    const panel = document.getElementById('historyClubPanel');
-    panel?.querySelector('[data-close-club]')?.addEventListener('click', () => panel.remove());
-    panel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }));
+  content.querySelectorAll('[data-club-id]').forEach((button) => button.addEventListener('click', () => openClubPanel(content, button.dataset.clubId)));
 }
 
 function render(data) {
   state = data;
   const root = document.getElementById('historyView');
   if (!root) return;
-  root.innerHTML = `<div class="section-heading"><div><h2>World History</h2><p>Live tables for every published division, club squads and persisted season records.</p></div><span>${data.completed_season_count} completed seasons</span></div><div class="history-tabs"><button data-history-tab="live">Live tables</button><button data-history-tab="archive">Season archive</button><button data-history-tab="club">My club history</button></div><div id="historyContent"></div>`;
+  root.innerHTML = `<div class="section-heading"><div><h2>World History</h2><p>Live tables for every published division, full club squads and persisted season records.</p></div><span>${data.completed_season_count} completed seasons</span></div><div class="history-tabs"><button data-history-tab="live">Live tables</button><button data-history-tab="archive">Season archive</button><button data-history-tab="club">My club history</button></div><div id="historyContent"></div>`;
   root.querySelector('.history-tabs').addEventListener('click', (event) => {
     const button = event.target.closest('button');
     if (button) show(button.dataset.historyTab);
@@ -65,7 +68,7 @@ function show(tab) {
   const content = document.getElementById('historyContent');
   if (!content || !state) return;
   if (tab === 'live') {
-    content.innerHTML = state.live_divisions.map((division) => `<section class="competition-card"><h3>${escapeHtml(division.name)}</h3><p>${division.played_fixture_count} results · ${division.scheduled_fixture_count} fixtures · Click any club to view its squad</p>${table(division.standings)}</section>`).join('');
+    content.innerHTML = state.live_divisions.map((division) => `<section class="competition-card"><h3>${escapeHtml(division.name)}</h3><p>${division.played_fixture_count} results · ${division.scheduled_fixture_count} fixtures · Select any club for the full read-only squad</p>${table(division.standings)}</section>`).join('');
     bindClubLinks(content);
   }
   if (tab === 'club') {
