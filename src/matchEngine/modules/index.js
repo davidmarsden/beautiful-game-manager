@@ -6,6 +6,7 @@ import { executeFatigueContext } from './FatigueContext.js';
 import { executeEventGeneration } from './EventGeneration.js';
 import { executeMatchResolution } from './MatchResolution.js';
 import { executeCommentaryReport } from './CommentaryReport.js';
+import { executePerformanceRatings } from './PerformanceRatings.js';
 
 function ratingCalibrationRequested(contract = {}) {
   return contract.rating_band_calibration === true
@@ -77,11 +78,20 @@ export const MODULE_F_COMMENTARY_REPORT = createEngineModule({
   execute: executeCommentaryReport
 });
 
+export const MODULE_G_PERFORMANCE_RATINGS = createEngineModule({
+  id: 'module-g-performance-ratings',
+  name: 'Module G — Player Performance Ratings',
+  order: 7,
+  constitution: 'Match Engine Constitution v0.3; Appendix E v0.1',
+  execute: executePerformanceRatings
+});
+
 export const CONSTITUTIONAL_ENGINE_MODULES = Object.freeze(validateEngineModules([
   MODULE_A_TACTICAL_RESOLUTION,
   MODULE_B_TEAM_QUALITY,
   MODULE_C_FATIGUE_CONTEXT,
   MODULE_D_EVENT_GENERATION,
   MODULE_E_MATCH_RESOLUTION,
-  MODULE_F_COMMENTARY_REPORT
+  MODULE_F_COMMENTARY_REPORT,
+  MODULE_G_PERFORMANCE_RATINGS
 ]));
