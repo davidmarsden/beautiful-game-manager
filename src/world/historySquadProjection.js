@@ -1,3 +1,5 @@
+import { projectManagerPortal } from './managerPortalProjection.js';
+
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = null) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
@@ -45,8 +47,7 @@ function contractDate(player) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function safePlayer(playerId, player, club) {
-  const registered = Array.isArray(club.registered_player_ids) ? club.registered_player_ids.includes(playerId) : player.registered !== false;
+function safePlayer(playerId, player) {
   return {
     player_id: playerId,
     tbg_player_id: player.tbg_player_id || playerId,
@@ -64,18 +65,14 @@ function safePlayer(playerId, player, club) {
     injury_status: text(player.injury_status || player.availability) || 'Available',
     availability: text(player.availability || player.injury_status) || 'Available',
     contract_expiry: player.contract_expiry || player.contract_end_at || player.contract?.end_at || null,
-    registered,
-    registration_status: registered ? 'registered' : 'unregistered',
+    registered: Boolean(player.registered),
+    registration_status: player.registered ? 'registered' : 'unregistered',
     transfer_listed: Boolean(player.transfer_listed),
     loan_listed: Boolean(player.loan_listed),
     loaned_out: isLoanedOut(player),
     loan_status: player.loan_status || null,
     loan_club_name: text(player.loan_club_name) || null
   };
-}
-
-function squadRules(world, club) {
-  return club.rules || world.squad_cycle?.rules || world.squad_rules || { first_team_capacity: 25, youth_team_capacity: 20 };
 }
 
 function squadCoverage(players) {
@@ -112,12 +109,15 @@ function contractWatch(players, now = new Date()) {
 
 export function enrichHistorySquads(projection, world, { now = new Date() } = {}) {
   const clubs = Object.fromEntries(Object.entries(projection.clubs || {}).map(([clubId, projected]) => {
-    const club = world.squad_cycle?.clubs?.[clubId] || {};
-    const players = (club.player_ids || []).map((playerId) => safePlayer(playerId, world.squad_cycle?.players?.[playerId] || {}, club));
+    const portal = projectManagerPortal(world, clubId);
+    const players = portal.squad.map((player) => safePlayer(player.tbg_player_id || player.player_id, player));
     return [clubId, {
       ...projected,
       player_count: players.length,
-      squad_rules: squadRules(world, club),
+      squad_rules: {
+        first_team_capacity: portal.club.squad.first_team_capacity,
+        youth_team_capacity: portal.club.squad.youth_team_capacity
+      },
       coverage: squadCoverage(players),
       contracts: contractWatch(players, now),
       players
