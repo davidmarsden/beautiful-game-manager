@@ -10,6 +10,19 @@ window.fetch = async (...args) => {
   return originalFetch(...args);
 };
 
+function storedAccessToken() {
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (!key?.startsWith('sb-') || !key.endsWith('-auth-token')) continue;
+    try {
+      const stored = JSON.parse(localStorage.getItem(key));
+      const token = stored?.access_token || stored?.currentSession?.access_token;
+      if (token) return token;
+    } catch {}
+  }
+  return '';
+}
+
 function table(rows = []) {
   return `<div class="table-wrap"><table class="competition-table"><thead><tr><th>Pos</th><th>Club</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr></thead><tbody>${rows.map((row) => `<tr class="${row.is_managed_club ? 'managed-club-row' : ''}"><td>${row.position}</td><td>${escapeHtml(row.club_name)}</td><td>${row.played}</td><td>${row.won}</td><td>${row.drawn}</td><td>${row.lost}</td><td>${row.goals_for}</td><td>${row.goals_against}</td><td>${row.goal_difference > 0 ? '+' : ''}${row.goal_difference}</td><td><strong>${row.points}</strong></td></tr>`).join('')}</tbody></table></div>`;
 }
@@ -47,7 +60,9 @@ function show(tab) {
 }
 
 async function load() {
-  if (loaded || !accessToken) return;
+  if (loaded) return;
+  accessToken ||= storedAccessToken();
+  if (!accessToken) return;
   const response = await fetch('/api/history', { headers: { authorization: `Bearer ${accessToken}` } });
   if (!response.ok) return;
   loaded = true;
