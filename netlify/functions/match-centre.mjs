@@ -64,7 +64,23 @@ function resolvePlayerName({ world, lookup, event = null, playerId = null, row =
   return text(world.squad_cycle?.players?.[id]?.display_name || world.squad_cycle?.players?.[id]?.player_name || world.squad_cycle?.players?.[id]?.canonical_name || lookup.get(id)) || prettyId(id);
 }
 
-const eventType = (event) => text(event.event_type || event.type || event.kind || event.payload?.event_type || event.payload?.type).toLowerCase();
+const eventToken = (value) => text(value).toLowerCase().replace(/[\s-]+/g, '_');
+function eventType(event) {
+  const type = eventToken(event.event_type || event.type || event.kind || event.payload?.event_type || event.payload?.type);
+  const subtype = eventToken(event.subtype || event.event_subtype || event.payload?.subtype || event.payload?.event_subtype);
+  const outcome = eventToken(event.outcome || event.result || event.payload?.outcome || event.payload?.result);
+
+  if (subtype === 'penalty_goal') return 'penalty_scored';
+  if (type === 'penalty' || subtype === 'penalty_attempt') {
+    if (['scored', 'score', 'goal', 'converted', 'success'].includes(outcome)) return 'penalty_scored';
+    if (['saved', 'save'].includes(outcome)) return 'penalty_saved';
+    if (['missed', 'miss', 'off_target', 'wide', 'post', 'bar'].includes(outcome)) return 'penalty_missed';
+    if (subtype === 'penalty_awarded' || outcome === 'awarded') return 'penalty_awarded';
+  }
+  if (type === 'set_piece' && subtype === 'free_kick') return 'free_kick';
+  if (['free_kick', 'penalty_awarded', 'penalty_scored', 'penalty_missed', 'penalty_saved'].includes(subtype)) return subtype;
+  return type || subtype || 'event';
+}
 const eventPlayerId = (event) => text(event.player_id || event.playerId || event.actor_id || event.scorer_id || event.booked_player_id || event.payload?.player_id || event.payload?.playerId || event.payload?.actor_id);
 const assistPlayerId = (event) => text(event.assist_player_id || event.assister_id || event.payload?.assist_player_id);
 function decorateEvent(world, lookup, event) {
@@ -74,7 +90,7 @@ function decorateEvent(world, lookup, event) {
   const commentary = event.commentary || event.description || event.payload?.commentary || null;
   return {
     ...event,
-    event_type: eventType(event) || 'event',
+    event_type: eventType(event),
     ...(commentary ? { commentary: playerName !== 'Unknown player' ? String(commentary).replace(/^A player\b/i, playerName) : commentary } : {}),
     player_id: playerId || null,
     player_name: playerName,
@@ -116,6 +132,7 @@ function performanceRows(world, lookup, result, events, side, clubId) {
     const raw = explicit.get(id) || {};
     const playerEvents = events.filter((event) => event.player_id === id);
     const typeCount = (needle) => playerEvents.filter((event) => event.event_type.includes(needle)).length;
+    const goalCount = playerEvents.filter((event) => ['goal', 'penalty_scored'].includes(event.event_type)).length;
     const assists = events.filter((event) => event.assist_player_id === id).length;
     return {
       player_id: id,
@@ -123,7 +140,7 @@ function performanceRows(world, lookup, result, events, side, clubId) {
       club_id: clubId,
       side,
       rating: number(raw.rating ?? raw.performance_rating ?? raw.match_rating ?? raw.score),
-      goals: number(raw.goals, typeCount('goal')),
+      goals: number(raw.goals, goalCount),
       assists: number(raw.assists, assists),
       yellow_cards: number(raw.yellow_cards ?? raw.yellow, typeCount('yellow_card')),
       red_cards: number(raw.red_cards ?? raw.red, typeCount('red_card') + typeCount('second_yellow')),
