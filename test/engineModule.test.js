@@ -13,6 +13,7 @@ import { FATIGUE_CONTEXT_STATE_KEY } from '../src/matchEngine/modules/FatigueCon
 import { EVENT_GENERATION_STATE_KEY } from '../src/matchEngine/modules/EventGeneration.js';
 import { MATCH_RESOLUTION_STATE_KEY } from '../src/matchEngine/modules/MatchResolution.js';
 import { COMMENTARY_REPORT_STATE_KEY } from '../src/matchEngine/modules/CommentaryReport.js';
+import { PERFORMANCE_RATINGS_STATE_KEY } from '../src/matchEngine/modules/PerformanceRatings.js';
 
 const positions = ['Goalkeeper','Right-Back','Centre-Back','Centre-Back','Left-Back','Defensive Midfield','Central Midfield','Central Midfield','Right Winger','Centre-Forward','Left Winger'];
 const ids = (prefix) => positions.map((_, index) => `${prefix}-${index + 1}`);
@@ -41,22 +42,23 @@ const world = {
   ]
 };
 
-test('defines six ordered constitutional module interfaces', () => {
-  assert.equal(CONSTITUTIONAL_ENGINE_MODULES.length, 6);
-  assert.deepEqual(CONSTITUTIONAL_ENGINE_MODULES.map((module) => module.order), [1, 2, 3, 4, 5, 6]);
+test('defines seven ordered constitutional module interfaces', () => {
+  assert.equal(CONSTITUTIONAL_ENGINE_MODULES.length, 7);
+  assert.deepEqual(CONSTITUTIONAL_ENGINE_MODULES.map((module) => module.order), [1, 2, 3, 4, 5, 6, 7]);
   assert.deepEqual(CONSTITUTIONAL_ENGINE_MODULES.map((module) => module.id), [
     'module-a-tactical-resolution',
     'module-b-team-quality',
     'module-c-fatigue-context',
     'module-d-event-generation',
     'module-e-match-resolution',
-    'module-f-commentary-report'
+    'module-f-commentary-report',
+    'module-g-performance-ratings'
   ]);
   assert.ok(CONSTITUTIONAL_ENGINE_MODULES.every((module) => module.interfaceVersion === ENGINE_MODULE_INTERFACE_VERSION));
   assert.ok(CONSTITUTIONAL_ENGINE_MODULES.every((module) => Object.isFrozen(module)));
 });
 
-test('modules preserve EngineContext and complete the internal A-F state chain', () => {
+test('modules preserve EngineContext and complete the internal A-G state chain', () => {
   const context = createEngineContext({ contract, world });
   for (const module of CONSTITUTIONAL_ENGINE_MODULES) assert.equal(module.execute(context), context);
 
@@ -66,7 +68,8 @@ test('modules preserve EngineContext and complete the internal A-F state chain',
     FATIGUE_CONTEXT_STATE_KEY,
     EVENT_GENERATION_STATE_KEY,
     MATCH_RESOLUTION_STATE_KEY,
-    COMMENTARY_REPORT_STATE_KEY
+    COMMENTARY_REPORT_STATE_KEY,
+    PERFORMANCE_RATINGS_STATE_KEY
   ]);
   assert.equal(context.get(TACTICAL_RESOLUTION_STATE_KEY).home.formation, '4-3-3-wide');
   assert.equal(context.get(PLAYER_QUALITY_STATE_KEY).home.team_strength, 90);
@@ -74,6 +77,8 @@ test('modules preserve EngineContext and complete the internal A-F state chain',
   assert.equal(context.get(EVENT_GENERATION_STATE_KEY).score_resolution_pending, true);
   assert.equal(context.get(MATCH_RESOLUTION_STATE_KEY).resolution_complete, true);
   assert.equal(context.get(COMMENTARY_REPORT_STATE_KEY).report_complete, true);
+  assert.equal(context.get(PERFORMANCE_RATINGS_STATE_KEY).deterministic, true);
+  assert.equal(context.get(PERFORMANCE_RATINGS_STATE_KEY).home.length, 11);
 });
 
 test('module factory rejects incomplete descriptors', () => {
