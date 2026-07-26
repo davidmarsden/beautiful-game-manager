@@ -25,6 +25,18 @@ test('match centre projects scorers, cards and normalized player performances', 
   assert.match(source, /minutes_played/);
 });
 
+test('canonical event subtype and outcome drive semantic display types', async () => {
+  const source = await read('../netlify/functions/match-centre.mjs');
+  assert.match(source, /const subtype = eventToken\(event\.subtype/);
+  assert.match(source, /const outcome = eventToken\(event\.outcome/);
+  assert.match(source, /subtype === 'penalty_goal'/);
+  assert.match(source, /type === 'set_piece' && subtype === 'free_kick'/);
+  assert.match(source, /return 'penalty_saved'/);
+  assert.match(source, /return 'penalty_missed'/);
+  assert.match(source, /penalty: event\.event_type === 'penalty_scored'/);
+  assert.match(source, /\['goal', 'penalty_scored'\]\.includes\(event\.event_type\)/);
+});
+
 test('report and replay share centralized semantic event metadata', async () => {
   const source = await read('../public/phase2d4.js');
   assert.match(source, /const eventTypeMeta =/);
