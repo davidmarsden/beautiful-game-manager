@@ -9,7 +9,7 @@ const hasScore = (fixture) => fixture?.own_score != null && fixture?.opponent_sc
 const resultClass = (fixture) => fixture.own_score > fixture.opponent_score ? 'win' : fixture.own_score < fixture.opponent_score ? 'loss' : 'draw';
 const resultLetter = (fixture) => resultClass(fixture) === 'win' ? 'W' : resultClass(fixture) === 'loss' ? 'L' : 'D';
 const clubLink = (clubId, clubName, className = 'portal-club-link') => clubId
-  ? `<button type="button" class="${className}" data-club-id="${escapeHtml(clubId)}">${escapeHtml(clubName)}</button>`
+  ? `<span role="link" tabindex="0" class="${className}" data-club-id="${escapeHtml(clubId)}">${escapeHtml(clubName)}</span>`
   : escapeHtml(clubName);
 
 function showCompetitionView() {
