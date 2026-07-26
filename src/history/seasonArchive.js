@@ -1,15 +1,12 @@
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+const freezeRows = (rows) => Object.freeze(rows.map((row) => Object.freeze(row)));
 
-export const SEASON_ARCHIVE_VERSION = 'tbg-season-archive-v1.2';
+export const SEASON_ARCHIVE_VERSION = 'tbg-season-archive-v1.3';
 
-function freezeRows(rows) {
-  return Object.freeze(rows.map((row) => Object.freeze(row)));
-}
-
-function stableRank(rows, valueKeys) {
+function stableRank(rows, keys) {
   return [...rows].sort((a, b) => {
-    for (const [key, direction = 'desc'] of valueKeys) {
+    for (const [key, direction = 'desc'] of keys) {
       const left = number(a[key]);
       const right = number(b[key]);
       if (left !== right) return direction === 'asc' ? left - right : right - left;
@@ -18,21 +15,10 @@ function stableRank(rows, valueKeys) {
   });
 }
 
-function eventType(event) {
-  return text(event?.type || event?.event_type || event?.kind).toLowerCase();
-}
-
-function goalScorer(event) {
-  return text(event?.player_id || event?.scorer_id || event?.scorer?.player_id || event?.actor_player_id);
-}
-
-function assistPlayer(event) {
-  return text(event?.assist_player_id || event?.assister_id || event?.assist?.player_id);
-}
-
-function cardPlayer(event) {
-  return text(event?.player_id || event?.booked_player_id || event?.actor_player_id);
-}
+const eventType = (event) => text(event?.type || event?.event_type || event?.kind).toLowerCase();
+const goalScorer = (event) => text(event?.player_id || event?.scorer_id || event?.scorer?.player_id || event?.actor_player_id);
+const assistPlayer = (event) => text(event?.assist_player_id || event?.assister_id || event?.assist?.player_id);
+const cardPlayer = (event) => text(event?.player_id || event?.booked_player_id || event?.actor_player_id);
 
 function playerClubMap(season) {
   const map = new Map();
@@ -71,21 +57,11 @@ function buildPlayerRecords(season) {
     for (const side of ['home', 'away']) {
       const team = result.teams?.[side] || {};
       const starters = new Set(team.starting_xi || []);
-      const playersUsed = new Set(result.lineup_state?.[side]?.players_used || team.starting_xi || []);
-      for (const id of starters) {
-        const row = ensure(id);
-        row.starts += 1;
-      }
-      for (const id of playersUsed) {
-        const row = ensure(id);
-        row.appearances += 1;
-      }
-      for (const id of team.bench || []) {
-        const row = ensure(id);
-        row.bench_appearances += 1;
-      }
+      const used = new Set(result.lineup_state?.[side]?.players_used || team.starting_xi || []);
+      for (const id of starters) ensure(id).starts += 1;
+      for (const id of used) ensure(id).appearances += 1;
+      for (const id of team.bench || []) ensure(id).bench_appearances += 1;
     }
-
     for (const event of result.events || []) {
       const type = eventType(event);
       if (type.includes('goal') && !type.includes('own_goal')) {
@@ -104,7 +80,6 @@ function buildPlayerRecords(season) {
       }
     }
   }
-
   return freezeRows([...records.values()].sort((a, b) => a.player_id.localeCompare(b.player_id)));
 }
 
@@ -116,9 +91,9 @@ function buildClubRecords(season) {
     won: row.won,
     drawn: row.drawn,
     lost: row.lost,
-    goals_for: row.gf,
-    goals_against: row.ga,
-    goal_difference: row.gd,
+    goals_for: row.gf ?? row.goals_for,
+    goals_against: row.ga ?? row.goals_against,
+    goal_difference: row.gd ?? row.goal_difference,
     points: row.points,
     champion: row.position === 1
   })));
@@ -148,36 +123,46 @@ function rebuildClubRecords(results, clubIds) {
 
 function buildAwards(clubs, players) {
   const champion = clubs[0] || null;
-  const bestAttack = stableRank(clubs, [['goals_for', 'desc'], ['points', 'desc']])[0] || null;
-  const bestDefence = stableRank(clubs, [['goals_against', 'asc'], ['points', 'desc']])[0] || null;
-  const topScorer = stableRank(players, [['goals', 'desc'], ['assists', 'desc'], ['appearances', 'asc']])[0] || null;
-  const assistLeader = stableRank(players, [['assists', 'desc'], ['goals', 'desc'], ['appearances', 'asc']])[0] || null;
-  const appearanceLeader = stableRank(players, [['appearances', 'desc'], ['starts', 'desc']])[0] || null;
+  const bestAttack = stableRank(clubs, [['goals_for'], ['points']])[0] || null;
+  const bestDefence = stableRank(clubs, [['goals_against', 'asc'], ['points']])[0] || null;
+  const topScorer = stableRank(players, [['goals'], ['assists'], ['appearances', 'asc']])[0] || null;
+  const assistLeader = stableRank(players, [['assists'], ['goals'], ['appearances', 'asc']])[0] || null;
+  const appearanceLeader = stableRank(players, [['appearances'], ['starts']])[0] || null;
   return Object.freeze({
     champion: champion ? Object.freeze({ club_id: champion.club_id, position: champion.position, points: champion.points }) : null,
     best_attack: bestAttack ? Object.freeze({ club_id: bestAttack.club_id, goals_for: bestAttack.goals_for }) : null,
     best_defence: bestDefence ? Object.freeze({ club_id: bestDefence.club_id, goals_against: bestDefence.goals_against }) : null,
-    golden_boot: topScorer && topScorer.goals > 0 ? Object.freeze({ player_id: topScorer.player_id, club_id: topScorer.club_id, goals: topScorer.goals }) : null,
-    assist_leader: assistLeader && assistLeader.assists > 0 ? Object.freeze({ player_id: assistLeader.player_id, club_id: assistLeader.club_id, assists: assistLeader.assists }) : null,
-    appearance_leader: appearanceLeader && appearanceLeader.appearances > 0 ? Object.freeze({ player_id: appearanceLeader.player_id, club_id: appearanceLeader.club_id, appearances: appearanceLeader.appearances }) : null
+    golden_boot: topScorer?.goals > 0 ? Object.freeze({ player_id: topScorer.player_id, club_id: topScorer.club_id, goals: topScorer.goals }) : null,
+    assist_leader: assistLeader?.assists > 0 ? Object.freeze({ player_id: assistLeader.player_id, club_id: assistLeader.club_id, assists: assistLeader.assists }) : null,
+    appearance_leader: appearanceLeader?.appearances > 0 ? Object.freeze({ player_id: appearanceLeader.player_id, club_id: appearanceLeader.club_id, appearances: appearanceLeader.appearances }) : null
   });
 }
 
 function buildRecords(clubs, players) {
   return Object.freeze({
-    most_points: stableRank(clubs, [['points', 'desc'], ['goal_difference', 'desc']])[0] || null,
-    most_wins: stableRank(clubs, [['won', 'desc'], ['points', 'desc']])[0] || null,
-    most_goals: stableRank(clubs, [['goals_for', 'desc'], ['points', 'desc']])[0] || null,
-    fewest_goals_conceded: stableRank(clubs, [['goals_against', 'asc'], ['points', 'desc']])[0] || null,
-    most_player_appearances: stableRank(players, [['appearances', 'desc'], ['starts', 'desc']])[0] || null,
-    most_player_goals: stableRank(players, [['goals', 'desc'], ['assists', 'desc']])[0] || null
+    most_points: stableRank(clubs, [['points'], ['goal_difference']])[0] || null,
+    most_wins: stableRank(clubs, [['won'], ['points']])[0] || null,
+    most_goals: stableRank(clubs, [['goals_for'], ['points']])[0] || null,
+    fewest_goals_conceded: stableRank(clubs, [['goals_against', 'asc'], ['points']])[0] || null,
+    most_player_appearances: stableRank(players, [['appearances'], ['starts']])[0] || null,
+    most_player_goals: stableRank(players, [['goals'], ['assists']])[0] || null
   });
+}
+
+function archiveResults(results = []) {
+  return freezeRows(results.map((result) => ({
+    fixture: Object.freeze({ ...(result.fixture || {}) }),
+    score: Object.freeze({ ...(result.score || {}) }),
+    events: freezeRows(result.events || []),
+    statistics: result.statistics ? Object.freeze({ ...result.statistics }) : result.stats ? Object.freeze({ ...result.stats }) : null,
+    teams: result.teams ? Object.freeze({ home: Object.freeze({ ...(result.teams.home || {}) }), away: Object.freeze({ ...(result.teams.away || {}) }) }) : null,
+    lineup_state: result.lineup_state ? Object.freeze({ home: Object.freeze({ ...(result.lineup_state.home || {}) }), away: Object.freeze({ ...(result.lineup_state.away || {}) }) }) : null
+  })));
 }
 
 export function createSeasonArchive(season, { archivedAt = null } = {}) {
   if (!season?.season_id) throw new Error('Season archive requires a season_id');
   if (!Array.isArray(season.standings) || !Array.isArray(season.results)) throw new Error('Season archive requires standings and results');
-
   const clubs = buildClubRecords(season);
   const players = buildPlayerRecords(season);
   const awards = buildAwards(clubs, players);
@@ -189,7 +174,6 @@ export function createSeasonArchive(season, { archivedAt = null } = {}) {
     return source && ['played', 'won', 'drawn', 'lost', 'goals_for', 'goals_against', 'goal_difference', 'points']
       .every((key) => number(row[key]) === number(source[key]));
   });
-
   const checks = Object.freeze({
     fixture_count_reconciles: fixtureIds.length === number(season.fixture_count, fixtureIds.length),
     fixture_ids_are_unique: new Set(fixtureIds).size === fixtureIds.length && fixtureIds.every(Boolean),
@@ -201,14 +185,22 @@ export function createSeasonArchive(season, { archivedAt = null } = {}) {
     player_appearances_cover_starts: players.every((row) => row.appearances >= row.starts),
     awards_reference_archived_entities: !awards.champion || clubs.some((row) => row.club_id === awards.champion.club_id)
   });
-
   return Object.freeze({
     version: SEASON_ARCHIVE_VERSION,
     archive_id: `${season.season_id}:archive`,
     season_id: season.season_id,
     archived_at: archivedAt ? new Date(archivedAt).toISOString() : null,
-    summary: Object.freeze({ club_count: clubs.length, fixture_count: fixtureIds.length, total_goals: clubs.reduce((sum, row) => sum + row.goals_for, 0), champion_club_id: awards.champion?.club_id || null }),
-    clubs, players, awards, records,
+    summary: Object.freeze({
+      club_count: clubs.length,
+      fixture_count: fixtureIds.length,
+      total_goals: clubs.reduce((sum, row) => sum + row.goals_for, 0),
+      champion_club_id: awards.champion?.club_id || null
+    }),
+    clubs,
+    players,
+    awards,
+    records,
+    results: archiveResults(season.results),
     source_fixture_ids: Object.freeze(fixtureIds),
     checks,
     accepted: Object.values(checks).every(Boolean)
