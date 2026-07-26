@@ -3,7 +3,7 @@ const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(
 const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 
 export const CONSTITUTIONAL_PUBLIC_RESULT_VERSION = '2d5-v1';
-export const CONSTITUTIONAL_PUBLIC_ADAPTER_VERSION = 'tbg-constitutional-public-adapter-v0.4';
+export const CONSTITUTIONAL_PUBLIC_ADAPTER_VERSION = 'tbg-constitutional-public-adapter-v0.5';
 
 function commentaryByEvent(report = {}) { return new Map((report.commentary || []).map((row) => [String(row.event_id), row.text])); }
 
@@ -75,9 +75,11 @@ function publicStats(stats, possessionValue) {
 export function runConstitutionalPublicResult(context) {
   const resolution = context.get('module_e_match_resolution');
   const report = context.get('module_f_commentary_report');
+  const ratings = context.get('module_g_performance_ratings');
   const eventGeneration = context.get('module_d_event_generation');
   if (!resolution?.resolution_complete) throw new Error('Constitutional public adapter requires Module E resolution');
   if (!report?.report_complete) throw new Error('Constitutional public adapter requires Module F report');
+  if (!ratings?.deterministic) throw new Error('Constitutional public adapter requires Module G performance ratings');
   const homePossession = possession(eventGeneration);
   const events = (resolution.official_event_stream || []).map((event) => publicEvent(event, report, context.contract));
   const playedAt = context.fixture?.played_at || context.fixture?.kickoff_at || context.fixture?.scheduled_at || new Date().toISOString();
@@ -85,8 +87,10 @@ export function runConstitutionalPublicResult(context) {
     result_version: CONSTITUTIONAL_PUBLIC_RESULT_VERSION, run_key: context.contract.run_key, fixture_id: context.fixture.fixture_id || context.fixture.id,
     status: 'completed', played_at: playedAt, score: { ...resolution.score }, outcome: resolution.result, events,
     statistics: { home: publicStats(resolution.statistics.home, homePossession), away: publicStats(resolution.statistics.away, 100 - homePossession) },
+    player_ratings: { home: ratings.home, away: ratings.away },
+    player_of_the_match: ratings.player_of_the_match,
     report: { headline: report.headline, summary: report.summary, talking_points: report.talking_points },
     lineup_state: resolution.lineup_state, state_changes: resolution.state_changes,
-    model: { simulator: 'tbg-constitutional-engine-a-f', adapter_version: CONSTITUTIONAL_PUBLIC_ADAPTER_VERSION, seed_commitment: resolution.seed_commitment, calibrated_profile: 'pr39-baseline-v0.1' }
+    model: { simulator: 'tbg-constitutional-engine-a-g', adapter_version: CONSTITUTIONAL_PUBLIC_ADAPTER_VERSION, performance_ratings_version: ratings.version, seed_commitment: resolution.seed_commitment, calibrated_profile: 'pr39-baseline-v0.1' }
   };
 }
