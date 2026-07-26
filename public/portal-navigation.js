@@ -1,13 +1,34 @@
+import './history.js';
+
 const VIEW_ALIASES = new Map([
   ['dashboard', 'dashboard'],
   ['squad', 'squad'],
   ['tactics', 'tactics'],
   ['tactics & team', 'tactics'],
   ['schedule', 'schedule'],
+  ['history', 'history'],
   ['competition', 'competitions'],
   ['competitions', 'competitions'],
   ['world', 'world']
 ]);
+
+function installHistoryShell() {
+  if (!document.querySelector('link[href$="history.css"]')) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = './history.css';
+    document.head.append(link);
+  }
+  const workspace = document.querySelector('.workspace');
+  if (workspace && !document.getElementById('historyView')) {
+    const section = document.createElement('div');
+    section.id = 'historyView';
+    section.className = 'view';
+    section.hidden = true;
+    section.innerHTML = '<div class="empty-state">Loading canonical world history…</div>';
+    workspace.append(section);
+  }
+}
 
 function normaliseView(value) {
   return VIEW_ALIASES.get(String(value || '').trim().toLowerCase()) || null;
@@ -21,6 +42,7 @@ function viewFromTarget(target) {
 }
 
 export function showPortalView(viewName, { focus = false } = {}) {
+  installHistoryShell();
   const view = normaliseView(viewName);
   if (!view) return false;
   const target = document.getElementById(`${view}View`);
@@ -57,5 +79,6 @@ function handleNavigation(event) {
   showPortalView(view);
 }
 
+installHistoryShell();
 document.addEventListener('click', handleNavigation, true);
 window.addEventListener('tbg:portal-rendered', () => showPortalView('dashboard'), { once: true });
