@@ -52,10 +52,20 @@ export async function openClubInspection(clubId) {
   panel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+function activateClubLink(event, link) {
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  openClubInspection(link.dataset.clubId).catch((error) => console.error('Could not open club inspection', error));
+}
+
 document.addEventListener('click', (event) => {
   const link = event.target.closest('[data-club-id]');
   if (!link || link.closest('#historyView')) return;
-  event.preventDefault();
-  event.stopPropagation();
-  openClubInspection(link.dataset.clubId).catch((error) => console.error('Could not open club inspection', error));
+  activateClubLink(event, link);
+});
+
+document.addEventListener('keydown', (event) => {
+  const link = event.target.closest?.('[data-club-id]');
+  if (!link || link.closest('#historyView') || !['Enter', ' '].includes(event.key)) return;
+  activateClubLink(event, link);
 });
