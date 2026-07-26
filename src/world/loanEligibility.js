@@ -33,8 +33,13 @@ export function fixtureOpponentClubId(fixture = {}, clubId) {
 
 export function findWorldFixture(world = {}, fixtureId) {
   const id = text(fixtureId);
-  const rows = [world.fixtures, world.schedule, world.competition?.fixtures, ...(world.divisions || []).map((division) => division.fixtures)].flat().filter(Array.isArray).flat();
-  return rows.find((fixture) => text(fixture.id || fixture.fixture_id) === id) || null;
+  const collections = [
+    world.fixtures,
+    world.schedule,
+    world.competition?.fixtures,
+    ...(world.divisions || []).map((division) => division.fixtures)
+  ].filter(Array.isArray);
+  return collections.flat().find((fixture) => text(fixture.id || fixture.fixture_id) === id) || null;
 }
 
 export function loanEligibility({ player, player_id, club_id, fixture, world = {}, competition_rules = null } = {}) {
