@@ -2,6 +2,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>\"]/g, (character
 let loaded = false;
 let state = null;
 let accessToken = '';
+let renderedResults = [];
 const originalFetch = window.fetch.bind(window);
 window.fetch = async (...args) => {
   const headers = args[1]?.headers || {};
@@ -50,9 +51,11 @@ function show(tab) {
     content.innerHTML = `<section class="competition-card"><h3>${escapeHtml(history.club_name)}</h3><p>${history.seasons.length} archived campaigns · ${history.honours.length} honours</p>${table(history.seasons)}</section><section class="competition-card"><h3>Promotion and relegation</h3>${history.movements.length ? history.movements.map((movement) => `<p>${escapeHtml(movement.season_id)}: ${escapeHtml(movement.from_division_name)} → ${escapeHtml(movement.to_division_name)}</p>`).join('') : '<p>No recorded movement yet.</p>'}</section>`;
   }
   if (tab === 'archive') {
-    content.innerHTML = state.seasons.length ? state.seasons.map((season) => `<details class="season-archive"><summary>Season ${season.season_number || escapeHtml(season.season_id)}</summary>${season.divisions.map((division) => `<section class="competition-card"><h3>${escapeHtml(division.name)} — ${escapeHtml(division.summary.champion_club_name)} champions</h3>${table(division.standings)}<div class="honours-grid">${Object.entries(division.awards).filter(([, award]) => award).map(([key, award]) => `<div><span>${escapeHtml(key.replaceAll('_', ' '))}</span><strong>${escapeHtml(award.player_name || award.club_name)}</strong></div>`).join('')}</div><h4>Results</h4>${division.results.length ? division.results.map((result) => `<button class="archive-result" data-archive-result='${escapeHtml(JSON.stringify(result))}'>MD ${result.matchday}: ${escapeHtml(result.home_club_name)} ${result.home_score}–${result.away_score} ${escapeHtml(result.away_club_name)}</button>`).join('') : `<p>${division.legacy_result_count} legacy results are indexed, but full reports pre-date persisted result snapshots.</p>`}</section>`).join('')}</details>`).join('') : '<p>No completed seasons yet.</p>';
-    content.querySelectorAll('[data-archive-result]').forEach((button) => button.addEventListener('click', () => {
-      const result = JSON.parse(button.dataset.archiveResult);
+    renderedResults = [];
+    content.innerHTML = state.seasons.length ? state.seasons.map((season) => `<details class="season-archive"><summary>Season ${season.season_number || escapeHtml(season.season_id)}</summary>${season.divisions.map((division) => `<section class="competition-card"><h3>${escapeHtml(division.name)} — ${escapeHtml(division.summary.champion_club_name)} champions</h3>${table(division.standings)}<div class="honours-grid">${Object.entries(division.awards).filter(([, award]) => award).map(([key, award]) => `<div><span>${escapeHtml(key.replaceAll('_', ' '))}</span><strong>${escapeHtml(award.player_name || award.club_name)}</strong></div>`).join('')}</div><h4>Results</h4>${division.results.length ? division.results.map((result) => { const index = renderedResults.push(result) - 1; return `<button class="archive-result" data-result-index="${index}">MD ${result.matchday}: ${escapeHtml(result.home_club_name)} ${result.home_score}–${result.away_score} ${escapeHtml(result.away_club_name)}</button>`; }).join('') : `<p>${division.legacy_result_count} results are indexed, but detailed reports are not yet present in the external report store.</p>`}</section>`).join('')}</details>`).join('') : '<p>No completed seasons yet.</p>';
+    content.querySelectorAll('[data-result-index]').forEach((button) => button.addEventListener('click', () => {
+      const result = renderedResults[Number(button.dataset.resultIndex)];
+      if (!result) return;
       const commentary = (result.events || []).map((event) => event.commentary || event.description || event.type).filter(Boolean).join('\n') || 'No event commentary stored.';
       window.alert(`${result.home_club_name} ${result.home_score}–${result.away_score} ${result.away_club_name}\n\n${commentary}`);
     }));
