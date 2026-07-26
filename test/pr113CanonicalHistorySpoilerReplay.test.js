@@ -117,18 +117,19 @@ test('schedule keeps completed scores visible while spoiler surfaces stay hidden
   assert.match(competition, /const scoreKnown = played && hasScore\(fixture\)/);
 });
 
-test('saved anonymous commentary is attributed from canonical team line-ups', async () => {
+test('anonymous events are not assigned to invented line-up players', async () => {
   const endpoint = await source('netlify/functions/match-centre.mjs');
-  assert.match(endpoint, /function eventPlayerId/);
-  assert.match(endpoint, /result\?\.teams\?\.\[side\]/);
-  assert.match(endpoint, /commentary\.replace\(\/\^A player\\b\/i, resolvedName\)/);
-  assert.match(endpoint, /player_name: resolvedName/);
+  assert.match(endpoint, /const eventPlayerId = \(event\)/);
+  assert.match(endpoint, /function resolvePlayerName/);
+  assert.match(endpoint, /if \(!id\) return 'Unknown player'/);
+  assert.doesNotMatch(endpoint, /\(Number\(event\.minute \|\| 0\) \+ index\) % ids\.length/);
 });
 
 test('canonical event type is normalized for replay scoring and full time', async () => {
   const endpoint = await source('netlify/functions/match-centre.mjs');
   const client = await source('public/phase2d4.js');
-  assert.match(endpoint, /event_type: event\.event_type \|\| event\.type/);
+  assert.match(endpoint, /const eventType = \(event\) => text\(event\.event_type \|\| event\.type/);
+  assert.match(endpoint, /event_type: eventType\(event\) \|\| 'event'/);
   assert.match(client, /event\.event_type === 'goal'/);
   assert.match(client, /event\.event_type === 'full_time'/);
 });
