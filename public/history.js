@@ -68,7 +68,7 @@ function show(tab) {
   const content = document.getElementById('historyContent');
   if (!content || !state) return;
   if (tab === 'live') {
-    content.innerHTML = state.live_divisions.map((division) => `<section class="competition-card"><h3>${escapeHtml(division.name)}</h3><p>${division.played_fixture_count} results · ${division.scheduled_fixture_count} fixtures · Select any club for the full read-only squad</p>${table(division.standings)}</section>`).join('');
+    content.innerHTML = state.live_divisions.map((division) => `<section class="competition-card"><h3>${escapeHtml(division.name)}</h3><p>${division.played_fixture_count} results · ${division.scheduled_fixture_count} fixtures · Click any club to view its squad — now as the full read-only squad screen</p>${table(division.standings)}</section>`).join('');
     bindClubLinks(content);
   }
   if (tab === 'club') {
