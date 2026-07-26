@@ -7,7 +7,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 const text = (value) => String(value ?? '').trim();
-const number = (value, fallback = null) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+const number = (value, fallback = null) => value === null || value === undefined || value === '' ? fallback : Number.isFinite(Number(value)) ? Number(value) : fallback;
 const bearer = (request) => {
   const value = request.headers.get('authorization') || '';
   return value.toLowerCase().startsWith('bearer ') ? value.slice(7).trim() : '';
@@ -52,8 +52,16 @@ function playerLookup(world, result, submissions = []) {
   for (const event of result?.events || []) {
     remember(event.player_id || event.playerId || event.actor_id || event.payload?.player_id, event.player_name || event.payload?.player_name);
     remember(event.assist_player_id || event.payload?.assist_player_id, event.assist_player_name || event.payload?.assist_player_name);
+    remember(event.player_on_id || event.in_player_id || event.replacement_player_id || event.payload?.player_on_id || event.payload?.in_player_id || event.payload?.replacement_player_id, event.player_on_name || event.in_player_name || event.replacement_player_name || event.payload?.player_on_name || event.payload?.in_player_name || event.payload?.replacement_player_name);
+    remember(event.player_off_id || event.out_player_id || event.replaced_player_id || event.payload?.player_off_id || event.payload?.out_player_id || event.payload?.replaced_player_id, event.player_off_name || event.out_player_name || event.replaced_player_name || event.payload?.player_off_name || event.payload?.out_player_name || event.payload?.replaced_player_name);
   }
   return lookup;
+}
+
+function canonicalPlayerName(world, lookup, playerId) {
+  const id = text(playerId);
+  if (!id) return '';
+  return text(world.squad_cycle?.players?.[id]?.display_name || world.squad_cycle?.players?.[id]?.player_name || world.squad_cycle?.players?.[id]?.canonical_name || lookup.get(id));
 }
 
 function resolvePlayerName({ world, lookup, event = null, playerId = null, row = null }) {
@@ -61,7 +69,11 @@ function resolvePlayerName({ world, lookup, event = null, playerId = null, row =
   if (directName) return directName;
   const id = text(playerId || playerIdOf(row));
   if (!id) return 'Unknown player';
-  return text(world.squad_cycle?.players?.[id]?.display_name || world.squad_cycle?.players?.[id]?.player_name || world.squad_cycle?.players?.[id]?.canonical_name || lookup.get(id)) || prettyId(id);
+  return canonicalPlayerName(world, lookup, id) || prettyId(id);
+}
+
+function resolveCommentaryPlayerIds(world, lookup, commentary) {
+  return String(commentary).replace(/\btbg[-_:][a-z0-9:_-]+\b/gi, (playerId) => canonicalPlayerName(world, lookup, playerId) || 'an unnamed player');
 }
 
 const eventToken = (value) => text(value).toLowerCase().replace(/[\s-]+/g, '_');
@@ -88,10 +100,11 @@ function decorateEvent(world, lookup, event) {
   const assistId = assistPlayerId(event);
   const playerName = resolvePlayerName({ world, lookup, event, playerId });
   const commentary = event.commentary || event.description || event.payload?.commentary || null;
+  const resolvedCommentary = commentary ? resolveCommentaryPlayerIds(world, lookup, commentary) : null;
   return {
     ...event,
     event_type: eventType(event),
-    ...(commentary ? { commentary: playerName !== 'Unknown player' ? String(commentary).replace(/^A player\b/i, playerName) : commentary } : {}),
+    ...(resolvedCommentary ? { commentary: playerName !== 'Unknown player' ? resolvedCommentary.replace(/^A player\b/i, playerName) : resolvedCommentary } : {}),
     player_id: playerId || null,
     player_name: playerName,
     assist_player_id: assistId || null,
