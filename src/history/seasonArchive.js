@@ -3,6 +3,7 @@ const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(
 const freezeRows = (rows) => Object.freeze(rows.map((row) => Object.freeze(row)));
 
 export const SEASON_ARCHIVE_VERSION = 'tbg-season-archive-v1.3';
+export const SEASON_REPORT_BUNDLE_VERSION = 'tbg-season-report-bundle-v1.0';
 
 function stableRank(rows, keys) {
   return [...rows].sort((a, b) => {
@@ -149,15 +150,26 @@ function buildRecords(clubs, players) {
   });
 }
 
-function archiveResults(results = []) {
-  return freezeRows(results.map((result) => ({
+function reportSnapshot(result) {
+  return Object.freeze({
     fixture: Object.freeze({ ...(result.fixture || {}) }),
     score: Object.freeze({ ...(result.score || {}) }),
     events: freezeRows(result.events || []),
     statistics: result.statistics ? Object.freeze({ ...result.statistics }) : result.stats ? Object.freeze({ ...result.stats }) : null,
     teams: result.teams ? Object.freeze({ home: Object.freeze({ ...(result.teams.home || {}) }), away: Object.freeze({ ...(result.teams.away || {}) }) }) : null,
     lineup_state: result.lineup_state ? Object.freeze({ home: Object.freeze({ ...(result.lineup_state.home || {}) }), away: Object.freeze({ ...(result.lineup_state.away || {}) }) }) : null
-  })));
+  });
+}
+
+export function createSeasonReportBundle(season, { archivedAt = null } = {}) {
+  if (!season?.season_id || !Array.isArray(season.results)) throw new Error('Season report bundle requires a season_id and results');
+  return Object.freeze({
+    version: SEASON_REPORT_BUNDLE_VERSION,
+    report_store_key: `${season.season_id}:reports`,
+    season_id: season.season_id,
+    archived_at: archivedAt ? new Date(archivedAt).toISOString() : null,
+    reports: freezeRows(season.results.map(reportSnapshot))
+  });
 }
 
 export function createSeasonArchive(season, { archivedAt = null } = {}) {
@@ -188,6 +200,7 @@ export function createSeasonArchive(season, { archivedAt = null } = {}) {
   return Object.freeze({
     version: SEASON_ARCHIVE_VERSION,
     archive_id: `${season.season_id}:archive`,
+    report_store_key: `${season.season_id}:reports`,
     season_id: season.season_id,
     archived_at: archivedAt ? new Date(archivedAt).toISOString() : null,
     summary: Object.freeze({
@@ -200,7 +213,6 @@ export function createSeasonArchive(season, { archivedAt = null } = {}) {
     players,
     awards,
     records,
-    results: archiveResults(season.results),
     source_fixture_ids: Object.freeze(fixtureIds),
     checks,
     accepted: Object.values(checks).every(Boolean)
