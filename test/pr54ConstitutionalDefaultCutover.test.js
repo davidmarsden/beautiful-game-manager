@@ -73,8 +73,9 @@ test('an omitted engine mode runs the constitutional public adapter', () => {
   const { contract, world } = fixture();
   const result = simulateMatch(contract, world);
 
-  assert.equal(result.model.simulator, 'tbg-constitutional-engine-a-f');
+  assert.equal(result.model.simulator, 'tbg-constitutional-engine-a-g');
   assert.equal(result.result_version, '2d5-v1');
+  assert.equal(result.model.performance_ratings_version, 'tbg-performance-ratings-v0.1');
 });
 
 test('explicit constitutional mode matches the new default', () => {
