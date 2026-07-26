@@ -7,6 +7,11 @@ import {
 } from '../src/matchEngine/constitutionalPublicResult.js';
 
 function makeContext(runKey, fixtureId) {
+  const rating = {
+    player_id: 'home-9', side: 'home', minutes_played: 90, role: 'attacker', rating: 7.4,
+    components: { baseline: 6, event_impact: 1.15, role_contribution: 0.1, above_expectation: 0, match_context: 0, team_result: 0.15, discipline: 0 },
+    highlights: ['1 goal']
+  };
   const state = {
     module_d_event_generation: {
       expected: {
@@ -45,6 +50,10 @@ function makeContext(runKey, fixtureId) {
       commentary: [
         { event_id: 'home-chance-1', text: 'Named Player scores for Home.' }
       ]
+    },
+    module_g_performance_ratings: {
+      version: 'tbg-performance-ratings-v0.1', deterministic: true,
+      home: [rating], away: [], player_of_the_match: rating
     }
   };
 
@@ -68,6 +77,9 @@ test('public event IDs are namespaced by run key while internal IDs remain trace
   assert.equal(result.events[0].internal_event_id, 'home-chance-1');
   assert.equal(result.events[0].commentary, 'Named Player scores for Home.');
   assert.equal(result.model.adapter_version, CONSTITUTIONAL_PUBLIC_ADAPTER_VERSION);
+  assert.equal(result.model.performance_ratings_version, 'tbg-performance-ratings-v0.1');
+  assert.equal(result.player_ratings.home[0].rating, 7.4);
+  assert.equal(result.player_of_the_match.player_id, 'home-9');
 });
 
 test('identical internal event IDs cannot collide across fixtures', () => {
