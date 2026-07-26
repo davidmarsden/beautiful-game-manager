@@ -20,6 +20,14 @@ function installHistoryShell() {
     document.head.append(link);
   }
   const workspace = document.querySelector('.workspace');
+  const tabs = workspace?.querySelector('.tabs');
+  if (tabs && !tabs.querySelector('[data-view="history"]')) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.view = 'history';
+    button.textContent = 'History';
+    tabs.append(button);
+  }
   if (workspace && !document.getElementById('historyView')) {
     const section = document.createElement('div');
     section.id = 'historyView';
@@ -81,4 +89,7 @@ function handleNavigation(event) {
 
 installHistoryShell();
 document.addEventListener('click', handleNavigation, true);
-window.addEventListener('tbg:portal-rendered', () => showPortalView('dashboard'), { once: true });
+window.addEventListener('tbg:portal-rendered', () => {
+  installHistoryShell();
+  showPortalView('dashboard');
+}, { once: true });
