@@ -29,14 +29,19 @@ function generatedYouthPlayer(player = {}) {
   const id = text(player.tbg_player_id || player.player_id || player.id).toLowerCase();
   const source = text(player.source || player.player_source || player.origin || player.generated_source).toLowerCase();
   const type = text(player.player_type || player.registration_group || player.squad_status).toLowerCase();
+  const hasYouthIntakeSeason = player.youth_intake_season !== undefined
+    && player.youth_intake_season !== null
+    && text(player.youth_intake_season) !== '';
   return Boolean(
     player.generated === true
     || player.is_generated === true
     || player.generated_youth === true
     || player.youth_intake_generated === true
+    || hasYouthIntakeSeason
     || ['youth_intake', 'academy_intake', 'generated_youth', 'academy_generated'].includes(source)
     || ['generated_youth', 'academy_generated'].includes(type)
     || /(?:^|[-_:])(academy|youth)[-_:]?intake(?:[-_:]|$)/.test(id)
+    || /(?:^|[-_:])youth[-_:][^-_:]+[-_:]\d+(?:[-_:]|$)/.test(id)
   );
 }
 
