@@ -1,8 +1,10 @@
 import { loadPersistentWorld } from '../../src/world/persistentSeasonLoop.js';
 import { canonicalFixtureIds, projectManagerPortal } from '../../src/world/managerPortalProjection.js';
+import { projectPinkFinalSquadLinks } from '../../src/world/pinkFinalPlayerProfile.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+const PINK_FINAL_BASE_URL = process.env.PINK_FINAL_BASE_URL || undefined;
 const TURN_DAYS = String(process.env.TBG_TURN_DAYS || '2,5').split(',').map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6);
 const TURN_HOUR_UTC = Number(process.env.TBG_TURN_HOUR_UTC || 20);
 
@@ -99,11 +101,14 @@ export default async (request) => {
 
     const world = loadPersistentWorld(JSON.stringify(stored.save_envelope));
     if (world.world_id !== appointment.world_id) throw new Error('Appointment world does not match the canonical save');
-    const projection = spoilerSafeProjection(projectManagerPortal(world, appointment.club_id, {
+    const managerProjection = projectManagerPortal(world, appointment.club_id, {
       nextTurnAt: stored.next_turn_at,
       weekdaysUtc: TURN_DAYS,
       hourUtc: TURN_HOUR_UTC
-    }));
+    });
+    const projection = projectPinkFinalSquadLinks(spoilerSafeProjection(managerProjection), {
+      ...(PINK_FINAL_BASE_URL ? { baseUrl: PINK_FINAL_BASE_URL } : {})
+    });
     const messages = managerMessages(rawMessages, world, stored.created_at);
     const currentMatchday = world.matchday_cycle?.current_matchday || 1;
     const turnSubmissionRows = await supabase(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(world.world_id)}&season_id=eq.${encodeURIComponent(world.squad_cycle.season_id)}&matchday=eq.${currentMatchday}&manager_id=eq.${encodeURIComponent(manager.id)}&club_id=eq.${encodeURIComponent(appointment.club_id)}&select=*&order=submitted_at.desc&limit=1`, token).catch(() => []);
