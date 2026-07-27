@@ -40,6 +40,21 @@ function inspectionHost() {
   return host;
 }
 
+function addPinkFinalClubLink(panel, club) {
+  if (!panel || !club.pink_final_club_profile_url) return;
+  const heading = panel.querySelector('.section-heading');
+  const close = heading?.querySelector('[data-close-club]');
+  if (!heading || heading.querySelector('[data-pink-final-club]')) return;
+  const link = document.createElement('a');
+  link.dataset.pinkFinalClub = '';
+  link.className = 'club-public-profile-link';
+  link.href = club.pink_final_club_profile_url;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.textContent = 'View in The Pink Final';
+  heading.insertBefore(link, close || null);
+}
+
 export async function openClubInspection(clubId) {
   if (!clubId) return;
   const clubs = await clubDirectory();
@@ -48,6 +63,7 @@ export async function openClubInspection(clubId) {
   const host = inspectionHost();
   mountReadOnlySquadView(host, club);
   const panel = host.querySelector('#historyClubPanel');
+  addPinkFinalClubLink(panel, club);
   panel?.querySelector('[data-close-club]')?.addEventListener('click', () => host.remove());
   panel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }

@@ -1,10 +1,12 @@
 import { loadPersistentWorld } from '../../src/world/persistentSeasonLoop.js';
 import { projectPersistentHistory } from '../../src/world/persistentHistoryProjection.js';
 import { enrichHistorySquads } from '../../src/world/historySquadProjection.js';
+import { projectPinkFinalClubIdentity } from '../../src/world/pinkFinalClubProfile.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
 const PINK_FINAL_BASE_URL = process.env.PINK_FINAL_BASE_URL || undefined;
+const PINK_FINAL_CLUB_BASE_URL = process.env.PINK_FINAL_CLUB_BASE_URL || undefined;
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 const tokenOf = (request) => { const header = request.headers.get('authorization') || ''; return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : ''; };
 
@@ -40,8 +42,15 @@ export default async (request) => {
       }),
       pinkFinalBaseUrl: PINK_FINAL_BASE_URL
     };
+    const history = enrichHistorySquads(projection, world);
+    const clubLinkOptions = PINK_FINAL_CLUB_BASE_URL ? { baseUrl: PINK_FINAL_CLUB_BASE_URL } : {};
+    const clubs = Object.fromEntries(Object.entries(history.clubs || {}).map(([clubId, club]) => [clubId, {
+      ...club,
+      ...projectPinkFinalClubIdentity({ ...world.club_profiles?.[clubId], club_id: clubId }, clubLinkOptions)
+    }]));
     return json({
-      ...enrichHistorySquads(projection, world),
+      ...history,
+      clubs,
       canonical_source: { checksum: saves[0].save_checksum, updated_at: saves[0].updated_at }
     });
   } catch (error) {
