@@ -11,6 +11,8 @@ const POSITION_GROUPS = Object.freeze({
   attacker: new Set(['lw', 'rw', 'ss', 'cf', 'st', 'att', 'attacker', 'forward', 'left winger', 'right winger', 'second striker', 'centre-forward', 'center-forward', 'striker'])
 });
 const GROUP_REQUIREMENTS = Object.freeze({ goalkeeper: 2, defender: 6, midfielder: 5, attacker: 3 });
+const POSITIVE_PUBLICATION_STATES = new Set(['true', 'yes', 'published', 'public', 'live', 'eligible']);
+const GENERATED_YOUTH_SOURCES = new Set(['youth_intake', 'youth-intake', 'academy_generated', 'academy-generated', 'generated_youth', 'generated-youth']);
 
 function positionOf(player) {
   return text(player?.specific_position || player?.position || player?.primary_position || player?.canonical_position || player?.position_group) || 'Unknown';
@@ -32,6 +34,20 @@ function isYouth(player) {
   return number(player?.season_start_age ?? player?.age, 99) <= 21;
 }
 
+function isGeneratedYouth(player) {
+  if (player?.synthetic === true || player?.generated === true || player?.generated_youth === true || player?.academy_generated === true) return true;
+  const source = text(player?.generation_source || player?.player_source || player?.source || player?.origin).toLowerCase();
+  if (GENERATED_YOUTH_SOURCES.has(source)) return true;
+  const id = text(player?.tbg_player_id || player?.player_id).toLowerCase();
+  return /(?:^|[-_:])(youth|academy|intake)(?:[-_:]|$)/.test(id);
+}
+
+function hasExplicitPinkFinalPublication(player) {
+  if (text(player?.pink_final_profile_url || player?.public_profile_url || player?.pink_final_route_key || player?.profile_route_key || player?.canonical_profile_key)) return true;
+  return [player?.profile_published, player?.pink_final_profile_published, player?.public_profile_published, player?.publication_status, player?.profile_status]
+    .some((value) => value === true || POSITIVE_PUBLICATION_STATES.has(text(value).toLowerCase()));
+}
+
 function isLoanedOut(player) {
   return Boolean(player?.loaned_out || text(player?.loan_status).toLowerCase() === 'loaned_out');
 }
@@ -49,6 +65,7 @@ function contractDate(player) {
 }
 
 function safePlayer(playerId, player) {
+  const generatedYouthUnpublished = isGeneratedYouth(player) && !hasExplicitPinkFinalPublication(player);
   return {
     player_id: playerId,
     tbg_player_id: player.tbg_player_id || playerId,
@@ -73,17 +90,19 @@ function safePlayer(playerId, player) {
     loaned_out: isLoanedOut(player),
     loan_status: player.loan_status || null,
     loan_club_name: text(player.loan_club_name) || null,
-    profile_url: player.profile_url || null,
+    source_profile_url: player.source_profile_url || player.profile_url || null,
     pink_final_profile_url: player.pink_final_profile_url || null,
     public_profile_url: player.public_profile_url || null,
     pink_final_route_key: player.pink_final_route_key || null,
     profile_route_key: player.profile_route_key || null,
     canonical_profile_key: player.canonical_profile_key || null,
-    profile_published: player.profile_published,
+    profile_published: generatedYouthUnpublished ? false : player.profile_published,
     pink_final_profile_published: player.pink_final_profile_published,
     public_profile_published: player.public_profile_published,
-    publication_status: player.publication_status,
-    profile_status: player.profile_status
+    publication_status: generatedYouthUnpublished ? 'unpublished' : player.publication_status,
+    profile_status: player.profile_status,
+    synthetic: Boolean(player.synthetic || player.generated || player.generated_youth || player.academy_generated),
+    generation_source: player.generation_source || player.player_source || player.source || player.origin || null
   };
 }
 
