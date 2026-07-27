@@ -1,5 +1,5 @@
 import { openClubInspection } from './club-inspection.js';
-import { requestedTbgClubId } from '../src/world/tbgClubEntryRoute.js';
+import { requestedTbgClubId } from './stable-club-route.js';
 
 function clearClubRequest() {
   const url = new URL(window.location.href);
