@@ -10,14 +10,29 @@ test('match centre payload projects stable Pink Final identity by player ID', ()
     squad_cycle: {
       players: {
         'tbg-player-001': { tbg_player_id: 'tbg-player-001', display_name: 'Published Player' },
-        'academy-intake-001': { tbg_player_id: 'academy-intake-001', display_name: 'Generated Youth', generated: true, source: 'youth_intake' }
+        'academy-intake-001': { tbg_player_id: 'academy-intake-001', display_name: 'Generated Youth', generated: true, source: 'youth_intake' },
+        'academy-intake-002': {
+          tbg_player_id: 'academy-intake-002',
+          display_name: 'Published Academy Player',
+          generated: true,
+          source: 'youth_intake',
+          pink_final_profile_published: true,
+          pink_final_route_key: 'published-academy-002'
+        }
       }
     }
   };
   const payload = decorateMatchCentrePayload({
     fixture: { world_id: 'world-1', home_club_id: 'home', away_club_id: 'away' },
     events: [{ player_id: 'tbg-player-001', player_name: 'Published Player' }],
-    submissions: [{ club_id: 'home', starting_xi: [{ id: 'tbg-player-001', name: 'Published Player' }], bench: [{ id: 'academy-intake-001', name: 'Generated Youth' }] }],
+    submissions: [{
+      club_id: 'home',
+      starting_xi: [{ id: 'tbg-player-001', name: 'Published Player' }],
+      bench: [
+        { id: 'academy-intake-001', name: 'Generated Youth' },
+        { id: 'academy-intake-002', name: 'Published Academy Player' }
+      ]
+    }],
     summary: {
       scorers: { home: [{ player_id: 'tbg-player-001', player_name: 'Published Player' }], away: [] },
       cards: { home: [], away: [] },
@@ -31,6 +46,8 @@ test('match centre payload projects stable Pink Final identity by player ID', ()
   assert.match(payload.submissions[0].starting_xi[0].profile_url, /\?id=tbg-player-001$/);
   assert.equal(payload.submissions[0].bench[0].profile_url, null);
   assert.equal(payload.submissions[0].bench[0].pink_final_profile_status, 'unpublished');
+  assert.match(payload.submissions[0].bench[1].profile_url, /\?id=published-academy-002$/);
+  assert.equal(payload.submissions[0].bench[1].pink_final_profile_status, 'published');
   assert.match(payload.summary.player_of_the_match.profile_url, /\?id=tbg-player-001$/);
 });
 
