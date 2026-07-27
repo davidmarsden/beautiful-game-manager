@@ -56,6 +56,24 @@ test('unpublished profiles project an honest non-link state', () => {
   assert.equal(player.pink_final_profile_status, 'unpublished');
 });
 
+test('negative publication signals suppress stale explicit profile URLs', () => {
+  const unpublished = projectPinkFinalPlayerIdentity({
+    tbg_player_id: 'tbg-player-stale-001',
+    pink_final_profile_url: 'https://pink-final.example/players/stale-001',
+    profile_published: false
+  }, { baseUrl: BASE_URL });
+  const privateProfile = projectPinkFinalPlayerIdentity({
+    tbg_player_id: 'tbg-player-stale-002',
+    public_profile_url: 'https://pink-final.example/players/stale-002',
+    publication_status: 'private'
+  }, { baseUrl: BASE_URL });
+
+  assert.equal(unpublished.profile_url, null);
+  assert.equal(unpublished.pink_final_profile_status, 'unpublished');
+  assert.equal(privateProfile.profile_url, null);
+  assert.equal(privateProfile.pink_final_profile_status, 'unpublished');
+});
+
 test('every projected squad player receives stable profile metadata', () => {
   const projection = projectPinkFinalSquadLinks({ squad: [
     { tbg_player_id: 'tbg-player-005', display_name: 'Published Player' },
