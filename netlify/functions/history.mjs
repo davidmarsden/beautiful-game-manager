@@ -37,8 +37,9 @@ export default async (request) => {
       managedClubId: appointment.club_id,
       reportBundles: reportRows.map((row) => ({ ...row, reports: row.reports || [] }))
     });
+    if (PINK_FINAL_BASE_URL) projection.pink_final_base_url = PINK_FINAL_BASE_URL;
     return json({
-      ...enrichHistorySquads(projection, world, { ...(PINK_FINAL_BASE_URL ? { pinkFinalBaseUrl: PINK_FINAL_BASE_URL } : {}) }),
+      ...enrichHistorySquads(projection, world),
       canonical_source: { checksum: saves[0].save_checksum, updated_at: saves[0].updated_at }
     });
   } catch (error) {
