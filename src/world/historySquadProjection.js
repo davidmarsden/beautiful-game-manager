@@ -106,7 +106,7 @@ function contractWatch(players, now = new Date()) {
     .map((row) => ({ player_id: row.player.player_id, player_name: row.player.display_name, position: positionOf(row.player), end_at: row.end.toISOString(), days_remaining: row.days }));
 }
 
-export function enrichHistorySquads(projection, world, { now = new Date(), pinkFinalBaseUrl } = {}) {
+export function enrichHistorySquads(projection, world, { now = new Date(), pinkFinalBaseUrl = projection?.pink_final_base_url } = {}) {
   const clubs = Object.fromEntries(Object.entries(projection.clubs || {}).map(([clubId, projected]) => {
     const portal = projectManagerPortal(world, clubId);
     const linkOptions = pinkFinalBaseUrl ? { baseUrl: pinkFinalBaseUrl } : {};
