@@ -32,7 +32,7 @@ test('explicit public URLs and route keys survive future Pink Final route change
   const explicit = projectPinkFinalPlayerIdentity({
     tbg_player_id: 'tbg-player-003',
     display_name: 'Route Test',
-    profile_url: 'https://pink-final.example/footballers/stable-003'
+    pink_final_profile_url: 'https://pink-final.example/footballers/stable-003'
   }, { baseUrl: BASE_URL });
   const routed = projectPinkFinalPlayerIdentity({
     tbg_player_id: 'legacy-id',

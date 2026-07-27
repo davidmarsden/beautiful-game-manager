@@ -14,6 +14,13 @@ function absoluteUrl(value, baseUrl) {
   }
 }
 
+function explicitPinkFinalUrl(player = {}) {
+  // Generic profile_url belongs to imported provider data in the current world
+  // (for example Transfermarkt). Only fields explicitly governed as Pink Final
+  // public routes may override the canonical route-key URL.
+  return text(player.pink_final_profile_url || player.public_profile_url);
+}
+
 export function pinkFinalPublicationState(player = {}) {
   const signals = [
     player.profile_published,
@@ -27,8 +34,7 @@ export function pinkFinalPublicationState(player = {}) {
   // remain on an imported or previously published player record.
   if (signals.some(falsey)) return 'unpublished';
 
-  const explicitUrl = text(player.profile_url || player.pink_final_profile_url || player.public_profile_url);
-  if (explicitUrl) return 'published';
+  if (explicitPinkFinalUrl(player)) return 'published';
   if (signals.some(truthy)) return 'published';
 
   // Existing canonical-world players pre-date the publication flag. Their durable
@@ -50,10 +56,7 @@ export function pinkFinalProfileUrl(player = {}, { baseUrl = DEFAULT_PINK_FINAL_
   if (pinkFinalPublicationState(player) !== 'published') return null;
 
   const configuredBase = absoluteUrl(baseUrl, DEFAULT_PINK_FINAL_BASE_URL) || DEFAULT_PINK_FINAL_BASE_URL;
-  const explicitUrl = absoluteUrl(
-    player.profile_url || player.pink_final_profile_url || player.public_profile_url,
-    configuredBase
-  );
+  const explicitUrl = absoluteUrl(explicitPinkFinalUrl(player), configuredBase);
   if (explicitUrl) return explicitUrl;
 
   const routeKey = pinkFinalRouteKey(player);
@@ -65,9 +68,11 @@ export function pinkFinalProfileUrl(player = {}, { baseUrl = DEFAULT_PINK_FINAL_
 }
 
 export function projectPinkFinalPlayerIdentity(player = {}, options = {}) {
+  const sourceProfileUrl = text(player.source_profile_url || player.profile_url) || null;
   const profileUrl = pinkFinalProfileUrl(player, options);
   return {
     ...player,
+    source_profile_url: sourceProfileUrl,
     pink_final_route_key: pinkFinalRouteKey(player),
     pink_final_profile_status: profileUrl ? 'published' : 'unpublished',
     profile_url: profileUrl

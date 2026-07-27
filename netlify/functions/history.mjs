@@ -4,6 +4,7 @@ import { enrichHistorySquads } from '../../src/world/historySquadProjection.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+const PINK_FINAL_BASE_URL = process.env.PINK_FINAL_BASE_URL || undefined;
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 const tokenOf = (request) => { const header = request.headers.get('authorization') || ''; return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : ''; };
 
@@ -32,10 +33,13 @@ export default async (request) => {
     if (!saves[0]) return json({ error: 'Canonical world has not been initialized' }, 409);
     const reportRows = await supabase(`/rest/v1/season_match_report_bundles?world_id=eq.${encodeURIComponent(appointment.world_id)}&select=report_store_key,season_id,reports&order=season_id.desc`, token).catch(() => []);
     const world = loadPersistentWorld(JSON.stringify(saves[0].save_envelope));
-    const projection = projectPersistentHistory(world, {
-      managedClubId: appointment.club_id,
-      reportBundles: reportRows.map((row) => ({ ...row, reports: row.reports || [] }))
-    });
+    const projection = {
+      ...projectPersistentHistory(world, {
+        managedClubId: appointment.club_id,
+        reportBundles: reportRows.map((row) => ({ ...row, reports: row.reports || [] }))
+      }),
+      pinkFinalBaseUrl: PINK_FINAL_BASE_URL
+    };
     return json({
       ...enrichHistorySquads(projection, world),
       canonical_source: { checksum: saves[0].save_checksum, updated_at: saves[0].updated_at }

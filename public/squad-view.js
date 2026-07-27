@@ -51,8 +51,14 @@ function contractLabel(player) {
   return escapeHtml(player.contract_expiry || player.contract_end_at || player.contract?.end_at || 'Open-ended');
 }
 
+function playerNameMarkup(player) {
+  const name = escapeHtml(playerName(player));
+  if (!player.profile_url) return `<span class="player-link player-link-unavailable" title="Pink Final profile not published yet">${name}</span>`;
+  return `<a class="player-link" href="${escapeHtml(player.profile_url)}" target="_blank" rel="noopener">${name}</a>`;
+}
+
 function playerRow(player) {
-  return `<tr><td>${player.squad_number ?? '—'}</td><td>${escapeHtml(playerName(player))}</td><td>${escapeHtml(canonicalPosition(player))}</td><td>${player.age ?? '—'}</td><td><strong>${playerRating(player) ?? '—'}</strong></td><td>${player.fitness ?? 100}%</td><td>${escapeHtml(player.morale || 'Good')}</td><td>${availabilityBadge(player)}</td><td>${contractLabel(player)}</td><td>${statusBadges(player)}</td></tr>`;
+  return `<tr><td>${player.squad_number ?? '—'}</td><td>${playerNameMarkup(player)}</td><td>${escapeHtml(canonicalPosition(player))}</td><td>${player.age ?? '—'}</td><td><strong>${playerRating(player) ?? '—'}</strong></td><td>${player.fitness ?? 100}%</td><td>${escapeHtml(player.morale || 'Good')}</td><td>${availabilityBadge(player)}</td><td>${contractLabel(player)}</td><td>${statusBadges(player)}</td></tr>`;
 }
 
 function renderRows(players) {
