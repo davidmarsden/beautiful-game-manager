@@ -1,7 +1,21 @@
 import { openClubInspection } from './club-inspection.js';
 import { requestedTbgClubId } from './stable-club-route.js';
 
+const PENDING_CLUB_KEY = 'tbg_pending_club_id';
+
+function rememberRequestedClub(clubId) {
+  if (!clubId) return;
+  localStorage.setItem(PENDING_CLUB_KEY, clubId);
+}
+
+function pendingClubId() {
+  const stored = localStorage.getItem(PENDING_CLUB_KEY) || '';
+  return requestedTbgClubId(globalThis.location?.href || '')
+    || requestedTbgClubId(`/?club=${encodeURIComponent(stored)}`);
+}
+
 function clearClubRequest() {
+  localStorage.removeItem(PENDING_CLUB_KEY);
   const url = new URL(window.location.href);
   url.searchParams.delete('club');
   window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
@@ -12,7 +26,7 @@ function portalIsReady() {
   return Boolean(portal && !portal.hidden);
 }
 
-export function activateRequestedClubLink(clubId = requestedTbgClubId(globalThis.location?.href || '')) {
+export function activateRequestedClubLink(clubId = pendingClubId()) {
   if (!clubId || typeof document === 'undefined') return;
   let opening = false;
   const openWhenReady = () => {
@@ -35,4 +49,15 @@ export function activateRequestedClubLink(clubId = requestedTbgClubId(globalThis
   observer.observe(document.documentElement, { attributes: true, childList: true, subtree: true });
 }
 
-if (typeof window !== 'undefined' && typeof document !== 'undefined') activateRequestedClubLink();
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  const requested = requestedTbgClubId(globalThis.location?.href || '');
+
+  // Browsing another club link must not overwrite the club associated with an
+  // already-sent magic link. Commit the request only when this tab submits its
+  // own authentication attempt.
+  document.addEventListener('submit', (event) => {
+    if (event.target?.id === 'loginForm') rememberRequestedClub(requested);
+  }, true);
+
+  activateRequestedClubLink(requested || pendingClubId());
+}

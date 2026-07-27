@@ -1,6 +1,9 @@
 import './portal-v1.js';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const PENDING_CLUB_KEY = "tbg_pending_club_id";
+const SAFE_CLUB_ID = /^[A-Za-z0-9._:-]{1,160}$/;
+
 async function loadConfig() {
   const response = await fetch("/api/auth-config", { cache: "no-store" });
   const config = await response.json();
@@ -19,6 +22,13 @@ function callbackDetails() {
     refreshToken: hash.get("refresh_token"),
     authError: query.get("error_description") || query.get("error") || hash.get("error_description") || hash.get("error")
   };
+}
+
+function restoredPath() {
+  const pendingClubId = localStorage.getItem(PENDING_CLUB_KEY) || "";
+  const url = new URL(window.location.origin + window.location.pathname);
+  if (SAFE_CLUB_ID.test(pendingClubId)) url.searchParams.set("club", pendingClubId);
+  return `${url.pathname}${url.search}`;
 }
 
 async function completeAuthCallback() {
@@ -54,7 +64,7 @@ async function completeAuthCallback() {
   }
 
   sessionStorage.removeItem("tbg_auth_callback_error");
-  history.replaceState({}, document.title, window.location.pathname);
+  history.replaceState({}, document.title, restoredPath());
   return true;
 }
 
