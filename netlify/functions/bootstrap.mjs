@@ -101,12 +101,11 @@ export default async (request) => {
 
     const world = loadPersistentWorld(JSON.stringify(stored.save_envelope));
     if (world.world_id !== appointment.world_id) throw new Error('Appointment world does not match the canonical save');
-    const managerProjection = projectManagerPortal(world, appointment.club_id, {
+    const projection = projectPinkFinalSquadLinks(spoilerSafeProjection(projectManagerPortal(world, appointment.club_id, {
       nextTurnAt: stored.next_turn_at,
       weekdaysUtc: TURN_DAYS,
       hourUtc: TURN_HOUR_UTC
-    });
-    const projection = projectPinkFinalSquadLinks(spoilerSafeProjection(managerProjection), {
+    })), {
       ...(PINK_FINAL_BASE_URL ? { baseUrl: PINK_FINAL_BASE_URL } : {})
     });
     const messages = managerMessages(rawMessages, world, stored.created_at);
