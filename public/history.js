@@ -35,6 +35,21 @@ function table(rows = []) {
   return `<div class="table-wrap"><table class="competition-table"><thead><tr><th>Pos</th><th>Club</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr></thead><tbody>${rows.map((row) => `<tr class="${row.is_managed_club ? 'managed-club-row' : ''}"><td>${row.position}</td><td>${clubButton(row)}</td><td>${row.played}</td><td>${row.won}</td><td>${row.drawn}</td><td>${row.lost}</td><td>${row.goals_for}</td><td>${row.goals_against}</td><td>${row.goal_difference > 0 ? '+' : ''}${row.goal_difference}</td><td><strong>${row.points}</strong></td></tr>`).join('')}</tbody></table></div>`;
 }
 
+function addPinkFinalClubLink(panel, club) {
+  if (!panel || !club?.pink_final_club_profile_url) return;
+  const heading = panel.querySelector('.section-heading');
+  const close = heading?.querySelector('[data-close-club]');
+  if (!heading || heading.querySelector('[data-pink-final-club]')) return;
+  const link = document.createElement('a');
+  link.dataset.pinkFinalClub = '';
+  link.className = 'club-public-profile-link';
+  link.href = club.pink_final_club_profile_url;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.textContent = 'View in The Pink Final';
+  heading.insertBefore(link, close || null);
+}
+
 function openClubPanel(content, clubId) {
   const club = state?.clubs?.[clubId];
   if (!club) return;
@@ -44,6 +59,7 @@ function openClubPanel(content, clubId) {
   content.prepend(host);
   mountReadOnlySquadView(host, club);
   const panel = host.querySelector('#historyClubPanel');
+  addPinkFinalClubLink(panel, club);
   panel?.querySelector('[data-close-club]')?.addEventListener('click', () => host.remove());
   panel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
