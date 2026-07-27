@@ -2,11 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-test('requested club survives the magic-link callback', async () => {
+test('requested club survives the magic-link callback without being overwritten by browsing', async () => {
   const links = await readFile(new URL('../public/stable-club-links.js', import.meta.url), 'utf8');
   const auth = await readFile(new URL('../public/auth-entry.js', import.meta.url), 'utf8');
-  assert.match(links, /tbg_pending_club_id/);
-  assert.match(links, /localStorage\.setItem/);
+  assert.match(links, /event\.target\?\.id === 'loginForm'/);
+  assert.match(links, /rememberRequestedClub\(requested\)/);
+  assert.doesNotMatch(links, /rememberRequestedClub\(requested\);\s*document\.addEventListener/s);
   assert.match(auth, /localStorage\.getItem\(PENDING_CLUB_KEY\)/);
   assert.match(auth, /url\.searchParams\.set\("club", pendingClubId\)/);
 });
