@@ -15,9 +15,6 @@ function absoluteUrl(value, baseUrl) {
 }
 
 export function pinkFinalPublicationState(player = {}) {
-  const explicitUrl = text(player.profile_url || player.pink_final_profile_url || player.public_profile_url);
-  if (explicitUrl) return 'published';
-
   const signals = [
     player.profile_published,
     player.pink_final_profile_published,
@@ -25,7 +22,13 @@ export function pinkFinalPublicationState(player = {}) {
     player.publication_status,
     player.profile_status
   ];
+
+  // Explicit suppression always wins, including when stale public-profile URLs
+  // remain on an imported or previously published player record.
   if (signals.some(falsey)) return 'unpublished';
+
+  const explicitUrl = text(player.profile_url || player.pink_final_profile_url || player.public_profile_url);
+  if (explicitUrl) return 'published';
   if (signals.some(truthy)) return 'published';
 
   // Existing canonical-world players pre-date the publication flag. Their durable
