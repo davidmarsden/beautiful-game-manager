@@ -4,6 +4,7 @@ import { enrichHistorySquads } from '../../src/world/historySquadProjection.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+const PINK_FINAL_BASE_URL = process.env.PINK_FINAL_BASE_URL || undefined;
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 const tokenOf = (request) => { const header = request.headers.get('authorization') || ''; return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : ''; };
 
@@ -37,7 +38,7 @@ export default async (request) => {
       reportBundles: reportRows.map((row) => ({ ...row, reports: row.reports || [] }))
     });
     return json({
-      ...enrichHistorySquads(projection, world),
+      ...enrichHistorySquads(projection, world, { ...(PINK_FINAL_BASE_URL ? { pinkFinalBaseUrl: PINK_FINAL_BASE_URL } : {}) }),
       canonical_source: { checksum: saves[0].save_checksum, updated_at: saves[0].updated_at }
     });
   } catch (error) {
