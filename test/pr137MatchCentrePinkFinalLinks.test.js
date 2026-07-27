@@ -10,12 +10,15 @@ test('match centre payload projects stable Pink Final identity by player ID', ()
     squad_cycle: {
       players: {
         'tbg-player-001': { tbg_player_id: 'tbg-player-001', display_name: 'Published Player' },
-        'academy-intake-001': { tbg_player_id: 'academy-intake-001', display_name: 'Generated Youth', generated: true, source: 'youth_intake' },
-        'academy-intake-002': {
-          tbg_player_id: 'academy-intake-002',
+        'club-1-youth-season-1-0': {
+          tbg_player_id: 'club-1-youth-season-1-0',
+          display_name: 'Canonical Youth Intake Player',
+          youth_intake_season: 'season-1'
+        },
+        'club-1-youth-season-1-1': {
+          tbg_player_id: 'club-1-youth-season-1-1',
           display_name: 'Published Academy Player',
-          generated: true,
-          source: 'youth_intake',
+          youth_intake_season: 'season-1',
           pink_final_profile_published: true,
           pink_final_route_key: 'published-academy-002'
         }
@@ -29,8 +32,8 @@ test('match centre payload projects stable Pink Final identity by player ID', ()
       club_id: 'home',
       starting_xi: [{ id: 'tbg-player-001', name: 'Published Player' }],
       bench: [
-        { id: 'academy-intake-001', name: 'Generated Youth' },
-        { id: 'academy-intake-002', name: 'Published Academy Player' }
+        { id: 'club-1-youth-season-1-0', name: 'Canonical Youth Intake Player' },
+        { id: 'club-1-youth-season-1-1', name: 'Published Academy Player' }
       ]
     }],
     summary: {
