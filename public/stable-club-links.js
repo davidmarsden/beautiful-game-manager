@@ -28,7 +28,6 @@ function portalIsReady() {
 
 export function activateRequestedClubLink(clubId = pendingClubId()) {
   if (!clubId || typeof document === 'undefined') return;
-  rememberRequestedClub(clubId);
   let opening = false;
   const openWhenReady = () => {
     if (opening || !portalIsReady()) return;
@@ -52,9 +51,13 @@ export function activateRequestedClubLink(clubId = pendingClubId()) {
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   const requested = requestedTbgClubId(globalThis.location?.href || '');
-  rememberRequestedClub(requested);
+
+  // Browsing another club link must not overwrite the club associated with an
+  // already-sent magic link. Commit the request only when this tab submits its
+  // own authentication attempt.
   document.addEventListener('submit', (event) => {
-    if (event.target?.id === 'loginForm') rememberRequestedClub(requested || pendingClubId());
+    if (event.target?.id === 'loginForm') rememberRequestedClub(requested);
   }, true);
+
   activateRequestedClubLink(requested || pendingClubId());
 }
