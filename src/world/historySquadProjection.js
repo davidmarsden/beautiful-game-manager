@@ -106,6 +106,10 @@ function safePlayer(playerId, player) {
   };
 }
 
+export function projectHistoryPlayerIdentity(playerId, player, linkOptions = {}) {
+  return projectPinkFinalPlayerIdentity(safePlayer(playerId, player), linkOptions);
+}
+
 function squadCoverage(players) {
   const registered = players.filter((player) => player.registered && !isYouth(player) && !isLoanedOut(player));
   const available = registered.filter(isAvailable);
@@ -129,7 +133,7 @@ export function enrichHistorySquads(projection, world, { now = new Date() } = {}
   const clubs = Object.fromEntries(Object.entries(projection.clubs || {}).map(([clubId, projected]) => {
     const portal = projectManagerPortal(world, clubId);
     const linkOptions = projection.pinkFinalBaseUrl ? { baseUrl: projection.pinkFinalBaseUrl } : {};
-    const players = portal.squad.map((player) => projectPinkFinalPlayerIdentity(safePlayer(player.tbg_player_id || player.player_id, player), linkOptions));
+    const players = portal.squad.map((player) => projectHistoryPlayerIdentity(player.tbg_player_id || player.player_id, player, linkOptions));
     return [clubId, {
       ...projected,
       player_count: players.length,
