@@ -7,7 +7,7 @@ import {
   pinkFinalClubRouteKey,
   projectPinkFinalClubIdentity
 } from '../src/world/pinkFinalClubProfile.js';
-import { requestedTbgClubId, tbgClubEntryUrl } from '../src/world/tbgClubEntryRoute.js';
+import { requestedTbgClubId, tbgClubEntryUrl } from '../public/stable-club-route.js';
 
 test('Pink Final club routes depend on immutable identity rather than labels or division', () => {
   const before = pinkFinalClubProfileUrl({ club_id: 'club-hamburg', club_name: 'Hamburger SV', division_name: 'Division 2' });
