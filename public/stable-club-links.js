@@ -1,22 +1,5 @@
 import { openClubInspection } from './club-inspection.js';
-
-const FORBIDDEN_SCOPE_KEYS = new Set([
-  'world', 'world_id', 'appointment', 'appointment_id', 'manager', 'manager_id',
-  'season', 'season_id', 'squad', 'squad_id'
-]);
-const SAFE_CLUB_ID = /^[A-Za-z0-9._:-]{1,160}$/;
-
-export function requestedTbgClubId(value = globalThis.location?.href || '') {
-  let url;
-  try {
-    url = new URL(value, 'https://manager.invalid/');
-  } catch {
-    return null;
-  }
-  if ([...url.searchParams.keys()].some((key) => FORBIDDEN_SCOPE_KEYS.has(key.toLowerCase()))) return null;
-  const clubId = String(url.searchParams.get('club') || '').trim();
-  return SAFE_CLUB_ID.test(clubId) ? clubId : null;
-}
+import { requestedTbgClubId } from '../src/world/tbgClubEntryRoute.js';
 
 function clearClubRequest() {
   const url = new URL(window.location.href);
@@ -29,7 +12,7 @@ function portalIsReady() {
   return Boolean(portal && !portal.hidden);
 }
 
-export function activateRequestedClubLink(clubId = requestedTbgClubId()) {
+export function activateRequestedClubLink(clubId = requestedTbgClubId(globalThis.location?.href || '')) {
   if (!clubId || typeof document === 'undefined') return;
   let opening = false;
   const openWhenReady = () => {
