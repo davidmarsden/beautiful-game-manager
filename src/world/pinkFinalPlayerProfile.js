@@ -21,6 +21,25 @@ function explicitPinkFinalUrl(player = {}) {
   return text(player.pink_final_profile_url || player.public_profile_url);
 }
 
+function explicitPinkFinalRouteKey(player = {}) {
+  return text(player.pink_final_route_key || player.profile_route_key || player.canonical_profile_key);
+}
+
+function generatedYouthPlayer(player = {}) {
+  const id = text(player.tbg_player_id || player.player_id || player.id).toLowerCase();
+  const source = text(player.source || player.player_source || player.origin || player.generated_source).toLowerCase();
+  const type = text(player.player_type || player.registration_group || player.squad_status).toLowerCase();
+  return Boolean(
+    player.generated === true
+    || player.is_generated === true
+    || player.generated_youth === true
+    || player.youth_intake_generated === true
+    || ['youth_intake', 'academy_intake', 'generated_youth', 'academy_generated'].includes(source)
+    || ['generated_youth', 'academy_generated'].includes(type)
+    || /(?:^|[-_:])(academy|youth)[-_:]?intake(?:[-_:]|$)/.test(id)
+  );
+}
+
 export function pinkFinalPublicationState(player = {}) {
   const signals = [
     player.profile_published,
@@ -36,6 +55,11 @@ export function pinkFinalPublicationState(player = {}) {
 
   if (explicitPinkFinalUrl(player)) return 'published';
   if (signals.some(truthy)) return 'published';
+  if (explicitPinkFinalRouteKey(player)) return 'published';
+
+  // Generated academy players have durable in-world IDs but no Pink Final record
+  // until the publication pipeline explicitly publishes them.
+  if (generatedYouthPlayer(player)) return 'unpublished';
 
   // Existing canonical-world players pre-date the publication flag. Their durable
   // tbg_player_id is already the Pink Final lookup key, so preserve compatibility
