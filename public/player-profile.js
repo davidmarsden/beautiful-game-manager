@@ -21,6 +21,22 @@ function availabilityState(player) {
   return { label, tone };
 }
 
+function moraleState(value) {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) {
+    if (numeric >= 80) return { label: `${numeric} · Excellent`, tone: 'good' };
+    if (numeric >= 65) return { label: `${numeric} · Good`, tone: 'good' };
+    if (numeric >= 45) return { label: `${numeric} · Low`, tone: 'neutral' };
+    return { label: `${numeric} · Very low`, tone: 'bad' };
+  }
+  const label = String(value || 'Good');
+  const normalized = label.toLowerCase();
+  const tone = normalized.includes('low') || normalized.includes('poor') ? 'bad'
+    : normalized.includes('good') || normalized.includes('excellent') ? 'good'
+      : 'neutral';
+  return { label, tone };
+}
+
 function metric(label, value, extraClass = '') {
   return `<div class="tbg-profile-metric ${extraClass}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
 }
@@ -32,9 +48,10 @@ function emptyState(title, body) {
 function tabPanel(name, player) {
   if (name === 'selection') {
     const availability = availabilityState(player);
+    const morale = moraleState(player.morale);
     return `<div class="tbg-profile-grid">
       ${metric('Fitness', `${player.fitness ?? 100}%`)}
-      ${metric('Morale', player.morale || 'Good')}
+      ${metric('Morale', morale.label, `status-${morale.tone}`)}
       ${metric('Availability', availability.label, `status-${availability.tone}`)}
       ${metric('Contract', formatDate(player.contract_expiry || player.contract_end_at || player.contract?.end_at))}
     </div>`;
@@ -53,7 +70,7 @@ function profileIdentity(player, club, pinkFinalLink) {
   const nation = player.nationality || player.country || '';
   const availability = availabilityState(player);
   return `<div class="tbg-player-card">
-    <div class="tbg-player-rating" aria-label="TBG rating ${escapeHtml(rating(player))}">${escapeHtml(rating(player))}</div>
+    <div class="tbg-player-rating" aria-label="TBG rating ${escapeHtml(rating(player))}"><span>TBG</span><strong>${escapeHtml(rating(player))}</strong></div>
     <div class="tbg-player-summary">
       <span class="status-label">TBG PLAYER PROFILE</span>
       <h2>${escapeHtml(playerName(player))}</h2>
@@ -67,7 +84,6 @@ function profileIdentity(player, club, pinkFinalLink) {
     </div>
     <div class="tbg-player-actions">
       ${pinkFinalLink ? `<a class="tbg-pink-final-link" href="${escapeHtml(pinkFinalLink)}" target="_blank" rel="noopener"><span>Real-world profile</span><strong>View in The Pink Final ↗</strong></a>` : '<div class="tbg-pink-final-link unavailable"><span>Real-world profile</span><strong>Not published yet</strong></div>'}
-      <button type="button" class="tbg-profile-close" data-close-player aria-label="Close player profile">Close</button>
     </div>
   </div>`;
 }
@@ -84,6 +100,7 @@ export function openTbgPlayerProfile(root, player, club = {}) {
   const pinkFinalLink = player.profile_url || player.pink_final_profile_url;
   host.innerHTML = `<div class="tbg-player-profile-backdrop" data-close-player></div>
     <section class="tbg-player-profile" data-player-id="${escapeHtml(playerId(player))}">
+      <button type="button" class="tbg-profile-close" data-close-player aria-label="Close player profile">×</button>
       ${profileIdentity(player, club, pinkFinalLink)}
       <nav class="tbg-profile-tabs" aria-label="Player profile sections">
         <button class="active" data-player-tab="selection" aria-selected="true">Selection</button>
@@ -110,5 +127,5 @@ export function openTbgPlayerProfile(root, player, club = {}) {
     });
     host.querySelector('[data-player-tab-panel]').innerHTML = tabPanel(button.dataset.playerTab, player);
   }));
-  host.querySelector('[data-close-player]')?.focus();
+  host.querySelector('.tbg-profile-close')?.focus();
 }
