@@ -3,32 +3,112 @@ const playerName = (player) => player.display_name || player.player_name || play
 const playerId = (player) => player.tbg_player_id || player.player_id || '';
 const rating = (player) => player.underlying_ability_rating ?? player.tbg_rating ?? player.rating ?? '—';
 const position = (player) => player.specific_position || player.position || player.primary_position || player.position_group || 'Unknown';
+const currentClub = (player, club) => club.club_name || club.canonical_name || player.club_name || 'Current club unavailable';
+
+function formatDate(value) {
+  if (!value) return 'Open-ended';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return escapeHtml(value);
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function availabilityState(player) {
+  const label = player.injury_status || player.availability || 'Available';
+  const normalized = String(label).toLowerCase();
+  const tone = normalized.includes('available') || normalized.includes('fit') ? 'good'
+    : normalized.includes('injur') || normalized.includes('suspend') || normalized.includes('unavailable') ? 'bad'
+      : 'neutral';
+  return { label, tone };
+}
+
+function metric(label, value, extraClass = '') {
+  return `<div class="tbg-profile-metric ${extraClass}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+
+function emptyState(title, body) {
+  return `<div class="tbg-profile-empty"><strong>${escapeHtml(title)}</strong><p>${escapeHtml(body)}</p></div>`;
+}
 
 function tabPanel(name, player) {
-  if (name === 'selection') return `<div class="tbg-profile-grid"><div><span>Fitness</span><strong>${player.fitness ?? 100}%</strong></div><div><span>Morale</span><strong>${escapeHtml(player.morale || 'Good')}</strong></div><div><span>Availability</span><strong>${escapeHtml(player.injury_status || player.availability || 'Available')}</strong></div><div><span>Contract</span><strong>${escapeHtml(player.contract_expiry || player.contract_end_at || player.contract?.end_at || 'Open-ended')}</strong></div></div>`;
-  if (name === 'transfers') return `<p class="portal-empty">No in-game transfer ledger has been projected for this player yet.</p>`;
-  if (name === 'statistics') return `<div class="tbg-profile-grid"><div><span>Appearances</span><strong>${player.appearances ?? player.games_played ?? 0}</strong></div><div><span>Goals</span><strong>${player.goals ?? 0}</strong></div><div><span>Assists</span><strong>${player.assists ?? 0}</strong></div><div><span>Average rating</span><strong>${player.average_match_rating ?? '—'}</strong></div></div>`;
-  return `<p class="portal-empty">Career history and honours will populate from the canonical world ledger as seasons are completed.</p>`;
+  if (name === 'selection') {
+    const availability = availabilityState(player);
+    return `<div class="tbg-profile-grid">
+      ${metric('Fitness', `${player.fitness ?? 100}%`)}
+      ${metric('Morale', player.morale || 'Good')}
+      ${metric('Availability', availability.label, `status-${availability.tone}`)}
+      ${metric('Contract', formatDate(player.contract_expiry || player.contract_end_at || player.contract?.end_at))}
+    </div>`;
+  }
+  if (name === 'transfers') return emptyState('No transfer history yet', 'In-game moves, fees and contract events will appear here when recorded in the canonical transfer ledger.');
+  if (name === 'statistics') return `<div class="tbg-profile-grid">
+    ${metric('Appearances', player.appearances ?? player.games_played ?? 0)}
+    ${metric('Goals', player.goals ?? 0)}
+    ${metric('Assists', player.assists ?? 0)}
+    ${metric('Average rating', player.average_match_rating ?? '—')}
+  </div>`;
+  return emptyState('Career history is building', 'Season-by-season clubs, honours and milestones will populate as the canonical world ledger develops.');
+}
+
+function profileIdentity(player, club, pinkFinalLink) {
+  const nation = player.nationality || player.country || '';
+  const availability = availabilityState(player);
+  return `<div class="tbg-player-card">
+    <div class="tbg-player-rating" aria-label="TBG rating ${escapeHtml(rating(player))}">${escapeHtml(rating(player))}</div>
+    <div class="tbg-player-summary">
+      <span class="status-label">TBG PLAYER PROFILE</span>
+      <h2>${escapeHtml(playerName(player))}</h2>
+      <p class="tbg-player-role">${escapeHtml(position(player))}</p>
+      <p class="tbg-player-club"><span>Current TBG club</span><strong>${escapeHtml(currentClub(player, club))}</strong></p>
+      <div class="tbg-player-chips">
+        <span>Age ${escapeHtml(player.age ?? '—')}</span>
+        ${nation ? `<span>${escapeHtml(nation)}</span>` : ''}
+        <span class="status-${availability.tone}">${escapeHtml(availability.label)}</span>
+      </div>
+    </div>
+    <div class="tbg-player-actions">
+      ${pinkFinalLink ? `<a class="tbg-pink-final-link" href="${escapeHtml(pinkFinalLink)}" target="_blank" rel="noopener"><span>Real-world profile</span><strong>View in The Pink Final ↗</strong></a>` : '<div class="tbg-pink-final-link unavailable"><span>Real-world profile</span><strong>Not published yet</strong></div>'}
+      <button type="button" class="tbg-profile-close" data-close-player aria-label="Close player profile">Close</button>
+    </div>
+  </div>`;
 }
 
 export function openTbgPlayerProfile(root, player, club = {}) {
   if (!root || !player) return;
-  root.querySelector('[data-tbg-player-profile-host]')?.remove();
+  document.querySelector('[data-tbg-player-profile-host]')?.remove();
   const host = document.createElement('div');
   host.dataset.tbgPlayerProfileHost = '';
   host.className = 'tbg-player-profile-host';
+  host.setAttribute('role', 'dialog');
+  host.setAttribute('aria-modal', 'true');
+  host.setAttribute('aria-label', `${playerName(player)} TBG player profile`);
   const pinkFinalLink = player.profile_url || player.pink_final_profile_url;
-  host.innerHTML = `<section class="competition-card tbg-player-profile" data-player-id="${escapeHtml(playerId(player))}">
-    <div class="section-heading"><div><span class="status-label">TBG PLAYER PROFILE</span><h2>${escapeHtml(playerName(player))}</h2><p>${escapeHtml(position(player))} · ${escapeHtml(club.club_name || club.canonical_name || player.club_name || 'Current club unavailable')}</p></div><button type="button" data-close-player>Close</button></div>
-    <div class="tbg-player-identity"><strong class="tbg-player-rating">${rating(player)}</strong><div><span>Age ${player.age ?? '—'}</span><span>${escapeHtml(player.nationality || player.country || '')}</span></div>${pinkFinalLink ? `<a class="club-public-profile-link" href="${escapeHtml(pinkFinalLink)}" target="_blank" rel="noopener">View real-world profile in The Pink Final</a>` : '<span class="player-link-unavailable">Pink Final profile not published yet</span>'}</div>
-    <nav class="tbg-profile-tabs" aria-label="Player profile sections"><button class="active" data-player-tab="selection">Selection</button><button data-player-tab="transfers">Transfers</button><button data-player-tab="statistics">Statistics</button><button data-player-tab="history">History</button></nav>
-    <div data-player-tab-panel>${tabPanel('selection', player)}</div>
-  </section>`;
-  root.prepend(host);
-  host.querySelector('[data-close-player]').addEventListener('click', () => host.remove());
+  host.innerHTML = `<div class="tbg-player-profile-backdrop" data-close-player></div>
+    <section class="tbg-player-profile" data-player-id="${escapeHtml(playerId(player))}">
+      ${profileIdentity(player, club, pinkFinalLink)}
+      <nav class="tbg-profile-tabs" aria-label="Player profile sections">
+        <button class="active" data-player-tab="selection" aria-selected="true">Selection</button>
+        <button data-player-tab="transfers" aria-selected="false">Transfers</button>
+        <button data-player-tab="statistics" aria-selected="false">Statistics</button>
+        <button data-player-tab="history" aria-selected="false">History</button>
+      </nav>
+      <div class="tbg-profile-panel" data-player-tab-panel>${tabPanel('selection', player)}</div>
+    </section>`;
+  document.body.append(host);
+
+  const close = () => {
+    document.removeEventListener('keydown', onKeydown);
+    host.remove();
+  };
+  const onKeydown = (event) => { if (event.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKeydown);
+  host.querySelectorAll('[data-close-player]').forEach((button) => button.addEventListener('click', close));
   host.querySelectorAll('[data-player-tab]').forEach((button) => button.addEventListener('click', () => {
-    host.querySelectorAll('[data-player-tab]').forEach((candidate) => candidate.classList.toggle('active', candidate === button));
+    host.querySelectorAll('[data-player-tab]').forEach((candidate) => {
+      const selected = candidate === button;
+      candidate.classList.toggle('active', selected);
+      candidate.setAttribute('aria-selected', String(selected));
+    });
     host.querySelector('[data-player-tab-panel]').innerHTML = tabPanel(button.dataset.playerTab, player);
   }));
-  host.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  host.querySelector('[data-close-player]')?.focus();
 }
