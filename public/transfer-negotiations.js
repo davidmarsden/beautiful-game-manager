@@ -153,6 +153,8 @@ async function respond(proposalId, response) {
     await refresh();
   } catch (error) {
     message.textContent = error.message;
+  } finally {
+    renderIncoming();
   }
 }
 
