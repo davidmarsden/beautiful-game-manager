@@ -35,6 +35,7 @@ const FORBIDDEN_PUBLIC_ROUTE_KEYS = new Set([
   'fixture', 'fixture_id', 'match', 'match_id', 'result', 'result_id'
 ]);
 
+const SAFE_ROUTE_PARAMETER = /^[A-Za-z][A-Za-z0-9._-]{0,63}$/;
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
 
 function pick(record = {}, fields = []) {
@@ -58,12 +59,25 @@ function hasForbiddenRouteScope(url) {
   return [...url.searchParams.keys()].some((key) => FORBIDDEN_PUBLIC_ROUTE_KEYS.has(key.toLowerCase()));
 }
 
+function sanitizeProjectedUrl(record, field) {
+  if (!own(record, field)) return record;
+  const safeUrl = safeExplicitPublicProfileUrl(record[field]);
+  if (safeUrl) record[field] = safeUrl;
+  else delete record[field];
+  return record;
+}
+
 export function projectPublicPlayer(player = {}) {
-  return assertNoPrivateFields(pick(player, PUBLIC_PLAYER_FIELDS));
+  const projected = pick(player, PUBLIC_PLAYER_FIELDS);
+  sanitizeProjectedUrl(projected, 'source_profile_url');
+  sanitizeProjectedUrl(projected, 'profile_url');
+  return assertNoPrivateFields(projected);
 }
 
 export function projectPublicClub(club = {}) {
-  return assertNoPrivateFields(pick(club, PUBLIC_CLUB_FIELDS));
+  const projected = pick(club, PUBLIC_CLUB_FIELDS);
+  sanitizeProjectedUrl(projected, 'pink_final_club_profile_url');
+  return assertNoPrivateFields(projected);
 }
 
 export function projectPublicDirectory({ players = [], clubs = [] } = {}) {
@@ -78,8 +92,10 @@ export function projectManagerVisibleLiveState(state = {}) {
 }
 
 export function safeExplicitPublicProfileUrl(value, baseUrl) {
+  const candidate = String(value ?? '').trim();
+  if (!candidate) return null;
   try {
-    const url = new URL(String(value || '').trim(), baseUrl);
+    const url = new URL(candidate, baseUrl);
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || hasForbiddenRouteScope(url)) return null;
     return url.toString();
   } catch {
@@ -89,13 +105,19 @@ export function safeExplicitPublicProfileUrl(value, baseUrl) {
 
 export function publicProfileUrl(baseUrl, routeKey, parameter = 'id') {
   const key = String(routeKey ?? '').trim();
+  const routeParameter = String(parameter ?? '').trim().toLowerCase();
   if (!key || !/^[A-Za-z0-9._:-]{1,160}$/.test(key)) return null;
-  const url = new URL(baseUrl);
-  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return null;
-  url.search = '';
-  url.hash = '';
-  url.searchParams.set(parameter, key);
-  return url.toString();
+  if (!SAFE_ROUTE_PARAMETER.test(routeParameter) || FORBIDDEN_PUBLIC_ROUTE_KEYS.has(routeParameter)) return null;
+  try {
+    const url = new URL(baseUrl);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return null;
+    url.search = '';
+    url.hash = '';
+    url.searchParams.set(routeParameter, key);
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 export function assertPublicProjection(value) {
