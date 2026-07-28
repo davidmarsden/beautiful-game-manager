@@ -1,8 +1,17 @@
-/* Manager Portal product layer for TBG visual contract v1.0.0 */
+/* Manager Portal product layer for TBG visual contract v1.0.1 */
+:root {
+  /* The portal uses the Pink Final palette with a denser workspace treatment. */
+  --tbg-colour-workspace: #f6c3cb;
+  --tbg-colour-workspace-raised: #ffe1e5;
+  --tbg-surface-panel: rgba(255, 211, 216, .94);
+  --tbg-surface-card: #ffe8ea;
+  --tbg-shadow-workspace: 0 8px 22px rgba(33, 19, 19, .22);
+}
+
 body {
   color: var(--tbg-colour-ink);
   background:
-    linear-gradient(rgba(33, 19, 19, .2), rgba(33, 19, 19, .45)),
+    radial-gradient(circle at 15% 8%, rgba(255, 255, 255, .2), transparent 30%),
     repeating-linear-gradient(0deg, rgba(0, 0, 0, .025), rgba(0, 0, 0, .025) 1px, transparent 1px, transparent 5px),
     var(--tbg-colour-paper);
   font-family: var(--tbg-font-ui);
@@ -35,6 +44,7 @@ body::before {
   border-color: var(--tbg-colour-rule);
 }
 
+.workspace { background: rgba(255, 225, 229, .94); }
 .auth-card,
 .unassigned-state,
 .club-strip,
@@ -90,7 +100,7 @@ body::before {
   border: 2px solid var(--tbg-colour-rule);
   border-radius: 0;
   color: var(--tbg-colour-cream);
-  background: var(--tbg-colour-action);
+  background: var(--tbg-colour-ink);
   font-weight: 900;
   letter-spacing: .035em;
   text-transform: uppercase;
@@ -99,7 +109,10 @@ body::before {
 .manager-chip:hover,
 .logout-button:hover,
 .panel button:hover,
-.submit:hover { background: var(--tbg-colour-action-hover); }
+.submit:hover {
+  color: var(--tbg-colour-ink);
+  background: var(--tbg-colour-paper-light);
+}
 
 .club-nav,
 .tabs {
@@ -126,7 +139,9 @@ body::before {
   background: var(--tbg-colour-paper-light);
 }
 
-.club-nav a:first-child { background: transparent; }
+.club-nav a:first-child:not([aria-current="page"]):not(:hover):not(:focus-visible) {
+  background: transparent;
+}
 
 .crest {
   border: 3px solid var(--tbg-colour-rule);
@@ -166,7 +181,7 @@ select {
   overscroll-behavior-inline: contain;
 }
 
-table { background: rgba(255, 255, 255, .34); }
+table { background: rgba(255, 232, 234, .82); }
 th,
 td {
   min-height: var(--tbg-table-row-height);
@@ -186,13 +201,13 @@ th.active-sort {
   color: var(--tbg-colour-ink);
   background: var(--tbg-colour-paper-light);
 }
-tbody tr:hover { background: rgba(255, 242, 217, .65); }
+tbody tr:hover { background: rgba(255, 242, 217, .66); }
 tbody tr[aria-selected="true"],
 tbody tr.is-selected { background: var(--tbg-colour-selected); }
 
 .position-separator td {
   color: var(--tbg-colour-cream);
-  background: var(--tbg-colour-action);
+  background: var(--tbg-colour-ink);
 }
 
 .player-link,
@@ -256,9 +271,14 @@ tbody tr.is-selected { background: var(--tbg-colour-selected); }
     position: sticky;
     left: 0;
     z-index: 1;
-    background: inherit;
   }
+  td:first-child { background: var(--tbg-surface-card); }
+  tbody tr:hover td:first-child { background: #fff2d9; }
+  tbody tr[aria-selected="true"] td:first-child,
+  tbody tr.is-selected td:first-child { background: var(--tbg-colour-selected); }
+  tbody tr.managed-club-row td:first-child { background: #fff0a8; }
   th:first-child { z-index: 3; background: var(--tbg-colour-ink); }
+  .position-separator td:first-child { background: var(--tbg-colour-ink); }
   .topbar { gap: var(--tbg-space-2); }
   .brand { font-size: 1.05rem; }
 }

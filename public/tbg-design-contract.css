@@ -1,4 +1,4 @@
-/* TBG visual contract v1.0.0
+/* TBG visual contract v1.0.1
  * Shared language for The Pink Final and Manager Portal.
  * Product-specific themes may remap tokens but should preserve semantics.
  */
@@ -14,8 +14,8 @@
   --tbg-colour-ink-soft: #4f3030;
   --tbg-colour-muted: #6a4545;
   --tbg-colour-rule: #2a1717;
-  --tbg-colour-workspace: #f8eee1;
-  --tbg-colour-workspace-raised: #fffaf0;
+  --tbg-colour-workspace: #f6c3cb;
+  --tbg-colour-workspace-raised: #ffe1e5;
   --tbg-colour-action: #7d1830;
   --tbg-colour-action-hover: #57101f;
   --tbg-colour-selected: #ffd3d8;
@@ -25,7 +25,7 @@
   --tbg-colour-danger: #8b1e1e;
   --tbg-colour-info: #244a8c;
   --tbg-surface-page: var(--tbg-colour-paper);
-  --tbg-surface-panel: color-mix(in srgb, var(--tbg-colour-cream) 82%, transparent);
+  --tbg-surface-panel: color-mix(in srgb, var(--tbg-colour-paper-light) 78%, var(--tbg-colour-cream));
   --tbg-surface-card: var(--tbg-colour-workspace-raised);
   --tbg-surface-inverse: var(--tbg-colour-ink);
   --tbg-shadow-panel: 5px 5px 0 rgba(45, 19, 19, .22);
@@ -248,7 +248,10 @@
     position: sticky;
     left: 0;
     z-index: 1;
-    background: inherit;
   }
+  .tbg-table td:first-child { background: var(--tbg-surface-card); }
+  .tbg-table tbody tr:hover td:first-child { background: var(--tbg-colour-cream); }
+  .tbg-table tbody tr[aria-selected="true"] td:first-child,
+  .tbg-table tbody tr.is-selected td:first-child { background: var(--tbg-colour-selected); }
   .tbg-table th:first-child { z-index: 3; background: var(--tbg-colour-ink); }
 }
