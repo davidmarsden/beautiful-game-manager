@@ -107,6 +107,38 @@ function commandType(type) {
   return type;
 }
 
+function payloadValue(payload, camel, snake) {
+  return String(payload?.[camel] || payload?.[snake] || '').trim();
+}
+
+function clubOwnsPlayer(world, clubId, playerId) {
+  return Boolean(playerId && world.squad_cycle?.clubs?.[clubId]?.player_ids?.includes(playerId));
+}
+
+async function assertTransferCommand(token, current, world, type, payload) {
+  if (!['transfer_offer', 'transfer_listing'].includes(type)) return;
+  const playerId = payloadValue(payload, 'playerId', 'player_id');
+  if (!playerId || !world.squad_cycle?.players?.[playerId]) throw new Error('Transfer player is not present in the canonical world');
+
+  if (type === 'transfer_listing') {
+    if (!clubOwnsPlayer(world, current.appointment.club_id, playerId)) {
+      throw new Error('Managers may only list players owned by their appointed club');
+    }
+    return;
+  }
+
+  const otherClubId = payloadValue(payload, 'otherClubId', 'other_club_id');
+  if (!otherClubId || otherClubId === current.appointment.club_id) {
+    throw new Error('Transfer offer must target a different managed club');
+  }
+  if (!world.squad_cycle?.clubs?.[otherClubId]) throw new Error('Transfer counterpart is not present in the canonical world');
+  if (!clubOwnsPlayer(world, otherClubId, playerId)) {
+    throw new Error('Transfer player is not owned by the proposed selling club');
+  }
+  const appointments = await supabase(`/rest/v1/manager_appointments?world_id=eq.${encodeURIComponent(world.world_id)}&club_id=eq.${encodeURIComponent(otherClubId)}&status=eq.active&select=club_id&limit=1`, token);
+  if (!appointments[0]) throw new Error('Transfer offers may only target clubs with an active manager');
+}
+
 function stableCommandRequestKey({ worldId, managerId, commandType: type, payload, seasonId, matchday, suppliedKey }) {
   const supplied = String(suppliedKey || payload?.client_request_id || '').trim();
   if (supplied) return supplied;
@@ -227,6 +259,7 @@ export default async (request) => {
       if (stored.turn_status !== 'open') return json({ error: `World commands are locked while turn is ${stored.turn_status}` }, 409);
       const type = commandType(body.command_type);
       const commandPayload = body.command_payload || {};
+      await assertTransferCommand(token, current, world, type, commandPayload);
       const requestKey = stableCommandRequestKey({
         worldId: world.world_id,
         managerId: current.manager.id,
@@ -255,7 +288,7 @@ export default async (request) => {
 
     return json({ error: 'Managers cannot save, load, import, restore or advance the shared world' }, 403);
   } catch (error) {
-    const status = /Session|Authentication/.test(error.message) ? 401 : /deadline|Turn|appointment|world|submission|command/i.test(error.message) ? 409 : 503;
+    const status = /Session|Authentication/.test(error.message) ? 401 : /deadline|Turn|appointment|world|submission|command|transfer|player|club/i.test(error.message) ? 409 : 503;
     return json({ error: error.message }, status);
   }
 };
