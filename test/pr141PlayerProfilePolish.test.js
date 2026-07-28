@@ -12,7 +12,9 @@ test('player profile uses the polished modal presentation', async () => {
   assert.match(profile, /aria-modal/);
   assert.match(profile, /Current TBG club/);
   assert.match(profile, /View in The Pink Final/);
-  assert.match(profile, /toLocaleDateString\('en-GB'/);
+  assert.match(profile, /toLocaleDateString\('en-GB',[\s\S]*timeZone: 'UTC'/);
+  assert.match(profile, /normalized\.includes\('unavailable'\)/);
+  assert.match(profile, /const tone = negative \? 'bad' : positive \? 'good'/);
   assert.match(profile, /event\.key === 'Escape'/);
   assert.match(profile, /aria-selected/);
   assert.match(css, /position:fixed/);
