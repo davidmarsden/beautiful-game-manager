@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TBG targeted component polish preview</title>
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./formation-board.css">
+  <link rel="stylesheet" href="./phase2d3.css">
+  <link rel="stylesheet" href="./functional-inbox.css">
+  <link rel="stylesheet" href="./world-controls.css">
+  <link rel="stylesheet" href="./bulk-squad-registration.css">
+  <link rel="stylesheet" href="./tbg-design-contract.css">
+  <link rel="stylesheet" href="./manager-portal-theme.css">
+  <link rel="stylesheet" href="./football-pink-stock.css">
+  <link rel="stylesheet" href="./targeted-component-polish.css">
+  <style>
+    body{padding:24px}.preview-shell{max-width:1180px;margin:auto}.preview-cluster{margin:0 0 28px;padding:18px;border:2px solid var(--tbg-colour-rule);background:var(--tbg-colour-workspace)}.preview-cluster>h1{font-family:var(--tbg-font-display);text-transform:uppercase}.football-pitch{min-height:340px}.formation-board-shell{grid-template-columns:minmax(0,1.4fr) minmax(260px,.7fr)}.world-control-grid{grid-template-columns:repeat(2,minmax(0,1fr))}@media(max-width:760px){body{padding:10px}.formation-board-shell,.world-control-grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<main class="preview-shell">
+  <section id="tacticsView" class="preview-cluster">
+    <h1>Tactics & Team</h1>
+    <div class="formation-board-shell">
+      <section class="pitch-panel"><div class="pitch-toolbar"><strong>Interactive formation</strong><span class="pitch-help">Green pitch preserved</span></div><div class="football-pitch"><button class="formation-slot" style="left:50%;top:25%">Forward</button><button class="formation-slot selected" style="left:35%;top:58%">Midfield</button></div><div class="bench-board"><button class="bench-slot">Substitute</button><button class="bench-slot empty"></button></div></section>
+      <aside class="squad-tray-panel"><h3>Squad</h3><div class="squad-tray"><button class="tray-player"><span class="tray-rating">94</span><span><strong>Sample Player</strong><small>Central Midfield</small></span><span>Fit</span></button><button class="tray-player assigned"><span class="tray-rating">91</span><span><strong>Selected Player</strong><small>Centre-Back</small></span><span>Selected</span></button></div></aside>
+    </div>
+  </section>
+
+  <section id="competitionsView" class="preview-cluster">
+    <h1>Competition matchdays</h1>
+    <article class="competition-card division-round-card"><header class="competition-round-header"><div><h2>Division matchdays</h2><p>Pink-stock fixture surface</p></div><div class="competition-round-tabs"><button class="active">Results</button><button>Fixtures</button></div></header><div class="round-navigation"><button>Previous</button><div><strong>Matchday 1</strong><span>Friday</span></div><button>Next</button></div><div class="division-round-list"><article class="division-round-fixture managed-fixture"><span class="round-team home">Real Madrid</span><button class="round-score">2–0</button><span class="round-team away">Fenerbahçe</span></article><article class="division-round-fixture"><span class="round-team home">Newcastle United</span><span class="round-kickoff">21:00</span><span class="round-team away">Barcelona</span></article></div><div class="round-count">Matchday 1 of 38</div></article>
+  </section>
+
+  <section id="worldView" class="preview-cluster">
+    <h1>World operations</h1>
+    <div class="world-control-summary"><article><span>Season</span><strong>1</strong><small>Shared world</small></article><article><span>Phase</span><strong>Season</strong><small>Matchday 2</small></article><article><span>Your club</span><strong>Real Madrid</strong><small>Manager appointed</small></article><article><span>Status</span><strong>Open</strong><small>Next turn scheduled</small></article></div>
+    <div class="world-control-grid"><article class="world-control-card"><h3>Team submission</h3><label>Formation<select><option>4-3-3 wide</option></select></label><button class="primary-action">Submit</button></article><article class="world-control-card"><h3>Senior squad registration</h3><div class="bulk-registration-list"><label class="bulk-registration-player"><input type="checkbox" checked><span><strong>Kylian Mbappé</strong><small>Centre-Forward · TBG 99</small></span><em>Registered</em></label></div></article></div>
+  </section>
+
+  <section id="dashboardView" class="preview-cluster">
+    <h1>Dashboard inbox</h1>
+    <article class="inbox-message unread"><div class="message-heading"><strong>Transfer listing rejected</strong><span class="message-read-label">Unread</span></div><p>Command requires negotiation resolution before application.</p></article>
+    <article class="inbox-message read"><div class="message-heading"><strong>Player registration completed</strong><span class="message-read-label">Read</span></div><p>The player is registered for competitive selection.</p></article>
+  </section>
+</main>
+</body>
+</html>
