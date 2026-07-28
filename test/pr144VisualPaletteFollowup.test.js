@@ -30,3 +30,19 @@ test("sticky mobile table cells use opaque surfaces with interaction overrides",
     assert.doesNotMatch(css, /td:first-child[^}]*background: inherit/s);
   }
 });
+
+test("managed club row keeps its mobile sticky-cell highlight", async () => {
+  const css = await read("public/manager-portal-theme.css");
+  assert.match(css, /tbody tr\.managed-club-row td:first-child \{ background: #fff0a8; \}/);
+});
+
+test("adoption guide matches visual contract version 1.0.1", async () => {
+  const [contract, guide] = await Promise.all([
+    read("public/tbg-design-contract.css"),
+    read("docs/manager-portal/shared-visual-system.md"),
+  ]);
+  assert.match(contract, /TBG visual contract v1\.0\.1/);
+  assert.match(guide, /Version: \*\*1\.0\.1\*\*/);
+  assert.match(guide, /at version 1\.0\.1 into `beautiful-game-data`/);
+  assert.doesNotMatch(guide, /at version 1\.0\.0 into `beautiful-game-data`/);
+});
