@@ -10,6 +10,8 @@ test('player links open authenticated TBG profiles before Pink Final', async () 
   assert.match(routing, /event\.preventDefault\(\)/);
   assert.match(routing, /openTbgPlayerProfile/);
   assert.match(routing, /\/api\/history/);
+  assert.match(routing, /closest\('\.player-link'\)/);
+  assert.doesNotMatch(routing, /contains\('player-link-unavailable'\)/);
   assert.match(profile, /TBG PLAYER PROFILE/);
   assert.match(profile, /View real-world profile in The Pink Final/);
   assert.match(profile, /Selection/);
