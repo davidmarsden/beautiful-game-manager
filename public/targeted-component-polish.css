@@ -1,0 +1,230 @@
+/* Future visual polish: targeted Manager Portal component overrides.
+ * Loaded after football-pink-stock.css so legacy feature styles can be remapped
+ * without deepening the global palette or changing shared contract semantics.
+ */
+
+/* Tactics & Team: pink-paper work surfaces around the preserved green pitch. */
+#tacticsView .pitch-panel,
+#tacticsView .squad-tray-panel,
+#tacticsView .team-sheet-panel,
+#tacticsView .team-preset-panel,
+#tacticsView .current-submission {
+  color: var(--tbg-colour-ink);
+  background: var(--tbg-surface-card);
+  border-color: rgba(33, 19, 19, .28);
+  box-shadow: 0 7px 18px rgba(33, 19, 19, .12);
+}
+
+#tacticsView .pitch-help,
+#tacticsView .tray-player small,
+#tacticsView .bench-slot.empty::after {
+  color: var(--tbg-colour-muted);
+}
+
+#tacticsView .tray-player,
+#tacticsView .bench-slot {
+  color: var(--tbg-colour-ink);
+  background: #f7dce1;
+  border-color: rgba(33, 19, 19, .3);
+}
+
+#tacticsView .tray-player:hover,
+#tacticsView .tray-player:focus-visible,
+#tacticsView .bench-slot:hover,
+#tacticsView .bench-slot:focus-visible {
+  background: var(--tbg-colour-paper-light);
+  border-color: var(--tbg-colour-rule);
+}
+
+#tacticsView .tray-player.selected,
+#tacticsView .bench-slot.selected {
+  outline-color: var(--tbg-colour-focus);
+}
+
+#tacticsView .board-actions button {
+  color: var(--tbg-colour-cream);
+  background: var(--tbg-colour-ink);
+}
+
+#tacticsView .board-actions button:hover,
+#tacticsView .board-actions button:focus-visible {
+  color: var(--tbg-colour-ink);
+  background: var(--tbg-colour-paper-light);
+}
+
+/* Preserve tactical contrast and the pitch as a recognisable green football field. */
+#tacticsView .football-pitch {
+  background: repeating-linear-gradient(0deg, #267945 0, #267945 70px, #2d8650 70px, #2d8650 140px);
+}
+
+#tacticsView .formation-slot {
+  background: #07304db8;
+  color: #fff;
+}
+
+#tacticsView .formation-slot.drop-target {
+  background: #0e6f9bd9;
+}
+
+/* Competition matchdays: pink stock rather than white application slabs. */
+#competitionsView .competition-card,
+#competitionsView .division-round-card,
+#competitionsView .competition-round-header,
+#competitionsView .round-navigation,
+#competitionsView .division-round-list,
+#competitionsView .season-archive-summary {
+  color: var(--tbg-colour-ink);
+  background: var(--tbg-surface-card);
+  border-color: rgba(33, 19, 19, .28);
+}
+
+#competitionsView .competition-round-header p,
+#competitionsView .round-navigation span,
+#competitionsView .round-scorers,
+#competitionsView .competition-round-loading {
+  color: var(--tbg-colour-muted);
+}
+
+#competitionsView .competition-round-tabs button,
+#competitionsView .round-navigation button,
+#competitionsView .division-selector select,
+#competitionsView .round-score,
+#competitionsView .round-kickoff {
+  color: var(--tbg-colour-ink);
+  background: var(--tbg-colour-cream);
+  border-color: rgba(33, 19, 19, .45);
+}
+
+#competitionsView .competition-round-tabs button.active,
+#competitionsView .competition-round-tabs button:hover,
+#competitionsView .competition-round-tabs button:focus-visible,
+#competitionsView .round-navigation button:hover,
+#competitionsView .round-navigation button:focus-visible,
+#competitionsView .round-score:hover,
+#competitionsView .round-score:focus-visible {
+  color: var(--tbg-colour-cream);
+  background: var(--tbg-colour-ink);
+}
+
+#competitionsView .division-round-fixture {
+  background: rgba(247, 220, 225, .72);
+  border-bottom-color: rgba(33, 19, 19, .22);
+}
+
+#competitionsView .division-round-fixture:nth-child(even) {
+  background: rgba(231, 168, 182, .22);
+}
+
+#competitionsView .division-round-fixture.managed-fixture {
+  background: #fff0a8;
+}
+
+#competitionsView .round-count {
+  color: var(--tbg-colour-cream);
+  background: var(--tbg-colour-ink);
+}
+
+/* World: operational cards remain clear but belong to the Football Pink layer. */
+#worldView .world-control-summary article,
+#worldView .world-control-card,
+#worldView .world-transfer-card,
+#worldView .request-history,
+#worldView .world-history-block {
+  color: var(--tbg-colour-ink);
+  background: #f6d5dc;
+  border-color: rgba(33, 19, 19, .28);
+  box-shadow: 0 8px 20px rgba(33, 19, 19, .12);
+}
+
+#worldView .world-control-summary span,
+#worldView .world-control-summary small,
+#worldView .world-control-card small {
+  color: var(--tbg-colour-muted);
+}
+
+#worldView .world-control-card input,
+#worldView .world-control-card select,
+#worldView .world-transfer-card input,
+#worldView .world-transfer-card select {
+  color: var(--tbg-colour-ink);
+  background: var(--tbg-colour-cream);
+  border-color: rgba(33, 19, 19, .38);
+}
+
+#worldView .world-control-card button,
+#worldView .file-action {
+  color: var(--tbg-colour-ink);
+  background: var(--tbg-colour-paper-light);
+  border: 1px solid rgba(33, 19, 19, .3);
+}
+
+#worldView .world-control-card button:hover,
+#worldView .world-control-card button:focus-visible,
+#worldView .file-action:hover,
+#worldView .file-action:focus-visible,
+#worldView .world-control-card .primary-action {
+  color: var(--tbg-colour-cream);
+  background: var(--tbg-colour-ink);
+}
+
+#worldView .bulk-registration-player {
+  color: var(--tbg-colour-ink);
+  background: rgba(242, 199, 208, .62);
+  border-color: rgba(33, 19, 19, .24);
+}
+
+#worldView .bulk-registration-player em {
+  color: var(--tbg-colour-success);
+  font-weight: 800;
+}
+
+#worldView .bulk-registration-player:hover,
+#worldView .bulk-registration-player:focus-within {
+  background: var(--tbg-colour-paper-light);
+  border-color: var(--tbg-colour-rule);
+}
+
+/* Dashboard inbox: messages should feel printed into the stock, not laid on top. */
+#dashboardView .inbox-message,
+#dashboardView .inbox-message.read {
+  background: #efcbd2;
+  border-color: rgba(33, 19, 19, .24);
+}
+
+#dashboardView .inbox-message.read {
+  opacity: .82;
+}
+
+#dashboardView .inbox-message.unread {
+  background: #f5d7dd;
+}
+
+#dashboardView .inbox-message.unread:hover,
+#dashboardView .inbox-message.unread:focus {
+  background: var(--tbg-colour-paper-light);
+  outline-color: var(--tbg-colour-focus);
+}
+
+/* Late-loaded legacy surfaces: only known operational clusters are remapped. */
+#scheduleView .portal-card,
+#historyView .portal-card,
+#historyView .history-club-panel,
+#historyView .season-archive {
+  color: var(--tbg-colour-ink);
+  background: var(--tbg-surface-card);
+  border-color: rgba(33, 19, 19, .26);
+}
+
+@media (max-width: 600px) {
+  #competitionsView .division-round-fixture {
+    background: #f4d3da;
+  }
+
+  #competitionsView .division-round-fixture:nth-child(even) {
+    background: #edc4cd;
+  }
+
+  #competitionsView .division-round-fixture.managed-fixture {
+    background: #fff0a8;
+  }
+}
