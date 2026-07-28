@@ -19,7 +19,6 @@
 </head>
 <body>
   <section id="authGate" class="auth-gate"><div class="auth-card"><div class="auth-kicker">THE BEAUTIFUL GAME</div><h1>Manager sign in</h1><p>Enter the email address registered to your TBG manager account. We’ll send a secure one-time login link.</p><form id="loginForm"><label>Email address<input id="loginEmail" type="email" autocomplete="email" required placeholder="manager@example.com"></label><button class="submit" type="submit">Send login link</button><p id="loginStatus" aria-live="polite"></p></form></div></section>
-
   <div id="portal" hidden>
     <header class="topbar"><div class="brand">THE BEAUTIFUL GAME</div><div class="world-pill">ONE WORLD · SEASON 1</div><button class="manager-chip" id="managerChip" type="button">Manager</button><span id="inboxBadge" class="inbox-badge" hidden>0</span><button class="logout-button" id="logoutButton" type="button">Sign out</button></header>
     <main class="shell">
@@ -61,5 +60,6 @@
   <script type="module" src="./portal-navigation.js"></script>
   <script type="module" src="./stable-player-links.js"></script>
   <script type="module" src="./stable-club-links.js"></script>
+  <script type="module" src="./internal-profile-links.js"></script>
 </body>
 </html>
