@@ -55,11 +55,16 @@ function playerName(world, playerId) {
   return String(player?.display_name || player?.player_name || player?.name || playerId || 'Unknown player').trim();
 }
 
-function transferDirectory(world, appointedClubId) {
+function transferDirectory(world, appointedClubId, managedClubIds = new Set()) {
   const clubs = [];
   const players = [];
   for (const [clubId, club] of Object.entries(world.squad_cycle?.clubs || {})) {
-    clubs.push({ club_id: clubId, club_name: clubName(world, clubId), appointed: clubId === appointedClubId });
+    clubs.push({
+      club_id: clubId,
+      club_name: clubName(world, clubId),
+      appointed: clubId === appointedClubId,
+      managed: managedClubIds.has(clubId)
+    });
     for (const playerId of club.player_ids || []) {
       const player = world.squad_cycle?.players?.[playerId] || {};
       players.push({
@@ -110,16 +115,21 @@ export default async (request) => {
     const world = loadPersistentWorld(JSON.stringify(stored.save_envelope));
 
     if (request.method === 'GET') {
-      const rows = await supabase('/rest/v1/rpc/get_manager_transfer_inbox', token, {
-        method: 'POST',
-        body: JSON.stringify({ p_world_id: current.appointment.world_id })
-      });
+      const [offerRows, managedRows] = await Promise.all([
+        supabase('/rest/v1/rpc/get_manager_transfer_inbox', token, {
+          method: 'POST', body: JSON.stringify({ p_world_id: current.appointment.world_id })
+        }),
+        supabase('/rest/v1/rpc/get_managed_transfer_clubs', token, {
+          method: 'POST', body: JSON.stringify({ p_world_id: current.appointment.world_id })
+        })
+      ]);
+      const managedClubIds = new Set((Array.isArray(managedRows) ? managedRows : []).map((row) => row.club_id));
       return json({
         world_id: current.appointment.world_id,
         club_id: current.appointment.club_id,
         turn_status: stored.turn_status,
-        directory: transferDirectory(world, current.appointment.club_id),
-        incoming_offers: (Array.isArray(rows) ? rows : []).map((row) => projectOffer(world, row))
+        directory: transferDirectory(world, current.appointment.club_id, managedClubIds),
+        incoming_offers: (Array.isArray(offerRows) ? offerRows : []).map((row) => projectOffer(world, row))
       });
     }
 
