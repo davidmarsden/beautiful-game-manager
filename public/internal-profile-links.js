@@ -30,28 +30,33 @@ async function directory() {
   return loading;
 }
 
-function findPlayer(data, link) {
-  const href = link.href;
-  const label = link.textContent.trim();
+function findPlayer(data, trigger) {
+  const href = trigger instanceof HTMLAnchorElement ? trigger.href : '';
+  const playerId = String(trigger.dataset.tbgPlayerId || trigger.dataset.playerId || '').trim();
+  const label = trigger.textContent.trim();
   for (const club of Object.values(data.clubs || {})) {
-    const player = (club.players || []).find((candidate) => candidate.profile_url === href || candidate.pink_final_profile_url === href || candidate.display_name === label);
+    const player = (club.players || []).find((candidate) =>
+      (playerId && (candidate.tbg_player_id === playerId || candidate.player_id === playerId))
+      || (href && (candidate.profile_url === href || candidate.pink_final_profile_url === href))
+      || candidate.display_name === label
+    );
     if (player) return { player, club };
   }
   return null;
 }
 
-function profileRoot(link) {
-  return link.closest('.history-club-host, #historyContent, #squadView, #clubPortal') || document.querySelector('#clubPortal') || document.body;
+function profileRoot(trigger) {
+  return trigger.closest('.history-club-host, #historyContent, #squadView, #clubPortal') || document.querySelector('#clubPortal') || document.body;
 }
 
 document.addEventListener('click', async (event) => {
-  const link = event.target.closest('a.player-link');
-  if (!link || link.classList.contains('player-link-unavailable')) return;
+  const trigger = event.target.closest('.player-link');
+  if (!trigger) return;
   event.preventDefault();
   try {
-    const match = findPlayer(await directory(), link);
+    const match = findPlayer(await directory(), trigger);
     if (!match) throw new Error('This player is not present in the current canonical world.');
-    openTbgPlayerProfile(profileRoot(link), match.player, match.club);
+    openTbgPlayerProfile(profileRoot(trigger), match.player, match.club);
   } catch (error) {
     console.error('Could not open TBG player profile', error);
   }
