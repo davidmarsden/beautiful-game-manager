@@ -48,7 +48,19 @@ test('negotiation API exposes only the appointed club inbox and a compact manage
   assert.doesNotMatch(api, /SUPABASE_SERVICE_ROLE_KEY/);
 });
 
-test('manager portal provides club and player selectors plus explicit accept and decline controls', async () => {
+test('shared-world command submission enforces transfer authority before writing the ledger', async () => {
+  const api = await read('netlify/functions/shared-world.mjs');
+  assert.match(api, /async function assertTransferCommand/);
+  assert.match(api, /clubOwnsPlayer\(world, current\.appointment\.club_id, playerId\)/);
+  assert.match(api, /clubOwnsPlayer\(world, otherClubId, playerId\)/);
+  assert.match(api, /manager_appointments\?world_id=eq\.\$\{encodeURIComponent\(world\.world_id\)\}&club_id=eq\.\$\{encodeURIComponent\(otherClubId\)\}&status=eq\.active/);
+  assert.match(api, /Transfer offers may only target clubs with an active manager/);
+  const validationIndex = api.indexOf('await assertTransferCommand(token, current, world, type, commandPayload);');
+  const ledgerIndex = api.indexOf("supabase('/rest/v1/rpc/submit_manager_world_command'");
+  assert.ok(validationIndex >= 0 && ledgerIndex > validationIndex, 'transfer authority must be checked before ledger insertion');
+});
+
+test('manager portal provides selectors controls and retry-safe transfer responses', async () => {
   const [html, script, css] = await Promise.all([
     read('public/index.html'),
     read('public/transfer-negotiations.js'),
@@ -63,6 +75,7 @@ test('manager portal provides club and player selectors plus explicit accept and
   assert.match(script, /data-transfer-response="declined"/);
   assert.match(script, /£\$\{Number\(offer\.fee/);
   assert.match(script, /next canonical checkpoint/);
+  assert.match(script, /async function respond[\s\S]*finally \{[\s\S]*renderIncoming\(\);[\s\S]*\}/);
   assert.match(css, /transfer-negotiation-grid/);
   assert.match(css, /@media\(max-width:560px\)/);
 });
