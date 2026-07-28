@@ -1,6 +1,7 @@
 {
   "contract": "tbg-design-contract",
   "version": "1.0.1",
+  "releaseRecord": "design-contract/releases/1.0.1.json",
   "governedSource": {
     "repository": "davidmarsden/beautiful-game-manager",
     "path": "public/tbg-design-contract.css",
