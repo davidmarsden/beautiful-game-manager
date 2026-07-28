@@ -10,15 +10,39 @@ const gitBlobSha = (buffer) => createHash("sha1")
   .update(buffer)
   .digest("hex");
 
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const hasCompleteSelector = (css, selector) => new RegExp(
+  `(^|[},]\\s*)${escapeRegExp(selector)}(?=\\s*[,\\{])`,
+  "m",
+).test(css);
+
 test("design contract manifest pins semantic version and governed source bytes", async () => {
   const manifest = JSON.parse(await read("design-contract/tbg-design-contract.manifest.json"));
+  const release = JSON.parse(await read(manifest.releaseRecord));
   const css = await read(manifest.governedSource.path, null);
   const text = css.toString("utf8");
 
   assert.equal(manifest.contract, "tbg-design-contract");
   assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
+  assert.equal(manifest.releaseRecord, `design-contract/releases/${manifest.version}.json`);
   assert.equal(manifest.governedSource.repository, "davidmarsden/beautiful-game-manager");
   assert.equal(manifest.governedSource.blobSha, gitBlobSha(css));
+  assert.deepEqual(
+    {
+      contract: release.contract,
+      version: release.version,
+      blobSha: release.blobSha,
+      sourcePath: release.sourcePath,
+      status: release.status,
+    },
+    {
+      contract: manifest.contract,
+      version: manifest.version,
+      blobSha: manifest.governedSource.blobSha,
+      sourcePath: manifest.governedSource.path,
+      status: "immutable-release-record",
+    },
+  );
   assert.match(text, new RegExp(`TBG visual contract v${manifest.version.replaceAll(".", "\\.")}`));
 });
 
@@ -43,22 +67,26 @@ test("critical shared primitives have a stable visual review surface", async () 
     read("public/design-contract-preview.html"),
   ]);
 
-  for (const primitive of [
-    "tbg-nav",
-    "tbg-panel",
-    "tbg-card",
-    "tbg-table-wrap",
-    "tbg-table",
-    "tbg-rating",
-    "tbg-badge--available",
-    "tbg-badge--injured",
-    "tbg-player-link",
-    "tbg-club-link",
+  for (const selector of [
+    ".tbg-nav",
+    ".tbg-panel",
+    ".tbg-card",
+    ".tbg-table-wrap",
+    ".tbg-table",
+    ".tbg-rating",
+    ".tbg-player-link",
+    ".tbg-club-link",
   ]) {
-    assert.ok(css.includes(`.${primitive}`), `contract missing .${primitive}`);
-    assert.ok(preview.includes(primitive), `preview missing ${primitive}`);
+    assert.ok(hasCompleteSelector(css, selector), `contract missing complete selector ${selector}`);
+    assert.ok(preview.includes(selector.slice(1)), `preview missing ${selector}`);
   }
 
+  for (const modifier of ["tbg-badge--available", "tbg-badge--injured"]) {
+    assert.ok(hasCompleteSelector(css, `.${modifier}`), `contract missing complete selector .${modifier}`);
+    assert.ok(preview.includes(modifier), `preview missing ${modifier}`);
+  }
+
+  assert.ok(hasCompleteSelector(css, ".tbg-badge"), "contract missing complete selector .tbg-badge");
   assert.match(preview, /aria-selected="true"/);
   assert.match(css, /:focus-visible/);
   assert.match(css, /prefers-reduced-motion/);
