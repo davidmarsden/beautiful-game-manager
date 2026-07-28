@@ -69,9 +69,15 @@ function renderComposer() {
   const contractLabel = $('negotiationContractLabel');
   clubLabel.hidden = action === 'listing';
   contractLabel.hidden = action === 'listing';
-  $('negotiationClub').innerHTML = clubs().filter((club) => club.club_id !== ownClub)
+  const managedCounterparts = clubs().filter((club) => club.club_id !== ownClub && club.managed);
+  $('negotiationClub').innerHTML = managedCounterparts
     .map((club) => `<option value="${escapeHtml(club.club_id)}">${escapeHtml(club.club_name)}</option>`).join('');
   $('submitNegotiation').textContent = action === 'listing' ? 'List player for transfer' : 'Submit transfer offer';
+  if (action === 'offer' && !managedCounterparts.length) {
+    $('negotiationPlayer').innerHTML = '<option value="">No other managed clubs available</option>';
+    $('submitNegotiation').disabled = true;
+    return;
+  }
   renderPlayerOptions();
 }
 
@@ -126,7 +132,7 @@ async function submitProposal() {
           contractYears: Number($('negotiationContractYears').value) || 3
         };
     await request('/api/shared-world', { type: 'submit_command', command_type: action === 'listing' ? 'transfer_listing' : 'transfer_offer', command_payload: payload });
-    message.textContent = action === 'listing' ? 'Player listed. The request is recorded in your command history.' : 'Offer submitted to the other club.';
+    message.textContent = action === 'listing' ? 'Player listed. The request is recorded in your command history.' : 'Offer submitted to the other manager.';
     await refresh();
   } catch (error) {
     message.textContent = error.message;
