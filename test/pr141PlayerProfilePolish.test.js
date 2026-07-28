@@ -17,6 +17,9 @@ test('player profile uses the polished modal presentation', async () => {
   assert.match(profile, /const tone = negative \? 'bad' : positive \? 'good'/);
   assert.match(profile, /function moraleState/);
   assert.match(profile, /Very low/);
+  assert.match(profile, /const bad = normalized\.includes\('very low'\) \|\| normalized\.includes\('poor'\)/);
+  assert.match(profile, /const neutral = normalized === 'low'/);
+  assert.match(profile, /bad \? 'bad' : neutral \? 'neutral' : good \? 'good'/);
   assert.match(profile, /<span>TBG<\/span><strong>/);
   assert.match(profile, /class="tbg-profile-close"[\s\S]*>×<\/button>/);
   assert.match(profile, /event\.key === 'Escape'/);
