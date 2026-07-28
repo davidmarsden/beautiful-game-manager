@@ -15,10 +15,16 @@ test('player profile uses the polished modal presentation', async () => {
   assert.match(profile, /toLocaleDateString\('en-GB',[\s\S]*timeZone: 'UTC'/);
   assert.match(profile, /normalized\.includes\('unavailable'\)/);
   assert.match(profile, /const tone = negative \? 'bad' : positive \? 'good'/);
+  assert.match(profile, /function moraleState/);
+  assert.match(profile, /Very low/);
+  assert.match(profile, /<span>TBG<\/span><strong>/);
+  assert.match(profile, /class="tbg-profile-close"[\s\S]*>×<\/button>/);
   assert.match(profile, /event\.key === 'Escape'/);
   assert.match(profile, /aria-selected/);
   assert.match(css, /position:fixed/);
-  assert.match(css, /tbg-player-rating/);
+  assert.match(css, /tbg-player-rating span/);
+  assert.match(css, /tbg-profile-close\{position:absolute/);
+  assert.match(css, /tbg-pink-final-link\{[\s\S]*padding:12px 14px/);
   assert.match(css, /tbg-profile-grid/);
   assert.match(css, /@media\(max-width:760px\)/);
 });
