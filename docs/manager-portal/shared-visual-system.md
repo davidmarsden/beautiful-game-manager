@@ -1,6 +1,6 @@
 # Shared TBG visual system
 
-Version: **1.0.0**
+Version: **1.0.1**
 
 This contract gives The Pink Final and the Manager Portal one recognisable product language without making them the same application.
 
@@ -31,4 +31,4 @@ The contract includes colour and surface tokens, typography, spacing, layout wid
 
 ## Pink Final adoption
 
-Milestone 5 should copy `tbg-design-contract.css` at version 1.0.0 into `beautiful-game-data`, map its existing Pink Final selectors to the shared primitives, and retain the more overt newspaper masthead and editorial layout. The shared semantic names—not byte-for-byte identical pages—are the compatibility boundary.
+Milestone 5 should copy `tbg-design-contract.css` at version 1.0.1 into `beautiful-game-data`, map its existing Pink Final selectors to the shared primitives, and retain the more overt newspaper masthead and editorial layout. The shared semantic names—not byte-for-byte identical pages—are the compatibility boundary.
