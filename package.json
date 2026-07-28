@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
+    "design-contract:verify": "node scripts/verify-design-contract.js",
     "calibration:report": "node scripts/generate-calibration-report.js",
     "calibration:rating-bands": "node scripts/investigate-rating-bands.js",
     "calibration:shadow": "node scripts/generate-shadow-comparison.js",
