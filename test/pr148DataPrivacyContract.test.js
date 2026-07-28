@@ -72,6 +72,30 @@ test('directory projection applies the same boundary to every record', () => {
   });
 });
 
+test('public projection sanitizes profile URL fields instead of copying them verbatim', () => {
+  const safePlayer = projectPublicPlayer({
+    tbg_player_id: 'player-1',
+    profile_url: 'https://pink.example.test/players/?id=player-1',
+    source_profile_url: 'https://source.example.test/player/1'
+  });
+  assert.equal(safePlayer.profile_url, 'https://pink.example.test/players/?id=player-1');
+  assert.equal(safePlayer.source_profile_url, 'https://source.example.test/player/1');
+
+  const unsafePlayer = projectPublicPlayer({
+    tbg_player_id: 'player-2',
+    profile_url: 'https://user:pass@pink.example.test/players/?appointment_id=secret',
+    source_profile_url: 'https://source.example.test/player/2?world_id=secret'
+  });
+  assert.equal('profile_url' in unsafePlayer, false);
+  assert.equal('source_profile_url' in unsafePlayer, false);
+
+  const unsafeClub = projectPublicClub({
+    club_id: 'club-1',
+    pink_final_club_profile_url: 'https://pink.example.test/clubs/?id=club-1&result_id=hidden'
+  });
+  assert.equal('pink_final_club_profile_url' in unsafeClub, false);
+});
+
 test('public assertion rejects nested private fields even after composition', () => {
   for (const field of NEVER_PUBLIC_FIELDS) {
     assert.throws(
@@ -108,6 +132,9 @@ test('public profile URLs cannot carry hidden world scope', () => {
   );
   assert.equal(publicProfileUrl('https://pink.example.test/players/', '../../secret'), null);
   assert.equal(publicProfileUrl('javascript:alert(1)', 'player-1'), null);
+  assert.equal(publicProfileUrl('https://pink.example.test/players/', 'player-1', 'world_id'), null);
+  assert.equal(publicProfileUrl('https://pink.example.test/players/', 'player-1', 'appointment_id'), null);
+  assert.equal(publicProfileUrl('https://pink.example.test/players/', 'player-1', 'bad parameter'), null);
   assert.equal(
     safeExplicitPublicProfileUrl('https://pink.example.test/players/?id=player-1', 'https://pink.example.test/'),
     'https://pink.example.test/players/?id=player-1'
@@ -117,6 +144,9 @@ test('public profile URLs cannot carry hidden world scope', () => {
     null
   );
   assert.equal(safeExplicitPublicProfileUrl('https://user:pass@pink.example.test/player/1', 'https://pink.example.test/'), null);
+  assert.equal(safeExplicitPublicProfileUrl('', 'https://pink.example.test/players/'), null);
+  assert.equal(safeExplicitPublicProfileUrl(null, 'https://pink.example.test/players/'), null);
+  assert.equal(safeExplicitPublicProfileUrl(undefined, 'https://pink.example.test/players/'), null);
 });
 
 test('canonical history remains bearer protected and non-cacheable', async () => {
