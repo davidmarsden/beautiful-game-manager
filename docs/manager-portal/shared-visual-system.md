@@ -37,4 +37,4 @@ Full governance, audit, upgrade and rollback procedure: [`shared-component-repos
 
 ## Pink Final adoption
 
-`beautiful-game-data` should copy the exact `tbg-design-contract.css` v1.0.1 bytes into its manifest path, pin the same version and source blob SHA, map existing Pink Final selectors to the shared primitives, and retain the more overt newspaper masthead and editorial layout. The copied contract bytes are the governed compatibility baseline; product pages and rendering remain intentionally different.
+The Pink Final should copy `tbg-design-contract.css` at version 1.0.1 into `beautiful-game-data`. The copied file must use the exact governed bytes at that version, be recorded at its manifest path with the same source blob SHA, and map existing Pink Final selectors to the shared primitives while retaining the more overt newspaper masthead and editorial layout. The copied contract bytes are the governed compatibility baseline; product pages and rendering remain intentionally different.
