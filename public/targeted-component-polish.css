@@ -7,7 +7,7 @@
 #tacticsView .pitch-panel,
 #tacticsView .squad-tray-panel,
 #tacticsView .team-sheet-panel,
-#tacticsView .preset-panel,
+#tacticsView .team-preset-panel,
 #tacticsView .current-submission {
   color: var(--tbg-colour-ink);
   background: var(--tbg-surface-card);
@@ -173,6 +173,11 @@
   border-color: rgba(33, 19, 19, .24);
 }
 
+#worldView .bulk-registration-player em {
+  color: var(--tbg-colour-success);
+  font-weight: 800;
+}
+
 #worldView .bulk-registration-player:hover,
 #worldView .bulk-registration-player:focus-within {
   background: var(--tbg-colour-paper-light);
@@ -204,7 +209,7 @@
 #scheduleView .portal-card,
 #historyView .portal-card,
 #historyView .history-club-panel,
-#historyView .history-season-card {
+#historyView .season-archive {
   color: var(--tbg-colour-ink);
   background: var(--tbg-surface-card);
   border-color: rgba(33, 19, 19, .26);
