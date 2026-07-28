@@ -54,6 +54,10 @@ function assertNoPrivateFields(value, path = '$') {
   return value;
 }
 
+function hasForbiddenRouteScope(url) {
+  return [...url.searchParams.keys()].some((key) => FORBIDDEN_PUBLIC_ROUTE_KEYS.has(key.toLowerCase()));
+}
+
 export function projectPublicPlayer(player = {}) {
   return assertNoPrivateFields(pick(player, PUBLIC_PLAYER_FIELDS));
 }
@@ -73,16 +77,24 @@ export function projectManagerVisibleLiveState(state = {}) {
   return pick(state, MANAGER_VISIBLE_LIVE_FIELDS);
 }
 
+export function safeExplicitPublicProfileUrl(value, baseUrl) {
+  try {
+    const url = new URL(String(value || '').trim(), baseUrl);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || hasForbiddenRouteScope(url)) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 export function publicProfileUrl(baseUrl, routeKey, parameter = 'id') {
   const key = String(routeKey ?? '').trim();
   if (!key || !/^[A-Za-z0-9._:-]{1,160}$/.test(key)) return null;
   const url = new URL(baseUrl);
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return null;
   url.search = '';
   url.hash = '';
   url.searchParams.set(parameter, key);
-  for (const forbidden of FORBIDDEN_PUBLIC_ROUTE_KEYS) {
-    if (forbidden !== parameter && url.searchParams.has(forbidden)) return null;
-  }
   return url.toString();
 }
 
