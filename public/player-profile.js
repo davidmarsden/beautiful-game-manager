@@ -9,15 +9,15 @@ function formatDate(value) {
   if (!value) return 'Open-ended';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return escapeHtml(value);
-  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 }
 
 function availabilityState(player) {
   const label = player.injury_status || player.availability || 'Available';
-  const normalized = String(label).toLowerCase();
-  const tone = normalized.includes('available') || normalized.includes('fit') ? 'good'
-    : normalized.includes('injur') || normalized.includes('suspend') || normalized.includes('unavailable') ? 'bad'
-      : 'neutral';
+  const normalized = String(label).trim().toLowerCase();
+  const negative = normalized.includes('unavailable') || normalized.includes('injur') || normalized.includes('suspend');
+  const positive = normalized === 'available' || normalized === 'fit' || normalized === 'fully fit';
+  const tone = negative ? 'bad' : positive ? 'good' : 'neutral';
   return { label, tone };
 }
 
