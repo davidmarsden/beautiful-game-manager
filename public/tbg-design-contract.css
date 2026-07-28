@@ -1,0 +1,254 @@
+/* TBG visual contract v1.0.0
+ * Shared language for The Pink Final and Manager Portal.
+ * Product-specific themes may remap tokens but should preserve semantics.
+ */
+:root {
+  color-scheme: light;
+
+  /* Colour and surfaces */
+  --tbg-colour-paper: #f3b4bd;
+  --tbg-colour-paper-strong: #e692a1;
+  --tbg-colour-paper-light: #ffd3d8;
+  --tbg-colour-cream: #fff2d9;
+  --tbg-colour-ink: #211313;
+  --tbg-colour-ink-soft: #4f3030;
+  --tbg-colour-muted: #6a4545;
+  --tbg-colour-rule: #2a1717;
+  --tbg-colour-workspace: #f8eee1;
+  --tbg-colour-workspace-raised: #fffaf0;
+  --tbg-colour-action: #7d1830;
+  --tbg-colour-action-hover: #57101f;
+  --tbg-colour-selected: #ffd3d8;
+  --tbg-colour-focus: #005fcc;
+  --tbg-colour-success: #176b26;
+  --tbg-colour-warning: #744d00;
+  --tbg-colour-danger: #8b1e1e;
+  --tbg-colour-info: #244a8c;
+  --tbg-surface-page: var(--tbg-colour-paper);
+  --tbg-surface-panel: color-mix(in srgb, var(--tbg-colour-cream) 82%, transparent);
+  --tbg-surface-card: var(--tbg-colour-workspace-raised);
+  --tbg-surface-inverse: var(--tbg-colour-ink);
+  --tbg-shadow-panel: 5px 5px 0 rgba(45, 19, 19, .22);
+  --tbg-shadow-workspace: 0 8px 22px rgba(33, 19, 19, .18);
+
+  /* Typography */
+  --tbg-font-display: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif;
+  --tbg-font-editorial: Georgia, "Times New Roman", serif;
+  --tbg-font-ui: Arial, Helvetica, sans-serif;
+  --tbg-type-xs: .72rem;
+  --tbg-type-sm: .82rem;
+  --tbg-type-md: .95rem;
+  --tbg-type-lg: 1.1rem;
+  --tbg-type-xl: clamp(1.5rem, 3vw, 2.4rem);
+  --tbg-type-display: clamp(2.4rem, 7vw, 5.5rem);
+  --tbg-leading-tight: 1;
+  --tbg-leading-body: 1.45;
+  --tbg-tracking-label: .06em;
+
+  /* Spacing and layout */
+  --tbg-space-1: 4px;
+  --tbg-space-2: 8px;
+  --tbg-space-3: 12px;
+  --tbg-space-4: 16px;
+  --tbg-space-5: 20px;
+  --tbg-space-6: 24px;
+  --tbg-space-8: 32px;
+  --tbg-space-10: 40px;
+  --tbg-content-max: 1260px;
+  --tbg-radius-none: 0;
+  --tbg-radius-sm: 3px;
+  --tbg-radius-pill: 999px;
+  --tbg-rule-thin: 1px;
+  --tbg-rule-heavy: 3px;
+  --tbg-nav-height: 52px;
+  --tbg-control-height: 44px;
+  --tbg-table-row-height: 44px;
+
+  /* Responsive contract */
+  --tbg-breakpoint-compact: 560px;
+  --tbg-breakpoint-tablet: 900px;
+  --tbg-breakpoint-wide: 1200px;
+}
+
+.tbg-ui-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: var(--tbg-space-1) var(--tbg-space-2);
+  color: var(--tbg-colour-cream);
+  background: var(--tbg-colour-ink);
+  font: 900 var(--tbg-type-xs)/1 var(--tbg-font-ui);
+  letter-spacing: var(--tbg-tracking-label);
+  text-transform: uppercase;
+}
+
+.tbg-panel,
+.tbg-card {
+  color: var(--tbg-colour-ink);
+  border: var(--tbg-rule-heavy) solid var(--tbg-colour-rule);
+  background: var(--tbg-surface-panel);
+  box-shadow: var(--tbg-shadow-panel);
+}
+
+.tbg-card {
+  border-width: var(--tbg-rule-thin);
+  background: var(--tbg-surface-card);
+  box-shadow: var(--tbg-shadow-workspace);
+}
+
+.tbg-nav {
+  min-height: var(--tbg-nav-height);
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  background: var(--tbg-surface-inverse);
+  border-block: var(--tbg-rule-thin) solid var(--tbg-colour-rule);
+}
+
+.tbg-nav a,
+.tbg-nav button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tbg-nav-height);
+  padding: 0 var(--tbg-space-4);
+  border: 0;
+  border-inline-end: var(--tbg-rule-thin) solid rgba(255, 242, 217, .28);
+  color: var(--tbg-colour-cream);
+  background: transparent;
+  font: 800 var(--tbg-type-sm)/1 var(--tbg-font-ui);
+  letter-spacing: .035em;
+  text-decoration: none;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tbg-nav a:hover,
+.tbg-nav button:hover,
+.tbg-nav [aria-current="page"],
+.tbg-nav .active {
+  color: var(--tbg-colour-ink);
+  background: var(--tbg-colour-paper-light);
+}
+
+.tbg-table-wrap {
+  max-width: 100%;
+  overflow: auto;
+  border: var(--tbg-rule-thin) solid var(--tbg-colour-rule);
+  overscroll-behavior-inline: contain;
+}
+
+.tbg-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: rgba(255, 255, 255, .3);
+}
+
+.tbg-table th,
+.tbg-table td {
+  min-height: var(--tbg-table-row-height);
+  padding: var(--tbg-space-2) var(--tbg-space-3);
+  border-bottom: var(--tbg-rule-thin) solid rgba(33, 19, 19, .3);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.tbg-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  color: var(--tbg-colour-cream);
+  background: var(--tbg-colour-ink);
+  font: 900 var(--tbg-type-xs)/1.2 var(--tbg-font-ui);
+  letter-spacing: var(--tbg-tracking-label);
+  text-transform: uppercase;
+}
+
+.tbg-table tbody tr:hover { background: rgba(255, 242, 217, .65); }
+.tbg-table tbody tr[aria-selected="true"],
+.tbg-table tbody tr.is-selected { background: var(--tbg-colour-selected); }
+
+.tbg-badge,
+.tbg-rating {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 3px 7px;
+  border: var(--tbg-rule-thin) solid currentColor;
+  border-radius: var(--tbg-radius-pill);
+  font: 800 var(--tbg-type-xs)/1 var(--tbg-font-ui);
+  white-space: nowrap;
+}
+
+.tbg-rating {
+  min-width: 42px;
+  border: 2px solid var(--tbg-colour-rule);
+  border-radius: var(--tbg-radius-none);
+  color: var(--tbg-colour-ink);
+  background: var(--tbg-colour-paper-light);
+  font: 400 1.12rem/1 var(--tbg-font-display);
+}
+
+.tbg-badge--available,
+.tbg-badge--success { color: var(--tbg-colour-success); background: #dff3df; }
+.tbg-badge--injured,
+.tbg-badge--danger { color: var(--tbg-colour-danger); background: #f9dada; }
+.tbg-badge--listed,
+.tbg-badge--warning { color: var(--tbg-colour-warning); background: #ffe6a8; }
+.tbg-badge--loan,
+.tbg-badge--info { color: var(--tbg-colour-info); background: #dce8ff; }
+.tbg-badge--competition { color: var(--tbg-colour-cream); background: var(--tbg-colour-action); }
+.tbg-badge--neutral { color: #5c5353; background: #f1e5df; }
+
+.tbg-player-link,
+.tbg-club-link {
+  color: var(--tbg-colour-action);
+  font-weight: 800;
+  text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.tbg-player-link:hover,
+.tbg-club-link:hover {
+  color: var(--tbg-colour-action-hover);
+  text-decoration-thickness: 2px;
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid var(--tbg-colour-focus);
+  outline-offset: 3px;
+}
+
+:where(button, input, select, textarea):disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .tbg-table { min-width: 760px; }
+}
+
+@media (max-width: 560px) {
+  .tbg-nav a,
+  .tbg-nav button { padding-inline: var(--tbg-space-3); }
+  .tbg-table { min-width: 680px; }
+  .tbg-table th:first-child,
+  .tbg-table td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: inherit;
+  }
+  .tbg-table th:first-child { z-index: 3; background: var(--tbg-colour-ink); }
+}
