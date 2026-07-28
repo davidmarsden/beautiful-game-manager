@@ -30,10 +30,11 @@ function moraleState(value) {
     return { label: `${numeric} · Very low`, tone: 'bad' };
   }
   const label = String(value || 'Good');
-  const normalized = label.toLowerCase();
-  const tone = normalized.includes('low') || normalized.includes('poor') ? 'bad'
-    : normalized.includes('good') || normalized.includes('excellent') ? 'good'
-      : 'neutral';
+  const normalized = label.trim().toLowerCase();
+  const bad = normalized.includes('very low') || normalized.includes('poor');
+  const neutral = normalized === 'low';
+  const good = normalized.includes('good') || normalized.includes('excellent');
+  const tone = bad ? 'bad' : neutral ? 'neutral' : good ? 'good' : 'neutral';
   return { label, tone };
 }
 
