@@ -1,0 +1,132 @@
+/* Manager Portal Football Pink stock refinement.
+ * Loaded after the shared contract and product theme so pink remains the paper,
+ * black remains the print, and cream is reserved for contrast.
+ */
+:root {
+  --tbg-colour-paper: #e7a8b6;
+  --tbg-colour-paper-strong: #d88fa0;
+  --tbg-colour-paper-light: #f2c7d0;
+  --tbg-colour-cream: #fff0df;
+  --tbg-colour-workspace: #efbcc7;
+  --tbg-colour-workspace-raised: #f6d4db;
+  --tbg-surface-panel: rgba(242, 199, 208, .96);
+  --tbg-surface-card: #f5d7dd;
+  --tbg-surface-table: #f3d2d8;
+  --portal-panel: var(--tbg-surface-card);
+  --portal-border: rgba(33, 19, 19, .24);
+}
+
+body {
+  background:
+    radial-gradient(circle at 15% 8%, rgba(255, 255, 255, .14), transparent 30%),
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, .022), rgba(0, 0, 0, .022) 1px, transparent 1px, transparent 5px),
+    var(--tbg-colour-paper);
+}
+
+.auth-card,
+.unassigned-state,
+.club-strip,
+.panel {
+  background: var(--tbg-surface-panel);
+}
+
+.workspace {
+  background: rgba(239, 188, 199, .94);
+}
+
+.view,
+.competition-card {
+  background: transparent;
+}
+
+.portal-overview article,
+.portal-card,
+.depth-card,
+.season-archive-summary div {
+  color: var(--tbg-colour-ink);
+  background: var(--tbg-surface-card);
+  border-color: var(--portal-border);
+  box-shadow: 0 8px 20px rgba(33, 19, 19, .14);
+}
+
+.portal-alert {
+  color: var(--tbg-colour-ink);
+  background: rgba(231, 168, 182, .34);
+  border-color: rgba(33, 19, 19, .22);
+}
+
+.portal-alert:hover,
+.portal-alert:focus-visible {
+  background: var(--tbg-colour-paper-light);
+  border-color: var(--tbg-colour-rule);
+}
+
+.season-progress-shell {
+  background: rgba(33, 19, 19, .15);
+}
+
+input,
+select {
+  background: var(--tbg-colour-cream);
+}
+
+.table-wrap {
+  background: var(--tbg-surface-table);
+}
+
+table,
+.tbg-table {
+  background: var(--tbg-surface-table);
+}
+
+tbody tr {
+  background: rgba(255, 255, 255, .11);
+}
+
+tbody tr:nth-child(even) {
+  background: rgba(231, 168, 182, .16);
+}
+
+tbody tr:hover {
+  background: rgba(255, 240, 223, .72);
+}
+
+.inbox-message {
+  background: #f3d6dc;
+  border-color: rgba(33, 19, 19, .22);
+}
+
+.empty-state,
+.tbg-profile-empty,
+.current-submission,
+.submission-summary {
+  background-color: rgba(245, 215, 221, .72);
+}
+
+@media (max-width: 600px) {
+  td:first-child,
+  .tbg-table td:first-child {
+    background: var(--tbg-surface-table);
+  }
+
+  tbody tr:nth-child(even) td:first-child,
+  .tbg-table tbody tr:nth-child(even) td:first-child {
+    background: #edc4cd;
+  }
+
+  tbody tr:hover td:first-child,
+  .tbg-table tbody tr:hover td:first-child {
+    background: var(--tbg-colour-cream);
+  }
+
+  tbody tr[aria-selected="true"] td:first-child,
+  tbody tr.is-selected td:first-child,
+  .tbg-table tbody tr[aria-selected="true"] td:first-child,
+  .tbg-table tbody tr.is-selected td:first-child {
+    background: var(--tbg-colour-selected);
+  }
+
+  tbody tr.managed-club-row td:first-child {
+    background: #fff0a8;
+  }
+}
