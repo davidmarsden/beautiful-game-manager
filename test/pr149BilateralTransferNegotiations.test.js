@@ -36,11 +36,13 @@ test('terminal response closes both sides atomically with audit and inbox outcom
   assert.match(migration, /insert into public\.manager_messages/);
 });
 
-test('negotiation API exposes only the appointed club inbox and a compact football directory', async () => {
+test('negotiation API exposes only the appointed club inbox and a compact managed-club football directory', async () => {
   const api = await read('netlify/functions/transfer-negotiations.mjs');
   assert.match(api, /get_manager_transfer_inbox/);
+  assert.match(api, /get_managed_transfer_clubs/);
   assert.match(api, /submit_manager_transfer_response/);
-  assert.match(api, /transferDirectory\(world, current\.appointment\.club_id\)/);
+  assert.match(api, /const managedClubIds = new Set/);
+  assert.match(api, /transferDirectory\(world, current\.appointment\.club_id, managedClubIds\)/);
   assert.match(api, /incoming_offers/);
   assert.match(api, /cache-control': 'no-store'/);
   assert.doesNotMatch(api, /SUPABASE_SERVICE_ROLE_KEY/);
