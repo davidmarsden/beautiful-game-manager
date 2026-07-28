@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TBG design contract preview</title>
+  <link rel="stylesheet" href="./tbg-design-contract.css">
+  <style>
+    body { margin: 0; color: var(--tbg-colour-ink); background: var(--tbg-surface-page); font-family: var(--tbg-font-ui); }
+    main { width: min(calc(100% - 32px), var(--tbg-content-max)); margin: 24px auto 48px; display: grid; gap: var(--tbg-space-6); }
+    h1, h2 { margin: 0; font-family: var(--tbg-font-display); text-transform: uppercase; }
+    h1 { font-size: var(--tbg-type-xl); }
+    h2 { font-size: var(--tbg-type-lg); }
+    .preview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--tbg-space-4); }
+    .tbg-panel, .tbg-card { padding: var(--tbg-space-4); }
+    .preview-row { display: flex; flex-wrap: wrap; gap: var(--tbg-space-2); align-items: center; }
+  </style>
+</head>
+<body>
+  <nav class="tbg-nav" aria-label="Primitive preview navigation">
+    <a aria-current="page" href="#foundations">Foundations</a>
+    <a href="#tables">Tables</a>
+    <a href="#states">States</a>
+  </nav>
+  <main>
+    <header id="foundations">
+      <span class="tbg-ui-label">Contract v1.0.1</span>
+      <h1>The Beautiful Game</h1>
+      <p>Stable visual-regression surface for the shared presentation contract.</p>
+    </header>
+
+    <section class="preview-grid" aria-label="Panels and cards">
+      <article class="tbg-panel"><h2>Panel</h2><p>Heavy rule, pink-paper surface and governed shadow.</p></article>
+      <article class="tbg-card"><h2>Card</h2><p>Raised workspace surface for compact information.</p></article>
+    </section>
+
+    <section id="states" class="tbg-card">
+      <h2>Ratings, statuses and links</h2>
+      <div class="preview-row">
+        <span class="tbg-rating">91</span>
+        <span class="tbg-badge tbg-badge--available">Available</span>
+        <span class="tbg-badge tbg-badge--injured">Injured</span>
+        <span class="tbg-badge tbg-badge--listed">Listed</span>
+        <span class="tbg-badge tbg-badge--loan">Loan</span>
+        <span class="tbg-badge tbg-badge--competition">Division 1</span>
+      </div>
+      <p><a class="tbg-player-link" href="#states">Player profile</a> · <a class="tbg-club-link" href="#states">Club profile</a></p>
+    </section>
+
+    <section id="tables">
+      <h2>Responsive table states</h2>
+      <div class="tbg-table-wrap">
+        <table class="tbg-table">
+          <thead><tr><th>Player</th><th>Position</th><th>Rating</th><th>Status</th><th>Contract</th></tr></thead>
+          <tbody>
+            <tr><td><a class="tbg-player-link" href="#tables">Maya Okafor</a></td><td>AM</td><td><span class="tbg-rating">93</span></td><td><span class="tbg-badge tbg-badge--available">Available</span></td><td>2029</td></tr>
+            <tr aria-selected="true"><td><a class="tbg-player-link" href="#tables">Lena Silva</a></td><td>DM</td><td><span class="tbg-rating">90</span></td><td><span class="tbg-badge tbg-badge--listed">Listed</span></td><td>2028</td></tr>
+            <tr><td><a class="tbg-player-link" href="#tables">Amara Mensah</a></td><td>CB</td><td><span class="tbg-rating">88</span></td><td><span class="tbg-badge tbg-badge--injured">Injured</span></td><td>2030</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

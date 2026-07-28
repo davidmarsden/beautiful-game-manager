@@ -1,0 +1,27 @@
+{
+  "contract": "tbg-design-contract",
+  "version": "1.0.1",
+  "releaseRecord": "design-contract/releases/1.0.1.json",
+  "governedSource": {
+    "repository": "davidmarsden/beautiful-game-manager",
+    "path": "public/tbg-design-contract.css",
+    "blobSha": "b8cc54bf27e0b0116e82f518d14398cb6f97dbb3"
+  },
+  "consumers": [
+    {
+      "repository": "davidmarsden/beautiful-game-manager",
+      "path": "public/tbg-design-contract.css",
+      "role": "source-and-consumer"
+    },
+    {
+      "repository": "davidmarsden/beautiful-game-data",
+      "path": "site/tbg-design-contract.css",
+      "role": "versioned-copy"
+    }
+  ],
+  "compatibility": {
+    "additiveTokensAndPrimitives": "minor",
+    "fixesWithoutSemanticChange": "patch",
+    "renamedOrRemovedTokensAndPrimitives": "major"
+  }
+}
