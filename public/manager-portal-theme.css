@@ -276,6 +276,7 @@ tbody tr.is-selected { background: var(--tbg-colour-selected); }
   tbody tr:hover td:first-child { background: #fff2d9; }
   tbody tr[aria-selected="true"] td:first-child,
   tbody tr.is-selected td:first-child { background: var(--tbg-colour-selected); }
+  tbody tr.managed-club-row td:first-child { background: #fff0a8; }
   th:first-child { z-index: 3; background: var(--tbg-colour-ink); }
   .position-separator td:first-child { background: var(--tbg-colour-ink); }
   .topbar { gap: var(--tbg-space-2); }
