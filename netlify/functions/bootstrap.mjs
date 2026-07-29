@@ -11,25 +11,44 @@ const TURN_HOUR_UTC = Number(process.env.TBG_TURN_HOUR_UTC || 20);
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 const bearerToken = (request) => { const header = request.headers.get('authorization') || ''; return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : ''; };
+const isJwt = (value) => String(value || '').split('.').length === 3;
 
-async function supabase(path, key, label = 'Supabase request') {
-  const response = await fetch(`${SUPABASE_URL}${path}`, { headers: { apikey: key, authorization: `Bearer ${key}`, accept: 'application/json' } });
+async function requestSupabase(path, { apiKey, bearer, label = 'Supabase request' } = {}) {
+  const headers = { apikey: apiKey, accept: 'application/json' };
+  if (bearer) headers.authorization = `Bearer ${bearer}`;
+  const response = await fetch(`${SUPABASE_URL}${path}`, { headers });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(`${label}: ${body.message || body.error || `Supabase returned ${response.status}`}`);
   return body;
 }
 
-const userSupabase = (path, token, label) => supabase(path, token, label);
-const serverSupabase = (path, label) => supabase(path, SUPABASE_SERVICE_ROLE_KEY, label);
+const userSupabase = (path, token, label) => requestSupabase({
+  apiKey: SUPABASE_ANON_KEY,
+  bearer: token,
+  label
+});
+const serverSupabase = (path, label) => requestSupabase(path, {
+  apiKey: SUPABASE_SERVICE_ROLE_KEY,
+  ...(isJwt(SUPABASE_SERVICE_ROLE_KEY) ? { bearer: SUPABASE_SERVICE_ROLE_KEY } : {}),
+  label
+});
 
 async function identity(token) {
   const userResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SUPABASE_ANON_KEY, authorization: `Bearer ${token}` } });
   if (!userResponse.ok) throw new Error('Session is invalid or expired');
   const user = await userResponse.json();
-  const profiles = await userSupabase(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id,user_id,display_name,email,status,is_admin,profile_completed,country,timezone,favourite_club&limit=1`, token, 'Could not load manager profile');
+  const profiles = await requestSupabase(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id,user_id,display_name,email,status,is_admin,profile_completed,country,timezone,favourite_club&limit=1`, {
+    apiKey: SUPABASE_ANON_KEY,
+    bearer: token,
+    label: 'Could not load manager profile'
+  });
   const manager = profiles[0];
   if (!manager) throw new Error('Manager profile has not been created yet');
-  const appointments = await userSupabase(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=id,world_id,club_id,control_type,appointed_at&limit=1`, token, 'Could not load active appointment');
+  const appointments = await requestSupabase(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=id,world_id,club_id,control_type,appointed_at&limit=1`, {
+    apiKey: SUPABASE_ANON_KEY,
+    bearer: token,
+    label: 'Could not load active appointment'
+  });
   return { user, manager, appointment: appointments[0] || null };
 }
 
