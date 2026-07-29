@@ -11,11 +11,15 @@ test('boot watchdog accepts the authenticated portal shell as a usable state', a
   assert.match(recovery, /if \(!usablePortalScreen\(\)\) show/);
 });
 
-test('shared-world requests reuse the portal authorization bridge', async () => {
+test('shared-world requests reuse and prime the portal authorization bridge', async () => {
   const html = await read('public/index.html');
   const bridge = await read('public/shared-world-auth-bridge.js');
   assert.ok(html.indexOf('shared-world-auth-bridge.js') < html.indexOf('type="module"'));
   assert.match(bridge, /\/api\/shared-world/);
   assert.match(bridge, /window\.tbgPortalAuthorization/);
   assert.match(bridge, /headers\.set\('authorization'/);
+  assert.match(bridge, /AUTH_PRIME_URL/);
+  assert.match(bridge, /window\.addEventListener\('tbg:portal-rendered'/);
+  assert.match(bridge, /window\.fetch\(AUTH_PRIME_URL, \{ headers: \{ authorization \} \}\)/);
+  assert.match(bridge, /return new Response\(null, \{ status: 204 \}\)/);
 });
