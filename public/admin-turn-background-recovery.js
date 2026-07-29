@@ -23,7 +23,16 @@
     return `Background turn queued · world status ${status.turn_status || status.state || 'pending'}.`;
   }
 
-  async function pollUntilSettled(output, button) {
+  function isNewerThanQueuedBaseline(status, baseline, queuedAt) {
+    if (status.state === 'processing') return true;
+    if (status.run?.id && status.run.id !== baseline.run?.id) return true;
+    if (status.operation_id && status.operation_id !== baseline.operation_id) return true;
+    if (status.operation_created_at && new Date(status.operation_created_at).getTime() >= queuedAt) return true;
+    if (status.checksum && baseline.checksum && status.checksum !== baseline.checksum) return true;
+    return false;
+  }
+
+  async function pollUntilSettled(output, button, baseline, queuedAt) {
     const deadline = Date.now() + (12 * 60 * 1000);
     let sawProcessing = false;
     let transientErrors = 0;
@@ -32,15 +41,18 @@
       try {
         const status = await statusRequest();
         transientErrors = 0;
+        const belongsToQueuedAttempt = isNewerThanQueuedBaseline(status, baseline, queuedAt);
         if (status.state === 'processing') sawProcessing = true;
-        output.textContent = statusText(status);
-        if (status.state === 'failed') {
+        output.textContent = belongsToQueuedAttempt
+          ? statusText(status)
+          : 'Production turn queued. Waiting for the background worker to claim the failed checkpoint…';
+        if (status.state === 'failed' && belongsToQueuedAttempt) {
           button.disabled = false;
           button.textContent = 'Retry failed turn';
           document.getElementById('reloadWorldState')?.removeAttribute('hidden');
           return;
         }
-        if (status.state === 'complete' && (sawProcessing || status.run?.status === 'complete')) {
+        if (status.state === 'complete' && belongsToQueuedAttempt && (sawProcessing || status.run?.status === 'complete')) {
           button.disabled = true;
           button.textContent = 'Turn complete — reload world';
           const reload = document.getElementById('reloadWorldState');
@@ -55,7 +67,6 @@
         transientErrors += 1;
         output.textContent = `Background turn is still queued; status check temporarily failed (${error.message}).`;
         if (transientErrors >= 10) {
-          button.disabled = false;
           const reload = document.getElementById('reloadWorldState');
           if (reload) reload.hidden = false;
           return;
@@ -78,10 +89,12 @@
     const authorization = window.tbgPortalAuthorization || '';
     button.disabled = true;
     if (reload) reload.hidden = true;
-    if (output) output.textContent = 'Queueing the production turn in the background…';
+    if (output) output.textContent = 'Checking the current failed checkpoint before queueing recovery…';
 
     try {
       if (!authorization) throw new Error('Portal session is not ready');
+      const baseline = await statusRequest();
+      const queuedAt = Date.now();
       const response = await fetch('/api/run-due-turn-now-background', {
         method: 'POST',
         headers: { authorization, 'content-type': 'application/json' },
@@ -93,7 +106,7 @@
       }
       button.textContent = 'Turn running in background';
       if (output) output.textContent = 'Production turn queued. This page will check the canonical run ledger every few seconds; no long browser connection is being held open.';
-      await pollUntilSettled(output, button);
+      await pollUntilSettled(output, button, baseline, queuedAt);
     } catch (error) {
       if (output) output.textContent = error.message;
       button.disabled = false;
