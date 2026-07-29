@@ -123,12 +123,7 @@ export function applyPendingCommands(worldInput, rows) {
     const transferResponse = row.command_type === 'transfer_response' ? responseValue(payload) : '';
 
     if (row.command_type === 'transfer_response' && ['declined', 'rejected'].includes(transferResponse)) {
-      results.push({
-        id: row.id,
-        status: 'rejected',
-        negotiation_state: 'declined',
-        error: 'The transfer proposal was declined'
-      });
+      results.push({ id: row.id, status: 'rejected', negotiation_state: 'declined', error: 'The transfer proposal was declined' });
       continue;
     }
 
@@ -190,6 +185,44 @@ async function finalizeCommand(row, result, world, now) {
     })
   });
   return Array.isArray(response) ? response[0] : response;
+}
+
+function automaticFailureOperationId(worldId, previousChecksum, now) {
+  return `scheduled-turn-failure:${worldId}:${previousChecksum}:${now}`;
+}
+
+async function persistAutomaticFailure({ stored, now, runId, seasonId, matchday, error, diagnostics }) {
+  const operationId = automaticFailureOperationId(stored.world_id, stored.save_checksum, now);
+  await service('/rest/v1/world_operation_events', {
+    method: 'POST',
+    body: JSON.stringify({
+      operation_id: operationId,
+      operation_type: 'advance',
+      world_id: stored.world_id,
+      manager_id: null,
+      club_id: null,
+      previous_checksum: stored.save_checksum,
+      replacement_checksum: null,
+      status: 'rejected',
+      details: {
+        action: 'automatic_scheduled_turn',
+        production_scheduler_version: 'tbg-scheduled-world-turn-v1.7',
+        failed_run_id: runId,
+        error: error.message,
+        diagnostics: diagnostics || null,
+        before: {
+          season_id: seasonId,
+          matchday,
+          checksum: stored.save_checksum,
+          next_turn_at: stored.next_turn_at,
+          turn_status: stored.turn_status
+        }
+      },
+      requested_by: null,
+      created_at: now
+    })
+  });
+  return operationId;
 }
 
 async function processWorld(stored, now) {
@@ -305,6 +338,7 @@ async function processWorld(stored, now) {
       viability: failureDetails
     };
   } catch (error) {
+    const diagnostics = error.diagnostics || failureDetails || null;
     await service(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(worldId)}&season_id=eq.${encodeURIComponent(seasonId)}&matchday=eq.${matchday}&status=eq.locked`, {
       method: 'PATCH',
       body: JSON.stringify({ status: 'submitted', locked_at: null }),
@@ -320,7 +354,8 @@ async function processWorld(stored, now) {
       body: JSON.stringify({ status: 'failed', error_message: error.message, completed_at: now }),
       headers: { prefer: 'return=minimal' }
     }).catch(() => {});
-    return { world_id: worldId, status: 'failed', error: error.message, diagnostics: error.diagnostics || failureDetails };
+    const operationId = await persistAutomaticFailure({ stored, now, runId, seasonId, matchday, error, diagnostics }).catch(() => null);
+    return { world_id: worldId, status: 'failed', error: error.message, diagnostics, operation_id: operationId, failed_run_id: runId };
   }
 }
 
@@ -330,7 +365,7 @@ export default async () => {
   const due = await service(`/rest/v1/canonical_world_saves?turn_status=eq.open&next_turn_at=lte.${encodeURIComponent(now)}&select=*`);
   const results = [];
   for (const stored of due) results.push(await processWorld(stored, now));
-  return json({ version: 'tbg-scheduled-world-turn-v1.6', checked_at: now, worlds_due: due.length, results });
+  return json({ version: 'tbg-scheduled-world-turn-v1.7', checked_at: now, worlds_due: due.length, results });
 };
 
 export const config = { schedule: '*/15 * * * *' };

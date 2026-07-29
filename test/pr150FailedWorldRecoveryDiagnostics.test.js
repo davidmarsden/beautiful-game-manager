@@ -1,0 +1,57 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
+
+test('failed-world diagnostics are protected and bound to the unchanged checkpoint', async () => {
+  const api = await read('netlify/functions/world-failure-diagnostics.mjs');
+  assert.match(api, /Administrator access required/);
+  assert.match(api, /turn_status !== 'failed'/);
+  assert.match(api, /previous_checksum=eq\.\$\{encodeURIComponent\(world\.save_checksum\)\}/);
+  assert.match(api, /world_turn_runs[\s\S]*status=eq\.failed/);
+  assert.match(api, /failed_run_id/);
+  assert.match(api, /operation_id/);
+  assert.match(api, /error_message/);
+  assert.match(api, /can_retry: Boolean\(failedRun\)/);
+  assert.match(api, /cache-control': 'no-store'/);
+});
+
+test('automatic scheduler failures persist an authoritative rejected advance incident', async () => {
+  const scheduler = await read('netlify/functions/scheduled-world-turn.mjs');
+  assert.match(scheduler, /persistAutomaticFailure/);
+  assert.match(scheduler, /scheduled-turn-failure:/);
+  assert.match(scheduler, /operation_type: 'advance'/);
+  assert.match(scheduler, /status: 'rejected'/);
+  assert.match(scheduler, /action: 'automatic_scheduled_turn'/);
+  assert.match(scheduler, /failed_run_id: runId/);
+  assert.match(scheduler, /error: error\.message/);
+  assert.match(scheduler, /diagnostics: diagnostics \|\| null/);
+  assert.match(scheduler, /const diagnostics = error\.diagnostics \|\| failureDetails \|\| null/);
+  assert.match(scheduler, /persistAutomaticFailure\(\{ stored, now, runId, seasonId, matchday, error, diagnostics \}\)/);
+  assert.match(scheduler, /operation_id: operationId/);
+  assert.match(scheduler, /tbg-scheduled-world-turn-v1\.7/);
+});
+
+test('admin world control explains the failure and exposes a safe retry action', async () => {
+  const script = await read('public/admin-turn-control.js');
+  assert.match(script, /world-failure-diagnostics/);
+  assert.match(script, /Matchday \$\{escapeHtml\(details\.matchday/);
+  assert.match(script, /Failed run \$\{details\.failed_run_id\}/);
+  assert.match(script, /Operation \$\{details\.operation_id\}/);
+  assert.match(script, /Retry failed turn/);
+  assert.match(script, /Manual recovery required/);
+  assert.match(script, /Reopening the failed checkpoint and retrying the production scheduler/);
+  assert.match(script, /resultText\(result\)/);
+  assert.match(script, /await loadFailureDiagnostics\(\)\.catch/);
+});
+
+test('existing production retry remains checksum and failed-run guarded', async () => {
+  const api = await read('netlify/functions/run-due-turn-now.mjs');
+  assert.match(api, /before\.turn_status === 'failed'/);
+  assert.match(api, /previous_checksum=eq\.\$\{encodeURIComponent\(before\.save_checksum\)\}/);
+  assert.match(api, /status=eq\.failed/);
+  assert.match(api, /retry_failed_turn/);
+  assert.match(api, /save_checksum=eq\.\$\{encodeURIComponent\(before\.save_checksum\)\}[\s\S]*turn_status=eq\.failed/);
+  assert.match(api, /Failed world changed before retry; replay rejected/);
+});
