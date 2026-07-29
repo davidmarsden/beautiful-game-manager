@@ -12,19 +12,33 @@ const bearer = (request) => {
   const header = request.headers.get('authorization') || '';
   return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
 };
+const isJwt = (value) => String(value || '').split('.').length === 3;
 
-async function rest(path, key, options = {}, label = 'Supabase request') {
-  const result = await fetch(`${SUPABASE_URL}${path}`, {
-    ...options,
-    headers: { apikey: key, authorization: `Bearer ${key}`, accept: 'application/json', ...(options.headers || {}) }
-  });
+async function requestSupabase(path, { apiKey, bearer: bearerCredential, label = 'Supabase request', ...options } = {}) {
+  const headers = {
+    apikey: apiKey,
+    accept: 'application/json',
+    ...(options.headers || {})
+  };
+  if (bearerCredential) headers.authorization = `Bearer ${bearerCredential}`;
+  const result = await fetch(`${SUPABASE_URL}${path}`, { ...options, headers });
   const body = await result.json().catch(() => ({}));
   if (!result.ok) throw new Error(`${label}: ${body.message || body.error || `Supabase returned ${result.status}`}`);
   return body;
 }
 
-const userRest = (path, token, options = {}, label) => rest(path, token, options, label);
-const serverRest = (path, options = {}, label) => rest(path, SUPABASE_SERVICE_ROLE_KEY, options, label);
+const userRest = (path, token, options = {}, label) => requestSupabase(path, {
+  ...options,
+  apiKey: SUPABASE_ANON_KEY,
+  bearer: token,
+  label
+});
+const serverRest = (path, options = {}, label) => requestSupabase(path, {
+  ...options,
+  apiKey: SUPABASE_SERVICE_ROLE_KEY,
+  ...(isJwt(SUPABASE_SERVICE_ROLE_KEY) ? { bearer: SUPABASE_SERVICE_ROLE_KEY } : {}),
+  label
+});
 
 export default async (request) => {
   if (request.method !== 'POST') return response({ error: 'Method not allowed' }, 405);
