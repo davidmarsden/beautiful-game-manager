@@ -118,12 +118,15 @@ test('portal registration follows live squad-cycle registration rather than stal
 
 test('production bootstrap cannot read legacy publication, fixture or standings state', async () => {
   const source = await readFile(new URL('../netlify/functions/bootstrap.mjs', import.meta.url), 'utf8');
-  assert.match(source, /canonical_world_saves/);
+  const migration = await readFile(new URL('../supabase/migrations/20260729_pr159_manager_portal_world_fragment.sql', import.meta.url), 'utf8');
+  assert.match(source, /get_manager_portal_world_fragment/);
+  assert.match(migration, /from public\.canonical_world_saves/);
   assert.match(source, /projectManagerPortal\(world, appointment\.club_id, \{/);
-  assert.match(source, /nextTurnAt: stored\.next_turn_at/);
+  assert.match(source, /nextTurnAt: context\.next_turn_at/);
   assert.match(source, /canonicalFixtureIds\(world\)/);
   assert.match(source, /manager_turn_submissions/);
   assert.match(source, /matchday=eq\.\$\{currentMatchday\}/);
+  assert.doesNotMatch(source, /save_envelope/);
   assert.doesNotMatch(source, /TBG_WORLD_URL|WORLD_URL/);
   assert.doesNotMatch(source, /\/rest\/v1\/fixtures/);
   assert.doesNotMatch(source, /competition_standings/);
@@ -133,10 +136,13 @@ test('production bootstrap cannot read legacy publication, fixture or standings 
 
 test('team decisions are persisted through the canonical turn ledger', async () => {
   const source = await readFile(new URL('../netlify/functions/decisions.mjs', import.meta.url), 'utf8');
-  assert.match(source, /canonical_world_saves/);
+  const migration = await readFile(new URL('../supabase/migrations/20260729_pr159_manager_portal_world_fragment.sql', import.meta.url), 'utf8');
+  assert.match(source, /get_manager_portal_world_fragment/);
+  assert.match(migration, /from public\.canonical_world_saves/);
   assert.match(source, /buildManagerTurnSubmission/);
   assert.match(source, /manager_turn_submissions\?on_conflict=world_id,season_id,matchday,club_id/);
   assert.match(source, /Fixture is not the canonical next fixture/);
+  assert.doesNotMatch(source, /save_envelope/);
   assert.doesNotMatch(source, /TBG_WORLD_URL|WORLD_URL/);
   assert.doesNotMatch(source, /\/rest\/v1\/fixtures/);
   assert.doesNotMatch(source, /\/rest\/v1\/manager_submissions/);
