@@ -51,6 +51,16 @@ test('admin world control explains failures and never destroys the result with a
   assert.doesNotMatch(script, /window\.location\.reload\(\);[\s\S]*tbg:canonical-turn-complete/);
 });
 
+test('successful retry clears stale failed-world controls until the administrator reloads', async () => {
+  const script = await read('public/admin-turn-control.js');
+  assert.match(script, /function clearRecoveredFailureState\(\)/);
+  assert.match(script, /failureDiagnostics = \{ active: false, can_retry: false \}/);
+  assert.match(script, /panel\.innerHTML = ''/);
+  assert.match(script, /button\.textContent = 'Turn complete — reload world'/);
+  assert.match(script, /turnCompleted = true;[\s\S]*clearRecoveredFailureState\(\)/);
+  assert.match(script, /if \(!turnCompleted\) button\.disabled/);
+});
+
 test('existing production retry remains checksum and failed-run guarded', async () => {
   const api = await read('netlify/functions/run-due-turn-now.mjs');
   assert.match(api, /before\.turn_status === 'failed'/);
