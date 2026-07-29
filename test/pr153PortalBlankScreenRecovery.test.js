@@ -37,5 +37,9 @@ test('Open World recovery route is honoured by portal navigation', async () => {
   assert.match(navigation, /new URLSearchParams\(window\.location\.search\)\.get\('view'\)/);
   assert.match(navigation, /const requested = requestedInitialView\(\)/);
   assert.match(navigation, /if \(!showPortalView\(requested\)\) showPortalView\('dashboard'\)/);
-  assert.doesNotMatch(navigation, /tbg:portal-rendered'[\s\S]*showPortalView\('dashboard'\);/);
+  assert.doesNotMatch(
+    navigation,
+    /window\.addEventListener\('tbg:portal-rendered', \(\) => \{\s*installHistoryShell\(\);\s*showPortalView\('dashboard'\);/,
+    'portal render must not unconditionally force Dashboard before considering the requested recovery view'
+  );
 });
