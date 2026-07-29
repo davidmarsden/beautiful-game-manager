@@ -22,7 +22,7 @@ async function requestSupabase(path, { apiKey, bearer, label = 'Supabase request
   return body;
 }
 
-const userSupabase = (path, token, label) => requestSupabase({
+const userSupabase = (path, token, label) => requestSupabase(path, {
   apiKey: SUPABASE_ANON_KEY,
   bearer: token,
   label
@@ -37,18 +37,10 @@ async function identity(token) {
   const userResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SUPABASE_ANON_KEY, authorization: `Bearer ${token}` } });
   if (!userResponse.ok) throw new Error('Session is invalid or expired');
   const user = await userResponse.json();
-  const profiles = await requestSupabase(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id,user_id,display_name,email,status,is_admin,profile_completed,country,timezone,favourite_club&limit=1`, {
-    apiKey: SUPABASE_ANON_KEY,
-    bearer: token,
-    label: 'Could not load manager profile'
-  });
+  const profiles = await userSupabase(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id,user_id,display_name,email,status,is_admin,profile_completed,country,timezone,favourite_club&limit=1`, token, 'Could not load manager profile');
   const manager = profiles[0];
   if (!manager) throw new Error('Manager profile has not been created yet');
-  const appointments = await requestSupabase(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=id,world_id,club_id,control_type,appointed_at&limit=1`, {
-    apiKey: SUPABASE_ANON_KEY,
-    bearer: token,
-    label: 'Could not load active appointment'
-  });
+  const appointments = await userSupabase(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=id,world_id,club_id,control_type,appointed_at&limit=1`, token, 'Could not load active appointment');
   return { user, manager, appointment: appointments[0] || null };
 }
 
