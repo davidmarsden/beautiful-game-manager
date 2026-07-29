@@ -21,7 +21,9 @@ test('portal boot guard catches failures and clears a stale watchdog overlay aft
   assert.match(guard, /new MutationObserver\(inspectPortal\)/);
   assert.match(guard, /attributes: true/);
   assert.match(guard, /attributeFilter: \['hidden', 'class', 'style'\]/);
-  assert.match(guard, /healthyPortalScreen[\s\S]*if \(healthyPortalScreen\) clear\(\)/);
+  assert.match(guard, /function usablePortalScreen\(\)[\s\S]*document\.getElementById\('portal'\)[\s\S]*\.some\(visible\)/);
+  assert.match(guard, /if \(usablePortalScreen\(\)\) clear\(\)/);
+  assert.match(guard, /if \(!usablePortalScreen\(\)\) show\(/);
   assert.match(guard, /window\.tbgDismissPortalRecovery = clear/);
   assert.match(guard, /boot_watchdog/);
   assert.match(guard, /Retry portal/);
