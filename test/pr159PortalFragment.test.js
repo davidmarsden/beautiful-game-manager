@@ -28,6 +28,20 @@ test('fragment migration excludes heavy world history and event payloads', async
   assert.match(migration, /grant execute on function public\.get_manager_portal_world_fragment\(text, text\) to service_role/);
 });
 
+test('fragment RPC validates the canonical envelope before returning trusted state', async () => {
+  const migration = await read('supabase/migrations/20260729_pr159_manager_portal_world_fragment.sql');
+  assert.match(migration, /create extension if not exists pgcrypto/);
+  assert.match(migration, /create or replace function public\.tbg_canonical_jsonb_text/);
+  assert.match(migration, /order by entry\.key/);
+  assert.match(migration, /order by entry\.ordinality/);
+  assert.match(migration, /save_version', ''\) <> 'tbg-playable-world-save-v1\.0'/);
+  assert.match(migration, /digest\(convert_to\(public\.tbg_canonical_jsonb_text\(world\), 'UTF8'\), 'sha256'\)/);
+  assert.match(migration, /stored\.save_checksum <> envelope_checksum/);
+  assert.match(migration, /Canonical save checksum mismatch/);
+  assert.match(migration, /tbg-playable-persistent-world-v1\.0/);
+  assert.match(migration, /failed fragment integrity validation/);
+});
+
 test('team save retains canonical fixture ownership and loan checks', async () => {
   const decisions = await read('netlify/functions/decisions.mjs');
   assert.match(decisions, /projectManagerPortal\(world, appointment\.club_id/);
