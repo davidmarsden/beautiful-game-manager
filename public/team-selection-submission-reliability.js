@@ -16,6 +16,11 @@
     return state;
   }
 
+  function invalidatePortalState() {
+    cachedPortalState = null;
+    window.tbgPortalState = null;
+  }
+
   async function cacheBootstrapResponse(response) {
     if (!response?.ok) return;
     try {
@@ -63,7 +68,6 @@
       if (response.ok) return {};
       throw new Error(`${fallbackMessage} (HTTP ${response.status}; empty response)`);
     }
-
     try {
       return JSON.parse(text);
     } catch {
@@ -100,7 +104,6 @@
       .find((item) => String(item.dataset.playerId || '').trim() === playerId);
     const visibleName = visibleToken?.querySelector('strong')?.textContent;
     if (visibleName) return String(visibleName).trim();
-
     const legacyInput = [...document.querySelectorAll('input[data-zone="xi"]')]
       .find((input) => String(input.value || '').trim() === playerId);
     const legacyText = legacyInput?.closest('.player-pick')?.querySelector('span')?.textContent || '';
@@ -145,7 +148,6 @@
     const startingXi = usingBoard ? playerIds('#formationPitch .formation-slot') : legacyPlayerIds('xi');
     const bench = usingBoard ? playerIds('#formationBench .bench-slot') : legacyPlayerIds('bench');
     const captainId = synchronizeCaptainChoices(startingXi);
-
     if (startingXi.length !== 11 || startingXi.some((id) => !id)) {
       throw new Error(`Select exactly 11 starters before saving${usingBoard ? '.' : ' using the checkboxes shown.'}`);
     }
@@ -153,12 +155,9 @@
       throw new Error(`Select exactly 7 substitutes before saving${usingBoard ? '.' : ' using the checkboxes shown.'}`);
     }
     const allPlayers = [...startingXi, ...bench];
-    if (new Set(allPlayers).size !== allPlayers.length) {
-      throw new Error('A player cannot appear in both the starting XI and the substitutes.');
-    }
+    if (new Set(allPlayers).size !== allPlayers.length) throw new Error('A player cannot appear in both the starting XI and the substitutes.');
     if (!captainId) throw new Error('Select a captain before saving.');
     if (!startingXi.includes(captainId)) throw new Error('The selected captain must be in the starting XI.');
-
     return { startingXi, bench, captainId, usingBoard };
   }
 
@@ -173,13 +172,24 @@
     panel.innerHTML = `<strong>Current submission</strong><span>Version ${submission.version}</span><span>${submission.formation}</span><span>${new Date(submission.updated_at || submission.submitted_at).toLocaleString()}</span><span class="badge ${submission.status === 'locked' ? 'injured' : 'fit'}">${submission.status}</span>`;
   }
 
+  async function refreshAfterCanonicalRejection() {
+    invalidatePortalState();
+    try {
+      const refreshed = await bootstrapState();
+      renderCanonicalSubmission(refreshed);
+      window.dispatchEvent(new CustomEvent('tbg:portal-rendered', { detail: refreshed }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async function submitVisibleSelection(event) {
     if (event.target?.id !== 'decisionForm') return;
     event.preventDefault();
     event.stopImmediatePropagation();
     installInlineStatus();
     installCaptainSynchronization();
-
     const button = event.target.querySelector('button[type="submit"]');
     const previousLabel = button?.textContent || 'Save team and tactics';
     if (button) {
@@ -193,7 +203,6 @@
       const canonical = cachedPortalState || window.tbgPortalState || await bootstrapState();
       if (!canonical?.next_fixture) throw new Error('There is no scheduled fixture available for this team submission.');
       if (canonical.next_fixture.locked) throw new Error('The team-selection deadline has passed and this fixture is locked.');
-
       const payload = {
         manager_id: canonical.manager.id,
         club_id: canonical.club.tbg_club_id,
@@ -216,7 +225,6 @@
           defensive_line: $('defensiveLine').value
         }
       };
-
       const response = await nativeFetch('/api/decisions', {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: authorization() },
@@ -227,15 +235,20 @@
         const validation = Array.isArray(result.validation_errors)
           ? result.validation_errors.map((item) => typeof item === 'string' ? item : item?.message || item?.code).filter(Boolean).join(' · ')
           : '';
-        throw new Error(validation || result.error || result.message || `Team selection could not be saved (HTTP ${response.status})`);
+        const baseMessage = validation || result.error || result.message || `Team selection could not be saved (HTTP ${response.status})`;
+        if (response.status === 409) {
+          const refreshed = await refreshAfterCanonicalRejection();
+          throw new Error(refreshed ? `${baseMessage} The fixture state has been refreshed; review the team and save again.` : baseMessage);
+        }
+        throw new Error(baseMessage);
       }
 
       const submittedAt = result.submitted_at || result.updated_at || null;
       setStatus(submittedAt ? `Saved · ${new Date(submittedAt).toLocaleString()}` : 'Team selection saved.', 'ok');
-
       let refreshed = null;
       let refreshError = null;
       try {
+        invalidatePortalState();
         refreshed = await bootstrapState();
         renderCanonicalSubmission(refreshed);
         const canonicalSavedAt = refreshed.current_submission?.submitted_at || refreshed.current_submission?.updated_at;
@@ -244,7 +257,6 @@
         refreshError = error;
         setStatus('Team selection saved. Confirmation refresh failed; reload the portal to confirm the canonical version.', 'ok');
       }
-
       window.dispatchEvent(new CustomEvent('tbg:team-submission-saved', {
         detail: { result, state: refreshed, refresh_error: refreshError?.message || null }
       }));
