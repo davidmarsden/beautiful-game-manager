@@ -21,11 +21,13 @@ test('portal boot guard catches failures and only clears stale watchdog overlays
   assert.match(guard, /new MutationObserver\(inspectPortal\)/);
   assert.match(guard, /attributes: true/);
   assert.match(guard, /attributeFilter: \['hidden', 'class', 'style'\]/);
-  assert.match(guard, /function usablePortalScreen\(\)[\s\S]*document\.getElementById\('portal'\)[\s\S]*\.some\(visible\)/);
+  assert.match(guard, /function usablePortalScreen\(\)[\s\S]*document\.getElementById\('clubPortal'\)[\s\S]*document\.getElementById\('unassignedState'\)[\s\S]*\.some\(visible\)/);
+  assert.doesNotMatch(guard, /function usablePortalScreen\(\)[\s\S]*document\.getElementById\('portal'\)/);
   assert.match(guard, /data-recovery-source/);
   assert.match(guard, /recovery\?\.dataset\.recoverySource === 'boot_watchdog'/);
   assert.match(guard, /usablePortalScreen\(\) && \(!recovery \|\| isWatchdogOverlay\)/);
   assert.match(guard, /if \(!usablePortalScreen\(\)\) show\(/);
+  assert.match(guard, /shell loaded, but no sign-in, club, onboarding or unassigned screen became ready/);
   assert.match(guard, /window\.tbgDismissPortalRecovery = clear/);
   assert.match(guard, /boot_watchdog/);
   assert.match(guard, /Retry portal/);
