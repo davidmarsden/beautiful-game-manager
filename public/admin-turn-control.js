@@ -19,11 +19,12 @@ async function responseJson(response, fallbackMessage) {
     try {
       return JSON.parse(text || '{}');
     } catch {
-      throw new Error(fallbackMessage);
+      const excerpt = text.trim().slice(0, 500);
+      throw new Error(`${fallbackMessage} (HTTP ${response.status}${excerpt ? ` · ${excerpt}` : ''})`);
     }
   }
-  if (!response.ok) throw new Error(`${fallbackMessage} (HTTP ${response.status})`);
-  throw new Error(fallbackMessage);
+  const excerpt = text.trim().replace(/\s+/g, ' ').slice(0, 500);
+  throw new Error(`${fallbackMessage} (HTTP ${response.status}${excerpt ? ` · ${excerpt}` : ''})`);
 }
 
 function resultText(result) {
@@ -35,6 +36,25 @@ function resultText(result) {
     return `${result?.error || 'Turn was not advanced.'}${references ? ` · ${references}` : ''}`;
   }
   return `Matchday ${result.matchday_advanced} complete · next matchday ${result.next_matchday ?? 'pending'} · checkpoint ${String(result.replacement_checksum || '').slice(0, 12)} · next turn ${result.next_turn_at ? new Date(result.next_turn_at).toLocaleString() : 'pending'}`;
+}
+
+function showReloadAction(label = 'Reload world state') {
+  const button = document.getElementById('reloadWorldState');
+  if (!button) return;
+  button.textContent = label;
+  button.hidden = false;
+  button.disabled = false;
+}
+
+function clearRecoveredFailureState() {
+  failureDiagnostics = { active: false, can_retry: false };
+  const panel = document.getElementById('worldFailureDiagnostics');
+  const button = document.getElementById('runDueTurnNow');
+  if (panel) panel.innerHTML = '';
+  if (button) {
+    button.textContent = 'Turn complete — reload world';
+    button.disabled = true;
+  }
 }
 
 function diagnosticDetails(value, depth = 0) {
@@ -130,7 +150,10 @@ function mount(bootstrap) {
       <h3>Production turn operation</h3>
       <p>Run the due canonical turn through the same scheduled production path. The operation rejects early, duplicate and replayed execution.</p>
       <div id="worldFailureDiagnostics"></div>
-      <button id="runDueTurnNow" class="primary-action" type="button">Run due turn now</button>
+      <div class="world-control-actions">
+        <button id="runDueTurnNow" class="primary-action" type="button">Run due turn now</button>
+        <button id="reloadWorldState" type="button" hidden>Reload world state</button>
+      </div>
       <p id="runDueTurnResult" class="world-control-message" aria-live="polite"></p>
     </section>
     <section id="registrationRepairCard" class="world-control-card">
@@ -148,34 +171,36 @@ function mount(bootstrap) {
     if (panel) panel.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
   });
 
+  document.getElementById('reloadWorldState').addEventListener('click', () => window.location.reload());
+
   document.getElementById('runDueTurnNow').addEventListener('click', async () => {
     const button = document.getElementById('runDueTurnNow');
     const output = document.getElementById('runDueTurnResult');
+    const reloadButton = document.getElementById('reloadWorldState');
+    let turnCompleted = false;
     button.disabled = true;
+    if (reloadButton) reloadButton.hidden = true;
     output.textContent = failureDiagnostics?.active ? 'Reopening the failed checkpoint and retrying the production scheduler…' : 'Claiming due world and running the production scheduler…';
     try {
       if (!authorization) throw new Error('Portal session is not ready');
       const response = await nativeFetch('/api/run-due-turn-now', { method: 'POST', headers: { authorization, 'content-type': 'application/json' }, body: '{}' });
-      let result;
-      try {
-        result = await responseJson(response, 'Production turn response was interrupted; refreshing the canonical world state…');
-      } catch (error) {
-        output.textContent = error.message;
-        window.setTimeout(() => window.location.reload(), 1200);
-        return;
-      }
+      const result = await responseJson(response, 'Production turn response was interrupted');
       output.textContent = resultText(result);
       if (!response.ok) {
         await loadFailureDiagnostics().catch(() => {});
+        showReloadAction();
         return;
       }
+      turnCompleted = true;
+      clearRecoveredFailureState();
       window.dispatchEvent(new CustomEvent('tbg:canonical-turn-complete', { detail: result }));
-      window.location.reload();
+      showReloadAction('Reload completed world');
     } catch (error) {
       output.textContent = error.message;
       await loadFailureDiagnostics().catch(() => {});
+      showReloadAction();
     } finally {
-      button.disabled = Boolean(failureDiagnostics?.active && !failureDiagnostics?.can_retry);
+      if (!turnCompleted) button.disabled = Boolean(failureDiagnostics?.active && !failureDiagnostics?.can_retry);
     }
   });
 
@@ -211,7 +236,7 @@ function mount(bootstrap) {
       const result = await repairRequest('apply', registrationRepairPreview.source_checksum, registrationRepairPreview.reservoir_fingerprint);
       output.textContent = `Registration repair applied. Checkpoint ${String(result.previous_checksum).slice(0, 12)} → ${String(result.replacement_checksum).slice(0, 12)}.`;
       window.dispatchEvent(new CustomEvent('tbg:canonical-registration-repaired', { detail: result }));
-      window.location.reload();
+      showReloadAction('Reload repaired world');
     } catch (error) {
       output.textContent = error.message;
       previewButton.disabled = false;
