@@ -34,7 +34,7 @@ test('queued retry ignores the pre-existing failed run until a newer attempt app
   assert.match(client, /const baseline = await statusRequest\(\)/);
   assert.match(client, /const queuedAt = Date\.now\(\)/);
   assert.match(client, /isNewerThanQueuedBaseline\(status, baseline, queuedAt\)/);
-  assert.match(client, /status\.run\?\.id !== baseline\.run\?\.id/);
+  assert.match(client, /status\.run\?\.id && status\.run\.id !== baseline\.run\?\.id/);
   assert.match(client, /status\.operation_id !== baseline\.operation_id/);
   assert.match(client, /status\.operation_created_at/);
   assert.match(client, /status\.state === 'failed' && belongsToQueuedAttempt/);
