@@ -5,27 +5,45 @@ import { createLoanEligibilitySnapshot, findWorldFixture, ineligibleLoanPlayerId
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 const response = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 const bearer = (request) => {
   const header = request.headers.get('authorization') || '';
   return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
 };
+const isJwt = (value) => String(value || '').split('.').length === 3;
 
-async function rest(path, token, options = {}) {
-  const result = await fetch(`${SUPABASE_URL}${path}`, {
-    ...options,
-    headers: { apikey: SUPABASE_ANON_KEY, authorization: `Bearer ${token}`, accept: 'application/json', ...(options.headers || {}) }
-  });
+async function requestSupabase(path, { apiKey, bearer: bearerCredential, label = 'Supabase request', ...options } = {}) {
+  const headers = {
+    apikey: apiKey,
+    accept: 'application/json',
+    ...(options.headers || {})
+  };
+  if (bearerCredential) headers.authorization = `Bearer ${bearerCredential}`;
+  const result = await fetch(`${SUPABASE_URL}${path}`, { ...options, headers });
   const body = await result.json().catch(() => ({}));
-  if (!result.ok) throw new Error(body.message || body.error || `Supabase returned ${result.status}`);
+  if (!result.ok) throw new Error(`${label}: ${body.message || body.error || `Supabase returned ${result.status}`}`);
   return body;
 }
+
+const userRest = (path, token, options = {}, label) => requestSupabase(path, {
+  ...options,
+  apiKey: SUPABASE_ANON_KEY,
+  bearer: token,
+  label
+});
+const serverRest = (path, options = {}, label) => requestSupabase(path, {
+  ...options,
+  apiKey: SUPABASE_SERVICE_ROLE_KEY,
+  ...(isJwt(SUPABASE_SERVICE_ROLE_KEY) ? { bearer: SUPABASE_SERVICE_ROLE_KEY } : {}),
+  label
+});
 
 export default async (request) => {
   if (request.method !== 'POST') return response({ error: 'Method not allowed' }, 405);
   try {
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return response({ error: 'Supabase is not configured' }, 503);
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) return response({ error: 'Supabase is not configured' }, 503);
     const token = bearer(request);
     if (!token) return response({ error: 'Authentication required' }, 401);
     const userResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SUPABASE_ANON_KEY, authorization: `Bearer ${token}` } });
@@ -33,15 +51,15 @@ export default async (request) => {
     const user = await userResponse.json();
     const payload = await request.json();
 
-    const profiles = await rest(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id&limit=1`, token);
+    const profiles = await userRest(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id&limit=1`, token, {}, 'Could not verify manager profile');
     const manager = profiles[0];
     if (!manager || manager.id !== payload.manager_id) return response({ error: 'Manager identity does not match this session' }, 403);
 
-    const appointments = await rest(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&club_id=eq.${encodeURIComponent(payload.club_id)}&status=eq.active&select=id,world_id,club_id&limit=1`, token);
+    const appointments = await userRest(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&club_id=eq.${encodeURIComponent(payload.club_id)}&status=eq.active&select=id,world_id,club_id&limit=1`, token, {}, 'Could not verify active appointment');
     const appointment = appointments[0];
     if (!appointment) return response({ error: 'You are not appointed to this club' }, 403);
 
-    const storedRows = await rest(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(appointment.world_id)}&select=world_id,save_envelope,next_turn_at,turn_status&limit=1`, token);
+    const storedRows = await serverRest(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(appointment.world_id)}&select=world_id,save_envelope,next_turn_at,turn_status&limit=1`, {}, 'Could not load canonical world');
     const stored = storedRows[0];
     if (!stored) return response({ error: `Canonical world ${appointment.world_id} has not been initialized` }, 409);
     if (stored.turn_status !== 'open') return response({ error: `Turn is ${stored.turn_status}` }, 409);
@@ -96,17 +114,17 @@ export default async (request) => {
       }
     });
 
-    const saved = await rest('/rest/v1/manager_turn_submissions?on_conflict=world_id,season_id,matchday,club_id', token, {
+    const saved = await serverRest('/rest/v1/manager_turn_submissions?on_conflict=world_id,season_id,matchday,club_id', {
       method: 'POST',
       headers: { 'content-type': 'application/json', prefer: 'resolution=merge-duplicates,return=representation' },
       body: JSON.stringify(submission)
-    });
+    }, 'Could not persist team submission');
 
-    await rest('/rest/v1/manager_messages', token, {
+    await serverRest('/rest/v1/manager_messages', {
       method: 'POST',
       headers: { 'content-type': 'application/json', prefer: 'return=minimal' },
       body: JSON.stringify({ recipient_manager_id: manager.id, club_id: appointment.club_id, message_type: 'submission_confirmation', subject: 'Team submission received', body: `Your team and tactics have been saved for ${fixture.opponent_name}.`, related_fixture_id: fixture.fixture_id, priority: 'normal' })
-    }).catch(() => null);
+    }, 'Could not create submission confirmation').catch(() => null);
 
     return response({ ...payload, saved: true, canonical: true, submission: saved[0] || submission, submitted_at: submission.submitted_at, matchday: submission.matchday, season_id: submission.season_id });
   } catch (error) {

@@ -32,6 +32,7 @@ let assignments = [];
 let benchAssignments = [];
 let players = [];
 let refreshTimer;
+let buildRetryTimer;
 let syncingLegacy = false;
 
 const byId = (id) => document.getElementById(id);
@@ -69,7 +70,7 @@ function token(player, role) {
 }
 
 function renderBoard() {
-  if (!board) return;
+  if (!board?.isConnected) return;
   const formation = byId('formation')?.value || '4-3-3-wide';
   const slots = FORMATIONS[formation] || FORMATIONS['4-3-3-wide'];
   const pitch = byId('formationPitch');
@@ -94,6 +95,7 @@ function renderBoard() {
 
 function validateBoard() {
   const target = byId('formationValidation');
+  if (!target) return false;
   const xi = assignments.filter(Boolean);
   const bench = benchAssignments.filter(Boolean);
   const duplicates = [...xi,...bench].filter((id,index,all) => all.indexOf(id) !== index);
@@ -139,6 +141,7 @@ function clickSlot(zone,index) {
 }
 
 function syncLegacyInputs() {
+  if (!board?.isConnected) return;
   syncingLegacy = true;
   document.querySelectorAll('input[data-zone="xi"]').forEach((input) => { input.checked = assignments.includes(norm(input.value)); });
   document.querySelectorAll('input[data-zone="bench"]').forEach((input) => { input.checked = benchAssignments.includes(norm(input.value)); });
@@ -164,10 +167,13 @@ function syncLegacyInputs() {
 }
 
 function buildBoard() {
-  if (board || !collectPlayers()) return;
+  if (board?.isConnected) return true;
+  if (board && !board.isConnected) board = null;
+  if (!collectPlayers()) return false;
   initialiseAssignments();
   const legacyXi = byId('startingXi');
   const legacyBench = byId('bench');
+  if (!legacyXi || !legacyBench) return false;
   const xiHeading = legacyXi.previousElementSibling;
   const benchHeading = legacyBench.previousElementSibling;
   legacyXi.classList.add('legacy-team-selectors');
@@ -201,10 +207,17 @@ function buildBoard() {
   };
   new MutationObserver(scheduleRefresh).observe(legacyXi,{childList:true,subtree:true});
   new MutationObserver(scheduleRefresh).observe(legacyBench,{childList:true,subtree:true});
+  window.dispatchEvent(new CustomEvent('tbg:formation-board-ready'));
+  return true;
 }
 
 function refreshFromPersistedInputs() {
-  if (!board || syncingLegacy || !collectPlayers()) return;
+  if (!board?.isConnected) {
+    board = null;
+    scheduleBoardBuild(100);
+    return;
+  }
+  if (syncingLegacy || !collectPlayers()) return;
   const checkedXi=currentChecked('xi');
   const checkedBench=currentChecked('bench');
   assignments=FORMATIONS[byId('formation')?.value || '4-3-3-wide'].map((_,index)=>checkedXi[index]||null);
@@ -212,11 +225,17 @@ function refreshFromPersistedInputs() {
   renderBoard();
 }
 
-function waitForTeamLists(attempt=0) {
-  if (buildBoard() !== false && board) return;
-  if (attempt < 60) setTimeout(() => waitForTeamLists(attempt+1), 150);
+function waitForTeamLists() {
+  if (buildBoard()) return;
+  scheduleBoardBuild(500);
 }
 
-window.addEventListener('load',()=>setTimeout(waitForTeamLists,500));
+function scheduleBoardBuild(delay = 0) {
+  clearTimeout(buildRetryTimer);
+  buildRetryTimer = setTimeout(waitForTeamLists, delay);
+}
+
+window.addEventListener('load',()=>scheduleBoardBuild(300));
+window.addEventListener('tbg:portal-rendered',()=>scheduleBoardBuild(0));
 byId('formation')?.addEventListener('change',()=>{ const next=FORMATIONS[byId('formation').value]||FORMATIONS['4-3-3-wide']; assignments=next.map((_,index)=>assignments[index]||null); renderBoard(); });
-document.addEventListener('submit',(event)=>{ if(event.target?.id==='decisionForm'){ syncLegacyInputs(); if(!validateBoard()){ event.preventDefault(); event.stopImmediatePropagation(); } } },true);
+document.addEventListener('submit',(event)=>{ if(event.target?.id==='decisionForm' && board?.isConnected){ syncLegacyInputs(); if(!validateBoard()){ event.preventDefault(); event.stopImmediatePropagation(); } } },true);
