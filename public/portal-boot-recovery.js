@@ -11,7 +11,7 @@
     const existing = document.getElementById('portalBootRecovery');
     const detail = String(message || 'The manager portal could not finish loading.').trim();
     const html = `
-      <section id="portalBootRecovery" role="alert" style="position:fixed;inset:0;z-index:2147483647;background:#f7f3ea;color:#1f1f1f;display:grid;place-items:center;padding:24px;font-family:system-ui,sans-serif;">
+      <section id="portalBootRecovery" data-recovery-source="${escapeHtml(source)}" role="alert" style="position:fixed;inset:0;z-index:2147483647;background:#f7f3ea;color:#1f1f1f;display:grid;place-items:center;padding:24px;font-family:system-ui,sans-serif;">
         <div style="width:min(680px,100%);background:#fff;border:1px solid #d8d0c0;border-radius:14px;padding:24px;box-shadow:0 18px 60px rgba(0,0,0,.18);">
           <p style="margin:0 0 8px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">The Beautiful Game</p>
           <h1 style="margin:0 0 12px;font-size:1.6rem;">Portal recovery</h1>
@@ -48,18 +48,25 @@
     return Boolean(element && !element.hidden && getComputedStyle(element).display !== 'none' && getComputedStyle(element).visibility !== 'hidden');
   }
 
+  function usablePortalScreen() {
+    return [
+      document.getElementById('authGate'),
+      document.getElementById('portal'),
+      document.getElementById('clubPortal'),
+      document.getElementById('unassignedState'),
+      document.getElementById('onboardingState')
+    ].some(visible);
+  }
+
   function inspectPortal() {
     const fatal = document.querySelector('#portal .fatal-error');
     if (fatal?.textContent?.trim()) {
       show(fatal.textContent.trim(), 'bootstrap_error');
       return;
     }
-    const healthyPortalScreen = [
-      document.getElementById('clubPortal'),
-      document.getElementById('unassignedState'),
-      document.getElementById('onboardingState')
-    ].some(visible);
-    if (healthyPortalScreen) clear();
+    const recovery = document.getElementById('portalBootRecovery');
+    const isWatchdogOverlay = recovery?.dataset.recoverySource === 'boot_watchdog';
+    if (usablePortalScreen() && (!recovery || isWatchdogOverlay)) clear();
   }
 
   window.tbgShowPortalRecovery = show;
@@ -90,12 +97,6 @@
 
   window.setTimeout(() => {
     inspectPortal();
-    const usableScreen = [
-      document.getElementById('authGate'),
-      document.getElementById('clubPortal'),
-      document.getElementById('unassignedState'),
-      document.getElementById('onboardingState')
-    ].some(visible);
-    if (!usableScreen) show('The manager portal did not expose a usable sign-in, club, onboarding or unassigned screen within 12 seconds.', 'boot_watchdog');
+    if (!usablePortalScreen()) show('The manager portal did not expose a usable sign-in, portal, club, onboarding or unassigned screen within 12 seconds.', 'boot_watchdog');
   }, 12000);
 })();
