@@ -27,10 +27,12 @@ test('automatic scheduler failures persist an authoritative rejected advance inc
   assert.match(scheduler, /failed_run_id: runId/);
   assert.match(scheduler, /error: error\.message/);
   assert.match(scheduler, /diagnostics: diagnostics \|\| null/);
-  assert.match(scheduler, /const diagnostics = error\.diagnostics \|\| failureDetails \|\| null/);
-  assert.match(scheduler, /persistAutomaticFailure\(\{ stored, now, runId, seasonId, matchday, error, diagnostics \}\)/);
+  assert.match(scheduler, /failing_stage: stageSnapshot\.stage/);
+  assert.match(scheduler, /stage_elapsed_ms: stageSnapshot\.stage_elapsed_ms/);
+  assert.match(scheduler, /stage_timings: stageSnapshot\.stage_timings/);
+  assert.match(scheduler, /persistAutomaticFailure\(\{[\s\S]*stageSnapshot[\s\S]*\}\)/);
   assert.match(scheduler, /operation_id: operationId/);
-  assert.match(scheduler, /tbg-scheduled-world-turn-v1\.7/);
+  assert.match(scheduler, /tbg-scheduled-world-turn-v1\.8/);
 });
 
 test('admin world control explains the failure and exposes a safe retry action', async () => {
