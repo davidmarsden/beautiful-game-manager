@@ -1,6 +1,8 @@
 (() => {
   const nativeFetch = window.fetch.bind(window);
   const $ = (id) => document.getElementById(id);
+  let captainObserver = null;
+  let observedPitch = null;
 
   function authorization() {
     return String(window.tbgPortalAuthorization || '').trim();
@@ -63,13 +65,44 @@
     );
   }
 
+  function visiblePlayerName(playerId) {
+    const token = [...document.querySelectorAll('#formationPitch .formation-slot .player-token')]
+      .find((item) => String(item.dataset.playerId || '').trim() === playerId);
+    return String(token?.querySelector('strong')?.textContent || playerId).trim();
+  }
+
+  function synchronizeCaptainChoices(startingXi = playerIds('#formationPitch .formation-slot')) {
+    const captain = $('captain');
+    if (!captain) return '';
+    const orderedXi = startingXi.filter(Boolean);
+    const previousCaptain = String(captain.value || '').trim();
+    captain.replaceChildren(...orderedXi.map((playerId) => {
+      const option = document.createElement('option');
+      option.value = playerId;
+      option.textContent = visiblePlayerName(playerId);
+      return option;
+    }));
+    captain.value = orderedXi.includes(previousCaptain) ? previousCaptain : (orderedXi[0] || '');
+    return String(captain.value || '').trim();
+  }
+
+  function installCaptainSynchronization() {
+    const pitch = $('formationPitch');
+    if (!pitch || pitch === observedPitch) return;
+    captainObserver?.disconnect();
+    observedPitch = pitch;
+    captainObserver = new MutationObserver(() => synchronizeCaptainChoices());
+    captainObserver.observe(pitch, { childList: true, subtree: true });
+    synchronizeCaptainChoices();
+  }
+
   function visibleSelection() {
     const board = $('interactiveFormationBoard');
     if (!board) throw new Error('The visible team-selection board is not ready yet. Reload the portal and try again.');
 
     const startingXi = playerIds('#formationPitch .formation-slot');
     const bench = playerIds('#formationBench .bench-slot');
-    const captainId = String($('captain')?.value || '').trim();
+    const captainId = synchronizeCaptainChoices(startingXi);
 
     if (startingXi.length !== 11 || startingXi.some((id) => !id)) {
       throw new Error('Select exactly 11 starters on the pitch before saving.');
@@ -103,6 +136,7 @@
     event.preventDefault();
     event.stopImmediatePropagation();
     installInlineStatus();
+    installCaptainSynchronization();
 
     const button = event.target.querySelector('button[type="submit"]');
     const previousLabel = button?.textContent || 'Save team and tactics';
@@ -152,11 +186,24 @@
         throw new Error(validation || result.error || result.message || `Team selection could not be saved (HTTP ${response.status})`);
       }
 
-      const refreshed = await bootstrapState();
-      renderCanonicalSubmission(refreshed);
-      const savedAt = result.submitted_at || refreshed.current_submission?.submitted_at || refreshed.current_submission?.updated_at;
-      setStatus(savedAt ? `Saved · ${new Date(savedAt).toLocaleString()}` : 'Team selection saved.', 'ok');
-      window.dispatchEvent(new CustomEvent('tbg:team-submission-saved', { detail: { result, state: refreshed } }));
+      const submittedAt = result.submitted_at || result.updated_at || null;
+      setStatus(submittedAt ? `Saved · ${new Date(submittedAt).toLocaleString()}` : 'Team selection saved.', 'ok');
+
+      let refreshed = null;
+      let refreshError = null;
+      try {
+        refreshed = await bootstrapState();
+        renderCanonicalSubmission(refreshed);
+        const canonicalSavedAt = refreshed.current_submission?.submitted_at || refreshed.current_submission?.updated_at;
+        if (canonicalSavedAt) setStatus(`Saved · ${new Date(canonicalSavedAt).toLocaleString()}`, 'ok');
+      } catch (error) {
+        refreshError = error;
+        setStatus('Team selection saved. Confirmation refresh failed; reload the portal to confirm the canonical version.', 'ok');
+      }
+
+      window.dispatchEvent(new CustomEvent('tbg:team-submission-saved', {
+        detail: { result, state: refreshed, refresh_error: refreshError?.message || null }
+      }));
     } catch (error) {
       setStatus(error?.message || 'Team selection could not be saved.', 'error');
     } finally {
@@ -167,7 +214,12 @@
     }
   }
 
+  function installEnhancements() {
+    installInlineStatus();
+    installCaptainSynchronization();
+  }
+
   document.addEventListener('submit', submitVisibleSelection, true);
-  window.addEventListener('DOMContentLoaded', installInlineStatus);
-  window.addEventListener('tbg:portal-rendered', installInlineStatus);
+  window.addEventListener('DOMContentLoaded', installEnhancements);
+  window.addEventListener('tbg:portal-rendered', installEnhancements);
 })();
