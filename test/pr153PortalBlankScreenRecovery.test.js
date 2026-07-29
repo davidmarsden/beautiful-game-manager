@@ -13,7 +13,7 @@ test('portal boot guard loads before module scripts and exposes recovery actions
   assert.ok(guardIndex < moduleIndex, 'boot recovery must execute before portal modules');
 });
 
-test('portal boot guard catches failures and clears a stale watchdog overlay after healthy render', async () => {
+test('portal boot guard catches failures and only clears stale watchdog overlays after healthy render', async () => {
   const guard = await read('public/portal-boot-recovery.js');
   assert.match(guard, /window\.addEventListener\('error'/);
   assert.match(guard, /window\.addEventListener\('unhandledrejection'/);
@@ -22,7 +22,9 @@ test('portal boot guard catches failures and clears a stale watchdog overlay aft
   assert.match(guard, /attributes: true/);
   assert.match(guard, /attributeFilter: \['hidden', 'class', 'style'\]/);
   assert.match(guard, /function usablePortalScreen\(\)[\s\S]*document\.getElementById\('portal'\)[\s\S]*\.some\(visible\)/);
-  assert.match(guard, /if \(usablePortalScreen\(\)\) clear\(\)/);
+  assert.match(guard, /data-recovery-source/);
+  assert.match(guard, /recovery\?\.dataset\.recoverySource === 'boot_watchdog'/);
+  assert.match(guard, /usablePortalScreen\(\) && \(!recovery \|\| isWatchdogOverlay\)/);
   assert.match(guard, /if \(!usablePortalScreen\(\)\) show\(/);
   assert.match(guard, /window\.tbgDismissPortalRecovery = clear/);
   assert.match(guard, /boot_watchdog/);
