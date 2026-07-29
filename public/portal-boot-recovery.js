@@ -48,18 +48,23 @@
     return Boolean(element && !element.hidden && getComputedStyle(element).display !== 'none' && getComputedStyle(element).visibility !== 'hidden');
   }
 
+  function usablePortalScreen() {
+    return [
+      document.getElementById('authGate'),
+      document.getElementById('portal'),
+      document.getElementById('clubPortal'),
+      document.getElementById('unassignedState'),
+      document.getElementById('onboardingState')
+    ].some(visible);
+  }
+
   function inspectPortal() {
     const fatal = document.querySelector('#portal .fatal-error');
     if (fatal?.textContent?.trim()) {
       show(fatal.textContent.trim(), 'bootstrap_error');
       return;
     }
-    const healthyPortalScreen = [
-      document.getElementById('clubPortal'),
-      document.getElementById('unassignedState'),
-      document.getElementById('onboardingState')
-    ].some(visible);
-    if (healthyPortalScreen) clear();
+    if (usablePortalScreen()) clear();
   }
 
   window.tbgShowPortalRecovery = show;
@@ -90,12 +95,6 @@
 
   window.setTimeout(() => {
     inspectPortal();
-    const usableScreen = [
-      document.getElementById('authGate'),
-      document.getElementById('clubPortal'),
-      document.getElementById('unassignedState'),
-      document.getElementById('onboardingState')
-    ].some(visible);
-    if (!usableScreen) show('The manager portal did not expose a usable sign-in, club, onboarding or unassigned screen within 12 seconds.', 'boot_watchdog');
+    if (!usablePortalScreen()) show('The manager portal did not expose a usable sign-in, portal, club, onboarding or unassigned screen within 12 seconds.', 'boot_watchdog');
   }, 12000);
 })();
