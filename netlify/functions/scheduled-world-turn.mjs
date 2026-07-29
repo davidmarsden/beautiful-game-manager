@@ -122,12 +122,10 @@ export function applyPendingCommands(worldInput, rows) {
   for (const row of rows) {
     const payload = row.command_payload || {};
     const transferResponse = row.command_type === 'transfer_response' ? responseValue(payload) : '';
-
     if (row.command_type === 'transfer_response' && ['declined', 'rejected'].includes(transferResponse)) {
       results.push({ id: row.id, status: 'rejected', negotiation_state: 'declined', error: 'The transfer proposal was declined' });
       continue;
     }
-
     const command = commandForDomain(row);
     if (!command && isNegotiationCommand(row)) {
       negotiations.push({
@@ -253,19 +251,21 @@ async function processWorld(stored, now) {
   const worldId = stored.world_id;
   const previousChecksum = stored.save_checksum;
   const tracker = stageTracker('claim_world');
-  const lockRows = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&save_checksum=eq.${encodeURIComponent(previousChecksum)}&turn_status=eq.open`, {
-    method: 'PATCH',
-    body: JSON.stringify({ turn_status: 'locking', updated_at: now }),
-    headers: { prefer: 'return=representation' }
-  });
-  if (lockRows.length !== 1) return { world_id: worldId, status: 'skipped', reason: 'World was already claimed or changed' };
-
+  let claimed = false;
   let runId = null;
   let seasonId = stored.season_id;
   let matchday = stored.matchday || 1;
   let failureDetails = null;
 
   try {
+    const lockRows = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&save_checksum=eq.${encodeURIComponent(previousChecksum)}&turn_status=eq.open`, {
+      method: 'PATCH',
+      body: JSON.stringify({ turn_status: 'locking', updated_at: now }),
+      headers: { prefer: 'return=representation' }
+    });
+    if (lockRows.length !== 1) return { world_id: worldId, status: 'skipped', reason: 'World was already claimed or changed' };
+    claimed = true;
+
     tracker.begin('load_world');
     let world = loadPersistentWorld(JSON.stringify(stored.save_envelope));
     const commandDisplayWorld = loadPersistentWorld(JSON.stringify(stored.save_envelope));
@@ -391,21 +391,25 @@ async function processWorld(stored, now) {
       stage_elapsed_ms: stageSnapshot.stage_elapsed_ms,
       stage_timings: stageSnapshot.stage_timings
     };
-    await service(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(worldId)}&season_id=eq.${encodeURIComponent(seasonId)}&matchday=eq.${matchday}&status=eq.locked`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status: 'submitted', locked_at: null }),
-      headers: { prefer: 'return=minimal' }
-    }).catch(() => {});
-    await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&save_checksum=eq.${encodeURIComponent(previousChecksum)}&turn_status=eq.locking`, {
-      method: 'PATCH',
-      body: JSON.stringify({ turn_status: 'failed', updated_at: now }),
-      headers: { prefer: 'return=minimal' }
-    }).catch(() => {});
-    if (runId) await service(`/rest/v1/world_turn_runs?id=eq.${encodeURIComponent(runId)}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status: 'failed', error_message: error.message, completed_at: now }),
-      headers: { prefer: 'return=minimal' }
-    }).catch(() => {});
+
+    if (claimed) {
+      await service(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(worldId)}&season_id=eq.${encodeURIComponent(seasonId)}&matchday=eq.${matchday}&status=eq.locked`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'submitted', locked_at: null }),
+        headers: { prefer: 'return=minimal' }
+      }).catch(() => {});
+      await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&save_checksum=eq.${encodeURIComponent(previousChecksum)}&turn_status=eq.locking`, {
+        method: 'PATCH',
+        body: JSON.stringify({ turn_status: 'failed', updated_at: now }),
+        headers: { prefer: 'return=minimal' }
+      }).catch(() => {});
+      if (runId) await service(`/rest/v1/world_turn_runs?id=eq.${encodeURIComponent(runId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'failed', error_message: error.message, completed_at: now }),
+        headers: { prefer: 'return=minimal' }
+      }).catch(() => {});
+    }
+
     const operationId = await persistAutomaticFailure({
       stored,
       now,
@@ -416,6 +420,7 @@ async function processWorld(stored, now) {
       diagnostics,
       stageSnapshot
     }).catch(() => null);
+
     return {
       world_id: worldId,
       status: 'failed',
