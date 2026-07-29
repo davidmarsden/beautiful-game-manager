@@ -7,7 +7,8 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 test('admin turn recovery uses a Netlify background function instead of a long browser request', async () => {
   const background = await read('netlify/functions/run-due-turn-now-background.mjs');
   const client = await read('public/admin-turn-background-recovery.js');
-  assert.match(background, /export \{ default \} from '\.\/run-due-turn-now\.mjs'/);
+  assert.match(background, /import runDueTurnNow from '\.\/run-due-turn-now\.mjs'/);
+  assert.match(background, /return runDueTurnNow\(request\)/);
   assert.match(client, /\/api\/run-due-turn-now-background/);
   assert.match(client, /response\.status !== 202/);
   assert.match(client, /Production turn queued/);
