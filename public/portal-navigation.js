@@ -46,6 +46,11 @@ function normaliseView(value) {
   return VIEW_ALIASES.get(String(value || '').trim().toLowerCase()) || null;
 }
 
+function requestedInitialView() {
+  const requested = new URLSearchParams(window.location.search).get('view');
+  return normaliseView(requested) || 'dashboard';
+}
+
 function viewFromTarget(target) {
   const explicit = target.closest?.('[data-view], [data-portal-view]');
   if (explicit) return normaliseView(explicit.dataset.view || explicit.dataset.portalView);
@@ -95,5 +100,6 @@ installHistoryShell();
 document.addEventListener('click', handleNavigation, true);
 window.addEventListener('tbg:portal-rendered', () => {
   installHistoryShell();
-  showPortalView('dashboard');
+  const requested = requestedInitialView();
+  if (!showPortalView(requested)) showPortalView('dashboard');
 }, { once: true });

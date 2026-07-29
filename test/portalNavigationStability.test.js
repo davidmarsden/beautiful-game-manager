@@ -14,9 +14,12 @@ test('one authoritative controller owns every portal view transition', async () 
   }
 });
 
-test('view switching is local and never reloads or refetches canonical state', async () => {
+test('view switching is local and never reloads, navigates or refetches canonical state', async () => {
   const source = await read('public/portal-navigation.js');
-  assert.doesNotMatch(source, /fetch\(|location\.reload|window\.location/);
+  assert.doesNotMatch(source, /fetch\(/);
+  assert.doesNotMatch(source, /location\.reload|location\.assign|location\.replace/);
+  assert.doesNotMatch(source, /(?:window\.)?location\.(?:href|pathname|search|hash)\s*=/);
+  assert.match(source, /new URLSearchParams\(window\.location\.search\)/);
   assert.match(source, /panel\.hidden = !active/);
   assert.match(source, /aria-selected/);
 });
