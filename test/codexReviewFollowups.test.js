@@ -7,11 +7,15 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 test('bootstrap cannot return legacy score state and manager messages are limited to the canonical world', async () => {
   const bootstrap = await read('netlify/functions/bootstrap.mjs');
   const projection = await read('src/world/managerPortalProjection.js');
+  const fragmentMigration = await read('supabase/migrations/20260729_pr159_manager_portal_world_fragment.sql');
 
+  assert.match(bootstrap, /get_manager_portal_world_fragment/);
+  assert.match(fragmentMigration, /from public\.canonical_world_saves/);
   assert.match(bootstrap, /projectManagerPortal\(world, appointment\.club_id, \{/);
-  assert.match(bootstrap, /nextTurnAt: stored\.next_turn_at/);
+  assert.match(bootstrap, /nextTurnAt: context\.next_turn_at/);
   assert.match(bootstrap, /canonicalFixtureIds\(world\)/);
   assert.match(bootstrap, /message\.related_fixture_id/);
+  assert.doesNotMatch(bootstrap, /save_envelope/);
   assert.doesNotMatch(bootstrap, /\/rest\/v1\/fixtures/);
   assert.doesNotMatch(bootstrap, /competition_standings/);
   assert.doesNotMatch(bootstrap, /manager_match_views/);

@@ -127,18 +127,22 @@ test('Supabase requests separate API keys from optional bearer credentials', asy
   }
 });
 
-test('authorised heavy reads and writes use the server path after identity verification', async () => {
-  const [bootstrap, decisions] = await Promise.all([
+test('authorised canonical reads and writes use the server path after identity verification', async () => {
+  const [bootstrap, decisions, migration] = await Promise.all([
     read('netlify/functions/bootstrap.mjs'),
-    read('netlify/functions/decisions.mjs')
+    read('netlify/functions/decisions.mjs'),
+    read('supabase/migrations/20260729_pr159_manager_portal_world_fragment.sql')
   ]);
   assert.match(bootstrap, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(bootstrap, /const \{ user, manager, appointment \} = await identity\(token\)/);
-  assert.match(bootstrap, /serverSupabase\(`\/rest\/v1\/canonical_world_saves/);
+  assert.match(bootstrap, /serverSupabase\('\/rest\/v1\/rpc\/get_manager_portal_world_fragment'/);
   assert.match(bootstrap, /serverSupabase\(`\/rest\/v1\/manager_turn_submissions/);
+  assert.doesNotMatch(bootstrap, /save_envelope/);
   assert.match(decisions, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(decisions, /manager\.id !== payload\.manager_id/);
   assert.match(decisions, /if \(!appointment\) return response\(\{ error: 'You are not appointed to this club'/);
-  assert.match(decisions, /serverRest\(`\/rest\/v1\/canonical_world_saves/);
+  assert.match(decisions, /serverRest\('\/rest\/v1\/rpc\/get_manager_portal_world_fragment'/);
   assert.match(decisions, /serverRest\('\/rest\/v1\/manager_turn_submissions/);
+  assert.doesNotMatch(decisions, /save_envelope/);
+  assert.match(migration, /from public\.canonical_world_saves/);
 });

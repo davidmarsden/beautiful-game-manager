@@ -1,4 +1,3 @@
-import { loadPersistentWorld } from '../../src/world/persistentSeasonLoop.js';
 import { canonicalFixtureIds, projectManagerPortal } from '../../src/world/managerPortalProjection.js';
 import { projectPinkFinalSquadLinks } from '../../src/world/pinkFinalPlayerProfile.js';
 
@@ -13,10 +12,10 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), { status
 const bearerToken = (request) => { const header = request.headers.get('authorization') || ''; return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : ''; };
 const isJwt = (value) => String(value || '').split('.').length === 3;
 
-async function requestSupabase(path, { apiKey, bearer, label = 'Supabase request' } = {}) {
-  const headers = { apikey: apiKey, accept: 'application/json' };
+async function requestSupabase(path, { apiKey, bearer, label = 'Supabase request', ...options } = {}) {
+  const headers = { apikey: apiKey, accept: 'application/json', ...(options.headers || {}) };
   if (bearer) headers.authorization = `Bearer ${bearer}`;
-  const response = await fetch(`${SUPABASE_URL}${path}`, { headers });
+  const response = await fetch(`${SUPABASE_URL}${path}`, { ...options, headers });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(`${label}: ${body.message || body.error || `Supabase returned ${response.status}`}`);
   return body;
@@ -27,7 +26,8 @@ const userSupabase = (path, token, label) => requestSupabase(path, {
   bearer: token,
   label
 });
-const serverSupabase = (path, label) => requestSupabase(path, {
+const serverSupabase = (path, options = {}, label) => requestSupabase(path, {
+  ...options,
   apiKey: SUPABASE_SERVICE_ROLE_KEY,
   ...(isJwt(SUPABASE_SERVICE_ROLE_KEY) ? { bearer: SUPABASE_SERVICE_ROLE_KEY } : {}),
   label
@@ -92,23 +92,27 @@ export default async (request) => {
       navigation: navigation()
     });
 
-    const [rawMessages, storedRows] = await Promise.all([
-      serverSupabase(`/rest/v1/manager_messages?recipient_manager_id=eq.${encodeURIComponent(manager.id)}&select=id,message_type,subject,body,priority,created_at,read_at,related_fixture_id&order=created_at.desc&limit=100`, 'Could not load manager messages').catch(() => []),
-      serverSupabase(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(appointment.world_id)}&select=world_id,save_envelope,save_checksum,season_id,season_number,phase,matchday,next_turn_at,turn_status,created_at,updated_at&limit=1`, 'Could not load canonical world')
-    ]);
-    const stored = storedRows[0];
-    if (!stored) return json({ error: `Canonical world ${appointment.world_id} has not been initialized`, code: 'canonical_world_not_initialized' }, 409);
+    const context = await serverSupabase('/rest/v1/rpc/get_manager_portal_world_fragment', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ p_world_id: appointment.world_id, p_club_id: appointment.club_id })
+    }, 'Could not load canonical portal fragment');
+    if (!context?.world) return json({ error: `Canonical world ${appointment.world_id} has not been initialized`, code: 'canonical_world_not_initialized' }, 409);
 
-    const world = loadPersistentWorld(JSON.stringify(stored.save_envelope));
-    if (world.world_id !== appointment.world_id) throw new Error('Appointment world does not match the canonical save');
+    const world = context.world;
+    if (world.world_id !== appointment.world_id) throw new Error('Appointment world does not match the canonical fragment');
     const projection = projectPinkFinalSquadLinks(spoilerSafeProjection(projectManagerPortal(world, appointment.club_id, {
-      nextTurnAt: stored.next_turn_at,
+      nextTurnAt: context.next_turn_at,
       weekdaysUtc: TURN_DAYS,
       hourUtc: TURN_HOUR_UTC
     })), { ...(PINK_FINAL_BASE_URL ? { baseUrl: PINK_FINAL_BASE_URL } : {}) });
-    const messages = managerMessages(rawMessages, world, stored.created_at);
     const currentMatchday = world.matchday_cycle?.current_matchday || 1;
-    const turnSubmissionRows = await serverSupabase(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(world.world_id)}&season_id=eq.${encodeURIComponent(world.squad_cycle.season_id)}&matchday=eq.${currentMatchday}&manager_id=eq.${encodeURIComponent(manager.id)}&club_id=eq.${encodeURIComponent(appointment.club_id)}&select=*&order=submitted_at.desc&limit=1`, 'Could not load current submission').catch(() => []);
+
+    const [rawMessages, turnSubmissionRows] = await Promise.all([
+      serverSupabase(`/rest/v1/manager_messages?recipient_manager_id=eq.${encodeURIComponent(manager.id)}&select=id,message_type,subject,body,priority,created_at,read_at,related_fixture_id&order=created_at.desc&limit=100`, {}, 'Could not load manager messages').catch(() => []),
+      serverSupabase(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(world.world_id)}&season_id=eq.${encodeURIComponent(world.squad_cycle.season_id)}&matchday=eq.${currentMatchday}&manager_id=eq.${encodeURIComponent(manager.id)}&club_id=eq.${encodeURIComponent(appointment.club_id)}&select=*&order=submitted_at.desc&limit=1`, {}, 'Could not load current submission').catch(() => [])
+    ]);
+    const messages = managerMessages(rawMessages, world, context.created_at);
 
     return json({
       authenticated: true,
@@ -116,7 +120,7 @@ export default async (request) => {
       manager,
       onboarding_required: !manager.profile_completed,
       appointment,
-      canonical_source: { world_id: stored.world_id, checksum: stored.save_checksum, updated_at: stored.updated_at, next_turn_at: stored.next_turn_at },
+      canonical_source: { world_id: context.world_id, checksum: context.save_checksum, updated_at: context.updated_at, next_turn_at: context.next_turn_at },
       ...projection,
       squad_rules: {
         first_team_capacity: world.squad_cycle.registration_limit || 25,
@@ -131,7 +135,7 @@ export default async (request) => {
       navigation: navigation()
     });
   } catch (error) {
-    const status = /Session|Authentication/.test(error.message) ? 401 : /appointment|canonical|world/i.test(error.message) ? 409 : 503;
+    const status = /Session|Authentication/.test(error.message) ? 401 : /appointment|canonical|world|fragment/i.test(error.message) ? 409 : 503;
     return json({ error: error.message }, status);
   }
 };
