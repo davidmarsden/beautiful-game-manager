@@ -36,6 +36,16 @@ test('submission validates eleven starters seven substitutes and a starting capt
   assert.ok(validationIndex >= 0 && postIndex > validationIndex, 'visible selection must be validated before the submission request');
 });
 
+test('captain choices stay synchronized with the visible starting XI', async () => {
+  const source = await read('public/team-selection-submission-reliability.js');
+  assert.match(source, /function synchronizeCaptainChoices\(startingXi = playerIds\('#formationPitch \.formation-slot'\)\)/);
+  assert.match(source, /captain\.replaceChildren/);
+  assert.match(source, /orderedXi\.includes\(previousCaptain\)/);
+  assert.match(source, /new MutationObserver\(\(\) => synchronizeCaptainChoices\(\)\)/);
+  assert.match(source, /captainObserver\.observe\(pitch, \{ childList: true, subtree: true \}\)/);
+  assert.match(source, /const captainId = synchronizeCaptainChoices\(startingXi\)/);
+});
+
 test('submission exposes saving success and exact failures beside a disabled save button', async () => {
   const [source, css] = await Promise.all([
     read('public/team-selection-submission-reliability.js'),
@@ -52,9 +62,22 @@ test('submission exposes saving success and exact failures beside a disabled sav
   assert.match(css, /team-submission-actions/);
 });
 
-test('successful submission refreshes and renders canonical submission state', async () => {
+test('successful POST remains successful when canonical refresh fails', async () => {
   const source = await read('public/team-selection-submission-reliability.js');
-  assert.match(source, /const refreshed = await bootstrapState\(\)/);
+  const successfulResponseIndex = source.indexOf("const submittedAt = result.submitted_at");
+  const nestedRefreshIndex = source.indexOf('let refreshed = null;');
+  const outerCatchIndex = source.indexOf("setStatus(error?.message || 'Team selection could not be saved.'");
+  assert.ok(successfulResponseIndex >= 0 && nestedRefreshIndex > successfulResponseIndex, 'POST success must be recorded before best-effort refresh');
+  assert.ok(outerCatchIndex > nestedRefreshIndex, 'only pre-save and POST failures should reach the outer error state');
+  assert.match(source, /try \{\s*refreshed = await bootstrapState\(\)/);
+  assert.match(source, /Confirmation refresh failed; reload the portal to confirm the canonical version/);
+  assert.match(source, /setStatus\('Team selection saved\. Confirmation refresh failed; reload the portal to confirm the canonical version\.', 'ok'\)/);
+  assert.match(source, /refresh_error: refreshError\?\.message \|\| null/);
+});
+
+test('successful submission refreshes and renders canonical submission state when available', async () => {
+  const source = await read('public/team-selection-submission-reliability.js');
+  assert.match(source, /refreshed = await bootstrapState\(\)/);
   assert.match(source, /renderCanonicalSubmission\(refreshed\)/);
   assert.match(source, /current_submission/);
   assert.match(source, /tbg:team-submission-saved/);
