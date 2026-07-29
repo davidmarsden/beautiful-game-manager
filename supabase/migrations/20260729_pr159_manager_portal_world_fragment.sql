@@ -1,5 +1,35 @@
 begin;
 
+create extension if not exists pgcrypto;
+
+create or replace function public.tbg_canonical_jsonb_text(p_value jsonb)
+returns text
+language plpgsql
+immutable
+strict
+as $$
+declare
+  rendered text;
+begin
+  case jsonb_typeof(p_value)
+    when 'object' then
+      select '{' || coalesce(string_agg(to_jsonb(entry.key)::text || ':' || public.tbg_canonical_jsonb_text(entry.value), ',' order by entry.key), '') || '}'
+        into rendered
+      from jsonb_each(p_value) entry;
+      return rendered;
+    when 'array' then
+      select '[' || coalesce(string_agg(public.tbg_canonical_jsonb_text(entry.value), ',' order by entry.ordinality), '') || ']'
+        into rendered
+      from jsonb_array_elements(p_value) with ordinality entry(value, ordinality);
+      return rendered;
+    else
+      return p_value::text;
+  end case;
+end;
+$$;
+
+revoke all on function public.tbg_canonical_jsonb_text(jsonb) from public;
+
 create or replace function public.get_manager_portal_world_fragment(
   p_world_id text,
   p_club_id text
@@ -11,7 +41,10 @@ set search_path = public
 as $$
 declare
   stored public.canonical_world_saves%rowtype;
+  envelope jsonb;
   world jsonb;
+  envelope_checksum text;
+  calculated_checksum text;
   squad_cycle jsonb;
   club jsonb;
   player_ids jsonb;
@@ -32,7 +65,35 @@ begin
     return null;
   end if;
 
-  world := stored.save_envelope -> 'world';
+  envelope := stored.save_envelope;
+  if coalesce(envelope ->> 'save_version', '') <> 'tbg-playable-world-save-v1.0' then
+    raise exception 'Unsupported canonical save version for world %', p_world_id;
+  end if;
+
+  world := envelope -> 'world';
+  if world is null or jsonb_typeof(world) <> 'object' then
+    raise exception 'Canonical save envelope for world % has no valid world payload', p_world_id;
+  end if;
+
+  envelope_checksum := envelope ->> 'checksum';
+  calculated_checksum := encode(
+    digest(convert_to(public.tbg_canonical_jsonb_text(world), 'UTF8'), 'sha256'),
+    'hex'
+  );
+
+  if coalesce(envelope_checksum, '') = ''
+    or envelope_checksum <> calculated_checksum
+    or stored.save_checksum <> envelope_checksum then
+    raise exception 'Canonical save checksum mismatch for world %', p_world_id;
+  end if;
+
+  if coalesce(world ->> 'world_id', '') <> p_world_id
+    or coalesce(world ->> 'version', '') <> 'tbg-playable-persistent-world-v1.0'
+    or jsonb_typeof(world -> 'squad_cycle') <> 'object'
+    or coalesce(world -> 'squad_cycle' ->> 'season_id', '') <> stored.season_id then
+    raise exception 'Canonical world % failed fragment integrity validation', p_world_id;
+  end if;
+
   squad_cycle := world -> 'squad_cycle';
   club := squad_cycle -> 'clubs' -> p_club_id;
 
