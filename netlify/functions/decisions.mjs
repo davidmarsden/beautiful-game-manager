@@ -1,4 +1,3 @@
-import { loadPersistentWorld } from '../../src/world/persistentSeasonLoop.js';
 import { projectManagerPortal } from '../../src/world/managerPortalProjection.js';
 import { buildManagerTurnSubmission } from '../../src/world/sharedWorldScheduler.js';
 import { createLoanEligibilitySnapshot, findWorldFixture, ineligibleLoanPlayerIds } from '../../src/world/loanEligibility.js';
@@ -59,14 +58,17 @@ export default async (request) => {
     const appointment = appointments[0];
     if (!appointment) return response({ error: 'You are not appointed to this club' }, 403);
 
-    const storedRows = await serverRest(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(appointment.world_id)}&select=world_id,save_envelope,next_turn_at,turn_status&limit=1`, {}, 'Could not load canonical world');
-    const stored = storedRows[0];
-    if (!stored) return response({ error: `Canonical world ${appointment.world_id} has not been initialized` }, 409);
-    if (stored.turn_status !== 'open') return response({ error: `Turn is ${stored.turn_status}` }, 409);
+    const context = await serverRest('/rest/v1/rpc/get_manager_portal_world_fragment', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ p_world_id: appointment.world_id, p_club_id: appointment.club_id })
+    }, 'Could not load canonical submission fragment');
+    if (!context?.world) return response({ error: `Canonical world ${appointment.world_id} has not been initialized` }, 409);
+    if (context.turn_status !== 'open') return response({ error: `Turn is ${context.turn_status}` }, 409);
 
-    const world = loadPersistentWorld(JSON.stringify(stored.save_envelope));
-    if (world.world_id !== appointment.world_id) return response({ error: 'Appointment world does not match the canonical save' }, 409);
-    const projection = projectManagerPortal(world, appointment.club_id);
+    const world = context.world;
+    if (world.world_id !== appointment.world_id) return response({ error: 'Appointment world does not match the canonical fragment' }, 409);
+    const projection = projectManagerPortal(world, appointment.club_id, { nextTurnAt: context.next_turn_at });
     const fixture = projection.next_fixture;
     if (!fixture || String(fixture.fixture_id) !== String(payload.fixture_id)) return response({ error: 'Fixture is not the canonical next fixture for this club' }, 409);
 
@@ -74,9 +76,17 @@ export default async (request) => {
     if (!canonicalFixture) return response({ error: 'Canonical fixture could not be resolved for eligibility validation' }, 409);
     const eligibilityFixture = {
       ...canonicalFixture,
-      eligibility_checkpoint_at: canonicalFixture.eligibility_checkpoint_at || canonicalFixture.lock_at || stored.next_turn_at || canonicalFixture.kickoff_at
+      eligibility_checkpoint_at: canonicalFixture.eligibility_checkpoint_at || canonicalFixture.lock_at || context.next_turn_at || canonicalFixture.kickoff_at
     };
     const selectedPlayerIds = [...(payload.starting_xi || []), ...(payload.bench || [])];
+    const ownedPlayerIds = new Set(world.squad_cycle?.clubs?.[appointment.club_id]?.player_ids || []);
+    const unownedPlayerIds = selectedPlayerIds.filter((playerId) => !ownedPlayerIds.has(playerId));
+    if (unownedPlayerIds.length) {
+      const error = new Error(`Selected players are not owned by this club: ${unownedPlayerIds.join(', ')}`);
+      error.validationErrors = unownedPlayerIds.map((playerId) => ({ code: 'player_not_owned', player_id: playerId }));
+      throw error;
+    }
+
     const loanEligibilitySnapshot = createLoanEligibilitySnapshot({
       playerIds: selectedPlayerIds,
       clubId: appointment.club_id,
@@ -101,7 +111,7 @@ export default async (request) => {
       managerId: manager.id,
       clubId: appointment.club_id,
       submittedAt,
-      nextTurnAt: stored.next_turn_at,
+      nextTurnAt: context.next_turn_at,
       instruction: {
         fixture_id: fixture.fixture_id,
         formation: payload.formation,
@@ -128,6 +138,6 @@ export default async (request) => {
 
     return response({ ...payload, saved: true, canonical: true, submission: saved[0] || submission, submitted_at: submission.submitted_at, matchday: submission.matchday, season_id: submission.season_id });
   } catch (error) {
-    return response({ error: error.message, validation_errors: error.validationErrors || [] }, error.validationErrors ? 400 : /deadline|Turn|canonical|fixture|world/i.test(error.message) ? 409 : 500);
+    return response({ error: error.message, validation_errors: error.validationErrors || [] }, error.validationErrors ? 400 : /deadline|Turn|canonical|fixture|world|fragment/i.test(error.message) ? 409 : 500);
   }
 };
