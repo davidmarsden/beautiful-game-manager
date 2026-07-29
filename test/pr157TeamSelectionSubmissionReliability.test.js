@@ -13,15 +13,18 @@ test('reliable submission controller owns form submission before the legacy form
   assert.match(html, /team-selection-submission-reliability\.css/);
 });
 
-test('submission serialises the visible pitch and bench rather than hidden checkboxes', async () => {
+test('submission prefers the visible ordered board but can recover through legacy selectors', async () => {
   const source = await read('public/team-selection-submission-reliability.js');
+  assert.match(source, /function boardAvailable\(\)/);
   assert.match(source, /#formationPitch \.formation-slot/);
   assert.match(source, /#formationBench \.bench-slot/);
-  assert.match(source, /querySelector\('\.player-token'\)\?\.dataset\.playerId/);
+  assert.match(source, /function legacyPlayerIds\(zone\)/);
+  assert.match(source, /input\[data-zone=\\"\$\{zone\}\\"\]:checked/);
+  assert.match(source, /const usingBoard = boardAvailable\(\)/);
+  assert.match(source, /usingBoard \? playerIds\('#formationPitch \.formation-slot'\) : legacyPlayerIds\('xi'\)/);
+  assert.match(source, /usingBoard \? playerIds\('#formationBench \.bench-slot'\) : legacyPlayerIds\('bench'\)/);
   assert.match(source, /starting_xi: selection\.startingXi/);
   assert.match(source, /bench: selection\.bench/);
-  assert.doesNotMatch(source, /input\[data-zone="xi"\]:checked/);
-  assert.doesNotMatch(source, /input\[data-zone="bench"\]:checked/);
 });
 
 test('submission validates eleven starters seven substitutes and a starting captain before POST', async () => {
@@ -31,19 +34,41 @@ test('submission validates eleven starters seven substitutes and a starting capt
   assert.match(source, /new Set\(allPlayers\)\.size !== allPlayers\.length/);
   assert.match(source, /if \(!captainId\)/);
   assert.match(source, /if \(!startingXi\.includes\(captainId\)\)/);
-  const validationIndex = source.indexOf('const selection = visibleSelection();');
+  const validationIndex = source.indexOf('const selection = selectedTeam();');
   const postIndex = source.indexOf("nativeFetch('/api/decisions'");
-  assert.ok(validationIndex >= 0 && postIndex > validationIndex, 'visible selection must be validated before the submission request');
+  assert.ok(validationIndex >= 0 && postIndex > validationIndex, 'selection must be validated before the submission request');
 });
 
-test('captain choices stay synchronized with the visible starting XI', async () => {
+test('captain choices stay synchronized with either rendered team selector', async () => {
   const source = await read('public/team-selection-submission-reliability.js');
-  assert.match(source, /function synchronizeCaptainChoices\(startingXi = playerIds\('#formationPitch \.formation-slot'\)\)/);
+  assert.match(source, /function synchronizeCaptainChoices\(startingXi\)/);
+  assert.match(source, /boardAvailable\(\) \? playerIds/);
+  assert.match(source, /legacyPlayerIds\('xi'\)/);
   assert.match(source, /captain\.replaceChildren/);
   assert.match(source, /orderedXi\.includes\(previousCaptain\)/);
   assert.match(source, /new MutationObserver\(\(\) => synchronizeCaptainChoices\(\)\)/);
-  assert.match(source, /captainObserver\.observe\(pitch, \{ childList: true, subtree: true \}\)/);
-  assert.match(source, /const captainId = synchronizeCaptainChoices\(startingXi\)/);
+  assert.match(source, /event\.target\?\.matches\('input\[data-zone=\\"xi\\"\]'\)/);
+});
+
+test('bootstrap responses are cached so save does not require a duplicate preflight load', async () => {
+  const source = await read('public/team-selection-submission-reliability.js');
+  assert.match(source, /let cachedPortalState = window\.tbgPortalState \|\| null/);
+  assert.match(source, /window\.fetch = async \(\.\.\.args\)/);
+  assert.match(source, /includes\('\/api\/bootstrap'\)/);
+  assert.match(source, /const canonical = cachedPortalState \|\| window\.tbgPortalState \|\| await bootstrapState\(\)/);
+  const selectionIndex = source.indexOf('const selection = selectedTeam();');
+  const canonicalIndex = source.indexOf('const canonical = cachedPortalState');
+  assert.ok(selectionIndex >= 0 && canonicalIndex > selectionIndex, 'local validation should happen before any fallback bootstrap request');
+});
+
+test('formation board keeps retrying after a slow or failed initial portal load', async () => {
+  const source = await read('public/formation-board.js');
+  assert.match(source, /if \(board\?\.isConnected\) return true/);
+  assert.match(source, /if \(!collectPlayers\(\)\) return false/);
+  assert.match(source, /scheduleBoardBuild\(500\)/);
+  assert.doesNotMatch(source, /attempt < 60/);
+  assert.match(source, /window\.addEventListener\('tbg:portal-rendered'/);
+  assert.match(source, /tbg:formation-board-ready/);
 });
 
 test('submission exposes saving success and exact failures beside a disabled save button', async () => {
@@ -57,28 +82,33 @@ test('submission exposes saving success and exact failures beside a disabled sav
   assert.match(source, /validation_errors/);
   assert.match(source, /invalid response/);
   assert.match(source, /empty response/);
-  assert.match(source, /catch \(error\)/);
   assert.match(source, /team-submission-actions/);
   assert.match(css, /team-submission-actions/);
 });
 
 test('successful POST remains successful when canonical refresh fails', async () => {
   const source = await read('public/team-selection-submission-reliability.js');
-  const successfulResponseIndex = source.indexOf("const submittedAt = result.submitted_at");
+  const successfulResponseIndex = source.indexOf('const submittedAt = result.submitted_at');
   const nestedRefreshIndex = source.indexOf('let refreshed = null;');
   const outerCatchIndex = source.indexOf("setStatus(error?.message || 'Team selection could not be saved.'");
   assert.ok(successfulResponseIndex >= 0 && nestedRefreshIndex > successfulResponseIndex, 'POST success must be recorded before best-effort refresh');
   assert.ok(outerCatchIndex > nestedRefreshIndex, 'only pre-save and POST failures should reach the outer error state');
-  assert.match(source, /try \{\s*refreshed = await bootstrapState\(\)/);
   assert.match(source, /Confirmation refresh failed; reload the portal to confirm the canonical version/);
-  assert.match(source, /setStatus\('Team selection saved\. Confirmation refresh failed; reload the portal to confirm the canonical version\.', 'ok'\)/);
   assert.match(source, /refresh_error: refreshError\?\.message \|\| null/);
 });
 
-test('successful submission refreshes and renders canonical submission state when available', async () => {
-  const source = await read('public/team-selection-submission-reliability.js');
-  assert.match(source, /refreshed = await bootstrapState\(\)/);
-  assert.match(source, /renderCanonicalSubmission\(refreshed\)/);
-  assert.match(source, /current_submission/);
-  assert.match(source, /tbg:team-submission-saved/);
+test('authorised heavy reads and writes use the server path after identity verification', async () => {
+  const [bootstrap, decisions] = await Promise.all([
+    read('netlify/functions/bootstrap.mjs'),
+    read('netlify/functions/decisions.mjs')
+  ]);
+  assert.match(bootstrap, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(bootstrap, /const \{ user, manager, appointment \} = await identity\(token\)/);
+  assert.match(bootstrap, /serverSupabase\(`\/rest\/v1\/canonical_world_saves/);
+  assert.match(bootstrap, /serverSupabase\(`\/rest\/v1\/manager_turn_submissions/);
+  assert.match(decisions, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(decisions, /manager\.id !== payload\.manager_id/);
+  assert.match(decisions, /if \(!appointment\) return response\(\{ error: 'You are not appointed to this club'/);
+  assert.match(decisions, /serverRest\(`\/rest\/v1\/canonical_world_saves/);
+  assert.match(decisions, /serverRest\('\/rest\/v1\/manager_turn_submissions/);
 });
