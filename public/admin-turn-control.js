@@ -1,6 +1,7 @@
 const nativeFetch = window.fetch.bind(window);
 let authorization = '';
 let registrationRepairPreview = null;
+let failureDiagnostics = null;
 
 window.fetch = async (...args) => {
   const headers = args[1]?.headers || (args[0] instanceof Request ? args[0].headers : null);
@@ -26,8 +27,59 @@ async function responseJson(response, fallbackMessage) {
 }
 
 function resultText(result) {
-  if (!result?.accepted) return result?.error || 'Turn was not advanced.';
+  if (!result?.accepted) {
+    const references = [
+      result?.operation_id ? `operation ${result.operation_id}` : '',
+      result?.recovery_of_run_id ? `failed run ${result.recovery_of_run_id}` : ''
+    ].filter(Boolean).join(' · ');
+    return `${result?.error || 'Turn was not advanced.'}${references ? ` · ${references}` : ''}`;
+  }
   return `Matchday ${result.matchday_advanced} complete · next matchday ${result.next_matchday ?? 'pending'} · checkpoint ${String(result.replacement_checksum || '').slice(0, 12)} · next turn ${result.next_turn_at ? new Date(result.next_turn_at).toLocaleString() : 'pending'}`;
+}
+
+function diagnosticDetails(value, depth = 0) {
+  if (value == null || depth > 2) return '';
+  if (typeof value !== 'object') return escapeHtml(value);
+  if (Array.isArray(value)) return value.slice(0, 8).map((item) => diagnosticDetails(item, depth + 1)).filter(Boolean).join(' · ');
+  return Object.entries(value).slice(0, 12).map(([key, item]) => {
+    const rendered = diagnosticDetails(item, depth + 1);
+    return rendered ? `${escapeHtml(key)}: ${rendered}` : '';
+  }).filter(Boolean).join('<br>');
+}
+
+function failureDiagnosticsHtml(details) {
+  if (!details?.active) return '';
+  const references = [
+    details.failed_run_id ? `Failed run ${details.failed_run_id}` : '',
+    details.operation_id ? `Operation ${details.operation_id}` : '',
+    details.checksum ? `Checkpoint ${String(details.checksum).slice(0, 12)}` : ''
+  ].filter(Boolean).join(' · ');
+  const diagnostics = diagnosticDetails(details.diagnostics);
+  return `
+    <div class="world-failure-diagnostics" role="alert">
+      <strong>Matchday ${escapeHtml(details.matchday ?? '—')} failed</strong>
+      <p>${escapeHtml(details.error || 'The production turn failed without a recorded exception.')}</p>
+      ${references ? `<small>${escapeHtml(references)}</small>` : ''}
+      ${details.failed_at ? `<small>Failed ${escapeHtml(new Date(details.failed_at).toLocaleString())}</small>` : ''}
+      ${diagnostics ? `<details><summary>Technical diagnostics</summary><p>${diagnostics}</p></details>` : ''}
+      <p>${escapeHtml(details.recovery || '')}</p>
+    </div>`;
+}
+
+async function loadFailureDiagnostics() {
+  if (!authorization) throw new Error('Portal session is not ready');
+  const response = await nativeFetch('/api/world-failure-diagnostics', { headers: { authorization } });
+  const result = await responseJson(response, 'World failure diagnostics returned an invalid response');
+  if (!response.ok) throw new Error(result.error || 'World failure diagnostics could not be loaded');
+  failureDiagnostics = result;
+  const panel = document.getElementById('worldFailureDiagnostics');
+  const button = document.getElementById('runDueTurnNow');
+  if (panel) panel.innerHTML = failureDiagnosticsHtml(result);
+  if (button && result.active) {
+    button.textContent = result.can_retry ? 'Retry failed turn' : 'Manual recovery required';
+    button.disabled = !result.can_retry;
+  }
+  return result;
 }
 
 function repairPreviewHtml(preview) {
@@ -77,6 +129,7 @@ function mount(bootstrap) {
     <section id="runDueTurnCard" class="world-control-card">
       <h3>Production turn operation</h3>
       <p>Run the due canonical turn through the same scheduled production path. The operation rejects early, duplicate and replayed execution.</p>
+      <div id="worldFailureDiagnostics"></div>
       <button id="runDueTurnNow" class="primary-action" type="button">Run due turn now</button>
       <p id="runDueTurnResult" class="world-control-message" aria-live="polite"></p>
     </section>
@@ -90,11 +143,16 @@ function mount(bootstrap) {
       <div id="registrationRepairResult" class="world-control-message" aria-live="polite"></div>
     </section>`);
 
+  loadFailureDiagnostics().catch((error) => {
+    const panel = document.getElementById('worldFailureDiagnostics');
+    if (panel) panel.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+  });
+
   document.getElementById('runDueTurnNow').addEventListener('click', async () => {
     const button = document.getElementById('runDueTurnNow');
     const output = document.getElementById('runDueTurnResult');
     button.disabled = true;
-    output.textContent = 'Claiming due world and running the production scheduler…';
+    output.textContent = failureDiagnostics?.active ? 'Reopening the failed checkpoint and retrying the production scheduler…' : 'Claiming due world and running the production scheduler…';
     try {
       if (!authorization) throw new Error('Portal session is not ready');
       const response = await nativeFetch('/api/run-due-turn-now', { method: 'POST', headers: { authorization, 'content-type': 'application/json' }, body: '{}' });
@@ -106,14 +164,18 @@ function mount(bootstrap) {
         window.setTimeout(() => window.location.reload(), 1200);
         return;
       }
-      if (!response.ok) throw new Error(result.error || 'Production turn failed');
-      output.innerHTML = escapeHtml(resultText(result));
+      output.textContent = resultText(result);
+      if (!response.ok) {
+        await loadFailureDiagnostics().catch(() => {});
+        return;
+      }
       window.dispatchEvent(new CustomEvent('tbg:canonical-turn-complete', { detail: result }));
       window.location.reload();
     } catch (error) {
       output.textContent = error.message;
+      await loadFailureDiagnostics().catch(() => {});
     } finally {
-      button.disabled = false;
+      button.disabled = Boolean(failureDiagnostics?.active && !failureDiagnostics?.can_retry);
     }
   });
 
