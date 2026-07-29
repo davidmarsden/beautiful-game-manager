@@ -1,12 +1,13 @@
 (() => {
-  let dismissed = false;
-
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
   }[char]));
 
+  function clear() {
+    document.getElementById('portalBootRecovery')?.remove();
+  }
+
   function show(message, source = 'portal_boot') {
-    if (dismissed) return;
     const existing = document.getElementById('portalBootRecovery');
     const detail = String(message || 'The manager portal could not finish loading.').trim();
     const html = `
@@ -49,14 +50,20 @@
 
   function inspectPortal() {
     const fatal = document.querySelector('#portal .fatal-error');
-    if (fatal?.textContent?.trim()) show(fatal.textContent.trim(), 'bootstrap_error');
+    if (fatal?.textContent?.trim()) {
+      show(fatal.textContent.trim(), 'bootstrap_error');
+      return;
+    }
+    const healthyPortalScreen = [
+      document.getElementById('clubPortal'),
+      document.getElementById('unassignedState'),
+      document.getElementById('onboardingState')
+    ].some(visible);
+    if (healthyPortalScreen) clear();
   }
 
   window.tbgShowPortalRecovery = show;
-  window.tbgDismissPortalRecovery = () => {
-    dismissed = true;
-    document.getElementById('portalBootRecovery')?.remove();
-  };
+  window.tbgDismissPortalRecovery = clear;
 
   window.addEventListener('error', (event) => {
     const message = event.error?.stack || event.error?.message || event.message;
@@ -69,8 +76,16 @@
   });
 
   window.addEventListener('DOMContentLoaded', () => {
-    const portal = document.getElementById('portal');
-    if (portal) new MutationObserver(inspectPortal).observe(portal, { childList: true, subtree: true, characterData: true });
+    if (document.body) {
+      new MutationObserver(inspectPortal).observe(document.body, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+        attributes: true,
+        attributeFilter: ['hidden', 'class', 'style']
+      });
+    }
+    inspectPortal();
   });
 
   window.setTimeout(() => {
