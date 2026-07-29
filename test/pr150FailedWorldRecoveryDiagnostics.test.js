@@ -17,6 +17,22 @@ test('failed-world diagnostics are protected and bound to the unchanged checkpoi
   assert.match(api, /cache-control': 'no-store'/);
 });
 
+test('automatic scheduler failures persist an authoritative rejected advance incident', async () => {
+  const scheduler = await read('netlify/functions/scheduled-world-turn.mjs');
+  assert.match(scheduler, /persistAutomaticFailure/);
+  assert.match(scheduler, /scheduled-turn-failure:/);
+  assert.match(scheduler, /operation_type: 'advance'/);
+  assert.match(scheduler, /status: 'rejected'/);
+  assert.match(scheduler, /action: 'automatic_scheduled_turn'/);
+  assert.match(scheduler, /failed_run_id: runId/);
+  assert.match(scheduler, /error: error\.message/);
+  assert.match(scheduler, /diagnostics: diagnostics \|\| null/);
+  assert.match(scheduler, /const diagnostics = error\.diagnostics \|\| failureDetails \|\| null/);
+  assert.match(scheduler, /persistAutomaticFailure\(\{ stored, now, runId, seasonId, matchday, error, diagnostics \}\)/);
+  assert.match(scheduler, /operation_id: operationId/);
+  assert.match(scheduler, /tbg-scheduled-world-turn-v1\.7/);
+});
+
 test('admin world control explains the failure and exposes a safe retry action', async () => {
   const script = await read('public/admin-turn-control.js');
   assert.match(script, /world-failure-diagnostics/);
