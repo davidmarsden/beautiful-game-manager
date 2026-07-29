@@ -51,7 +51,6 @@
   function usablePortalScreen() {
     return [
       document.getElementById('authGate'),
-      document.getElementById('portal'),
       document.getElementById('clubPortal'),
       document.getElementById('unassignedState'),
       document.getElementById('onboardingState')
@@ -97,6 +96,6 @@
 
   window.setTimeout(() => {
     inspectPortal();
-    if (!usablePortalScreen()) show('The manager portal did not expose a usable sign-in, portal, club, onboarding or unassigned screen within 12 seconds.', 'boot_watchdog');
+    if (!usablePortalScreen()) show('The manager portal shell loaded, but no sign-in, club, onboarding or unassigned screen became ready within 12 seconds. Bootstrap may still be pending or may have failed.', 'boot_watchdog');
   }, 12000);
 })();
