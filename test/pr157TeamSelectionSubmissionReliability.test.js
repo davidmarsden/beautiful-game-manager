@@ -19,7 +19,7 @@ test('submission prefers the visible ordered board but can recover through legac
   assert.match(source, /#formationPitch \.formation-slot/);
   assert.match(source, /#formationBench \.bench-slot/);
   assert.match(source, /function legacyPlayerIds\(zone\)/);
-  assert.match(source, /input\[data-zone=\"\$\{zone\}\"\]:checked/);
+  assert.match(source, /input\[data-zone="\$\{zone\}"\]:checked/);
   assert.match(source, /const usingBoard = boardAvailable\(\)/);
   assert.match(source, /usingBoard \? playerIds\('#formationPitch \.formation-slot'\) : legacyPlayerIds\('xi'\)/);
   assert.match(source, /usingBoard \? playerIds\('#formationBench \.bench-slot'\) : legacyPlayerIds\('bench'\)/);
@@ -63,6 +63,17 @@ test('bootstrap responses are cached so save does not require a duplicate prefli
   assert.ok(selectionIndex >= 0 && canonicalIndex > selectionIndex, 'local validation should happen before any fallback bootstrap request');
 });
 
+test('canonical rejection clears stale fixture state and refreshes before the next retry', async () => {
+  const source = await read('public/team-selection-submission-reliability.js');
+  assert.match(source, /function invalidatePortalState\(\)/);
+  assert.match(source, /cachedPortalState = null/);
+  assert.match(source, /window\.tbgPortalState = null/);
+  assert.match(source, /if \(response\.status === 409\)/);
+  assert.match(source, /const refreshed = await refreshAfterCanonicalRejection\(\)/);
+  assert.match(source, /const refreshed = await bootstrapState\(\)/);
+  assert.match(source, /fixture state has been refreshed; review the team and save again/);
+});
+
 test('formation board keeps retrying after a slow or failed initial portal load', async () => {
   const source = await read('public/formation-board.js');
   assert.match(source, /if \(board\?\.isConnected\) return true/);
@@ -97,6 +108,23 @@ test('successful POST remains successful when canonical refresh fails', async ()
   assert.ok(outerCatchIndex > nestedRefreshIndex, 'only pre-save and POST failures should reach the outer error state');
   assert.match(source, /Confirmation refresh failed; reload the portal to confirm the canonical version/);
   assert.match(source, /refresh_error: refreshError\?\.message \|\| null/);
+});
+
+test('Supabase requests separate API keys from optional bearer credentials', async () => {
+  const [bootstrap, decisions] = await Promise.all([
+    read('netlify/functions/bootstrap.mjs'),
+    read('netlify/functions/decisions.mjs')
+  ]);
+  for (const source of [bootstrap, decisions]) {
+    assert.match(source, /const isJwt = \(value\) => String\(value \|\| ''\)\.split\('\.'\)\.length === 3/);
+    assert.match(source, /apikey: apiKey/);
+    assert.match(source, /if \(bearer/);
+    assert.match(source, /authorization = `Bearer \$\{bearer/);
+    assert.match(source, /apiKey: SUPABASE_ANON_KEY/);
+    assert.match(source, /bearer: token/);
+    assert.match(source, /isJwt\(SUPABASE_SERVICE_ROLE_KEY\) \? \{ bearer: SUPABASE_SERVICE_ROLE_KEY \} : \{\}/);
+    assert.doesNotMatch(source, /apikey: token/);
+  }
 });
 
 test('authorised heavy reads and writes use the server path after identity verification', async () => {
