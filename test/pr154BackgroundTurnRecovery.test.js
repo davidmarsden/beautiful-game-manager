@@ -27,6 +27,20 @@ test('background recovery polls a lightweight canonical run ledger', async () =>
   assert.match(client, /12 \* 60 \* 1000/);
 });
 
+test('queued retry ignores the pre-existing failed run until a newer attempt appears', async () => {
+  const status = await read('netlify/functions/world-turn-status.mjs');
+  const client = await read('public/admin-turn-background-recovery.js');
+  assert.match(status, /operation_created_at: operation\?\.created_at \|\| null/);
+  assert.match(client, /const baseline = await statusRequest\(\)/);
+  assert.match(client, /const queuedAt = Date\.now\(\)/);
+  assert.match(client, /isNewerThanQueuedBaseline\(status, baseline, queuedAt\)/);
+  assert.match(client, /status\.run\?\.id !== baseline\.run\?\.id/);
+  assert.match(client, /status\.operation_id !== baseline\.operation_id/);
+  assert.match(client, /status\.operation_created_at/);
+  assert.match(client, /status\.state === 'failed' && belongsToQueuedAttempt/);
+  assert.match(client, /Waiting for the background worker to claim the failed checkpoint/);
+});
+
 test('portal captures the bearer token before bootstrap and installs the background click interceptor', async () => {
   const html = await read('public/index.html');
   const bridge = await read('public/portal-auth-bridge.js');
