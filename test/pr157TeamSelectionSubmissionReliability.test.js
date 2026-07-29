@@ -19,7 +19,7 @@ test('submission prefers the visible ordered board but can recover through legac
   assert.match(source, /#formationPitch \.formation-slot/);
   assert.match(source, /#formationBench \.bench-slot/);
   assert.match(source, /function legacyPlayerIds\(zone\)/);
-  assert.match(source, /input\[data-zone=\\"\$\{zone\}\\"\]:checked/);
+  assert.match(source, /input\[data-zone=\"\$\{zone\}\"\]:checked/);
   assert.match(source, /const usingBoard = boardAvailable\(\)/);
   assert.match(source, /usingBoard \? playerIds\('#formationPitch \.formation-slot'\) : legacyPlayerIds\('xi'\)/);
   assert.match(source, /usingBoard \? playerIds\('#formationBench \.bench-slot'\) : legacyPlayerIds\('bench'\)/);
@@ -47,7 +47,9 @@ test('captain choices stay synchronized with either rendered team selector', asy
   assert.match(source, /captain\.replaceChildren/);
   assert.match(source, /orderedXi\.includes\(previousCaptain\)/);
   assert.match(source, /new MutationObserver\(\(\) => synchronizeCaptainChoices\(\)\)/);
-  assert.match(source, /event\.target\?\.matches\('input\[data-zone=\\"xi\\"\]'\)/);
+  assert.match(source, /document\.addEventListener\('change', \(event\) => \{/);
+  assert.match(source, /event\.target\?\.matches\('input\[data-zone="xi"\]'\)/);
+  assert.match(source, /synchronizeCaptainChoices\(legacyPlayerIds\('xi'\)\)/);
 });
 
 test('bootstrap responses are cached so save does not require a duplicate preflight load', async () => {
