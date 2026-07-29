@@ -46,6 +46,17 @@ function showReloadAction(label = 'Reload world state') {
   button.disabled = false;
 }
 
+function clearRecoveredFailureState() {
+  failureDiagnostics = { active: false, can_retry: false };
+  const panel = document.getElementById('worldFailureDiagnostics');
+  const button = document.getElementById('runDueTurnNow');
+  if (panel) panel.innerHTML = '';
+  if (button) {
+    button.textContent = 'Turn complete — reload world';
+    button.disabled = true;
+  }
+}
+
 function diagnosticDetails(value, depth = 0) {
   if (value == null || depth > 2) return '';
   if (typeof value !== 'object') return escapeHtml(value);
@@ -166,6 +177,7 @@ function mount(bootstrap) {
     const button = document.getElementById('runDueTurnNow');
     const output = document.getElementById('runDueTurnResult');
     const reloadButton = document.getElementById('reloadWorldState');
+    let turnCompleted = false;
     button.disabled = true;
     if (reloadButton) reloadButton.hidden = true;
     output.textContent = failureDiagnostics?.active ? 'Reopening the failed checkpoint and retrying the production scheduler…' : 'Claiming due world and running the production scheduler…';
@@ -179,6 +191,8 @@ function mount(bootstrap) {
         showReloadAction();
         return;
       }
+      turnCompleted = true;
+      clearRecoveredFailureState();
       window.dispatchEvent(new CustomEvent('tbg:canonical-turn-complete', { detail: result }));
       showReloadAction('Reload completed world');
     } catch (error) {
@@ -186,7 +200,7 @@ function mount(bootstrap) {
       await loadFailureDiagnostics().catch(() => {});
       showReloadAction();
     } finally {
-      button.disabled = Boolean(failureDiagnostics?.active && !failureDiagnostics?.can_retry);
+      if (!turnCompleted) button.disabled = Boolean(failureDiagnostics?.active && !failureDiagnostics?.can_retry);
     }
   });
 
