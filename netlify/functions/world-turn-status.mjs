@@ -86,6 +86,7 @@ export default async (request) => {
       run: latest,
       operation_id: operation?.operation_id || null,
       operation_status: operation?.status || null,
+      operation_created_at: operation?.created_at || null,
       diagnostics
     });
   } catch (error) {
