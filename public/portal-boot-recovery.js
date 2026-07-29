@@ -43,6 +43,15 @@
     });
   }
 
+  function visible(element) {
+    return Boolean(element && !element.hidden && getComputedStyle(element).display !== 'none' && getComputedStyle(element).visibility !== 'hidden');
+  }
+
+  function inspectPortal() {
+    const fatal = document.querySelector('#portal .fatal-error');
+    if (fatal?.textContent?.trim()) show(fatal.textContent.trim(), 'bootstrap_error');
+  }
+
   window.tbgShowPortalRecovery = show;
   window.tbgDismissPortalRecovery = () => {
     dismissed = true;
@@ -59,9 +68,19 @@
     show(reason?.stack || reason?.message || reason, 'unhandled_rejection');
   });
 
+  window.addEventListener('DOMContentLoaded', () => {
+    const portal = document.getElementById('portal');
+    if (portal) new MutationObserver(inspectPortal).observe(portal, { childList: true, subtree: true, characterData: true });
+  });
+
   window.setTimeout(() => {
-    const authVisible = !document.getElementById('authGate')?.hidden;
-    const portalVisible = !document.getElementById('portal')?.hidden;
-    if (!authVisible && !portalVisible) show('Neither the sign-in screen nor the manager portal became visible within 12 seconds.', 'boot_watchdog');
+    inspectPortal();
+    const usableScreen = [
+      document.getElementById('authGate'),
+      document.getElementById('clubPortal'),
+      document.getElementById('unassignedState'),
+      document.getElementById('onboardingState')
+    ].some(visible);
+    if (!usableScreen) show('The manager portal did not expose a usable sign-in, club, onboarding or unassigned screen within 12 seconds.', 'boot_watchdog');
   }, 12000);
 })();
