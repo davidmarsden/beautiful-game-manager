@@ -1,7 +1,9 @@
 -- PR #151: persist a large scheduled-turn checkpoint through one guarded RPC.
--- The canonical save envelope can exceed the default PostgREST statement timeout during
--- a direct PATCH. Keep checksum compare-and-swap semantics while granting this one
--- service-role operation a controlled transaction-local timeout.
+-- PostgreSQL arms statement_timeout when the outer PostgREST statement starts, so a
+-- function-local SET is too late. Set the service role default before PostgREST begins
+-- the RPC statement. This applies to trusted server-side operations only.
+
+alter role service_role set statement_timeout = '90s';
 
 create or replace function public.replace_canonical_world_checkpoint(
   p_world_id text,
@@ -12,7 +14,6 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public
-set statement_timeout = '90s'
 as $$
 declare
   v_row public.canonical_world_saves%rowtype;
