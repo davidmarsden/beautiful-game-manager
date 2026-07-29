@@ -33,7 +33,7 @@ test('automatic scheduler failures persist an authoritative rejected advance inc
   assert.match(scheduler, /tbg-scheduled-world-turn-v1\.7/);
 });
 
-test('admin world control explains the failure and exposes a safe retry action', async () => {
+test('admin world control explains failures and never destroys the result with an automatic reload', async () => {
   const script = await read('public/admin-turn-control.js');
   assert.match(script, /world-failure-diagnostics/);
   assert.match(script, /Matchday \$\{escapeHtml\(details\.matchday/);
@@ -42,8 +42,13 @@ test('admin world control explains the failure and exposes a safe retry action',
   assert.match(script, /Retry failed turn/);
   assert.match(script, /Manual recovery required/);
   assert.match(script, /Reopening the failed checkpoint and retrying the production scheduler/);
-  assert.match(script, /resultText\(result\)/);
-  assert.match(script, /await loadFailureDiagnostics\(\)\.catch/);
+  assert.match(script, /Production turn response was interrupted/);
+  assert.match(script, /HTTP \$\{response\.status\}/);
+  assert.match(script, /showReloadAction\('Reload completed world'\)/);
+  assert.match(script, /id="reloadWorldState"/);
+  assert.match(script, /reloadWorldState'\)\.addEventListener\('click', \(\) => window\.location\.reload\(\)\)/);
+  assert.doesNotMatch(script, /setTimeout\([\s\S]*window\.location\.reload/);
+  assert.doesNotMatch(script, /window\.location\.reload\(\);[\s\S]*tbg:canonical-turn-complete/);
 });
 
 test('existing production retry remains checksum and failed-run guarded', async () => {
