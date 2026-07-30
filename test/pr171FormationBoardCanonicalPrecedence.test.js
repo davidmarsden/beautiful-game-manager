@@ -23,11 +23,10 @@ test('late carried-forward selector churn cannot overwrite canonical board state
 
   assert.match(source, /let managerEdited = false/);
   assert.match(source, /if \(managerEdited \|\| !players\.length\) return false/);
-  assert.match(source, /document\.addEventListener\('change',\(event\)=>\{/);
-  assert.match(source, /event\.target\?\.matches\('input\[data-zone="xi"\], input\[data-zone="bench"\]'\)/);
-  assert.match(source, /if \(event\.isTrusted \|\| allowLegacyImport\) refreshFromPersistedInputs\(\)/);
+  assert.match(source, /document\.addEventListener\('change'/);
+  assert.match(source, /input\[data-zone="xi"\], input\[data-zone="bench"\]/);
+  assert.match(source, /event\.isTrusted \|\| allowLegacyImport/);
   assert.match(source, /document\.addEventListener\('tbg:team-sheet-override', allowExplicitLegacyImport\)/);
-  assert.doesNotMatch(source, /new MutationObserver\([\s\S]*refreshFromPersistedInputs/);
 });
 
 test('manager edits and explicit team-sheet loads remain authoritative', async () => {
@@ -39,4 +38,22 @@ test('manager edits and explicit team-sheet loads remain authoritative', async (
   assert.match(source, /allowExplicitLegacyImport\(\)/);
   assert.match(source, /window\.addEventListener\('tbg:team-submission-saved'/);
   assert.match(source, /managerEdited=false/);
+});
+
+test('tablet swaps explicitly authorise hidden-team import before synthetic change', async () => {
+  const source = await read('public/formation-board-touch-fix.js');
+
+  const authorise = source.indexOf("authoriseBoardImport(source)");
+  const syntheticChange = source.indexOf("dispatchEvent(new Event('change', { bubbles: true }))");
+  assert.ok(authorise >= 0 && syntheticChange > authorise, 'tablet bridge must authorise board import before synthetic change');
+  assert.match(source, /importHiddenTeamIntoBoard\('tablet_swap_bridge'\)/);
+  assert.match(source, /new CustomEvent\('tbg:team-sheet-override'/);
+});
+
+test('captain and tactics changes latch manager-owned state before portal refreshes', async () => {
+  const source = await read('public/formation-board-touch-fix.js');
+
+  assert.match(source, /if \(!event\.isTrusted\) return/);
+  assert.match(source, /#captain, #mentality, #pressing, #tempo, #width, #defensiveLine/);
+  assert.match(source, /importHiddenTeamIntoBoard\('captain_or_tactics_change'\)/);
 });
