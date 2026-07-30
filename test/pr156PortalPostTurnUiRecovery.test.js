@@ -24,6 +24,17 @@ test('boot watchdog preserves explicit errors while replacing only its temporary
   assert.match(recovery, /show\(fatal\.textContent\.trim\(\), 'bootstrap_error'\)/);
 });
 
+test('hiding the authenticated sign-in gate immediately exposes the loading state', async () => {
+  const recovery = await read('public/portal-boot-recovery.js');
+  assert.match(recovery, /new MutationObserver\(inspectPortal\)/);
+  assert.match(recovery, /if \(usablePortalScreen\(\)\) \{[\s\S]*return;[\s\S]*\}/);
+  assert.match(recovery, /if \(!recovery\) showLoading\(\)/);
+  const inspectIndex = recovery.indexOf('function inspectPortal()');
+  const showLoadingIndex = recovery.indexOf('if (!recovery) showLoading();', inspectIndex);
+  const timeoutIndex = recovery.indexOf('window.setTimeout', inspectIndex);
+  assert.ok(showLoadingIndex > inspectIndex && showLoadingIndex < timeoutIndex, 'mutation inspection must show loading before the 30-second watchdog');
+});
+
 test('shared-world requests reuse and prime the portal authorization bridge', async () => {
   const html = await read('public/index.html');
   const bridge = await read('public/shared-world-auth-bridge.js');
