@@ -14,14 +14,16 @@ test('safe response diagnostics load before portal and world modules', async () 
   assert.ok(safeIndex < moduleIndex, 'safe response diagnostics must be available before module fetches');
 });
 
-test('empty and invalid API bodies retain HTTP diagnostics instead of leaking JSON parser errors', async () => {
+test('empty and invalid API bodies retain HTTP diagnostics without cloning successful responses', async () => {
   const source = await read('public/safe-response-json.js');
-  assert.match(source, /const nativeJson = Response\.prototype\.json/);
-  assert.match(source, /const diagnosticCopy = this\.clone\(\)/);
+  assert.match(source, /text = await this\.text\(\)/);
+  assert.match(source, /return JSON\.parse\(text\)/);
   assert.match(source, /empty response body/);
   assert.match(source, /invalid JSON response/);
-  assert.match(source, /diagnosticCopy\.status/);
-  assert.match(source, /diagnosticCopy\.headers\.get\('content-type'\)/);
+  assert.match(source, /this\.status/);
+  assert.match(source, /this\.headers\.get\('content-type'\)/);
   assert.match(source, /slice\(0, 500\)/);
+  assert.doesNotMatch(source, /this\.clone\(\)/);
+  assert.doesNotMatch(source, /Response\.prototype\.json\.call/);
   assert.doesNotMatch(source, /Unexpected end of JSON input/);
 });
