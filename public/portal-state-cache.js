@@ -1,7 +1,5 @@
 const networkFetch = window.fetch.bind(window);
-let bootstrapBody = null;
-let bootstrapStatus = 200;
-let bootstrapHeaders = [['content-type', 'application/json'], ['cache-control', 'no-store']];
+let bootstrapSnapshot = null;
 let bootstrapPromise = null;
 
 const requestUrl = (input) => typeof input === 'string' ? input : input?.url || '';
@@ -13,41 +11,51 @@ const invalidatesBootstrap = (input, init) => {
   return method !== 'GET' && ['/api/decisions', '/api/shared-world', '/api/profile'].some((path) => url.includes(path));
 };
 
-function cachedResponse() {
-  return new Response(bootstrapBody, { status: bootstrapStatus, headers: bootstrapHeaders });
+function responseFromSnapshot(snapshot) {
+  return new Response(snapshot.body, {
+    status: snapshot.status,
+    statusText: snapshot.statusText,
+    headers: snapshot.headers
+  });
+}
+
+async function fetchBootstrapSnapshot(input, init) {
+  const response = await networkFetch(input, init);
+  const snapshot = {
+    body: await response.text(),
+    status: response.status,
+    statusText: response.statusText,
+    headers: [...response.headers.entries()]
+  };
+  if (response.ok) bootstrapSnapshot = snapshot;
+  return snapshot;
 }
 
 window.fetch = async (input, init = {}) => {
   if (invalidatesBootstrap(input, init)) {
-    bootstrapBody = null;
+    bootstrapSnapshot = null;
     bootstrapPromise = null;
   }
 
   if (!isBootstrap(input, init)) return networkFetch(input, init);
-  if (bootstrapBody !== null) return cachedResponse();
-  if (bootstrapPromise) {
-    await bootstrapPromise;
-    return cachedResponse();
-  }
+  if (bootstrapSnapshot) return responseFromSnapshot(bootstrapSnapshot);
 
-  bootstrapPromise = (async () => {
-    const response = await networkFetch(input, init);
-    const body = await response.clone().text();
-    if (response.ok) {
-      bootstrapBody = body;
-      bootstrapStatus = response.status;
-      bootstrapHeaders = [...response.headers.entries()];
-    }
-    return response;
-  })();
-
+  if (!bootstrapPromise) bootstrapPromise = fetchBootstrapSnapshot(input, init);
   try {
-    return await bootstrapPromise;
+    const snapshot = await bootstrapPromise;
+    return responseFromSnapshot(snapshot);
   } finally {
     bootstrapPromise = null;
   }
 };
 
 window.addEventListener('tbg:portal-rendered', (event) => {
-  if (bootstrapBody === null && event.detail) bootstrapBody = JSON.stringify(event.detail);
+  if (!bootstrapSnapshot && event.detail) {
+    bootstrapSnapshot = {
+      body: JSON.stringify(event.detail),
+      status: 200,
+      statusText: 'OK',
+      headers: [['content-type', 'application/json'], ['cache-control', 'no-store']]
+    };
+  }
 });
