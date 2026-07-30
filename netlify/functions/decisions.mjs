@@ -50,13 +50,14 @@ export default async (request) => {
     const user = await userResponse.json();
     const payload = await request.json();
 
-    const profiles = await userRest(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id&limit=1`, token, {}, 'Could not verify manager profile');
+    const [profiles, appointments] = await Promise.all([
+      userRest(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id&limit=1`, token, {}, 'Could not verify manager profile'),
+      userRest(`/rest/v1/manager_appointments?club_id=eq.${encodeURIComponent(payload.club_id)}&status=eq.active&select=id,world_id,club_id,manager_id&limit=1`, token, {}, 'Could not verify active appointment')
+    ]);
     const manager = profiles[0];
     if (!manager || manager.id !== payload.manager_id) return response({ error: 'Manager identity does not match this session' }, 403);
-
-    const appointments = await userRest(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&club_id=eq.${encodeURIComponent(payload.club_id)}&status=eq.active&select=id,world_id,club_id&limit=1`, token, {}, 'Could not verify active appointment');
     const appointment = appointments[0];
-    if (!appointment) return response({ error: 'You are not appointed to this club' }, 403);
+    if (!appointment || appointment.manager_id !== manager.id) return response({ error: 'You are not appointed to this club' }, 403);
 
     const context = await serverRest('/rest/v1/rpc/get_manager_portal_world_fragment', {
       method: 'POST',
@@ -130,12 +131,8 @@ export default async (request) => {
       body: JSON.stringify(submission)
     }, 'Could not persist team submission');
 
-    await serverRest('/rest/v1/manager_messages', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', prefer: 'return=minimal' },
-      body: JSON.stringify({ recipient_manager_id: manager.id, club_id: appointment.club_id, message_type: 'submission_confirmation', subject: 'Team submission received', body: `Your team and tactics have been saved for ${fixture.opponent_name}.`, related_fixture_id: fixture.fixture_id, priority: 'normal' })
-    }, 'Could not create submission confirmation').catch(() => null);
-
+    // The authoritative upsert is the success boundary. Inbox confirmation must never
+    // delay or invalidate an already-persisted team selection.
     return response({ ...payload, saved: true, canonical: true, submission: saved[0] || submission, submitted_at: submission.submitted_at, matchday: submission.matchday, season_id: submission.season_id });
   } catch (error) {
     return response({ error: error.message, validation_errors: error.validationErrors || [] }, error.validationErrors ? 400 : /deadline|Turn|canonical|fixture|world|fragment/i.test(error.message) ? 409 : 500);

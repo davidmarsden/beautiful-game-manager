@@ -140,7 +140,7 @@ test('authorised canonical reads and writes use the server path after identity v
   assert.doesNotMatch(bootstrap, /save_envelope/);
   assert.match(decisions, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(decisions, /manager\.id !== payload\.manager_id/);
-  assert.match(decisions, /if \(!appointment\) return response\(\{ error: 'You are not appointed to this club'/);
+  assert.match(decisions, /if \(!appointment \|\| appointment\.manager_id !== manager\.id\) return response\(\{ error: 'You are not appointed to this club'/);
   assert.match(decisions, /serverRest\('\/rest\/v1\/rpc\/get_manager_portal_world_fragment'/);
   assert.match(decisions, /serverRest\('\/rest\/v1\/manager_turn_submissions/);
   assert.doesNotMatch(decisions, /save_envelope/);
