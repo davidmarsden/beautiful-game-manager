@@ -24,16 +24,19 @@ test('view switching is local and never reloads, navigates or refetches canonica
   assert.match(source, /aria-selected/);
 });
 
-test('bootstrap projection is cached and invalidated only after manager writes', async () => {
+test('bootstrap projection is generation-safe and invalidated after manager writes', async () => {
   const cache = await read('public/portal-state-cache.js');
   const html = await read('public/index.html');
-  assert.match(cache, /bootstrapPromise/);
+  assert.match(cache, /bootstrapRequest/);
   assert.match(cache, /bootstrapSnapshot/);
+  assert.match(cache, /bootstrapGeneration/);
+  assert.match(cache, /generation === bootstrapGeneration/);
   assert.match(cache, /responseFromSnapshot\(bootstrapSnapshot\)/);
-  assert.match(cache, /if \(response\.ok\) bootstrapSnapshot = snapshot/);
-  assert.match(cache, /bootstrapSnapshot = null/);
+  assert.match(cache, /invalidateBootstrapCache/);
+  assert.match(cache, /window\.tbgInvalidateBootstrapCache = invalidateBootstrapCache/);
   assert.match(cache, /\/api\/decisions/);
   assert.match(cache, /\/api\/shared-world/);
+  assert.doesNotMatch(cache, /tbg:portal-rendered/);
   assert.match(html, /portal-state-cache\.js/);
   assert.ok(html.indexOf('portal-state-cache.js') < html.indexOf('phase2d3.js'));
   assert.ok(html.indexOf('portal-navigation.js') > html.indexOf('world-controls.js'));
