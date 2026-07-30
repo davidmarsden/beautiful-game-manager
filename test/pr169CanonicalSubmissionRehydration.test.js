@@ -24,12 +24,30 @@ test('latest canonical submission remains authoritative after later portal rende
   assert.match(source, /window\.addEventListener\('tbg:team-submission-saved'/);
 });
 
-test('canonical rehydration yields immediately to deliberate manager changes', async () => {
+test('canonical rehydration yields immediately and permanently to deliberate manager changes', async () => {
   const source = await read('public/canonical-submission-rehydration.js');
   assert.match(source, /if \(!event\.isTrusted\) return/);
   assert.match(source, /#interactiveFormationBoard/);
   assert.match(source, /#loadPreset/);
   assert.match(source, /#loadPreviousMatch/);
   assert.match(source, /managerOverride = true/);
+  assert.match(source, /if \(managerOverride\) return false/);
+  assert.doesNotMatch(source, /function scheduleCanonicalRehydration\(state\) \{[\s\S]*managerOverride = false/);
   assert.match(source, /cancelRehydration\(\)/);
+});
+
+test('drag and pointer edits cancel delayed canonical restoration', async () => {
+  const source = await read('public/canonical-submission-rehydration.js');
+  assert.match(source, /\['click', 'change', 'pointerdown', 'dragstart', 'drop'\]/);
+  assert.match(source, /document\.addEventListener\(eventName, markManagerOverride, true\)/);
+});
+
+test('save events rehydrate only from refreshed state or the accepted saved payload', async () => {
+  const source = await read('public/canonical-submission-rehydration.js');
+  assert.match(source, /function stateFromSavedEvent\(detail\)/);
+  assert.match(source, /if \(detail\?\.state\?\.current_submission\) return detail\.state/);
+  assert.match(source, /if \(!result\?\.saved\) return null/);
+  assert.match(source, /const savedState = stateFromSavedEvent\(event\.detail\)/);
+  assert.match(source, /if \(savedState\) scheduleCanonicalRehydration\(savedState, \{ resetOverride: true \}\)/);
+  assert.doesNotMatch(source, /scheduleCanonicalRehydration\(event\.detail\?\.state \|\| window\.tbgPortalState\)/);
 });
