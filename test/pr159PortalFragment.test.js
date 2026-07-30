@@ -42,6 +42,16 @@ test('fragment RPC validates the canonical envelope before returning trusted sta
   assert.match(migration, /failed fragment integrity validation/);
 });
 
+test('production fragment override avoids recomputing the full-world checksum on every read', async () => {
+  const migration = await read('supabase/migrations/20260730_pr161_fast_manager_portal_fragment.sql');
+  assert.match(migration, /create or replace function public\.get_manager_portal_world_fragment/);
+  assert.match(migration, /stored\.save_checksum <> envelope ->> 'checksum'/);
+  assert.match(migration, /failed fragment integrity validation/);
+  assert.doesNotMatch(migration, /tbg_canonical_jsonb_text\(world\)/);
+  assert.doesNotMatch(migration, /digest\(/);
+  assert.doesNotMatch(migration, /jsonb_array_elements\(world -> 'history'/);
+});
+
 test('team save retains canonical fixture ownership and loan checks', async () => {
   const decisions = await read('netlify/functions/decisions.mjs');
   assert.match(decisions, /projectManagerPortal\(world, appointment\.club_id/);
