@@ -23,9 +23,11 @@ test('late carried-forward selector churn cannot overwrite canonical board state
 
   assert.match(source, /let managerEdited = false/);
   assert.match(source, /if \(managerEdited \|\| !players\.length\) return false/);
+  assert.match(source, /document\.addEventListener\('change',\(event\)=>\{/);
+  assert.match(source, /event\.target\?\.matches\('input\[data-zone="xi"\], input\[data-zone="bench"\]'\)/);
   assert.match(source, /if \(event\.isTrusted \|\| allowLegacyImport\) refreshFromPersistedInputs\(\)/);
   assert.match(source, /document\.addEventListener\('tbg:team-sheet-override', allowExplicitLegacyImport\)/);
-  assert.match(source, /document\.addEventListener\('change', \(event\) => \{[\s\S]*if \(!event\.target\?\.matches\('input\[data-zone="xi"\], input\[data-zone="bench"\]'\)\) return;[\s\S]*if \(event\.isTrusted \|\| allowLegacyImport\) refreshFromPersistedInputs\(\);[\s\S]*\}\);/);
+  assert.doesNotMatch(source, /new MutationObserver\([\s\S]*refreshFromPersistedInputs/);
 });
 
 test('manager edits and explicit team-sheet loads remain authoritative', async () => {
