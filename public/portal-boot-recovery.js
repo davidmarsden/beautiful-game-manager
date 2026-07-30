@@ -96,6 +96,10 @@
 
   window.setTimeout(() => {
     inspectPortal();
-    if (!usablePortalScreen()) show('The manager portal shell loaded, but no sign-in, club, onboarding or unassigned screen became ready within 12 seconds. Bootstrap may still be pending or may have failed.', 'boot_watchdog');
+    const recovery = document.getElementById('portalBootRecovery');
+    const fatal = document.querySelector('#portal .fatal-error');
+    if (!usablePortalScreen() && !recovery && !fatal?.textContent?.trim()) {
+      show('The manager portal shell loaded, but no sign-in, club, onboarding or unassigned screen became ready within 12 seconds. Bootstrap may still be pending or may have failed.', 'boot_watchdog');
+    }
   }, 12000);
 })();
