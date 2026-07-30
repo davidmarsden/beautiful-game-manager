@@ -29,11 +29,15 @@ test('older portal submission snapshots are stopped before consumers run', async
 test('direct bootstrap consumers use the same monotonic acceptance gate', async () => {
   const guard = await read('public/submission-state-monotonic-guard.js');
   const phase2c2b = await read('public/phase2c2b.js');
+  const refreshStart = phase2c2b.indexOf('async function refreshEnhancements()');
+  const refreshEnd = phase2c2b.indexOf("$('onboardingForm')", refreshStart);
+  const refreshBody = phase2c2b.slice(refreshStart, refreshEnd);
 
   assert.match(guard, /window\.tbgAcceptPortalState = acceptPortalState/);
-  assert.match(phase2c2b, /if \(window\.tbgAcceptPortalState && !window\.tbgAcceptPortalState\(state\)\) return;/);
+  assert.ok(refreshStart >= 0 && refreshEnd > refreshStart, 'refreshEnhancements body must be found');
+  assert.match(refreshBody, /if \(window\.tbgAcceptPortalState && !window\.tbgAcceptPortalState\(state\)\) return;/);
   assert.ok(
-    phase2c2b.indexOf('window.tbgAcceptPortalState(state)') < phase2c2b.indexOf('showOnboarding(state)'),
+    refreshBody.indexOf('window.tbgAcceptPortalState(state)') < refreshBody.indexOf('showOnboarding(state)'),
     'stale bootstrap state must be rejected before any phase2c2b rendering'
   );
 });
