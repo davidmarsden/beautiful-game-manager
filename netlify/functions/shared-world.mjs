@@ -60,14 +60,15 @@ async function identity(token) {
   return { user, manager, appointment };
 }
 
-async function readCanonicalFragment(current) {
+async function readClubFragment(worldId, clubId) {
   return serverSupabase('/rest/v1/rpc/get_manager_portal_world_fragment', {
     method: 'POST',
-    body: JSON.stringify({
-      p_world_id: current.appointment.world_id,
-      p_club_id: current.appointment.club_id
-    })
+    body: JSON.stringify({ p_world_id: worldId, p_club_id: clubId })
   });
+}
+
+async function readCanonicalFragment(current) {
+  return readClubFragment(current.appointment.world_id, current.appointment.club_id);
 }
 
 async function readSubmission(token, current, turn) {
@@ -135,18 +136,24 @@ function clubOwnsPlayer(world, clubId, playerId) {
 async function assertTransferCommand(token, current, world, type, payload) {
   if (!['transfer_offer', 'transfer_listing'].includes(type)) return;
   const playerId = payloadValue(payload, 'playerId', 'player_id');
-  if (!playerId || !world.squad_cycle?.players?.[playerId]) throw new Error('Transfer player is not present in the canonical world');
 
   if (type === 'transfer_listing') {
+    if (!playerId || !world.squad_cycle?.players?.[playerId]) throw new Error('Transfer player is not present in the canonical world');
     if (!clubOwnsPlayer(world, current.appointment.club_id, playerId)) throw new Error('Managers may only list players owned by their appointed club');
     return;
   }
 
   const otherClubId = payloadValue(payload, 'otherClubId', 'other_club_id');
   if (!otherClubId || otherClubId === current.appointment.club_id) throw new Error('Transfer offer must target a different managed club');
-  if (!world.squad_cycle?.clubs?.[otherClubId]) throw new Error('Transfer counterpart is not present in the canonical world');
-  if (!clubOwnsPlayer(world, otherClubId, playerId)) throw new Error('Transfer player is not owned by the proposed selling club');
-  const appointments = await userSupabase(`/rest/v1/manager_appointments?world_id=eq.${encodeURIComponent(world.world_id)}&club_id=eq.${encodeURIComponent(otherClubId)}&status=eq.active&select=club_id&limit=1`, token);
+
+  const [targetContext, appointments] = await Promise.all([
+    readClubFragment(world.world_id, otherClubId),
+    userSupabase(`/rest/v1/manager_appointments?world_id=eq.${encodeURIComponent(world.world_id)}&club_id=eq.${encodeURIComponent(otherClubId)}&status=eq.active&select=club_id&limit=1`, token)
+  ]);
+  const targetWorld = targetContext?.world;
+  if (!targetWorld?.squad_cycle?.clubs?.[otherClubId]) throw new Error('Transfer counterpart is not present in the canonical world');
+  if (!playerId || !targetWorld.squad_cycle?.players?.[playerId]) throw new Error('Transfer player is not present in the canonical world');
+  if (!clubOwnsPlayer(targetWorld, otherClubId, playerId)) throw new Error('Transfer player is not owned by the proposed selling club');
   if (!appointments[0]) throw new Error('Transfer offers may only target clubs with an active manager');
 }
 
