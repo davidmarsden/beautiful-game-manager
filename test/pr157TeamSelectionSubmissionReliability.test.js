@@ -52,11 +52,11 @@ test('captain choices stay synchronized with either rendered team selector', asy
   assert.match(source, /synchronizeCaptainChoices\(legacyPlayerIds\('xi'\)\)/);
 });
 
-test('bootstrap responses are cached so save does not require a duplicate preflight load', async () => {
+test('save reuses rendered portal state before requesting a fallback bootstrap', async () => {
   const source = await read('public/team-selection-submission-reliability.js');
   assert.match(source, /let cachedPortalState = window\.tbgPortalState \|\| null/);
-  assert.match(source, /window\.fetch = async \(\.\.\.args\)/);
-  assert.match(source, /includes\('\/api\/bootstrap'\)/);
+  assert.match(source, /window\.tbgInvalidateBootstrapCache\?\.\(\)/);
+  assert.doesNotMatch(source, /window\.fetch = async \(\.\.\.args\)/);
   assert.match(source, /const canonical = cachedPortalState \|\| window\.tbgPortalState \|\| await bootstrapState\(\)/);
   const selectionIndex = source.indexOf('const selection = selectedTeam();');
   const canonicalIndex = source.indexOf('const canonical = cachedPortalState');
@@ -68,6 +68,7 @@ test('canonical rejection clears stale fixture state and refreshes before the ne
   assert.match(source, /function invalidatePortalState\(\)/);
   assert.match(source, /cachedPortalState = null/);
   assert.match(source, /window\.tbgPortalState = null/);
+  assert.match(source, /window\.tbgInvalidateBootstrapCache\?\.\(\)/);
   assert.match(source, /if \(response\.status === 409\)/);
   assert.match(source, /const refreshed = await refreshAfterCanonicalRejection\(\)/);
   assert.match(source, /const refreshed = await bootstrapState\(\)/);
@@ -99,14 +100,16 @@ test('submission exposes saving success and exact failures beside a disabled sav
   assert.match(css, /team-submission-actions/);
 });
 
-test('successful POST remains successful when canonical refresh fails', async () => {
+test('successful POST is only confirmed after exact canonical read-back', async () => {
   const source = await read('public/team-selection-submission-reliability.js');
   const successfulResponseIndex = source.indexOf('const submittedAt = result.submitted_at');
-  const nestedRefreshIndex = source.indexOf('let refreshed = null;');
+  const canonicalRefreshIndex = source.indexOf('refreshed = await refreshCanonicalState();');
   const outerCatchIndex = source.indexOf("setStatus(error?.message || 'Team selection could not be saved.'");
-  assert.ok(successfulResponseIndex >= 0 && nestedRefreshIndex > successfulResponseIndex, 'POST success must be recorded before best-effort refresh');
-  assert.ok(outerCatchIndex > nestedRefreshIndex, 'only pre-save and POST failures should reach the outer error state');
-  assert.match(source, /Confirmation refresh failed; reload the portal to confirm the canonical version/);
+  assert.ok(successfulResponseIndex >= 0 && canonicalRefreshIndex > successfulResponseIndex, 'POST success must be followed by canonical read-back');
+  assert.ok(outerCatchIndex > canonicalRefreshIndex, 'transport and pre-save failures should reach the outer error state');
+  assert.match(source, /canonicalMatchesPayload\(refreshed, payload\)/);
+  assert.match(source, /canonical read-back could not yet confirm the exact team/);
+  assert.match(source, /confirmed after timeout/);
   assert.match(source, /refresh_error: refreshError\?\.message \|\| null/);
 });
 
