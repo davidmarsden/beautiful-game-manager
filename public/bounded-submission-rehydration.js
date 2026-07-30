@@ -1,14 +1,40 @@
 (() => {
   let released = false;
   let fallbackTimer = null;
+  let releasePulse = null;
+  let releasePulseDeadline = 0;
 
-  function releaseSubmissionGuard(source) {
-    if (released) return;
-    released = true;
-    if (fallbackTimer) window.clearTimeout(fallbackTimer);
+  function dispatchRelease(source) {
     document.dispatchEvent(new CustomEvent('tbg:team-sheet-override', {
       detail: { source }
     }));
+  }
+
+  function stopReleasePulse() {
+    if (releasePulse) window.clearInterval(releasePulse);
+    releasePulse = null;
+  }
+
+  function releaseSubmissionGuard(source) {
+    released = true;
+    window.tbgSubmissionRehydrationReleased = true;
+    if (fallbackTimer) window.clearTimeout(fallbackTimer);
+    dispatchRelease(source);
+
+    // A formation-ready event can arrive before phase2c2b has finished its own
+    // bootstrap and created the observer. Keep issuing bounded release pulses so
+    // any observer created late is disconnected promptly instead of surviving
+    // for the lifetime of the page.
+    releasePulseDeadline = Math.max(releasePulseDeadline, Date.now() + 30000);
+    if (!releasePulse) {
+      releasePulse = window.setInterval(() => {
+        if (Date.now() >= releasePulseDeadline) {
+          stopReleasePulse();
+          return;
+        }
+        dispatchRelease('rehydration_release_latch');
+      }, 250);
+    }
   }
 
   // phase2c2b restores the persisted XI/bench into the hidden selectors while the
@@ -26,4 +52,6 @@
   window.addEventListener('tbg:portal-rendered', () => {
     fallbackTimer = window.setTimeout(() => releaseSubmissionGuard('rehydration_timeout'), 8000);
   }, { once: true });
+
+  window.addEventListener('pagehide', stopReleasePulse, { once: true });
 })();
