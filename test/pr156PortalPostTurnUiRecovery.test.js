@@ -12,7 +12,16 @@ test('boot watchdog requires a rendered portal state rather than the empty shell
   assert.match(recovery, /document\.getElementById\('unassignedState'\)/);
   assert.match(recovery, /document\.getElementById\('onboardingState'\)/);
   assert.doesNotMatch(recovery, /document\.getElementById\('portal'\),/);
-  assert.match(recovery, /if \(!usablePortalScreen\(\)\) show/);
+  assert.match(recovery, /if \(!usablePortalScreen\(\) && !recovery && !fatal\?\.textContent\?\.trim\(\)\)/);
+});
+
+test('boot watchdog preserves an explicit bootstrap or runtime recovery message', async () => {
+  const recovery = await read('public/portal-boot-recovery.js');
+  assert.match(recovery, /inspectPortal\(\);[\s\S]*const recovery = document\.getElementById\('portalBootRecovery'\)/);
+  assert.match(recovery, /const fatal = document\.querySelector\('#portal \.fatal-error'\)/);
+  assert.match(recovery, /!recovery/);
+  assert.match(recovery, /!fatal\?\.textContent\?\.trim\(\)/);
+  assert.match(recovery, /show\(fatal\.textContent\.trim\(\), 'bootstrap_error'\)/);
 });
 
 test('shared-world requests reuse and prime the portal authorization bridge', async () => {
