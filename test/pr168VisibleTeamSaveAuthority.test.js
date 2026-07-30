@@ -25,8 +25,17 @@ test('ambiguous decision writes receive one idempotent retry before failure is s
   assert.match(cache, /const isDecisionWrite/);
   assert.match(cache, /status === 408 \|\| status === 429 \|\| status >= 500/);
   assert.match(cache, /async function fetchDecisionWithRetry/);
-  assert.match(cache, /catch \{\s*return networkFetch\(input, init\);\s*\}/s);
+  assert.match(cache, /catch \{\s*return retryDecisionAfterAmbiguity\(input, init\);\s*\}/s);
   assert.match(cache, /if \(!retryableDecisionStatus\(firstResponse\.status\)\) return firstResponse/);
-  assert.match(cache, /return networkFetch\(input, init\)/);
+  assert.match(cache, /return retryDecisionAfterAmbiguity\(input, init\)/);
   assert.match(cache, /if \(isDecisionWrite\(input, init\)\) return fetchDecisionWithRetry\(input, init\)/);
+});
+
+test('a rejecting retry preserves the first attempt ambiguity for canonical verification', async () => {
+  const cache = await read('public/portal-state-cache.js');
+  assert.match(cache, /async function retryDecisionAfterAmbiguity/);
+  assert.match(cache, /if \(!retryResponse\.ok && !retryableDecisionStatus\(retryResponse\.status\)\)/);
+  assert.match(cache, /throw new Error\(`Decision retry returned HTTP \$\{retryResponse\.status\} after an ambiguous first attempt\.`\)/);
+  assert.match(cache, /catch \{\s*return retryDecisionAfterAmbiguity\(input, init\);\s*\}/s);
+  assert.match(cache, /return retryDecisionAfterAmbiguity\(input, init\);/);
 });
