@@ -195,6 +195,7 @@ function renderSubmission(state) {
 async function refreshEnhancements() {
   const state = await bootstrap();
   if (!state) return;
+  if (window.tbgAcceptPortalState && !window.tbgAcceptPortalState(state)) return;
   showOnboarding(state);
   renderInboxMeta(state);
   renderDeadline(state);
