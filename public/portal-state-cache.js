@@ -1,6 +1,7 @@
 const networkFetch = window.fetch.bind(window);
 let bootstrapSnapshot = null;
-let bootstrapPromise = null;
+let bootstrapRequest = null;
+let bootstrapGeneration = 0;
 
 const requestUrl = (input) => typeof input === 'string' ? input : input?.url || '';
 const requestMethod = (input, init = {}) => String(init.method || input?.method || 'GET').toUpperCase();
@@ -19,7 +20,13 @@ function responseFromSnapshot(snapshot) {
   });
 }
 
-async function fetchBootstrapSnapshot(input, init) {
+function invalidateBootstrapCache() {
+  bootstrapGeneration += 1;
+  bootstrapSnapshot = null;
+  bootstrapRequest = null;
+}
+
+async function fetchBootstrapSnapshot(input, init, generation) {
   const response = await networkFetch(input, init);
   const snapshot = {
     body: await response.text(),
@@ -27,35 +34,31 @@ async function fetchBootstrapSnapshot(input, init) {
     statusText: response.statusText,
     headers: [...response.headers.entries()]
   };
-  if (response.ok) bootstrapSnapshot = snapshot;
+  if (response.ok && generation === bootstrapGeneration) bootstrapSnapshot = snapshot;
   return snapshot;
 }
 
+window.tbgInvalidateBootstrapCache = invalidateBootstrapCache;
+
 window.fetch = async (input, init = {}) => {
-  if (invalidatesBootstrap(input, init)) {
-    bootstrapSnapshot = null;
-    bootstrapPromise = null;
-  }
+  if (invalidatesBootstrap(input, init)) invalidateBootstrapCache();
 
   if (!isBootstrap(input, init)) return networkFetch(input, init);
   if (bootstrapSnapshot) return responseFromSnapshot(bootstrapSnapshot);
 
-  if (!bootstrapPromise) bootstrapPromise = fetchBootstrapSnapshot(input, init);
-  try {
-    const snapshot = await bootstrapPromise;
-    return responseFromSnapshot(snapshot);
-  } finally {
-    bootstrapPromise = null;
-  }
-};
-
-window.addEventListener('tbg:portal-rendered', (event) => {
-  if (!bootstrapSnapshot && event.detail) {
-    bootstrapSnapshot = {
-      body: JSON.stringify(event.detail),
-      status: 200,
-      statusText: 'OK',
-      headers: [['content-type', 'application/json'], ['cache-control', 'no-store']]
+  const generation = bootstrapGeneration;
+  if (!bootstrapRequest || bootstrapRequest.generation !== generation) {
+    bootstrapRequest = {
+      generation,
+      promise: fetchBootstrapSnapshot(input, init, generation)
     };
   }
-});
+
+  const activeRequest = bootstrapRequest;
+  try {
+    const snapshot = await activeRequest.promise;
+    return responseFromSnapshot(snapshot);
+  } finally {
+    if (bootstrapRequest === activeRequest) bootstrapRequest = null;
+  }
+};

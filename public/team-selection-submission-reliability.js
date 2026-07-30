@@ -19,24 +19,8 @@
   function invalidatePortalState() {
     cachedPortalState = null;
     window.tbgPortalState = null;
+    window.tbgInvalidateBootstrapCache?.();
   }
-
-  async function cacheBootstrapResponse(response) {
-    if (!response?.ok) return;
-    try {
-      cachePortalState(await response.clone().json());
-    } catch {
-      // The caller still owns the original response and its error handling.
-    }
-  }
-
-  window.fetch = async (...args) => {
-    const response = await nativeFetch(...args);
-    const input = args[0];
-    const url = typeof input === 'string' ? input : input?.url;
-    if (String(url || '').includes('/api/bootstrap')) await cacheBootstrapResponse(response);
-    return response;
-  };
 
   function statusTarget() {
     return $('submissionStatus');
@@ -161,6 +145,40 @@
     return { startingXi, bench, captainId, usingBoard };
   }
 
+  const sameIds = (left, right) => {
+    const a = (left || []).map(String);
+    const b = (right || []).map(String);
+    return a.length === b.length && a.every((id, index) => id === b[index]);
+  };
+
+  function canonicalMatchesPayload(state, payload) {
+    const submission = state?.current_submission;
+    if (!submission || !payload) return false;
+    const tactics = submission.tactics || {};
+    return String(submission.fixture_id || '') === String(payload.fixture_id || '')
+      && String(submission.formation || '') === String(payload.formation || '')
+      && sameIds(submission.starting_xi, payload.starting_xi)
+      && sameIds(submission.bench, payload.bench)
+      && String(submission.captain_id || '') === String(payload.captain_id || '')
+      && ['mentality', 'pressing', 'tempo', 'width', 'defensive_line']
+        .every((key) => String(tactics[key] || '') === String(payload.tactics?.[key] || ''));
+  }
+
+  function ambiguousSaveFailure(error) {
+    return error?.ambiguousSave === true;
+  }
+
+  function ambiguousStatus(status) {
+    return status === 408 || status === 429 || status >= 500;
+  }
+
+  function markAmbiguous(error, detail = {}) {
+    const marked = error instanceof Error ? error : new Error(String(error || 'Team selection request failed.'));
+    marked.ambiguousSave = true;
+    Object.assign(marked, detail);
+    return marked;
+  }
+
   function renderCanonicalSubmission(state) {
     const submission = state?.current_submission;
     const summary = $('submissionSummary');
@@ -172,11 +190,16 @@
     panel.innerHTML = `<strong>Current submission</strong><span>Version ${submission.version}</span><span>${submission.formation}</span><span>${new Date(submission.updated_at || submission.submitted_at).toLocaleString()}</span><span class="badge ${submission.status === 'locked' ? 'injured' : 'fit'}">${submission.status}</span>`;
   }
 
-  async function refreshAfterCanonicalRejection() {
+  async function refreshCanonicalState() {
     invalidatePortalState();
+    const refreshed = await bootstrapState();
+    renderCanonicalSubmission(refreshed);
+    return refreshed;
+  }
+
+  async function refreshAfterCanonicalRejection() {
     try {
-      const refreshed = await bootstrapState();
-      renderCanonicalSubmission(refreshed);
+      const refreshed = await refreshCanonicalState();
       window.dispatchEvent(new CustomEvent('tbg:portal-rendered', { detail: refreshed }));
       return true;
     } catch {
@@ -192,6 +215,7 @@
     installCaptainSynchronization();
     const button = event.target.querySelector('button[type="submit"]');
     const previousLabel = button?.textContent || 'Save team and tactics';
+    let payload = null;
     if (button) {
       button.disabled = true;
       button.textContent = 'Saving…';
@@ -203,7 +227,7 @@
       const canonical = cachedPortalState || window.tbgPortalState || await bootstrapState();
       if (!canonical?.next_fixture) throw new Error('There is no scheduled fixture available for this team submission.');
       if (canonical.next_fixture.locked) throw new Error('The team-selection deadline has passed and this fixture is locked.');
-      const payload = {
+      payload = {
         manager_id: canonical.manager.id,
         club_id: canonical.club.tbg_club_id,
         fixture_id: canonical.next_fixture.fixture_id,
@@ -225,12 +249,26 @@
           defensive_line: $('defensiveLine').value
         }
       };
-      const response = await nativeFetch('/api/decisions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: authorization() },
-        body: JSON.stringify(payload)
-      });
-      const result = await responseBody(response, 'Team selection could not be saved');
+
+      let response;
+      try {
+        response = await nativeFetch('/api/decisions', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: authorization() },
+          body: JSON.stringify(payload)
+        });
+      } catch (error) {
+        throw markAmbiguous(error, { transportFailure: true });
+      }
+
+      let result;
+      try {
+        result = await responseBody(response, 'Team selection could not be saved');
+      } catch (error) {
+        if (ambiguousStatus(response.status)) throw markAmbiguous(error, { responseStatus: response.status });
+        throw error;
+      }
+
       if (!response.ok) {
         const validation = Array.isArray(result.validation_errors)
           ? result.validation_errors.map((item) => typeof item === 'string' ? item : item?.message || item?.code).filter(Boolean).join(' · ')
@@ -240,7 +278,9 @@
           const refreshed = await refreshAfterCanonicalRejection();
           throw new Error(refreshed ? `${baseMessage} The fixture state has been refreshed; review the team and save again.` : baseMessage);
         }
-        throw new Error(baseMessage);
+        const responseError = new Error(baseMessage);
+        if (ambiguousStatus(response.status)) throw markAmbiguous(responseError, { responseStatus: response.status });
+        throw responseError;
       }
 
       const submittedAt = result.submitted_at || result.updated_at || null;
@@ -248,19 +288,37 @@
       let refreshed = null;
       let refreshError = null;
       try {
-        invalidatePortalState();
-        refreshed = await bootstrapState();
-        renderCanonicalSubmission(refreshed);
+        refreshed = await refreshCanonicalState();
+        if (!canonicalMatchesPayload(refreshed, payload)) {
+          throw new Error('Canonical read-back did not match the team just submitted.');
+        }
         const canonicalSavedAt = refreshed.current_submission?.submitted_at || refreshed.current_submission?.updated_at;
         if (canonicalSavedAt) setStatus(`Saved · ${new Date(canonicalSavedAt).toLocaleString()}`, 'ok');
       } catch (error) {
         refreshError = error;
-        setStatus('Team selection saved. Confirmation refresh failed; reload the portal to confirm the canonical version.', 'ok');
+        setStatus('Team selection was accepted, but canonical read-back could not yet confirm the exact team. Reload before making further changes.', 'error');
       }
       window.dispatchEvent(new CustomEvent('tbg:team-submission-saved', {
         detail: { result, state: refreshed, refresh_error: refreshError?.message || null }
       }));
     } catch (error) {
+      if (payload && ambiguousSaveFailure(error)) {
+        try {
+          const refreshed = await refreshCanonicalState();
+          if (canonicalMatchesPayload(refreshed, payload)) {
+            const canonicalSavedAt = refreshed.current_submission?.submitted_at || refreshed.current_submission?.updated_at;
+            setStatus(canonicalSavedAt
+              ? `Saved · ${new Date(canonicalSavedAt).toLocaleString()} · confirmed after timeout`
+              : 'Team selection saved · confirmed after timeout', 'ok');
+            window.dispatchEvent(new CustomEvent('tbg:team-submission-saved', {
+              detail: { result: null, state: refreshed, recovered_after_timeout: true }
+            }));
+            return;
+          }
+        } catch {
+          // Keep the original transport error when canonical verification also fails.
+        }
+      }
       setStatus(error?.message || 'Team selection could not be saved.', 'error');
     } finally {
       if (button) {
