@@ -112,6 +112,17 @@ test('successful POST is only confirmed after exact canonical read-back', async 
   assert.match(source, /refresh_error: refreshError\?\.message \|\| null/);
 });
 
+test('ambiguous save recovery is driven by transport and HTTP status rather than error wording', async () => {
+  const source = await read('public/team-selection-submission-reliability.js');
+  assert.match(source, /function ambiguousSaveFailure\(error\) \{\s*return error\?\.ambiguousSave === true;/s);
+  assert.match(source, /function ambiguousStatus\(status\)/);
+  assert.match(source, /status === 408 \|\| status === 429 \|\| status >= 500/);
+  assert.match(source, /throw markAmbiguous\(error, \{ transportFailure: true \}\)/);
+  assert.match(source, /if \(ambiguousStatus\(response\.status\)\) throw markAmbiguous\(error, \{ responseStatus: response\.status \}\)/);
+  assert.match(source, /if \(ambiguousStatus\(response\.status\)\) throw markAmbiguous\(responseError, \{ responseStatus: response\.status \}\)/);
+  assert.doesNotMatch(source, /HTTP 504\|timeout\|failed to fetch/);
+});
+
 test('Supabase requests separate API keys from optional bearer credentials', async () => {
   const [bootstrap, decisions] = await Promise.all([
     read('netlify/functions/bootstrap.mjs'),
