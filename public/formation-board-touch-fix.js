@@ -36,6 +36,17 @@ function slotPlayerId(slot) {
   return q('[data-player-id]', slot)?.dataset.playerId || null;
 }
 
+function authoriseBoardImport(source) {
+  document.dispatchEvent(new CustomEvent('tbg:team-sheet-override', {
+    detail: { source }
+  }));
+}
+
+function importHiddenTeamIntoBoard(source) {
+  authoriseBoardImport(source);
+  q('input[data-zone="xi"]')?.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
 function applySwap(board, movingId, targetSlot) {
   const xi = orderedChecked('xi');
   const bench = orderedChecked('bench');
@@ -57,7 +68,7 @@ function applySwap(board, movingId, targetSlot) {
 
   reorderAndCheck('startingXi', 'xi', cleanXi);
   reorderAndCheck('bench', 'bench', cleanBench);
-  q('input[data-zone="xi"]')?.dispatchEvent(new Event('change', { bubbles: true }));
+  importHiddenTeamIntoBoard('tablet_swap_bridge');
   targetSlot.blur();
 }
 
@@ -78,6 +89,16 @@ function install() {
   }, true);
   return true;
 }
+
+// Captain and tactics live outside formation-board.js, but they are part of the
+// same unsaved manager-owned team sheet. Reuse the explicit import handshake to
+// latch the board's managerEdited state before a later portal render can restore
+// the previous canonical submission over those changes.
+document.addEventListener('change', (event) => {
+  if (!event.isTrusted) return;
+  if (!event.target?.matches('#captain, #mentality, #pressing, #tempo, #width, #defensiveLine')) return;
+  importHiddenTeamIntoBoard('captain_or_tactics_change');
+}, true);
 
 const observer = new MutationObserver(() => install());
 window.addEventListener('load', () => {
