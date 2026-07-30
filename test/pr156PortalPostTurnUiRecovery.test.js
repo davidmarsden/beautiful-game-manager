@@ -4,10 +4,14 @@ import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('boot watchdog accepts the authenticated portal shell as a usable state', async () => {
+test('boot watchdog requires a rendered portal state rather than the empty shell', async () => {
   const recovery = await read('public/portal-boot-recovery.js');
-  assert.match(recovery, /document\.getElementById\('portal'\)/);
   assert.match(recovery, /function usablePortalScreen\(\)/);
+  assert.match(recovery, /document\.getElementById\('authGate'\)/);
+  assert.match(recovery, /document\.getElementById\('clubPortal'\)/);
+  assert.match(recovery, /document\.getElementById\('unassignedState'\)/);
+  assert.match(recovery, /document\.getElementById\('onboardingState'\)/);
+  assert.doesNotMatch(recovery, /document\.getElementById\('portal'\),/);
   assert.match(recovery, /if \(!usablePortalScreen\(\)\) show/);
 });
 
