@@ -28,7 +28,10 @@ test('bootstrap projection is cached and invalidated only after manager writes',
   const cache = await read('public/portal-state-cache.js');
   const html = await read('public/index.html');
   assert.match(cache, /bootstrapPromise/);
-  assert.match(cache, /cachedResponse\(\)/);
+  assert.match(cache, /bootstrapSnapshot/);
+  assert.match(cache, /responseFromSnapshot\(bootstrapSnapshot\)/);
+  assert.match(cache, /if \(response\.ok\) bootstrapSnapshot = snapshot/);
+  assert.match(cache, /bootstrapSnapshot = null/);
   assert.match(cache, /\/api\/decisions/);
   assert.match(cache, /\/api\/shared-world/);
   assert.match(html, /portal-state-cache\.js/);
