@@ -13,7 +13,12 @@ test('saved-team rehydration observer is released after formation board startup'
   assert.match(source, /formation_board_ready/);
   assert.match(source, /rehydration_timeout/);
   assert.match(source, /8000/);
-  assert.match(source, /if \(released\) return/);
+  assert.match(source, /window\.tbgSubmissionRehydrationReleased = true/);
+  assert.match(source, /rehydration_release_latch/);
+  assert.match(source, /window\.setInterval/);
+  assert.match(source, /30000/);
+  assert.match(source, /250/);
+  assert.match(source, /pagehide/);
   assert.ok(html.indexOf('bounded-submission-rehydration.js') > html.indexOf('phase2c2b.js'));
   assert.ok(html.indexOf('bounded-submission-rehydration.js') < html.indexOf('formation-board.js'));
 });
