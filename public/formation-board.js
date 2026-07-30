@@ -31,9 +31,11 @@ let selected = null;
 let assignments = [];
 let benchAssignments = [];
 let players = [];
-let refreshTimer;
 let buildRetryTimer;
 let syncingLegacy = false;
+let managerEdited = false;
+let allowLegacyImport = false;
+let legacyImportTimer;
 
 const byId = (id) => document.getElementById(id);
 const norm = (value) => String(value ?? '');
@@ -55,7 +57,44 @@ function currentChecked(zone) {
   return [...document.querySelectorAll(`input[data-zone="${zone}"]:checked`)].map((input) => norm(input.value));
 }
 
+function normalisedSubmission(state = window.tbgPortalState) {
+  const raw = state?.current_submission;
+  if (!raw) return null;
+  const instruction = raw.instruction || {};
+  const submission = {
+    ...raw,
+    ...instruction,
+    tactics: instruction.tactics || raw.tactics || {}
+  };
+  const startingXi = (submission.starting_xi || []).map(norm);
+  const bench = (submission.bench || []).map(norm);
+  if (startingXi.length !== 11 || bench.length !== 7) return null;
+  const knownPlayers = new Set(players.map((player) => player.id));
+  if ([...startingXi, ...bench].some((playerId) => !knownPlayers.has(playerId))) return null;
+  return { ...submission, starting_xi: startingXi, bench };
+}
+
+function applyCanonicalSubmission(state = window.tbgPortalState) {
+  if (managerEdited || !players.length) return false;
+  const submission = normalisedSubmission(state);
+  if (!submission) return false;
+  if (submission.formation && FORMATIONS[submission.formation]) byId('formation').value = submission.formation;
+  assignments = [...submission.starting_xi];
+  benchAssignments = [...submission.bench];
+  selected = null;
+  if (submission.captain_id && byId('captain')) byId('captain').value = norm(submission.captain_id);
+  const tactics = submission.tactics || {};
+  if (tactics.mentality && byId('mentality')) byId('mentality').value = tactics.mentality;
+  if (tactics.pressing && byId('pressing')) byId('pressing').value = tactics.pressing;
+  if (tactics.tempo && byId('tempo')) byId('tempo').value = tactics.tempo;
+  if (tactics.width && byId('width')) byId('width').value = tactics.width;
+  if (tactics.defensive_line && byId('defensiveLine')) byId('defensiveLine').value = tactics.defensive_line;
+  renderBoard();
+  return true;
+}
+
 function initialiseAssignments() {
+  if (applyCanonicalSubmission()) return;
   const checkedXi = currentChecked('xi');
   const checkedBench = currentChecked('bench');
   assignments = FORMATIONS[byId('formation')?.value || '4-3-3-wide'].map((_, index) => checkedXi[index] || null);
@@ -106,6 +145,10 @@ function validateBoard() {
   target.className='formation-validation ok'; target.textContent=`Team ready · ${bench.length} substitute${bench.length===1?'':'s'}`; return true;
 }
 
+function markManagerEdited() {
+  managerEdited = true;
+}
+
 function removePlayer(id) {
   assignments = assignments.map((value) => value === id ? null : value);
   benchAssignments = benchAssignments.map((value) => value === id ? null : value);
@@ -113,6 +156,7 @@ function removePlayer(id) {
 
 function placePlayer(id, zone, index) {
   if (!id) return;
+  markManagerEdited();
   const target = zone === 'xi' ? assignments : benchAssignments;
   const displaced = target[index];
   const previous = assignments.findIndex((value) => value === id);
@@ -170,7 +214,6 @@ function buildBoard() {
   if (board?.isConnected) return true;
   if (board && !board.isConnected) board = null;
   if (!collectPlayers()) return false;
-  initialiseAssignments();
   const legacyXi = byId('startingXi');
   const legacyBench = byId('bench');
   if (!legacyXi || !legacyBench) return false;
@@ -186,6 +229,7 @@ function buildBoard() {
   board.className='formation-board-shell';
   board.innerHTML=`<div class="pitch-panel"><div class="pitch-toolbar"><div><strong>Interactive formation</strong><div class="pitch-help">Drag players, or tap a player then tap a slot. Tap two occupied slots to swap.</div></div><div class="selection-counts"><span id="xiCount"></span><span id="benchCount"></span></div></div><div id="formationPitch" class="football-pitch"></div><h3>Substitutes</h3><div id="formationBench" class="bench-board"></div><div id="formationValidation" class="formation-validation"></div><div class="board-actions"><button id="clearFormation" type="button">Clear team</button><button id="autoPickFormation" type="button">Auto-pick strongest XI</button></div></div><aside class="squad-tray-panel"><h3>Squad</h3><div class="pitch-help">Selected players are faded. Tap any player to move them.</div><div id="formationSquadTray" class="squad-tray"></div></aside>`;
   legacyXi.parentElement.insertBefore(board, xiHeading || legacyXi);
+  initialiseAssignments();
   renderBoard();
 
   board.addEventListener('click',(event)=>{
@@ -197,16 +241,9 @@ function buildBoard() {
   board.addEventListener('dragstart',(event)=>{ const player=event.target.closest('[data-player-id]'); if(player) event.dataTransfer.setData('text/plain',norm(player.dataset.playerId)); });
   board.addEventListener('dragover',(event)=>{ if(event.target.closest('[data-zone][data-index]')) event.preventDefault(); });
   board.addEventListener('drop',(event)=>{ const slot=event.target.closest('[data-zone][data-index]'); if(!slot)return; event.preventDefault(); placePlayer(event.dataTransfer.getData('text/plain'),slot.dataset.zone,Number(slot.dataset.index)); });
-  byId('clearFormation').addEventListener('click',()=>{assignments=Array(11).fill(null);benchAssignments=Array(7).fill(null);selected=null;renderBoard();});
-  byId('autoPickFormation').addEventListener('click',()=>{ const sorted=[...players].sort((a,b)=>Number(b.rating)-Number(a.rating)); const gk=sorted.find((p)=>p.position==='Goalkeeper'); const rest=sorted.filter((p)=>p.id!==gk?.id); assignments=[gk?.id||null,...rest.slice(0,10).map((p)=>p.id)]; benchAssignments=rest.slice(10,17).map((p)=>p.id); while(benchAssignments.length<7)benchAssignments.push(null);renderBoard(); });
+  byId('clearFormation').addEventListener('click',()=>{markManagerEdited();assignments=Array(11).fill(null);benchAssignments=Array(7).fill(null);selected=null;renderBoard();});
+  byId('autoPickFormation').addEventListener('click',()=>{ markManagerEdited(); const sorted=[...players].sort((a,b)=>Number(b.rating)-Number(a.rating)); const gk=sorted.find((p)=>p.position==='Goalkeeper'); const rest=sorted.filter((p)=>p.id!==gk?.id); assignments=[gk?.id||null,...rest.slice(0,10).map((p)=>p.id)]; benchAssignments=rest.slice(10,17).map((p)=>p.id); while(benchAssignments.length<7)benchAssignments.push(null);renderBoard(); });
 
-  const scheduleRefresh = () => {
-    if (syncingLegacy) return;
-    clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(refreshFromPersistedInputs, 180);
-  };
-  new MutationObserver(scheduleRefresh).observe(legacyXi,{childList:true,subtree:true});
-  new MutationObserver(scheduleRefresh).observe(legacyBench,{childList:true,subtree:true});
   window.dispatchEvent(new CustomEvent('tbg:formation-board-ready'));
   return true;
 }
@@ -222,7 +259,18 @@ function refreshFromPersistedInputs() {
   const checkedBench=currentChecked('bench');
   assignments=FORMATIONS[byId('formation')?.value || '4-3-3-wide'].map((_,index)=>checkedXi[index]||null);
   benchAssignments=Array.from({length:7},(_,index)=>checkedBench[index]||null);
+  selected=null;
+  managerEdited=true;
   renderBoard();
+}
+
+function allowExplicitLegacyImport() {
+  allowLegacyImport = true;
+  clearTimeout(legacyImportTimer);
+  legacyImportTimer = setTimeout(() => {
+    if (allowLegacyImport) refreshFromPersistedInputs();
+    allowLegacyImport = false;
+  }, 250);
 }
 
 function waitForTeamLists() {
@@ -236,6 +284,24 @@ function scheduleBoardBuild(delay = 0) {
 }
 
 window.addEventListener('load',()=>scheduleBoardBuild(300));
-window.addEventListener('tbg:portal-rendered',()=>scheduleBoardBuild(0));
-byId('formation')?.addEventListener('change',()=>{ const next=FORMATIONS[byId('formation').value]||FORMATIONS['4-3-3-wide']; assignments=next.map((_,index)=>assignments[index]||null); renderBoard(); });
+window.addEventListener('tbg:portal-rendered',(event)=>{
+  if (!board?.isConnected) return scheduleBoardBuild(0);
+  collectPlayers();
+  applyCanonicalSubmission(event.detail);
+});
+window.addEventListener('tbg:team-submission-saved',(event)=>{
+  if (!event.detail?.state?.current_submission) return;
+  managerEdited=false;
+  collectPlayers();
+  applyCanonicalSubmission(event.detail.state);
+});
+document.addEventListener('tbg:team-sheet-override', allowExplicitLegacyImport);
+document.addEventListener('click',(event)=>{
+  if (event.target?.closest('#loadPreset, #loadPreviousMatch')) allowExplicitLegacyImport();
+},true);
+document.addEventListener('change',(event)=>{
+  if (syncingLegacy || !event.target?.matches('input[data-zone="xi"], input[data-zone="bench"]')) return;
+  if (event.isTrusted || allowLegacyImport) refreshFromPersistedInputs();
+});
+byId('formation')?.addEventListener('change',(event)=>{ if (event.isTrusted) markManagerEdited(); const next=FORMATIONS[byId('formation').value]||FORMATIONS['4-3-3-wide']; assignments=next.map((_,index)=>assignments[index]||null); renderBoard(); });
 document.addEventListener('submit',(event)=>{ if(event.target?.id==='decisionForm' && board?.isConnected){ syncLegacyInputs(); if(!validateBoard()){ event.preventDefault(); event.stopImmediatePropagation(); } } },true);
