@@ -26,7 +26,7 @@ test('portal boot guard catches failures and only clears stale watchdog overlays
   assert.match(guard, /data-recovery-source/);
   assert.match(guard, /recovery\?\.dataset\.recoverySource === 'boot_watchdog'/);
   assert.match(guard, /usablePortalScreen\(\) && \(!recovery \|\| isWatchdogOverlay\)/);
-  assert.match(guard, /if \(!usablePortalScreen\(\)\) show\(/);
+  assert.match(guard, /if \(!usablePortalScreen\(\) && !recovery && !fatal\?\.textContent\?\.trim\(\)\)/);
   assert.match(guard, /shell loaded, but no sign-in, club, onboarding or unassigned screen became ready/);
   assert.match(guard, /window\.tbgDismissPortalRecovery = clear/);
   assert.match(guard, /boot_watchdog/);
