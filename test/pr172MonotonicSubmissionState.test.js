@@ -26,10 +26,22 @@ test('older portal submission snapshots are stopped before consumers run', async
   assert.match(source, /tbg:portal-refreshed/);
 });
 
+test('direct bootstrap consumers use the same monotonic acceptance gate', async () => {
+  const guard = await read('public/submission-state-monotonic-guard.js');
+  const phase2c2b = await read('public/phase2c2b.js');
+
+  assert.match(guard, /window\.tbgAcceptPortalState = acceptPortalState/);
+  assert.match(phase2c2b, /if \(window\.tbgAcceptPortalState && !window\.tbgAcceptPortalState\(state\)\) return;/);
+  assert.ok(
+    phase2c2b.indexOf('window.tbgAcceptPortalState(state)') < phase2c2b.indexOf('showOnboarding(state)'),
+    'stale bootstrap state must be rejected before any phase2c2b rendering'
+  );
+});
+
 test('successful canonical saves advance the monotonic state', async () => {
   const source = await read('public/submission-state-monotonic-guard.js');
 
   assert.match(source, /tbg:team-submission-saved/);
-  assert.match(source, /remember\(state\)/);
+  assert.match(source, /acceptPortalState\(state\)/);
   assert.match(source, /window\.tbgPortalState = state/);
 });
