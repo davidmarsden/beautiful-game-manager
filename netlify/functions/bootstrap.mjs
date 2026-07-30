@@ -57,6 +57,24 @@ function managerMessages(rows, world, canonicalCreatedAt) {
   });
 }
 
+function normalizeCurrentSubmission(row) {
+  if (!row) return null;
+  const instruction = row.instruction && typeof row.instruction === 'object' ? row.instruction : {};
+  return {
+    ...row,
+    ...instruction,
+    instruction,
+    starting_xi: Array.isArray(instruction.starting_xi) ? instruction.starting_xi : [],
+    bench: Array.isArray(instruction.bench) ? instruction.bench : [],
+    set_piece_takers: instruction.set_piece_takers || {},
+    tactics: instruction.tactics || {},
+    formation: instruction.formation || null,
+    captain_id: instruction.captain_id || null,
+    fixture_id: instruction.fixture_id || null,
+    version: row.version || instruction.version || null
+  };
+}
+
 function hideCompletedScore(fixture) {
   if (!fixture || fixture.status !== 'played') return fixture;
   return { ...fixture, home_score: null, away_score: null, own_score: null, opponent_score: null, result_revealed: false };
@@ -131,7 +149,7 @@ export default async (request) => {
       },
       messages,
       unread_count: messages.filter((message) => !message.read_at).length,
-      current_submission: turnSubmissionRows[0] || null,
+      current_submission: normalizeCurrentSubmission(turnSubmissionRows[0]),
       navigation: navigation()
     });
   } catch (error) {
