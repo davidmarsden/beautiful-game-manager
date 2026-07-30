@@ -49,11 +49,16 @@
     return true;
   }
 
+  function acceptPortalState(state) {
+    if (!remember(state)) return false;
+    if (state?.current_submission) window.tbgPortalState = state;
+    return true;
+  }
+
+  window.tbgAcceptPortalState = acceptPortalState;
+
   function guardPortalState(event) {
-    if (remember(event.detail)) {
-      if (event.detail?.current_submission) window.tbgPortalState = event.detail;
-      return;
-    }
+    if (acceptPortalState(event.detail)) return;
     event.stopImmediatePropagation();
     console.warn('Ignored stale portal state carrying an older team submission');
   }
@@ -64,9 +69,6 @@
 
   window.addEventListener('tbg:team-submission-saved', (event) => {
     const state = event.detail?.state;
-    if (state?.current_submission) {
-      remember(state);
-      window.tbgPortalState = state;
-    }
+    if (state?.current_submission) acceptPortalState(state);
   }, true);
 })();
