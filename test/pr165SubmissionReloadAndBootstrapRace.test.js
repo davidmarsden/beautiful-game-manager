@@ -16,14 +16,17 @@ test('bootstrap flattens persisted instruction fields for saved-team reloads', a
   assert.match(source, /current_submission: normalizeCurrentSubmission\(turnSubmissionRows\[0\]\)/);
 });
 
-test('concurrent bootstrap callers receive the same real response snapshot', async () => {
+test('concurrent bootstrap callers receive the same real generation-scoped response snapshot', async () => {
   const source = await read('public/portal-state-cache.js');
-  assert.match(source, /async function fetchBootstrapSnapshot/);
+  assert.match(source, /let bootstrapGeneration = 0/);
+  assert.match(source, /async function fetchBootstrapSnapshot\(input, init, generation\)/);
   assert.match(source, /body: await response\.text\(\)/);
   assert.match(source, /status: response\.status/);
-  assert.match(source, /if \(response\.ok\) bootstrapSnapshot = snapshot/);
-  assert.match(source, /const snapshot = await bootstrapPromise/);
+  assert.match(source, /if \(response\.ok && generation === bootstrapGeneration\) bootstrapSnapshot = snapshot/);
+  assert.match(source, /const activeRequest = bootstrapRequest/);
+  assert.match(source, /const snapshot = await activeRequest\.promise/);
   assert.match(source, /return responseFromSnapshot\(snapshot\)/);
+  assert.match(source, /if \(bootstrapRequest === activeRequest\) bootstrapRequest = null/);
   assert.doesNotMatch(source, /await bootstrapPromise;\s*return cachedResponse\(\)/s);
   assert.doesNotMatch(source, /new Response\(null/);
 });
