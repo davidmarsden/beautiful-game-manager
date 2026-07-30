@@ -77,7 +77,11 @@
     }
     const recovery = document.getElementById('portalBootRecovery');
     const dismissibleSource = ['boot_loading', 'boot_watchdog'].includes(recovery?.dataset.recoverySource);
-    if (usablePortalScreen() && (!recovery || dismissibleSource)) clear();
+    if (usablePortalScreen()) {
+      if (!recovery || dismissibleSource) clear();
+      return;
+    }
+    if (!recovery) showLoading();
   }
 
   window.tbgShowPortalRecovery = show;
@@ -104,7 +108,6 @@
       });
     }
     inspectPortal();
-    if (!usablePortalScreen() && !document.querySelector('#portal .fatal-error')) showLoading();
   });
 
   window.setTimeout(() => {
