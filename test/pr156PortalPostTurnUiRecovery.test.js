@@ -12,14 +12,14 @@ test('boot watchdog requires a rendered portal state rather than the empty shell
   assert.match(recovery, /document\.getElementById\('unassignedState'\)/);
   assert.match(recovery, /document\.getElementById\('onboardingState'\)/);
   assert.doesNotMatch(recovery, /document\.getElementById\('portal'\),/);
-  assert.match(recovery, /if \(!usablePortalScreen\(\) && !recovery && !fatal\?\.textContent\?\.trim\(\)\)/);
+  assert.match(recovery, /!usablePortalScreen\(\) && waitingOnly && !fatal\?\.textContent\?\.trim\(\)/);
 });
 
-test('boot watchdog preserves an explicit bootstrap or runtime recovery message', async () => {
+test('boot watchdog preserves explicit errors while replacing only its temporary loading state', async () => {
   const recovery = await read('public/portal-boot-recovery.js');
   assert.match(recovery, /inspectPortal\(\);[\s\S]*const recovery = document\.getElementById\('portalBootRecovery'\)/);
   assert.match(recovery, /const fatal = document\.querySelector\('#portal \.fatal-error'\)/);
-  assert.match(recovery, /!recovery/);
+  assert.match(recovery, /recovery\.dataset\.recoverySource === 'boot_loading'/);
   assert.match(recovery, /!fatal\?\.textContent\?\.trim\(\)/);
   assert.match(recovery, /show\(fatal\.textContent\.trim\(\), 'bootstrap_error'\)/);
 });
