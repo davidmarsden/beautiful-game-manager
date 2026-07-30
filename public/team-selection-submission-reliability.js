@@ -165,7 +165,18 @@
   }
 
   function ambiguousSaveFailure(error) {
-    return /(?:HTTP 504|timeout|failed to fetch|empty response|invalid response)/i.test(String(error?.message || error || ''));
+    return error?.ambiguousSave === true;
+  }
+
+  function ambiguousStatus(status) {
+    return status === 408 || status === 429 || status >= 500;
+  }
+
+  function markAmbiguous(error, detail = {}) {
+    const marked = error instanceof Error ? error : new Error(String(error || 'Team selection request failed.'));
+    marked.ambiguousSave = true;
+    Object.assign(marked, detail);
+    return marked;
   }
 
   function renderCanonicalSubmission(state) {
@@ -238,12 +249,26 @@
           defensive_line: $('defensiveLine').value
         }
       };
-      const response = await nativeFetch('/api/decisions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: authorization() },
-        body: JSON.stringify(payload)
-      });
-      const result = await responseBody(response, 'Team selection could not be saved');
+
+      let response;
+      try {
+        response = await nativeFetch('/api/decisions', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: authorization() },
+          body: JSON.stringify(payload)
+        });
+      } catch (error) {
+        throw markAmbiguous(error, { transportFailure: true });
+      }
+
+      let result;
+      try {
+        result = await responseBody(response, 'Team selection could not be saved');
+      } catch (error) {
+        if (ambiguousStatus(response.status)) throw markAmbiguous(error, { responseStatus: response.status });
+        throw error;
+      }
+
       if (!response.ok) {
         const validation = Array.isArray(result.validation_errors)
           ? result.validation_errors.map((item) => typeof item === 'string' ? item : item?.message || item?.code).filter(Boolean).join(' · ')
@@ -253,7 +278,9 @@
           const refreshed = await refreshAfterCanonicalRejection();
           throw new Error(refreshed ? `${baseMessage} The fixture state has been refreshed; review the team and save again.` : baseMessage);
         }
-        throw new Error(baseMessage);
+        const responseError = new Error(baseMessage);
+        if (ambiguousStatus(response.status)) throw markAmbiguous(responseError, { responseStatus: response.status });
+        throw responseError;
       }
 
       const submittedAt = result.submitted_at || result.updated_at || null;
