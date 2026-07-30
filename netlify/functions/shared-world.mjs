@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import { buildManagerTurnSubmission, currentTurnIdentity } from '../../src/world/sharedWorldScheduler.js';
-import { loadPersistentWorld } from '../../src/world/persistentSeasonLoop.js';
 import { projectManagerPortal } from '../../src/world/managerPortalProjection.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -15,13 +15,14 @@ const bearerToken = (request) => {
   const header = request.headers.get('authorization') || '';
   return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
 };
+const isJwt = (value) => String(value || '').split('.').length === 3;
 
-async function supabase(path, token, options = {}) {
+async function requestSupabase(path, { apiKey, bearer, ...options } = {}) {
   const response = await fetch(`${SUPABASE_URL}${path}`, {
     ...options,
     headers: {
-      apikey: SUPABASE_ANON_KEY,
-      authorization: `Bearer ${token}`,
+      apikey: apiKey,
+      ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
       accept: 'application/json',
       'content-type': 'application/json',
       prefer: options.prefer || 'return=representation',
@@ -33,38 +34,54 @@ async function supabase(path, token, options = {}) {
   return body;
 }
 
+const userSupabase = (path, token, options = {}) => requestSupabase(path, {
+  ...options,
+  apiKey: SUPABASE_ANON_KEY,
+  bearer: token
+});
+const serverSupabase = (path, options = {}) => requestSupabase(path, {
+  ...options,
+  apiKey: SUPABASE_SERVICE_ROLE_KEY,
+  ...(isJwt(SUPABASE_SERVICE_ROLE_KEY) ? { bearer: SUPABASE_SERVICE_ROLE_KEY } : {})
+});
+
 async function identity(token) {
   const userResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
     headers: { apikey: SUPABASE_ANON_KEY, authorization: `Bearer ${token}` }
   });
   if (!userResponse.ok) throw new Error('Session is invalid or expired');
   const user = await userResponse.json();
-  const profiles = await supabase(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id,user_id,display_name,is_admin&limit=1`, token);
+  const profiles = await userSupabase(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id,user_id,display_name,is_admin&limit=1`, token);
   const manager = profiles[0];
   if (!manager) throw new Error('Manager profile has not been created yet');
-  const appointments = await supabase(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=world_id,club_id&limit=1`, token);
+  const appointments = await userSupabase(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=world_id,club_id&limit=1`, token);
   const appointment = appointments[0];
   if (!appointment) throw new Error('No active club appointment');
   return { user, manager, appointment };
 }
 
-async function readCanonicalWorld(token, worldId) {
-  const rows = await supabase(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&select=*&limit=1`, token);
-  return rows[0] || null;
+async function readCanonicalFragment(current) {
+  return serverSupabase('/rest/v1/rpc/get_manager_portal_world_fragment', {
+    method: 'POST',
+    body: JSON.stringify({
+      p_world_id: current.appointment.world_id,
+      p_club_id: current.appointment.club_id
+    })
+  });
 }
 
 async function readSubmission(token, current, turn) {
-  const rows = await supabase(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(turn.world_id)}&season_id=eq.${encodeURIComponent(turn.season_id)}&matchday=eq.${turn.matchday}&manager_id=eq.${encodeURIComponent(current.manager.id)}&select=*&limit=1`, token);
+  const rows = await userSupabase(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(turn.world_id)}&season_id=eq.${encodeURIComponent(turn.season_id)}&matchday=eq.${turn.matchday}&manager_id=eq.${encodeURIComponent(current.manager.id)}&select=*&limit=1`, token);
   return rows[0] || null;
 }
 
 async function readCommandHistory(token, current) {
   const fields = [
-    'id','command_type','command_payload','status','negotiation_state',
+    'id','club_id','command_type','command_payload','status','negotiation_state',
     'effective_season_id','effective_matchday','submitted_at','processed_at','terminal_at',
     'outcome_reason','outcome_details','superseded_by','request_key','final_outcome_key'
   ].join(',');
-  return supabase(`/rest/v1/manager_world_commands?world_id=eq.${encodeURIComponent(current.appointment.world_id)}&manager_id=eq.${encodeURIComponent(current.manager.id)}&select=${fields}&order=submitted_at.desc,id.desc&limit=100`, token);
+  return userSupabase(`/rest/v1/manager_world_commands?world_id=eq.${encodeURIComponent(current.appointment.world_id)}&manager_id=eq.${encodeURIComponent(current.manager.id)}&select=${fields}&order=submitted_at.desc,id.desc&limit=100`, token);
 }
 
 function assertAppointment(world, appointment) {
@@ -121,21 +138,15 @@ async function assertTransferCommand(token, current, world, type, payload) {
   if (!playerId || !world.squad_cycle?.players?.[playerId]) throw new Error('Transfer player is not present in the canonical world');
 
   if (type === 'transfer_listing') {
-    if (!clubOwnsPlayer(world, current.appointment.club_id, playerId)) {
-      throw new Error('Managers may only list players owned by their appointed club');
-    }
+    if (!clubOwnsPlayer(world, current.appointment.club_id, playerId)) throw new Error('Managers may only list players owned by their appointed club');
     return;
   }
 
   const otherClubId = payloadValue(payload, 'otherClubId', 'other_club_id');
-  if (!otherClubId || otherClubId === current.appointment.club_id) {
-    throw new Error('Transfer offer must target a different managed club');
-  }
+  if (!otherClubId || otherClubId === current.appointment.club_id) throw new Error('Transfer offer must target a different managed club');
   if (!world.squad_cycle?.clubs?.[otherClubId]) throw new Error('Transfer counterpart is not present in the canonical world');
-  if (!clubOwnsPlayer(world, otherClubId, playerId)) {
-    throw new Error('Transfer player is not owned by the proposed selling club');
-  }
-  const appointments = await supabase(`/rest/v1/manager_appointments?world_id=eq.${encodeURIComponent(world.world_id)}&club_id=eq.${encodeURIComponent(otherClubId)}&status=eq.active&select=club_id&limit=1`, token);
+  if (!clubOwnsPlayer(world, otherClubId, playerId)) throw new Error('Transfer player is not owned by the proposed selling club');
+  const appointments = await userSupabase(`/rest/v1/manager_appointments?world_id=eq.${encodeURIComponent(world.world_id)}&club_id=eq.${encodeURIComponent(otherClubId)}&status=eq.active&select=club_id&limit=1`, token);
   if (!appointments[0]) throw new Error('Transfer offers may only target clubs with an active manager');
 }
 
@@ -188,12 +199,12 @@ function commandSummaryImpl(world, row) {
 
 export default async (request) => {
   try {
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return json({ error: 'Supabase is not configured' }, 503);
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured' }, 503);
     const token = bearerToken(request);
     if (!token) return json({ error: 'Authentication required' }, 401);
     const current = await identity(token);
-    const stored = await readCanonicalWorld(token, current.appointment.world_id);
-    if (!stored) return json({
+    const context = await readCanonicalFragment(current);
+    if (!context?.world) return json({
       configured: true,
       has_world: false,
       world_id: current.appointment.world_id,
@@ -202,7 +213,7 @@ export default async (request) => {
       message: 'The shared-world database is ready, but this world has not yet been initialized.'
     });
 
-    const world = loadPersistentWorld(JSON.stringify(stored.save_envelope));
+    const world = context.world;
     assertAppointment(world, current.appointment);
     const turn = currentTurnIdentity(world);
     const [existing, commandRows] = await Promise.all([
@@ -218,11 +229,11 @@ export default async (request) => {
       is_admin: Boolean(current.manager.is_admin),
       summary,
       world: {
-        world_id: stored.world_id,
-        checksum: stored.save_checksum,
-        updated_at: stored.updated_at,
-        next_turn_at: stored.next_turn_at,
-        turn_status: stored.turn_status
+        world_id: context.world_id,
+        checksum: context.save_checksum,
+        updated_at: context.updated_at,
+        next_turn_at: context.next_turn_at,
+        turn_status: context.turn_status
       },
       appointment,
       turn,
@@ -239,15 +250,15 @@ export default async (request) => {
     const body = await request.json().catch(() => ({}));
 
     if (body.type === 'submit_turn') {
-      if (stored.turn_status !== 'open') return json({ error: `Turn is ${stored.turn_status}` }, 409);
+      if (context.turn_status !== 'open') return json({ error: `Turn is ${context.turn_status}` }, 409);
       const submission = buildManagerTurnSubmission(world, {
         managerId: current.manager.id,
         clubId: current.appointment.club_id,
         instruction: body.instruction || {},
         submittedAt: new Date().toISOString(),
-        nextTurnAt: stored.next_turn_at
+        nextTurnAt: context.next_turn_at
       });
-      const rows = await supabase('/rest/v1/manager_turn_submissions?on_conflict=world_id,season_id,matchday,club_id', token, {
+      const rows = await userSupabase('/rest/v1/manager_turn_submissions?on_conflict=world_id,season_id,matchday,club_id', token, {
         method: 'POST',
         body: JSON.stringify(submission),
         headers: { prefer: 'resolution=merge-duplicates,return=representation' }
@@ -256,7 +267,7 @@ export default async (request) => {
     }
 
     if (body.type === 'submit_command') {
-      if (stored.turn_status !== 'open') return json({ error: `World commands are locked while turn is ${stored.turn_status}` }, 409);
+      if (context.turn_status !== 'open') return json({ error: `World commands are locked while turn is ${context.turn_status}` }, 409);
       const type = commandType(body.command_type);
       const commandPayload = body.command_payload || {};
       await assertTransferCommand(token, current, world, type, commandPayload);
@@ -269,7 +280,7 @@ export default async (request) => {
         matchday: turn.matchday,
         suppliedKey: body.request_key || body.client_request_id
       });
-      const rows = await supabase('/rest/v1/rpc/submit_manager_world_command', token, {
+      const rows = await userSupabase('/rest/v1/rpc/submit_manager_world_command', token, {
         method: 'POST',
         body: JSON.stringify({
           p_world_id: world.world_id,
