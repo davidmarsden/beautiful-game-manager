@@ -13,7 +13,7 @@ test('portal boot guard loads before module scripts and exposes recovery actions
   assert.ok(guardIndex < moduleIndex, 'boot recovery must execute before portal modules');
 });
 
-test('portal boot guard catches failures and only clears stale watchdog overlays after healthy render', async () => {
+test('portal boot guard shows loading immediately and only escalates after a delayed unhealthy boot', async () => {
   const guard = await read('public/portal-boot-recovery.js');
   assert.match(guard, /window\.addEventListener\('error'/);
   assert.match(guard, /window\.addEventListener\('unhandledrejection'/);
@@ -23,13 +23,14 @@ test('portal boot guard catches failures and only clears stale watchdog overlays
   assert.match(guard, /attributeFilter: \['hidden', 'class', 'style'\]/);
   assert.match(guard, /function usablePortalScreen\(\)[\s\S]*document\.getElementById\('clubPortal'\)[\s\S]*document\.getElementById\('unassignedState'\)[\s\S]*\.some\(visible\)/);
   assert.doesNotMatch(guard, /function usablePortalScreen\(\)[\s\S]*document\.getElementById\('portal'\)/);
-  assert.match(guard, /data-recovery-source/);
-  assert.match(guard, /recovery\?\.dataset\.recoverySource === 'boot_watchdog'/);
-  assert.match(guard, /usablePortalScreen\(\) && \(!recovery \|\| isWatchdogOverlay\)/);
-  assert.match(guard, /if \(!usablePortalScreen\(\) && !recovery && !fatal\?\.textContent\?\.trim\(\)\)/);
-  assert.match(guard, /shell loaded, but no sign-in, club, onboarding or unassigned screen became ready/);
+  assert.match(guard, /function showLoading\(\)/);
+  assert.match(guard, /data-recovery-source="boot_loading"/);
+  assert.match(guard, /Loading manager portal…/);
+  assert.match(guard, /\['boot_loading', 'boot_watchdog'\]\.includes/);
+  assert.match(guard, /waitingOnly = !recovery \|\| recovery\.dataset\.recoverySource === 'boot_loading'/);
+  assert.match(guard, /within 30 seconds/);
+  assert.match(guard, /\}, 30000\)/);
   assert.match(guard, /window\.tbgDismissPortalRecovery = clear/);
-  assert.match(guard, /boot_watchdog/);
   assert.match(guard, /Retry portal/);
   assert.match(guard, /Open World/);
   assert.match(guard, /Clear session and sign out/);

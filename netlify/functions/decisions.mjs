@@ -124,16 +124,17 @@ export default async (request) => {
         loan_eligibility_snapshot: loanEligibilitySnapshot
       }
     });
+    const { version: submissionVersion, ...submissionRow } = submission;
 
     const saved = await serverRest('/rest/v1/manager_turn_submissions?on_conflict=world_id,season_id,matchday,club_id', {
       method: 'POST',
       headers: { 'content-type': 'application/json', prefer: 'resolution=merge-duplicates,return=representation' },
-      body: JSON.stringify(submission)
+      body: JSON.stringify(submissionRow)
     }, 'Could not persist team submission');
 
     // The authoritative upsert is the success boundary. Inbox confirmation must never
     // delay or invalidate an already-persisted team selection.
-    return response({ ...payload, saved: true, canonical: true, submission: saved[0] || submission, submitted_at: submission.submitted_at, matchday: submission.matchday, season_id: submission.season_id });
+    return response({ ...payload, saved: true, canonical: true, submission: saved[0] || submissionRow, submission_version: submissionVersion, submitted_at: submission.submitted_at, matchday: submission.matchday, season_id: submission.season_id });
   } catch (error) {
     return response({ error: error.message, validation_errors: error.validationErrors || [] }, error.validationErrors ? 400 : /deadline|Turn|canonical|fixture|world|fragment/i.test(error.message) ? 409 : 500);
   }

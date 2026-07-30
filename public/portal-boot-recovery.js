@@ -44,6 +44,18 @@
     });
   }
 
+  function showLoading() {
+    if (document.getElementById('portalBootRecovery')) return;
+    document.body.insertAdjacentHTML('beforeend', `
+      <section id="portalBootRecovery" data-recovery-source="boot_loading" role="status" aria-live="polite" style="position:fixed;inset:0;z-index:2147483647;background:#f7f3ea;color:#1f1f1f;display:grid;place-items:center;padding:24px;font-family:system-ui,sans-serif;">
+        <div style="width:min(520px,100%);background:#fff;border:1px solid #d8d0c0;border-radius:14px;padding:24px;box-shadow:0 18px 60px rgba(0,0,0,.18);">
+          <p style="margin:0 0 8px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">The Beautiful Game</p>
+          <h1 style="margin:0 0 12px;font-size:1.6rem;">Loading manager portal…</h1>
+          <p style="margin:0;line-height:1.5;">Fetching your club and the current canonical turn. This can take a little longer after a fresh deployment.</p>
+        </div>
+      </section>`);
+  }
+
   function visible(element) {
     return Boolean(element && !element.hidden && getComputedStyle(element).display !== 'none' && getComputedStyle(element).visibility !== 'hidden');
   }
@@ -64,8 +76,12 @@
       return;
     }
     const recovery = document.getElementById('portalBootRecovery');
-    const isWatchdogOverlay = recovery?.dataset.recoverySource === 'boot_watchdog';
-    if (usablePortalScreen() && (!recovery || isWatchdogOverlay)) clear();
+    const dismissibleSource = ['boot_loading', 'boot_watchdog'].includes(recovery?.dataset.recoverySource);
+    if (usablePortalScreen()) {
+      if (!recovery || dismissibleSource) clear();
+      return;
+    }
+    if (!recovery) showLoading();
   }
 
   window.tbgShowPortalRecovery = show;
@@ -98,8 +114,9 @@
     inspectPortal();
     const recovery = document.getElementById('portalBootRecovery');
     const fatal = document.querySelector('#portal .fatal-error');
-    if (!usablePortalScreen() && !recovery && !fatal?.textContent?.trim()) {
-      show('The manager portal shell loaded, but no sign-in, club, onboarding or unassigned screen became ready within 12 seconds. Bootstrap may still be pending or may have failed.', 'boot_watchdog');
+    const waitingOnly = !recovery || recovery.dataset.recoverySource === 'boot_loading';
+    if (!usablePortalScreen() && waitingOnly && !fatal?.textContent?.trim()) {
+      show('The manager portal has not produced a sign-in, club, onboarding or unassigned screen within 30 seconds. Bootstrap may still be pending or may have failed.', 'boot_watchdog');
     }
-  }, 12000);
+  }, 30000);
 })();
