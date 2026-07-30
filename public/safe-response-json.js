@@ -1,21 +1,25 @@
 (() => {
-  const nativeJson = Response.prototype.json;
-
   Response.prototype.json = async function safeJson() {
-    const diagnosticCopy = this.clone();
+    const contentType = this.headers.get('content-type') || 'unknown content type';
+    const status = `HTTP ${this.status || 0}`;
+    let text;
+
     try {
-      return await nativeJson.call(this);
+      text = await this.text();
     } catch (error) {
-      const text = await diagnosticCopy.text().catch(() => '');
-      const compact = text.trim().replace(/\s+/g, ' ');
-      const excerpt = compact.slice(0, 500);
-      const contentType = diagnosticCopy.headers.get('content-type') || 'unknown content type';
-      const status = `HTTP ${diagnosticCopy.status || 0}`;
+      throw new Error(`${status}; could not read response body (${contentType})`, { cause: error });
+    }
 
-      if (!compact) {
-        throw new Error(`${status}; empty response body (${contentType})`);
-      }
+    const compact = text.trim().replace(/\s+/g, ' ');
+    const excerpt = compact.slice(0, 500);
 
+    if (!compact) {
+      throw new Error(`${status}; empty response body (${contentType})`);
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch (error) {
       throw new Error(`${status}; invalid JSON response (${contentType})${excerpt ? ` · ${excerpt}` : ''}`, {
         cause: error
       });
