@@ -80,13 +80,37 @@
     return true;
   }
 
-  function scheduleCanonicalRehydration(state) {
-    if (state) latestState = state;
+  function scheduleCanonicalRehydration(state, { resetOverride = false } = {}) {
+    if (!state?.current_submission) return false;
+    latestState = state;
     cancelRehydration();
-    managerOverride = false;
+    if (resetOverride) managerOverride = false;
+    if (managerOverride) return false;
     [0, 50, 150, 300, 600, 1200, 2500, 5000, 9000].forEach((delay) => {
       rehydrationTimers.push(window.setTimeout(applyCanonicalSubmission, delay));
     });
+    return true;
+  }
+
+  function stateFromSavedEvent(detail) {
+    if (detail?.state?.current_submission) return detail.state;
+    const result = detail?.result;
+    if (!result?.saved) return null;
+    const persisted = result.submission && typeof result.submission === 'object' ? result.submission : {};
+    const instruction = persisted.instruction && typeof persisted.instruction === 'object' ? persisted.instruction : {};
+    return {
+      current_submission: {
+        ...persisted,
+        ...instruction,
+        ...result,
+        instruction,
+        starting_xi: result.starting_xi || instruction.starting_xi || [],
+        bench: result.bench || instruction.bench || [],
+        captain_id: result.captain_id || instruction.captain_id || null,
+        formation: result.formation || instruction.formation || null,
+        tactics: result.tactics || instruction.tactics || {}
+      }
+    };
   }
 
   function markManagerOverride(event) {
@@ -97,15 +121,17 @@
     }
   }
 
-  document.addEventListener('click', markManagerOverride, true);
-  document.addEventListener('change', markManagerOverride, true);
+  ['click', 'change', 'pointerdown', 'dragstart', 'drop'].forEach((eventName) => {
+    document.addEventListener(eventName, markManagerOverride, true);
+  });
 
   window.addEventListener('tbg:portal-rendered', (event) => {
     scheduleCanonicalRehydration(event.detail || window.tbgPortalState);
   });
   window.addEventListener('tbg:formation-board-ready', () => scheduleCanonicalRehydration(latestState));
   window.addEventListener('tbg:team-submission-saved', (event) => {
-    scheduleCanonicalRehydration(event.detail?.state || window.tbgPortalState);
+    const savedState = stateFromSavedEvent(event.detail);
+    if (savedState) scheduleCanonicalRehydration(savedState, { resetOverride: true });
   });
   window.addEventListener('load', () => scheduleCanonicalRehydration(window.tbgPortalState));
   window.addEventListener('pagehide', cancelRehydration, { once: true });
