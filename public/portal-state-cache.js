@@ -40,15 +40,23 @@ async function fetchBootstrapSnapshot(input, init, generation) {
   return snapshot;
 }
 
+async function retryDecisionAfterAmbiguity(input, init) {
+  const retryResponse = await networkFetch(input, init);
+  if (!retryResponse.ok && !retryableDecisionStatus(retryResponse.status)) {
+    throw new Error(`Decision retry returned HTTP ${retryResponse.status} after an ambiguous first attempt.`);
+  }
+  return retryResponse;
+}
+
 async function fetchDecisionWithRetry(input, init) {
   let firstResponse;
   try {
     firstResponse = await networkFetch(input, init);
   } catch {
-    return networkFetch(input, init);
+    return retryDecisionAfterAmbiguity(input, init);
   }
   if (!retryableDecisionStatus(firstResponse.status)) return firstResponse;
-  return networkFetch(input, init);
+  return retryDecisionAfterAmbiguity(input, init);
 }
 
 function orderedVisiblePlayerIds(selector) {
