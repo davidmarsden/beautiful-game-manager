@@ -57,7 +57,7 @@ test('shared-world command submission enforces transfer authority before writing
   assert.match(api, /manager_appointments\?world_id=eq\.\$\{encodeURIComponent\(world\.world_id\)\}&club_id=eq\.\$\{encodeURIComponent\(otherClubId\)\}&status=eq\.active/);
   assert.match(api, /Transfer offers may only target clubs with an active manager/);
   const validationIndex = api.indexOf('await assertTransferCommand(token, current, world, type, commandPayload);');
-  const ledgerIndex = api.indexOf("userSupabase('/rest/v1/rpc/submit_manager_world_command'");
+  const ledgerIndex = api.indexOf("serverSupabase('/rest/v1/rpc/submit_manager_world_command_for_user'");
   assert.ok(validationIndex >= 0 && ledgerIndex > validationIndex, 'transfer authority must be checked before ledger insertion');
 });
 
