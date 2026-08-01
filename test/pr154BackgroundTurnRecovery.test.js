@@ -32,14 +32,24 @@ test('queued retry ignores the pre-existing failed run until a newer attempt app
   const status = await read('netlify/functions/world-turn-status.mjs');
   const client = await read('public/admin-turn-background-recovery.js');
   assert.match(status, /operation_created_at: operation\?\.created_at \|\| null/);
-  assert.match(client, /const baseline = await statusRequest\(\)/);
+  assert.match(client, /baseline = \{ \.\.\.\(await statusRequest\(\)\), unavailable: false \}/);
   assert.match(client, /const queuedAt = Date\.now\(\)/);
   assert.match(client, /isNewerThanQueuedBaseline\(status, baseline, queuedAt\)/);
-  assert.match(client, /status\.run\?\.id && status\.run\.id !== baseline\.run\?\.id/);
-  assert.match(client, /status\.operation_id !== baseline\.operation_id/);
+  assert.match(client, /!baseline\.unavailable && status\.run\?\.id/);
+  assert.match(client, /!baseline\.unavailable && status\.operation_id/);
   assert.match(client, /status\.operation_created_at/);
   assert.match(client, /status\.state === 'failed' && belongsToQueuedAttempt/);
   assert.match(client, /Waiting for the background worker to claim the failed checkpoint/);
+});
+
+test('a temporary status preflight failure cannot block the replay-safe queue request', async () => {
+  const client = await read('public/admin-turn-background-recovery.js');
+  const preflight = client.indexOf('baseline = { ...(await statusRequest()), unavailable: false }');
+  const queue = client.indexOf("fetch('/api/run-due-turn-now-background'");
+  assert.ok(preflight >= 0 && queue > preflight, 'status preflight must remain before queueing for baseline correlation');
+  assert.match(client, /try \{\s*baseline = \{ \.\.\.\(await statusRequest\(\)\), unavailable: false \};\s*\} catch \(error\) \{/s);
+  assert.match(client, /server-side replay protection will remain authoritative/);
+  assert.doesNotMatch(client, /const baseline = await statusRequest\(\)/);
 });
 
 test('portal captures the bearer token before bootstrap and installs the background click interceptor', async () => {
