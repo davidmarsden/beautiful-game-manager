@@ -8,7 +8,11 @@
     const text = await response.text();
     let result = {};
     try { result = text ? JSON.parse(text) : {}; } catch {}
-    if (!response.ok) throw new Error(result.error || `Turn status returned HTTP ${response.status}`);
+    if (!response.ok) {
+      const error = new Error(result.error || `Turn status returned HTTP ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
     return result;
   }
 
@@ -23,16 +27,21 @@
     return `Background turn queued · world status ${status.turn_status || status.state || 'pending'}.`;
   }
 
-  function isNewerThanQueuedBaseline(status, baseline, queuedAt) {
+  function isRetriableStatusFailure(error) {
+    return !Number.isInteger(error?.status) || error.status === 408 || error.status === 429 || error.status >= 500;
+  }
+
+  function isNewerThanQueuedBaseline(status, baseline, queuedServerAt, sawProcessing) {
     if (status.state === 'processing') return true;
+    if (sawProcessing && (status.state === 'complete' || status.state === 'failed')) return true;
     if (!baseline.unavailable && status.run?.id && status.run.id !== baseline.run?.id) return true;
     if (!baseline.unavailable && status.operation_id && status.operation_id !== baseline.operation_id) return true;
-    if (status.operation_created_at && new Date(status.operation_created_at).getTime() >= queuedAt) return true;
+    if (queuedServerAt && status.operation_created_at && new Date(status.operation_created_at).getTime() >= queuedServerAt) return true;
     if (!baseline.unavailable && status.checksum && baseline.checksum && status.checksum !== baseline.checksum) return true;
     return false;
   }
 
-  async function pollUntilSettled(output, button, baseline, queuedAt) {
+  async function pollUntilSettled(output, button, baseline, queuedServerAt) {
     const deadline = Date.now() + (12 * 60 * 1000);
     let sawProcessing = false;
     let transientErrors = 0;
@@ -41,7 +50,7 @@
       try {
         const status = await statusRequest();
         transientErrors = 0;
-        const belongsToQueuedAttempt = isNewerThanQueuedBaseline(status, baseline, queuedAt);
+        const belongsToQueuedAttempt = isNewerThanQueuedBaseline(status, baseline, queuedServerAt, sawProcessing);
         if (status.state === 'processing') sawProcessing = true;
         output.textContent = belongsToQueuedAttempt
           ? statusText(status)
@@ -98,10 +107,10 @@
       try {
         baseline = { ...(await statusRequest()), unavailable: false };
       } catch (error) {
+        if (!isRetriableStatusFailure(error)) throw error;
         preflightWarning = ` Status preflight was unavailable (${error.message}), so server-side replay protection will remain authoritative.`;
       }
 
-      const queuedAt = Date.now();
       const response = await fetch('/api/run-due-turn-now-background', {
         method: 'POST',
         headers: { authorization, 'content-type': 'application/json' },
@@ -111,9 +120,10 @@
         const text = await response.text();
         throw new Error(`Background turn could not be queued (HTTP ${response.status}${text ? ` · ${text.slice(0, 300)}` : ''})`);
       }
+      const queuedServerAt = Date.parse(response.headers.get('date') || '') || null;
       button.textContent = 'Turn running in background';
       if (output) output.textContent = `Production turn queued.${preflightWarning} This page will check the canonical run ledger every few seconds; no long browser connection is being held open.`;
-      await pollUntilSettled(output, button, baseline, queuedAt);
+      await pollUntilSettled(output, button, baseline, queuedServerAt);
     } catch (error) {
       if (output) output.textContent = error.message;
       button.disabled = false;
