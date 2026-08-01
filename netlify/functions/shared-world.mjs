@@ -287,12 +287,11 @@ export default async (request) => {
         matchday: turn.matchday,
         suppliedKey: body.request_key || body.client_request_id
       });
-      const rows = await userSupabase('/rest/v1/rpc/submit_manager_world_command', token, {
+      const rows = await serverSupabase('/rest/v1/rpc/submit_manager_world_command_for_user', {
         method: 'POST',
         body: JSON.stringify({
+          p_user_id: current.user.id,
           p_world_id: world.world_id,
-          p_manager_id: current.manager.id,
-          p_club_id: current.appointment.club_id,
           p_command_type: type,
           p_command_payload: { ...commandPayload, client_request_id: requestKey },
           p_effective_season_id: turn.season_id,
