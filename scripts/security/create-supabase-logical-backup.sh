@@ -6,21 +6,34 @@ set -euo pipefail
 expected_project_ref="edarvglbzuefveqcjpdt"
 source_project_ref=""
 
-if [[ "$SUPABASE_DB_URL" =~ ^postgres(ql)?://postgres\.([a-z0-9]+): ]]; then
-  source_project_ref="${BASH_REMATCH[2]}"
-elif [[ "$SUPABASE_DB_URL" =~ @db\.([a-z0-9]+)\.supabase\.co(:|/) ]]; then
-  source_project_ref="${BASH_REMATCH[1]}"
+if [[ "$SUPABASE_DB_URL" == *\?* || "$SUPABASE_DB_URL" == *\#* ]]; then
+  echo "SUPABASE_DB_URL must not contain query parameters or fragments." >&2
+  exit 1
 fi
 
-if [ -z "$source_project_ref" ]; then
-  echo "Could not determine the Supabase project ref from SUPABASE_DB_URL." >&2
-  echo "Use the Supabase Session pooler or direct database connection string." >&2
+if [[ "$SUPABASE_DB_URL" =~ ^postgres(ql)?://postgres\.([a-z0-9]+):[^@]+@([^/:]+)(:[0-9]+)?/postgres$ ]]; then
+  source_project_ref="${BASH_REMATCH[2]}"
+  source_host="${BASH_REMATCH[3]}"
+
+  if [[ ! "$source_host" =~ ^[a-z0-9-]+\.pooler\.supabase\.com$ ]]; then
+    echo "Refusing non-Supabase pooler host: $source_host" >&2
+    exit 1
+  fi
+elif [[ "$SUPABASE_DB_URL" =~ ^postgres(ql)?://postgres:[^@]+@db\.([a-z0-9]+)\.supabase\.co(:[0-9]+)?/postgres$ ]]; then
+  source_project_ref="${BASH_REMATCH[2]}"
+else
+  echo "Could not validate SUPABASE_DB_URL as a Supabase Session pooler or direct database URL." >&2
   exit 1
 fi
 
 if [ "$source_project_ref" != "$expected_project_ref" ]; then
   echo "Refusing to back up Supabase project $source_project_ref; expected $expected_project_ref." >&2
   exit 1
+fi
+
+if [ "${1:-}" = "--validate-only" ]; then
+  printf 'Validated Supabase database URL for project %s.\n' "$source_project_ref"
+  exit 0
 fi
 
 output_dir="${1:-backup}"
