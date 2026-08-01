@@ -25,10 +25,10 @@
 
   function isNewerThanQueuedBaseline(status, baseline, queuedAt) {
     if (status.state === 'processing') return true;
-    if (status.run?.id && status.run.id !== baseline.run?.id) return true;
-    if (status.operation_id && status.operation_id !== baseline.operation_id) return true;
+    if (!baseline.unavailable && status.run?.id && status.run.id !== baseline.run?.id) return true;
+    if (!baseline.unavailable && status.operation_id && status.operation_id !== baseline.operation_id) return true;
     if (status.operation_created_at && new Date(status.operation_created_at).getTime() >= queuedAt) return true;
-    if (status.checksum && baseline.checksum && status.checksum !== baseline.checksum) return true;
+    if (!baseline.unavailable && status.checksum && baseline.checksum && status.checksum !== baseline.checksum) return true;
     return false;
   }
 
@@ -93,7 +93,14 @@
 
     try {
       if (!authorization) throw new Error('Portal session is not ready');
-      const baseline = await statusRequest();
+      let baseline = { unavailable: true, run: null, operation_id: null, checksum: null };
+      let preflightWarning = '';
+      try {
+        baseline = { ...(await statusRequest()), unavailable: false };
+      } catch (error) {
+        preflightWarning = ` Status preflight was unavailable (${error.message}), so server-side replay protection will remain authoritative.`;
+      }
+
       const queuedAt = Date.now();
       const response = await fetch('/api/run-due-turn-now-background', {
         method: 'POST',
@@ -105,7 +112,7 @@
         throw new Error(`Background turn could not be queued (HTTP ${response.status}${text ? ` · ${text.slice(0, 300)}` : ''})`);
       }
       button.textContent = 'Turn running in background';
-      if (output) output.textContent = 'Production turn queued. This page will check the canonical run ledger every few seconds; no long browser connection is being held open.';
+      if (output) output.textContent = `Production turn queued.${preflightWarning} This page will check the canonical run ledger every few seconds; no long browser connection is being held open.`;
       await pollUntilSettled(output, button, baseline, queuedAt);
     } catch (error) {
       if (output) output.textContent = error.message;
