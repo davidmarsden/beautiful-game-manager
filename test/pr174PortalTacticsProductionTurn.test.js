@@ -30,3 +30,13 @@ test('the exact failed portal width value is accepted by the adapter', async () 
   assert.match(source, /width === 'narrow' \? 'central' : width/);
   assert.doesNotMatch(source, /throw new Error\(`Unsupported human tactic: width=/);
 });
+
+test('post-turn calendar alignment does not assign one deadline to two matchdays', async () => {
+  const source = await read('src/world/sharedWorldScheduler.js');
+  const executeStart = source.indexOf('export function executeScheduledTurn');
+  const executeBody = source.slice(executeStart);
+  const postAdvanceAlignment = executeBody.match(/if \(advance\.world\.matchday_cycle && plan\.next_turn_at\) alignCanonicalFixtureKickoffs\(advance\.world, \{([^}]*)\}\);/s)?.[1] || '';
+
+  assert.match(postAdvanceAlignment, /currentTurnAt: plan\.next_turn_at/);
+  assert.doesNotMatch(postAdvanceAlignment, /nextTurnAt: plan\.next_turn_at/);
+});
