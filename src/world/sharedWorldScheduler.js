@@ -24,6 +24,20 @@ function configuredTurnCalendar(world, override = null) {
   return Object.freeze({ weekdays_utc: [...weekdaysUtc], hour_utc: Number(hourUtc) });
 }
 
+function normalizePortalTactics(tactics = {}) {
+  const normalized = { ...(tactics || {}) };
+  const width = text(normalized.width);
+  if (width) {
+    normalized.route_to_goal = width === 'narrow' ? 'central' : width;
+    delete normalized.width;
+  }
+  // The current constitutional match engine has no defensive-line dial yet.
+  // Preserve the manager submission in storage, but do not pass this portal-only
+  // field into the strict engine tactic validator until that mechanic exists.
+  delete normalized.defensive_line;
+  return normalized;
+}
+
 export function currentTurnIdentity(world) {
   return Object.freeze({ world_id: world.world_id, season_id: world.squad_cycle.season_id, matchday: world.matchday_cycle?.current_matchday || 1 });
 }
@@ -78,6 +92,7 @@ function fixtureForClubTurn(world, clubId, matchday) {
 
 function lockInstruction(world, submission, lockAt) {
   const instruction = clone(submission.instruction || {});
+  instruction.tactics = normalizePortalTactics(instruction.tactics);
   const playerIds = [...(instruction.starting_xi || []), ...(instruction.bench || [])];
 
   // Formation/tactics-only submissions contain no player eligibility decision.
@@ -144,7 +159,7 @@ export function executeScheduledTurn(worldInput, plan) {
   if (world.matchday_cycle) alignCanonicalFixtureKickoffs(world, { currentMatchday: current.matchday, currentTurnAt: plan.scheduled_for, nextTurnAt: plan.next_turn_at, weekdaysUtc: cadence.weekdays_utc, hourUtc: cadence.hour_utc });
   const advance = advancePersistentMatchday(world, { instructionsByClub: plan.instructions_by_club, instructionSourcesByClub: plan.instruction_sources_by_club });
   if (!advance.accepted) throw new Error('Scheduled matchday advance was rejected');
-  if (advance.world.matchday_cycle && plan.next_turn_at) alignCanonicalFixtureKickoffs(advance.world, { currentMatchday: advance.world.matchday_cycle.current_matchday, currentTurnAt: plan.next_turn_at, weekdaysUtc: cadence.weekdays_utc, hourUtc: cadence.hour_utc });
+  if (advance.world.matchday_cycle && plan.next_turn_at) alignCanonicalFixtureKickoffs(advance.world, { currentMatchday: advance.world.matchday_cycle.current_matchday, currentTurnAt: plan.next_turn_at, nextTurnAt: plan.next_turn_at, weekdaysUtc: cadence.weekdays_utc, hourUtc: cadence.hour_utc });
   advance.world.shared_turn_history ||= [];
   advance.world.shared_turn_history.push({ version: SHARED_WORLD_SCHEDULER_VERSION, world_id: plan.world_id, season_id: plan.season_id, matchday: plan.matchday, scheduled_for: plan.scheduled_for, next_turn_at: plan.next_turn_at, turn_calendar: clone(cadence), appointed_club_ids: [...plan.appointed_club_ids], submitted_club_ids: [...plan.submitted_club_ids], fallback_club_ids: [...plan.fallback_club_ids], instruction_sources_by_club: clone(plan.instruction_sources_by_club), selected_submissions: clone(plan.selected_submissions), submission_count: plan.submission_count, fallback_count: plan.fallback_count, checkpoint_id: advance.checkpoint.checkpoint_id });
   const savedWorld = savePersistentWorld(advance.world);
