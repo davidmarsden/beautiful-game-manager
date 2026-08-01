@@ -3,7 +3,9 @@
   functions = "netlify/functions"
 
 [build.environment]
-  SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL,SUPABASE_ANON_KEY,SUPABASE_SERVICE_ROLE_KEY"
+  # URL and publishable anon key are intentionally emitted by auth-config.js.
+  # The service-role key must never be excluded from Netlify secret scanning.
+  SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL,SUPABASE_ANON_KEY"
 
 [functions."lock-fixtures"]
   schedule = "*/5 * * * *"
