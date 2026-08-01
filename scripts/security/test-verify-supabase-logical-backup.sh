@@ -46,4 +46,22 @@ if bash scripts/security/verify-supabase-logical-backup.sh "$secret"; then
   exit 1
 fi
 
+SUPABASE_DB_URL='postgresql://postgres.edarvglbzuefveqcjpdt:secret@aws-0-eu-west-2.pooler.supabase.com:5432/postgres' \
+  bash scripts/security/create-supabase-logical-backup.sh --validate-only
+
+SUPABASE_DB_URL='postgresql://postgres:secret@db.edarvglbzuefveqcjpdt.supabase.co:5432/postgres' \
+  bash scripts/security/create-supabase-logical-backup.sh --validate-only
+
+if SUPABASE_DB_URL='postgresql://postgres.edarvglbzuefveqcjpdt:secret@evil.example:5432/postgres' \
+  bash scripts/security/create-supabase-logical-backup.sh --validate-only; then
+  echo 'Expected non-Supabase pooler host validation to fail' >&2
+  exit 1
+fi
+
+if SUPABASE_DB_URL='postgresql://postgres.edarvglbzuefveqcjpdt:secret@aws-0-eu-west-2.pooler.supabase.com:5432/postgres?host=evil.example' \
+  bash scripts/security/create-supabase-logical-backup.sh --validate-only; then
+  echo 'Expected connection parameter override validation to fail' >&2
+  exit 1
+fi
+
 printf 'Backup verifier regression tests passed.\n'
