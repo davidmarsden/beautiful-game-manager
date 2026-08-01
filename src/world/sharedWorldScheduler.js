@@ -38,6 +38,14 @@ function normalizePortalTactics(tactics = {}) {
   return normalized;
 }
 
+function normalizeExecutionInstructions(instructionsByClub = {}) {
+  return Object.fromEntries(Object.entries(instructionsByClub || {}).map(([clubId, instruction]) => {
+    const normalized = clone(instruction || {});
+    normalized.tactics = normalizePortalTactics(normalized.tactics);
+    return [clubId, normalized];
+  }));
+}
+
 export function currentTurnIdentity(world) {
   return Object.freeze({ world_id: world.world_id, season_id: world.squad_cycle.season_id, matchday: world.matchday_cycle?.current_matchday || 1 });
 }
@@ -155,9 +163,10 @@ export function executeScheduledTurn(worldInput, plan) {
   const current = currentTurnIdentity(world);
   if (plan.world_id !== current.world_id || plan.season_id !== current.season_id || Number(plan.matchday) !== current.matchday) throw new Error('Scheduled turn plan is stale');
   const cadence = plan.turn_calendar || configuredTurnCalendar(world);
+  const executionInstructions = normalizeExecutionInstructions(plan.instructions_by_club);
   repairCompletedFixtureKickoffs(world);
   if (world.matchday_cycle) alignCanonicalFixtureKickoffs(world, { currentMatchday: current.matchday, currentTurnAt: plan.scheduled_for, nextTurnAt: plan.next_turn_at, weekdaysUtc: cadence.weekdays_utc, hourUtc: cadence.hour_utc });
-  const advance = advancePersistentMatchday(world, { instructionsByClub: plan.instructions_by_club, instructionSourcesByClub: plan.instruction_sources_by_club });
+  const advance = advancePersistentMatchday(world, { instructionsByClub: executionInstructions, instructionSourcesByClub: plan.instruction_sources_by_club });
   if (!advance.accepted) throw new Error('Scheduled matchday advance was rejected');
   if (advance.world.matchday_cycle && plan.next_turn_at) alignCanonicalFixtureKickoffs(advance.world, { currentMatchday: advance.world.matchday_cycle.current_matchday, currentTurnAt: plan.next_turn_at, weekdaysUtc: cadence.weekdays_utc, hourUtc: cadence.hour_utc });
   advance.world.shared_turn_history ||= [];
