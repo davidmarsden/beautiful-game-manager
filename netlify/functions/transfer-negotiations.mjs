@@ -3,6 +3,7 @@ import { loadPersistentWorld } from '../../src/world/persistentSeasonLoop.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -13,13 +14,14 @@ const bearerToken = (request) => {
   const header = request.headers.get('authorization') || '';
   return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
 };
+const isJwt = (value) => String(value || '').split('.').length === 3;
 
-async function supabase(path, token, options = {}) {
+async function requestSupabase(path, { apiKey, bearer, ...options } = {}) {
   const response = await fetch(`${SUPABASE_URL}${path}`, {
     ...options,
     headers: {
-      apikey: SUPABASE_ANON_KEY,
-      authorization: `Bearer ${token}`,
+      apikey: apiKey,
+      ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
       accept: 'application/json',
       'content-type': 'application/json',
       prefer: options.prefer || 'return=representation',
@@ -31,19 +33,30 @@ async function supabase(path, token, options = {}) {
   return body;
 }
 
+const userSupabase = (path, token, options = {}) => requestSupabase(path, {
+  ...options,
+  apiKey: SUPABASE_ANON_KEY,
+  bearer: token
+});
+const serverSupabase = (path, options = {}) => requestSupabase(path, {
+  ...options,
+  apiKey: SUPABASE_SERVICE_ROLE_KEY,
+  ...(isJwt(SUPABASE_SERVICE_ROLE_KEY) ? { bearer: SUPABASE_SERVICE_ROLE_KEY } : {})
+});
+
 async function identity(token) {
   const userResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
     headers: { apikey: SUPABASE_ANON_KEY, authorization: `Bearer ${token}` }
   });
   if (!userResponse.ok) throw new Error('Session is invalid or expired');
   const user = await userResponse.json();
-  const profiles = await supabase(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id&limit=1`, token);
+  const profiles = await userSupabase(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id&limit=1`, token);
   const manager = profiles[0];
   if (!manager) throw new Error('Manager profile has not been created yet');
-  const appointments = await supabase(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=world_id,club_id&limit=1`, token);
+  const appointments = await userSupabase(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=world_id,club_id&limit=1`, token);
   const appointment = appointments[0];
   if (!appointment) throw new Error('No active club appointment');
-  return { manager, appointment };
+  return { user, manager, appointment };
 }
 
 function clubName(world, clubId) {
@@ -105,22 +118,30 @@ function stableResponseKey({ worldId, managerId, proposalId, response }) {
 
 export default async (request) => {
   try {
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return json({ error: 'Supabase is not configured' }, 503);
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured' }, 503);
     const token = bearerToken(request);
     if (!token) return json({ error: 'Authentication required' }, 401);
     const current = await identity(token);
-    const saves = await supabase(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(current.appointment.world_id)}&select=save_envelope,turn_status&limit=1`, token);
+    const saves = await userSupabase(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(current.appointment.world_id)}&select=save_envelope,turn_status&limit=1`, token);
     const stored = saves[0];
     if (!stored) return json({ error: 'The canonical world has not been initialized' }, 409);
     const world = loadPersistentWorld(JSON.stringify(stored.save_envelope));
 
     if (request.method === 'GET') {
       const [offerRows, managedRows] = await Promise.all([
-        supabase('/rest/v1/rpc/get_manager_transfer_inbox', token, {
-          method: 'POST', body: JSON.stringify({ p_world_id: current.appointment.world_id })
+        serverSupabase('/rest/v1/rpc/get_manager_transfer_inbox_for_user', {
+          method: 'POST',
+          body: JSON.stringify({
+            p_user_id: current.user.id,
+            p_world_id: current.appointment.world_id
+          })
         }),
-        supabase('/rest/v1/rpc/get_managed_transfer_clubs', token, {
-          method: 'POST', body: JSON.stringify({ p_world_id: current.appointment.world_id })
+        serverSupabase('/rest/v1/rpc/get_managed_transfer_clubs_for_user', {
+          method: 'POST',
+          body: JSON.stringify({
+            p_user_id: current.user.id,
+            p_world_id: current.appointment.world_id
+          })
         })
       ]);
       const managedClubIds = new Set((Array.isArray(managedRows) ? managedRows : []).map((row) => row.club_id));
@@ -146,9 +167,10 @@ export default async (request) => {
       proposalId,
       response
     });
-    const rows = await supabase('/rest/v1/rpc/submit_manager_transfer_response', token, {
+    const rows = await serverSupabase('/rest/v1/rpc/submit_manager_transfer_response_for_user', {
       method: 'POST',
       body: JSON.stringify({
+        p_user_id: current.user.id,
         p_world_id: current.appointment.world_id,
         p_proposal_id: proposalId,
         p_response: response,
