@@ -24,6 +24,20 @@ function configuredTurnCalendar(world, override = null) {
   return Object.freeze({ weekdays_utc: [...weekdaysUtc], hour_utc: Number(hourUtc) });
 }
 
+function normalizePortalTactics(tactics = {}) {
+  const normalized = { ...(tactics || {}) };
+  const width = text(normalized.width);
+  if (width) {
+    normalized.route_to_goal = width === 'narrow' ? 'central' : width;
+    delete normalized.width;
+  }
+  // The current constitutional match engine has no defensive-line dial yet.
+  // Preserve the manager submission in storage, but do not pass this portal-only
+  // field into the strict engine tactic validator until that mechanic exists.
+  delete normalized.defensive_line;
+  return normalized;
+}
+
 export function currentTurnIdentity(world) {
   return Object.freeze({ world_id: world.world_id, season_id: world.squad_cycle.season_id, matchday: world.matchday_cycle?.current_matchday || 1 });
 }
@@ -78,6 +92,7 @@ function fixtureForClubTurn(world, clubId, matchday) {
 
 function lockInstruction(world, submission, lockAt) {
   const instruction = clone(submission.instruction || {});
+  instruction.tactics = normalizePortalTactics(instruction.tactics);
   const playerIds = [...(instruction.starting_xi || []), ...(instruction.bench || [])];
 
   // Formation/tactics-only submissions contain no player eligibility decision.
