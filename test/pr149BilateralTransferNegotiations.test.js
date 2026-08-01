@@ -38,14 +38,31 @@ test('terminal response closes both sides atomically with audit and inbox outcom
 
 test('negotiation API exposes only the appointed club inbox and a compact managed-club football directory', async () => {
   const api = await read('netlify/functions/transfer-negotiations.mjs');
-  assert.match(api, /get_manager_transfer_inbox/);
-  assert.match(api, /get_managed_transfer_clubs/);
-  assert.match(api, /submit_manager_transfer_response/);
+  assert.match(api, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(api, /serverSupabase\('\/rest\/v1\/rpc\/get_manager_transfer_inbox_for_user'/);
+  assert.match(api, /serverSupabase\('\/rest\/v1\/rpc\/get_managed_transfer_clubs_for_user'/);
+  assert.match(api, /serverSupabase\('\/rest\/v1\/rpc\/submit_manager_transfer_response_for_user'/);
+  assert.match(api, /p_user_id: current\.user\.id/);
   assert.match(api, /const managedClubIds = new Set/);
   assert.match(api, /transferDirectory\(world, current\.appointment\.club_id, managedClubIds\)/);
   assert.match(api, /incoming_offers/);
   assert.match(api, /cache-control': 'no-store'/);
-  assert.doesNotMatch(api, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(api, /userSupabase\('\/rest\/v1\/rpc\/(get_manager_transfer_inbox|get_managed_transfer_clubs|submit_manager_transfer_response)'/);
+});
+
+test('transfer RPC migration removes direct browser execution and grants only service gateways', async () => {
+  const migration = await read('supabase/migrations/20260801_transfer_service_role_gateways.sql');
+  assert.match(migration, /get_managed_transfer_clubs_for_user\(\s*p_user_id uuid,\s*p_world_id text/);
+  assert.match(migration, /get_manager_transfer_inbox_for_user\(\s*p_user_id uuid,\s*p_world_id text/);
+  assert.match(migration, /submit_manager_transfer_response_for_user\(\s*p_user_id uuid/);
+  assert.match(migration, /where profile\.user_id = p_user_id/);
+  assert.match(migration, /set_config\('request\.jwt\.claim\.sub', p_user_id::text, true\)/);
+  assert.match(migration, /revoke all on function public\.get_managed_transfer_clubs\(text\)[\s\S]*authenticated/);
+  assert.match(migration, /revoke all on function public\.get_manager_transfer_inbox\(text\)[\s\S]*authenticated/);
+  assert.match(migration, /revoke all on function public\.submit_manager_transfer_response\(text, uuid, text, text\)[\s\S]*authenticated/);
+  assert.match(migration, /grant execute on function public\.get_managed_transfer_clubs_for_user\(uuid, text\)[\s\S]*to service_role/);
+  assert.match(migration, /grant execute on function public\.get_manager_transfer_inbox_for_user\(uuid, text\)[\s\S]*to service_role/);
+  assert.match(migration, /grant execute on function public\.submit_manager_transfer_response_for_user\(uuid, text, uuid, text, text\)[\s\S]*to service_role/);
 });
 
 test('shared-world command submission enforces transfer authority before writing the ledger', async () => {
