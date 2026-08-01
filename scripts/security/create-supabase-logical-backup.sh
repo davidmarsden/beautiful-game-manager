@@ -3,6 +3,39 @@ set -euo pipefail
 
 : "${SUPABASE_DB_URL:?SUPABASE_DB_URL must be set}"
 
+expected_project_ref="edarvglbzuefveqcjpdt"
+source_project_ref=""
+
+if [[ "$SUPABASE_DB_URL" == *\?* || "$SUPABASE_DB_URL" == *\#* ]]; then
+  echo "SUPABASE_DB_URL must not contain query parameters or fragments." >&2
+  exit 1
+fi
+
+if [[ "$SUPABASE_DB_URL" =~ ^postgres(ql)?://postgres\.([a-z0-9]+):[^@]+@([^/:]+)(:[0-9]+)?/postgres$ ]]; then
+  source_project_ref="${BASH_REMATCH[2]}"
+  source_host="${BASH_REMATCH[3]}"
+
+  if [[ ! "$source_host" =~ ^[a-z0-9-]+\.pooler\.supabase\.com$ ]]; then
+    echo "Refusing non-Supabase pooler host: $source_host" >&2
+    exit 1
+  fi
+elif [[ "$SUPABASE_DB_URL" =~ ^postgres(ql)?://postgres:[^@]+@db\.([a-z0-9]+)\.supabase\.co(:[0-9]+)?/postgres$ ]]; then
+  source_project_ref="${BASH_REMATCH[2]}"
+else
+  echo "Could not validate SUPABASE_DB_URL as a Supabase Session pooler or direct database URL." >&2
+  exit 1
+fi
+
+if [ "$source_project_ref" != "$expected_project_ref" ]; then
+  echo "Refusing to back up Supabase project $source_project_ref; expected $expected_project_ref." >&2
+  exit 1
+fi
+
+if [ "${1:-}" = "--validate-only" ]; then
+  printf 'Validated Supabase database URL for project %s.\n' "$source_project_ref"
+  exit 0
+fi
+
 output_dir="${1:-backup}"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 label="${BACKUP_LABEL:-manual}"
@@ -33,7 +66,7 @@ supabase db dump \
   --exclude "storage.vector_indexes"
 
 cat > "$bundle_dir/manifest.txt" <<EOF
-project_ref=edarvglbzuefveqcjpdt
+project_ref=${source_project_ref}
 created_at_utc=${timestamp}
 label=${label}
 backup_type=supabase_cli_logical
@@ -48,4 +81,4 @@ EOF
   sha256sum roles.sql schema.sql data.sql supabase-cli-version.txt manifest.txt > SHA256SUMS
 )
 
-printf 'Created backup bundle: %s\n' "$bundle_dir"
+printf 'Created backup bundle for project %s: %s\n' "$source_project_ref" "$bundle_dir"

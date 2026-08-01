@@ -24,6 +24,9 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Run backup verifier regression tests
+        run: bash scripts/security/test-verify-supabase-logical-backup.sh
+
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v2
         with:
