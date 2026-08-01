@@ -42,8 +42,15 @@ revoke all on function public.propagate_transfer_response_outcome()
   from public, anon, authenticated;
 grant execute on function public.propagate_transfer_response_outcome() to service_role;
 
-revoke all on function public.rls_auto_enable()
-  from public, anon, authenticated, service_role;
+-- rls_auto_enable() exists in the live project but is absent from the tracked
+-- migration history. Harden it when present without breaking fresh rebuilds.
+do $optional_rls_auto_enable$
+begin
+  if to_regprocedure('public.rls_auto_enable()') is not null then
+    execute 'revoke all on function public.rls_auto_enable() from public, anon, authenticated, service_role';
+  end if;
+end
+$optional_rls_auto_enable$;
 
 -- Fix mutable search_path advisories on deterministic helper functions.
 alter function public.manager_command_subject_key(text, jsonb)
