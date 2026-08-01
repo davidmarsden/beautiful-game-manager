@@ -17,7 +17,7 @@ alter default privileges for role postgres in schema public
 
 -- Restore observed function execute privileges.
 grant execute on function public.current_manager_id()
-  to public, anon, authenticated, service_role;
+  to anon, authenticated, service_role;
 
 grant execute on function public.get_manager_portal_world_fragment(text, text)
   to public, anon, authenticated, service_role;
@@ -31,13 +31,20 @@ grant execute on function public.lock_expired_manager_submissions()
 grant execute on function public.propagate_transfer_response_outcome()
   to public, anon, authenticated, service_role;
 
-grant execute on function public.rls_auto_enable()
-  to public, anon, authenticated, service_role;
+-- rls_auto_enable() is live-only drift and may be absent on a reconstructed
+-- database. Restore its captured grants and configuration only when present.
+do $optional_rls_auto_enable$
+begin
+  if to_regprocedure('public.rls_auto_enable()') is not null then
+    execute 'grant execute on function public.rls_auto_enable() to public, anon, authenticated, service_role';
+    execute 'alter function public.rls_auto_enable() set search_path = pg_catalog';
+  end if;
+end
+$optional_rls_auto_enable$;
 
 -- Restore mutable helper configuration observed before the baseline.
 alter function public.manager_command_subject_key(text, jsonb) reset all;
 alter function public.tbg_canonical_jsonb_text(jsonb) reset all;
-alter function public.rls_auto_enable() set search_path = pg_catalog;
 
 -- Restore broad table privileges observed before the baseline.
 grant all on table public.match_runs to anon, authenticated, service_role;
