@@ -58,11 +58,10 @@ export default async (request) => {
     if (!world) return json({ error: `Canonical world ${worldId} does not exist` }, 404);
 
     const checksum = encodeURIComponent(world.save_checksum);
-    const runs = await service(`/rest/v1/world_turn_runs?world_id=eq.${encodeURIComponent(worldId)}&or=(previous_checksum.eq.${checksum},next_checksum.eq.${checksum})&select=id,season_id,matchday,previous_checksum,next_checksum,status,scheduled_for,completed_at,error_message&order=scheduled_for.desc&limit=8`);
+    const runs = await service(`/rest/v1/world_turn_runs?world_id=eq.${encodeURIComponent(worldId)}&or=(previous_checksum.eq.${checksum},next_checksum.eq.${checksum})&select=id,season_id,matchday,previous_checksum,next_checksum,status,scheduled_for,started_at,completed_at,error_message&order=started_at.desc.nullslast,completed_at.desc.nullslast,id.desc&limit=8`);
     const processing = runs.find((run) => run.status === 'processing' && run.previous_checksum === world.save_checksum) || null;
     const completed = runs.find((run) => run.status === 'complete' && run.next_checksum === world.save_checksum) || null;
     const failed = runs.find((run) => run.status === 'failed' && run.previous_checksum === world.save_checksum) || null;
-    const latest = processing || completed || failed;
 
     const operations = await service(`/rest/v1/world_operation_events?world_id=eq.${encodeURIComponent(worldId)}&operation_type=eq.advance&or=(previous_checksum.eq.${checksum},replacement_checksum.eq.${checksum})&select=operation_id,status,previous_checksum,replacement_checksum,details,created_at&order=created_at.desc&limit=3`);
     const operation = operations[0] || null;
@@ -72,6 +71,14 @@ export default async (request) => {
     if (processing || world.turn_status === 'locking') state = 'processing';
     else if (world.turn_status === 'failed') state = 'failed';
     else if (completed) state = 'complete';
+
+    const latest = state === 'processing'
+      ? processing
+      : state === 'failed'
+        ? failed
+        : state === 'complete'
+          ? completed
+          : null;
 
     return json({
       state,
