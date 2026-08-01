@@ -46,7 +46,7 @@
     let sawProcessing = false;
     let transientErrors = 0;
     while (Date.now() < deadline) {
-      await sleep(3000);
+      await sleep(10000);
       try {
         const status = await statusRequest();
         transientErrors = 0;
@@ -75,7 +75,7 @@
       } catch (error) {
         transientErrors += 1;
         output.textContent = `Background turn is still queued; status check temporarily failed (${error.message}).`;
-        if (transientErrors >= 10) {
+        if (transientErrors >= 6) {
           const reload = document.getElementById('reloadWorldState');
           if (reload) reload.hidden = false;
           return;
@@ -122,7 +122,7 @@
       }
       const queuedServerAt = Date.parse(response.headers.get('date') || '') || null;
       button.textContent = 'Turn running in background';
-      if (output) output.textContent = `Production turn queued.${preflightWarning} This page will check the canonical run ledger every few seconds; no long browser connection is being held open.`;
+      if (output) output.textContent = `Production turn queued.${preflightWarning} This page will check the canonical run ledger every ten seconds; no long browser connection is being held open.`;
       await pollUntilSettled(output, button, baseline, queuedServerAt);
     } catch (error) {
       if (output) output.textContent = error.message;

@@ -19,9 +19,10 @@ test('background recovery polls a lightweight canonical run ledger', async () =>
   const status = await read('netlify/functions/world-turn-status.mjs');
   const client = await read('public/admin-turn-background-recovery.js');
   assert.match(status, /world_turn_runs/);
-  assert.match(status, /status === 'processing'/);
+  assert.match(status, /run\.status === 'processing' && run\.previous_checksum === world\.save_checksum/);
+  assert.match(status, /run\.status === 'failed' && run\.previous_checksum === world\.save_checksum/);
+  assert.match(status, /run\.status === 'complete' && run\.next_checksum === world\.save_checksum/);
   assert.match(status, /world\.turn_status === 'failed'/);
-  assert.match(status, /latest\.next_checksum === world\.save_checksum/);
   assert.match(status, /diagnostics/);
   assert.match(client, /\/api\/world-turn-status/);
   assert.match(client, /failing stage/);
