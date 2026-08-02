@@ -142,10 +142,10 @@ function resolveBench(players) {
       form: playerForm(player)
     }))
     .map((row) => ({ ...row, effective_quality: clamp(row.ability + row.form * 0.4, 1, 100) }))
-    .sort((left, right) => right.effective_quality - left.effective_quality);
+    .sort((left, right) => right.effective_quality - left.effective_quality || left.player_id.localeCompare(right.player_id));
   const usefulDepth = ranked.slice(0, 5);
   return deepFreeze({
-    players: usefulDepth.map((row) => ({ ...row, effective_quality: round(row.effective_quality, 3) })),
+    players: ranked.map((row) => ({ ...row, effective_quality: round(row.effective_quality, 3) })),
     depth_quality: round(average(usefulDepth.map((row) => row.effective_quality)), 3),
     depth_count: usefulDepth.length
   });
