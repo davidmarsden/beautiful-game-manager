@@ -24,11 +24,18 @@ test('archive match centre retains semantic reports and player performances', as
 test('match reveal records manager state against the compact archive', async () => {
   const source = await read('netlify/functions/reveal-match.mjs');
   assert.match(source, /canonical_match_archives/);
-  assert.match(source, /manager_match_views\?on_conflict=manager_id,fixture_id/);
+  assert.match(source, /manager_canonical_match_views\?on_conflict=manager_id,fixture_id/);
   assert.match(source, /const revealedAt = existing\?\.revealed_at \|\| now/);
   assert.doesNotMatch(source, /revealed_at:\s*null/);
   assert.doesNotMatch(source, /canonical_world_saves/);
   assert.doesNotMatch(source, /loadPersistentWorld/);
+});
+
+test('canonical reveal state is keyed to canonical match archives', async () => {
+  const migration = await read('supabase/migrations/20260802_canonical_match_archive_views.sql');
+  assert.match(migration, /create table if not exists public\.manager_canonical_match_views/);
+  assert.match(migration, /references public\.canonical_match_archives\(fixture_id\)/);
+  assert.match(migration, /primary key \(manager_id, fixture_id\)/);
 });
 
 test('canonical save updates refresh an RLS-protected match archive', async () => {
