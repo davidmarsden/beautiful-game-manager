@@ -27,17 +27,21 @@ test('competition UI switches division and opens completed scores in match centr
 
 test('match centre permits authenticated managers to replay any completed fixture in their world', async () => {
   const source = await read('../netlify/functions/match-centre.mjs');
+  assert.match(source, /canonical_match_archives\?fixture_id=eq\./);
+  assert.match(source, /world_id=in\.\(/);
+  assert.match(source, /manager_canonical_match_views\?manager_id=eq\./);
+  assert.match(source, /revealed: Boolean\(reveal\?\.revealed_at\)/);
+  assert.doesNotMatch(source, /\[fixture\.home_club_id, fixture\.away_club_id\]\.includes\(appointment\.club_id\)/);
   assert.doesNotMatch(source, /You do not have access to this fixture/);
-  assert.match(source, /revealed: false/);
-  assert.match(source, /reveal: null/);
-  assert.match(source, /Match reports are available only after full time/);
 });
 
 test('cross-club replay reveal completes for any played fixture in the authenticated world', async () => {
   const source = await read('../netlify/functions/reveal-match.mjs');
-  assert.match(source, /canonicalPlayedFixture\(world, fixtureId\)/);
+  assert.match(source, /canonical_match_archives\?fixture_id=eq\./);
+  assert.match(source, /world_id=in\.\(/);
+  assert.match(source, /manager_canonical_match_views\?on_conflict=manager_id,fixture_id/);
   assert.doesNotMatch(source, /\[fixture\.home_club_id, fixture\.away_club_id\]\.includes\(appointment\.club_id\)/);
   assert.doesNotMatch(source, /You do not have access to this fixture/);
   assert.match(source, /revealed: true/);
-  assert.match(source, /reveal_method: method/);
+  assert.match(source, /reveal_method: rows\[0\]\?\.reveal_method \|\| existing\?\.reveal_method \|\| method/);
 });
