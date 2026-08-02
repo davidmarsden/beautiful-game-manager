@@ -66,6 +66,19 @@ test('superseded provisional substitutions are discarded before lineup applicati
   assert.equal(result.lineups.away.substitutions.filter((event) => event.player_out_id === 'away-11').length, 1);
 });
 
+test('post-reassignment reconciliation drops a generated substitution invalidated by a reassigned second yellow', () => {
+  const result = resolveLineupEvents(generation([
+    { event_id: 'away-yellow-1', minute: 20, side: 'away', type: 'yellow_card', player_id: 'away-10' },
+    { event_id: 'away-yellow-inactive', minute: 65, side: 'away', type: 'yellow_card', player_id: 'away-11' }
+  ]), contract, quality);
+
+  const reassignedCard = result.events.find((event) => event.event_id === 'away-yellow-inactive');
+  assert.equal(reassignedCard?.reassigned_from_player_id, 'away-11');
+  assert.equal(reassignedCard?.player_id, 'away-10');
+  assert.equal(result.lineups.away.final_on_pitch.includes('away-10'), false);
+  assert.equal(result.events.some((event) => event.type === 'substitution' && event.player_out_id === 'away-10'), false);
+});
+
 test('malformed non-provisional substitutions still fail loudly', () => {
   assert.throws(() => resolveLineupEvents(generation([
     {
