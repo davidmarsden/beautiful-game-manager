@@ -66,7 +66,7 @@ function playerPosition(player = {}) {
   );
 }
 
-function canonicalRole(player = {}) {
+export function canonicalRole(player = {}) {
   const position = playerPosition(player);
   for (const [role, values] of Object.entries(POSITION_GROUPS)) {
     if (values.has(position)) return role;
@@ -135,12 +135,17 @@ function average(values) {
 
 function resolveBench(players) {
   const ranked = players
-    .map((player) => ({ player_id: String(player.tbg_player_id || player.id || ''), ability: playerAbility(player), form: playerForm(player) }))
+    .map((player) => ({
+      player_id: String(player.tbg_player_id || player.id || ''),
+      actual_role: canonicalRole(player),
+      ability: playerAbility(player),
+      form: playerForm(player)
+    }))
     .map((row) => ({ ...row, effective_quality: clamp(row.ability + row.form * 0.4, 1, 100) }))
-    .sort((left, right) => right.effective_quality - left.effective_quality);
+    .sort((left, right) => right.effective_quality - left.effective_quality || left.player_id.localeCompare(right.player_id));
   const usefulDepth = ranked.slice(0, 5);
   return deepFreeze({
-    players: usefulDepth.map((row) => ({ ...row, effective_quality: round(row.effective_quality, 3) })),
+    players: ranked.map((row) => ({ ...row, effective_quality: round(row.effective_quality, 3) })),
     depth_quality: round(average(usefulDepth.map((row) => row.effective_quality)), 3),
     depth_count: usefulDepth.length
   });

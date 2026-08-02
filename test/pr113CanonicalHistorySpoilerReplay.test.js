@@ -134,7 +134,8 @@ test('canonical event type is normalized for replay scoring and full time', asyn
   const endpoint = await source('netlify/functions/match-centre.mjs');
   const client = await source('public/phase2d4.js');
   assert.match(endpoint, /function eventType\(event\)/);
-  assert.match(endpoint, /event_type: eventType\(event\)/);
+  assert.match(endpoint, /const normalizedType = eventType\(event\)/);
+  assert.match(endpoint, /event_type: normalizedType/);
   assert.match(client, /normalType\(event\.event_type\) === 'goal'/);
   assert.match(client, /normalType\(event\.event_type\) === 'full_time'/);
 });

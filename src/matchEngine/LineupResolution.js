@@ -4,6 +4,22 @@ const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, v
 
 const MAXIMUM_SUBSTITUTIONS = 5;
 const EVENT_PRIORITY = Object.freeze({ injury: 9, red_card: 8, yellow_card: 7, substitution: 6, goal: 5, penalty: 4, foul: 3, set_piece: 2, big_chance: 1, shot: 0 });
+const ROLE_UNIT = Object.freeze({
+  gk: 'goalkeeping', cb: 'defence', fb: 'defence', wing_back: 'defence',
+  dm: 'midfield', cm: 'midfield', am: 'midfield', wide_mid: 'midfield',
+  wing: 'attack', st: 'attack'
+});
+const ROLE_ADJACENT = Object.freeze({
+  cb: new Set(['fb', 'wing_back', 'dm']),
+  fb: new Set(['cb', 'wing_back', 'wide_mid']),
+  wing_back: new Set(['fb', 'wide_mid', 'wing']),
+  dm: new Set(['cb', 'cm']),
+  cm: new Set(['dm', 'am', 'wide_mid']),
+  am: new Set(['cm', 'wing', 'st']),
+  wide_mid: new Set(['fb', 'wing_back', 'cm', 'wing']),
+  wing: new Set(['wide_mid', 'am', 'st', 'wing_back']),
+  st: new Set(['am', 'wing'])
+});
 
 function deepFreeze(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
@@ -20,14 +36,42 @@ function sideInputs(side, contract = {}, quality = {}) {
   const starters = (quality?.[side]?.starters || []).map((player) => ({
     player_id: text(player.player_id),
     required_role: player.required_role || null,
+    actual_role: player.actual_role || player.required_role || 'unknown',
     effective_quality: number(player.effective_quality, 50)
   })).filter((player) => player.player_id);
-  const benchQuality = new Map((quality?.[side]?.bench?.players || []).map((player) => [text(player.player_id), number(player.effective_quality, 50)]));
-  const bench = (contract?.teams?.[side]?.bench || []).map((playerId) => ({
-    player_id: text(playerId),
-    effective_quality: benchQuality.get(text(playerId)) ?? 50
-  })).filter((player) => player.player_id);
+  const benchQuality = new Map((quality?.[side]?.bench?.players || []).map((player) => [text(player.player_id), player]));
+  const bench = (contract?.teams?.[side]?.bench || []).map((playerId) => {
+    const qualityRow = benchQuality.get(text(playerId)) || {};
+    return {
+      player_id: text(playerId),
+      actual_role: qualityRow.actual_role || 'unknown',
+      effective_quality: number(qualityRow.effective_quality, 50)
+    };
+  }).filter((player) => player.player_id);
   return { starters, bench };
+}
+
+function replacementSuitability(actualRole, requiredRole) {
+  const actual = actualRole || 'unknown';
+  const required = requiredRole || 'unknown';
+  if (required === 'gk') return actual === 'gk' ? 5 : -1;
+  if (actual === 'gk') return -1;
+  if (actual === required) return 5;
+  if (ROLE_ADJACENT[required]?.has(actual) || ROLE_ADJACENT[actual]?.has(required)) return 4;
+  if (ROLE_UNIT[required] && ROLE_UNIT[required] === ROLE_UNIT[actual]) return 3;
+  if (actual === 'unknown') return 2;
+  return 1;
+}
+
+function takeCompatibleReplacement(unusedBench, requiredRole) {
+  const ranked = unusedBench
+    .map((player, index) => ({ player, index, suitability: replacementSuitability(player.actual_role, requiredRole) }))
+    .filter((row) => row.suitability >= 0)
+    .sort((left, right) => right.suitability - left.suitability || right.player.effective_quality - left.player.effective_quality || left.player.player_id.localeCompare(right.player.player_id));
+  const selected = ranked[0];
+  if (!selected) return null;
+  unusedBench.splice(selected.index, 1);
+  return selected.player;
 }
 
 function substitutionEvent(side, index, minute, playerOutId, playerInId, reason, sourceEventId = null) {
@@ -82,7 +126,8 @@ function buildSideSubstitutions(side, baseEvents, contract, quality) {
     if (substitutions.length >= MAXIMUM_SUBSTITUTIONS) break;
     const playerOutId = text(injury.player_id);
     if (!active.has(playerOutId)) continue;
-    const replacement = unusedBench.shift();
+    const playerOut = starters.find((player) => player.player_id === playerOutId);
+    const replacement = takeCompatibleReplacement(unusedBench, playerOut?.required_role);
     if (!replacement) continue;
     active.delete(playerOutId);
     active.add(replacement.player_id);
@@ -97,9 +142,16 @@ function buildSideSubstitutions(side, baseEvents, contract, quality) {
     const candidates = starters
       .filter((player) => active.has(player.player_id) && player.required_role !== 'gk')
       .sort((left, right) => left.effective_quality - right.effective_quality || left.player_id.localeCompare(right.player_id));
-    const playerOut = candidates[0];
-    if (!playerOut) break;
-    const replacement = unusedBench.shift();
+    let playerOut = null;
+    let replacement = null;
+    for (const candidate of candidates) {
+      replacement = takeCompatibleReplacement(unusedBench, candidate.required_role);
+      if (replacement) {
+        playerOut = candidate;
+        break;
+      }
+    }
+    if (!playerOut || !replacement) break;
     active.delete(playerOut.player_id);
     active.add(replacement.player_id);
     index += 1;
@@ -159,7 +211,7 @@ function applyLineupTimeline(side, events, initial, bench) {
 function reassignInactiveActors(events, lineupBySide) {
   const active = { home: new Set(lineupBySide.home.starting_xi), away: new Set(lineupBySide.away.starting_xi) };
   const yellows = { home: new Map(), away: new Map() };
-  const replacement = (side) => [...active[side]][0] || null;
+  const replacement = (side) => [...active[side]].find((playerId) => playerId) || null;
   return orderEvents(events.map((event) => ({ ...event }))).map((event) => {
     const side = event.side;
     if (!active[side]) return event;
