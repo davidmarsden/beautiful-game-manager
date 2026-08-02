@@ -58,12 +58,14 @@ test('portal projection exposes full canonical schedule and complete standings f
   assert.deepEqual(madrid.form, ['W']);
 });
 
-test('canonical match centre reads persisted world rather than legacy fixture tables', async () => {
+test('canonical match centre reads the compact persisted archive rather than legacy fixture tables or the full world save', async () => {
   const source = await readFile(new URL('../netlify/functions/match-centre.mjs', import.meta.url), 'utf8');
-  assert.match(source, /canonical_world_saves/);
-  assert.match(source, /loadPersistentWorld/);
-  assert.match(source, /canonicalFixture\(world, fixtureId\)/);
+  assert.match(source, /canonical_match_archives/);
+  assert.match(source, /archive_payload/);
+  assert.match(source, /const result = archive\.result \|\| \{\}/);
   assert.match(source, /result\.events/);
+  assert.doesNotMatch(source, /canonical_world_saves/);
+  assert.doesNotMatch(source, /loadPersistentWorld/);
   assert.doesNotMatch(source, /\/rest\/v1\/fixtures\?id=eq\./);
   assert.doesNotMatch(source, /TBG_WORLD_URL|WORLD_URL/);
 });
