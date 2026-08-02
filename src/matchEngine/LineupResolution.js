@@ -175,6 +175,52 @@ function removeActivePlayer(active, removed, minutes, playerId, minute) {
   minutes.set(playerId, row);
 }
 
+function reconcileGeneratedSubstitutions(events, lineupInputs) {
+  const state = Object.fromEntries(['home', 'away'].map((side) => [side, {
+    active: new Set(lineupInputs[side].initial),
+    availableBench: new Set(lineupInputs[side].bench),
+    usedPlayers: new Set(lineupInputs[side].initial),
+    yellows: new Map()
+  }]));
+  const reconciled = [];
+
+  for (const event of orderEvents(events.map((row) => ({ ...row })))) {
+    const sideState = state[event.side];
+    if (!sideState) {
+      reconciled.push(event);
+      continue;
+    }
+
+    if (event.type === 'substitution') {
+      const outId = text(event.player_out_id);
+      const inId = text(event.player_in_id);
+      const feasible = sideState.active.has(outId)
+        && sideState.availableBench.has(inId)
+        && !sideState.usedPlayers.has(inId);
+      if (!feasible && event.provisional) continue;
+      reconciled.push(event);
+      if (feasible) {
+        sideState.active.delete(outId);
+        sideState.active.add(inId);
+        sideState.availableBench.delete(inId);
+        sideState.usedPlayers.add(inId);
+      }
+      continue;
+    }
+
+    reconciled.push(event);
+    if (event.type === 'yellow_card' && event.player_id) {
+      const playerId = text(event.player_id);
+      const count = (sideState.yellows.get(playerId) || 0) + 1;
+      sideState.yellows.set(playerId, count);
+      if (count >= 2) sideState.active.delete(playerId);
+    }
+    if (event.type === 'red_card' && event.player_id) sideState.active.delete(text(event.player_id));
+  }
+
+  return reconciled;
+}
+
 function applyLineupTimeline(side, events, initial, bench) {
   const active = new Set(initial);
   const availableBench = new Set(bench);
@@ -282,7 +328,10 @@ export function resolveLineupEvents(eventGeneration, contract = {}, quality = {}
   if (!contract?.teams || !quality?.home || !quality?.away) return deepFreeze({ events: orderEvents(baseEvents), lineups: null });
   const home = buildSideSubstitutions('home', baseEvents, contract, quality);
   const away = buildSideSubstitutions('away', baseEvents, contract, quality);
-  const combined = orderEvents([...baseEvents, ...home.substitutions, ...away.substitutions]);
+  const combined = reconcileGeneratedSubstitutions(
+    [...baseEvents, ...home.substitutions, ...away.substitutions],
+    { home, away }
+  );
   const preliminary = {
     home: applyLineupTimeline('home', combined, home.initial, home.bench),
     away: applyLineupTimeline('away', combined, away.initial, away.bench)
