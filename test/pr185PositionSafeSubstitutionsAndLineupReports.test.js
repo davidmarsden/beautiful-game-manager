@@ -59,6 +59,18 @@ test('goalkeeper injuries use a goalkeeper replacement when one is available', (
   assert.equal(replacement.player_in_id, 'home-bench-gk');
 });
 
+test('a dismissal at the injury-substitution minute cancels the invalid substitution', () => {
+  const result = resolveLineupEvents({
+    provisional_event_stream: [
+      { event_id: 'away-cm-injury', minute: 69, side: 'away', type: 'injury', player_id: 'away-cm1' },
+      { event_id: 'away-cm-red', minute: 70, side: 'away', type: 'red_card', player_id: 'away-cm1' }
+    ]
+  }, contract(), quality());
+  const invalid = result.events.find((event) => event.type === 'substitution' && event.reason === 'injury' && event.player_out_id === 'away-cm1');
+  assert.equal(invalid, undefined);
+  assert.equal(result.lineups.away.removed_players.includes('away-cm1'), true);
+});
+
 test('match archive projection exposes substitution identities and lineup minutes', async () => {
   const endpoint = await read('netlify/functions/match-centre.mjs');
   assert.match(endpoint, /event\.player_in_id/);
