@@ -32,6 +32,8 @@ async function service(path, options = {}) {
 const prettyId = (value) => text(value).replace(/^tbg[-_:]?/i, '').replace(/[-_:]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) || 'Unknown player';
 const playerIdOf = (row) => text(typeof row === 'string' ? row : row?.player_id || row?.tbg_player_id || row?.id);
 const playerDisplayName = (row) => text(typeof row === 'object' ? row?.player_name || row?.display_name || row?.canonical_name || row?.name : '');
+const playerInId = (event) => text(event.player_in_id || event.player_on_id || event.in_player_id || event.replacement_player_id || event.payload?.player_in_id || event.payload?.player_on_id || event.payload?.in_player_id || event.payload?.replacement_player_id);
+const playerOutId = (event) => text(event.player_out_id || event.player_off_id || event.out_player_id || event.replaced_player_id || event.payload?.player_out_id || event.payload?.player_off_id || event.payload?.out_player_id || event.payload?.replaced_player_id);
 
 function playerLookup(world, result, submissions = []) {
   const lookup = new Map();
@@ -47,8 +49,8 @@ function playerLookup(world, result, submissions = []) {
   for (const event of result?.events || []) {
     remember(event.player_id || event.playerId || event.actor_id || event.payload?.player_id, event.player_name || event.payload?.player_name);
     remember(event.assist_player_id || event.payload?.assist_player_id, event.assist_player_name || event.payload?.assist_player_name);
-    remember(event.player_on_id || event.in_player_id || event.replacement_player_id || event.payload?.player_on_id || event.payload?.in_player_id || event.payload?.replacement_player_id, event.player_on_name || event.in_player_name || event.replacement_player_name || event.payload?.player_on_name || event.payload?.in_player_name || event.payload?.replacement_player_name);
-    remember(event.player_off_id || event.out_player_id || event.replaced_player_id || event.payload?.player_off_id || event.payload?.out_player_id || event.payload?.replaced_player_id, event.player_off_name || event.out_player_name || event.replaced_player_name || event.payload?.player_off_name || event.payload?.out_player_name || event.payload?.replaced_player_name);
+    remember(playerInId(event), event.player_in_name || event.player_on_name || event.in_player_name || event.replacement_player_name || event.payload?.player_in_name || event.payload?.player_on_name || event.payload?.in_player_name || event.payload?.replacement_player_name);
+    remember(playerOutId(event), event.player_out_name || event.player_off_name || event.out_player_name || event.replaced_player_name || event.payload?.player_out_name || event.payload?.player_off_name || event.payload?.out_player_name || event.payload?.replaced_player_name);
   }
   return lookup;
 }
@@ -91,19 +93,30 @@ const eventPlayerId = (event) => text(event.player_id || event.playerId || event
 const assistPlayerId = (event) => text(event.assist_player_id || event.assister_id || event.payload?.assist_player_id);
 
 function decorateEvent(world, lookup, event) {
-  const playerId = eventPlayerId(event);
+  const normalizedType = eventType(event);
+  const primaryId = eventPlayerId(event);
   const assistId = assistPlayerId(event);
-  const playerName = resolvePlayerName({ world, lookup, event, playerId });
+  const inId = playerInId(event);
+  const outId = playerOutId(event);
+  const inName = inId ? resolvePlayerName({ world, lookup, playerId: inId }) : null;
+  const outName = outId ? resolvePlayerName({ world, lookup, playerId: outId }) : null;
+  const playerName = normalizedType === 'substitution'
+    ? outName || inName || 'Unknown player'
+    : resolvePlayerName({ world, lookup, event, playerId: primaryId });
   const commentary = event.commentary || event.description || event.payload?.commentary || null;
   const resolvedCommentary = commentary ? resolveCommentaryPlayerIds(world, lookup, commentary) : null;
   return {
     ...event,
-    event_type: eventType(event),
+    event_type: normalizedType,
     ...(resolvedCommentary ? { commentary: playerName !== 'Unknown player' ? resolvedCommentary.replace(/^A player\b/i, playerName) : resolvedCommentary } : {}),
-    player_id: playerId || null,
+    player_id: primaryId || null,
     player_name: playerName,
     assist_player_id: assistId || null,
-    assist_player_name: assistId ? resolvePlayerName({ world, lookup, playerId: assistId }) : text(event.assist_player_name || event.payload?.assist_player_name) || null
+    assist_player_name: assistId ? resolvePlayerName({ world, lookup, playerId: assistId }) : text(event.assist_player_name || event.payload?.assist_player_name) || null,
+    player_in_id: inId || null,
+    player_in_name: inName,
+    player_out_id: outId || null,
+    player_out_name: outName
   };
 }
 
@@ -136,6 +149,10 @@ function performanceRows(world, lookup, result, events, side, clubId) {
   const explicit = new Map(rawRatingRows(result, side).map((row) => [playerIdOf(row), row]));
   const ids = new Set([...appearancesById.keys(), ...explicit.keys()]);
   for (const event of events) if (event.side === side && event.player_id) ids.add(event.player_id);
+  for (const event of events) if (event.side === side && event.event_type === 'substitution') {
+    if (event.player_in_id) ids.add(event.player_in_id);
+    if (event.player_out_id) ids.add(event.player_out_id);
+  }
   return [...ids].map((id) => {
     const raw = explicit.get(id) || {};
     const playerEvents = events.filter((event) => event.player_id === id);
@@ -164,11 +181,25 @@ function performanceRows(world, lookup, result, events, side, clubId) {
   }).sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1) || a.player_name.localeCompare(b.player_name));
 }
 
-function decorateSubmission(world, lookup, submission, performancesById) {
+function substitutionTimeline(events, side, playerId) {
+  const on = events.find((event) => event.side === side && event.event_type === 'substitution' && event.player_in_id === playerId);
+  const off = events.find((event) => event.side === side && event.event_type === 'substitution' && event.player_out_id === playerId);
+  return {
+    on_minute: on ? number(on.minute, 0) : null,
+    off_minute: off ? number(off.minute, 0) : null
+  };
+}
+
+function decorateSubmission(world, lookup, submission, performancesById, events, side) {
   const instruction = submission.instruction || submission.instructions || {};
   const decorate = (row) => {
     const id = playerIdOf(row);
-    return { id, name: resolvePlayerName({ world, lookup, playerId: id, row }), performance: performancesById.get(id) || null };
+    return {
+      id,
+      name: resolvePlayerName({ world, lookup, playerId: id, row }),
+      performance: performancesById.get(id) || null,
+      substitution: substitutionTimeline(events, side, id)
+    };
   };
   return {
     ...submission,
@@ -277,7 +308,14 @@ export default async (request) => {
         away_score: score.away ?? null
       },
       events,
-      submissions: submissions.map((submission) => decorateSubmission(world, lookup, submission, performancesById)),
+      substitutions: {
+        home: events.filter((event) => event.side === 'home' && event.event_type === 'substitution'),
+        away: events.filter((event) => event.side === 'away' && event.event_type === 'substitution')
+      },
+      submissions: submissions.map((submission) => {
+        const side = submission.club_id === row.home_club_id ? 'home' : 'away';
+        return decorateSubmission(world, lookup, submission, performancesById, events, side);
+      }),
       summary: {
         scorers: { home: goalSummary(events, 'home'), away: goalSummary(events, 'away') },
         cards: {
