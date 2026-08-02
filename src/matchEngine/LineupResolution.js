@@ -336,7 +336,8 @@ export function resolveLineupEvents(eventGeneration, contract = {}, quality = {}
     home: applyLineupTimeline('home', combined, home.initial, home.bench),
     away: applyLineupTimeline('away', combined, away.initial, away.bench)
   };
-  const events = reassignInvalidActors(combined, preliminary, quality);
+  const reassigned = reassignInvalidActors(combined, preliminary, quality);
+  const events = reconcileGeneratedSubstitutions(reassigned, { home, away });
   const lineups = deepFreeze({
     home: applyLineupTimeline('home', events, home.initial, home.bench),
     away: applyLineupTimeline('away', events, away.initial, away.bench)
