@@ -257,7 +257,7 @@ export default async (request) => {
     const rated = performances.filter((performance) => performance.rating !== null).sort((a, b) => b.rating - a.rating || a.player_name.localeCompare(b.player_name));
     const score = result.score || {};
     const clubName = (clubId) => world.club_profiles?.[clubId]?.club_name || world.club_profiles?.[clubId]?.canonical_name || clubId;
-    const views = await service(`/rest/v1/manager_match_views?manager_id=eq.${encodeURIComponent(manager.id)}&fixture_id=eq.${encodeURIComponent(fixtureId)}&select=revealed_at,reveal_method&limit=1`).catch(() => []);
+    const views = await service(`/rest/v1/manager_canonical_match_views?manager_id=eq.${encodeURIComponent(manager.id)}&fixture_id=eq.${encodeURIComponent(fixtureId)}&select=revealed_at,reveal_method&limit=1`).catch(() => []);
     const reveal = views[0] || null;
 
     return json({
