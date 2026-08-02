@@ -120,25 +120,30 @@ function buildSideSubstitutions(side, baseEvents, contract, quality) {
     }
   };
 
-  const injuries = orderEvents(baseEvents.filter((event) => event.side === side && event.type === 'injury' && event.player_id).map((event) => ({ ...event })));
-  for (const injury of injuries) {
-    applyDisciplineThrough(injury.minute);
-    if (substitutions.length >= MAXIMUM_SUBSTITUTIONS) break;
-    const playerOutId = text(injury.player_id);
-    if (!active.has(playerOutId)) continue;
-    const playerOut = starters.find((player) => player.player_id === playerOutId);
-    const replacement = takeCompatibleReplacement(unusedBench, playerOut?.required_role);
-    if (!replacement) continue;
-    active.delete(playerOutId);
-    active.add(replacement.player_id);
-    index += 1;
-    substitutions.push(substitutionEvent(side, index, injury.minute + 1, playerOutId, replacement.player_id, 'injury', injury.event_id));
-  }
+  const triggers = [
+    ...baseEvents
+      .filter((event) => event.side === side && event.type === 'injury' && event.player_id)
+      .map((event) => ({ kind: 'injury', minute: clamp(Math.trunc(event.minute) + 1, 1, 120), source: event })),
+    ...[60, 70, 80].map((minute) => ({ kind: 'tactical', minute, source: null }))
+  ].sort((left, right) => left.minute - right.minute || (left.kind === 'injury' ? -1 : 1));
 
-  const tacticalMinutes = [60, 70, 80];
-  for (const minute of tacticalMinutes) {
-    applyDisciplineThrough(minute);
-    if (!unusedBench.length || substitutions.length >= MAXIMUM_SUBSTITUTIONS) break;
+  for (const trigger of triggers) {
+    if (substitutions.length >= MAXIMUM_SUBSTITUTIONS || !unusedBench.length) break;
+    applyDisciplineThrough(trigger.minute);
+
+    if (trigger.kind === 'injury') {
+      const playerOutId = text(trigger.source.player_id);
+      if (!active.has(playerOutId)) continue;
+      const playerOut = starters.find((player) => player.player_id === playerOutId);
+      const replacement = takeCompatibleReplacement(unusedBench, playerOut?.required_role);
+      if (!replacement) continue;
+      active.delete(playerOutId);
+      active.add(replacement.player_id);
+      index += 1;
+      substitutions.push(substitutionEvent(side, index, trigger.minute, playerOutId, replacement.player_id, 'injury', trigger.source.event_id));
+      continue;
+    }
+
     const candidates = starters
       .filter((player) => active.has(player.player_id) && player.required_role !== 'gk')
       .sort((left, right) => left.effective_quality - right.effective_quality || left.player_id.localeCompare(right.player_id));
@@ -151,11 +156,11 @@ function buildSideSubstitutions(side, baseEvents, contract, quality) {
         break;
       }
     }
-    if (!playerOut || !replacement) break;
+    if (!playerOut || !replacement) continue;
     active.delete(playerOut.player_id);
     active.add(replacement.player_id);
     index += 1;
-    substitutions.push(substitutionEvent(side, index, minute, playerOut.player_id, replacement.player_id, 'tactical'));
+    substitutions.push(substitutionEvent(side, index, trigger.minute, playerOut.player_id, replacement.player_id, 'tactical'));
   }
 
   return { substitutions, initial: starters.map((player) => player.player_id), bench: bench.map((player) => player.player_id) };
