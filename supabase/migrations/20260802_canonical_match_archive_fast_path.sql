@@ -63,19 +63,31 @@ begin
     for v_result in
       select value from jsonb_array_elements(coalesce(v_runtime.runtime->'results', '[]'::jsonb))
     loop
-      v_fixture_id := v_result->'fixture'->>'fixture_id';
-      if coalesce(v_fixture_id, '') = '' then
+      v_fixture_id := coalesce(
+        nullif(v_result->'fixture'->>'fixture_id', ''),
+        nullif(v_result->>'fixture_id', '')
+      );
+      if v_fixture_id is null then
         continue;
       end if;
 
+      v_fixture := null;
       select value into v_fixture
       from jsonb_array_elements(coalesce(v_runtime.runtime->'fixtures', '[]'::jsonb))
       where value->>'fixture_id' = v_fixture_id
       limit 1;
 
-      v_fixture := coalesce(v_fixture, v_result->'fixture');
-      v_home_id := v_fixture->>'home_club_id';
-      v_away_id := v_fixture->>'away_club_id';
+      v_fixture := coalesce(v_fixture, v_result->'fixture', jsonb_build_object(
+        'fixture_id', v_fixture_id,
+        'home_club_id', v_result->>'home_club_id',
+        'away_club_id', v_result->>'away_club_id',
+        'matchday', v_result->>'matchday'
+      ));
+      v_home_id := coalesce(nullif(v_fixture->>'home_club_id', ''), nullif(v_result->>'home_club_id', ''));
+      v_away_id := coalesce(nullif(v_fixture->>'away_club_id', ''), nullif(v_result->>'away_club_id', ''));
+      if v_home_id is null or v_away_id is null then
+        continue;
+      end if;
 
       select coalesce(jsonb_object_agg(ids.player_id, v_world->'squad_cycle'->'players'->ids.player_id), '{}'::jsonb)
       into v_players
@@ -98,10 +110,10 @@ begin
         new.world_id,
         coalesce(v_world->'matchday_cycle'->>'season_id', new.season_id),
         v_runtime.competition_id,
-        coalesce((v_fixture->>'matchday')::integer, new.matchday - 1),
+        coalesce((v_fixture->>'matchday')::integer, (v_result->>'matchday')::integer, new.matchday - 1),
         v_home_id,
         v_away_id,
-        nullif(coalesce(v_fixture->>'kickoff_at', v_result->'fixture'->>'kickoff_at'), '')::timestamptz,
+        nullif(coalesce(v_fixture->>'kickoff_at', v_result->'fixture'->>'kickoff_at', v_result->>'played_at'), '')::timestamptz,
         jsonb_build_object(
           'fixture', v_fixture,
           'result', v_result,
