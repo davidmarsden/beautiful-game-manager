@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolveLineupEvents } from '../src/matchEngine/LineupResolution.js';
 import { resolveMatch } from '../src/matchEngine/modules/MatchResolution.js';
+import { resolveTeamQuality } from '../src/matchEngine/modules/PlayerQuality.js';
 
 const starters = (side) => Array.from({ length: 11 }, (_, index) => ({
   player_id: `${side}-${index + 1}`,
@@ -127,4 +128,47 @@ test('a bench player cannot be introduced twice', () => {
     { event_id: 'sub-2', minute: 70, side: 'home', type: 'substitution', player_out_id: 'home-3', player_in_id: 'home-bench-1' }
   ]);
   assert.throws(() => resolveMatch(malformed, {}, { contract, quality }), /introduces unavailable player/);
+});
+
+test('a low-rated seventh bench goalkeeper keeps the goalkeeper role and replaces an injured starter', () => {
+  const starterIds = Array.from({ length: 11 }, (_, index) => `home-full-${index + 1}`);
+  const benchIds = Array.from({ length: 7 }, (_, index) => `home-full-bench-${index + 1}`);
+  const playersById = new Map();
+  starterIds.forEach((id, index) => playersById.set(id, {
+    tbg_player_id: id,
+    position: index === 0 ? 'goalkeeper' : index < 5 ? 'centre back' : index < 9 ? 'central midfield' : 'striker',
+    underlying_ability_rating: 90 - index
+  }));
+  benchIds.forEach((id, index) => playersById.set(id, {
+    tbg_player_id: id,
+    position: index === 6 ? 'goalkeeper' : 'central midfield',
+    underlying_ability_rating: index === 6 ? 60 : 85 - index
+  }));
+  const team = {
+    side: 'home',
+    club_id: 'home-club',
+    formation: '4-3-3-wide',
+    starting_xi: starterIds,
+    bench: benchIds
+  };
+  const teamQuality = resolveTeamQuality(team, playersById);
+  assert.equal(teamQuality.bench.players.length, 7);
+  assert.equal(teamQuality.bench.players.find((row) => row.player_id === benchIds[6])?.actual_role, 'gk');
+  assert.equal(teamQuality.depth_count, undefined);
+  assert.equal(teamQuality.bench.depth_count, 5);
+
+  const result = resolveLineupEvents(eventGeneration([
+    { event_id: 'home-gk-injury', minute: 12, side: 'home', type: 'injury', player_id: starterIds[0] }
+  ]), {
+    teams: {
+      home: { starting_xi: starterIds, bench: benchIds },
+      away: contract.teams.away
+    }
+  }, {
+    home: teamQuality,
+    away: quality.away
+  });
+  const goalkeeperChange = result.events.find((event) => event.type === 'substitution' && event.reason === 'injury');
+  assert.equal(goalkeeperChange?.player_out_id, starterIds[0]);
+  assert.equal(goalkeeperChange?.player_in_id, benchIds[6]);
 });
