@@ -81,16 +81,21 @@ test('portal uses the repaired completed date in schedule, last fixture and comp
   assert.equal(projection.competition.results[0].played_at, '2026-07-25T13:13:02.000Z');
 });
 
-test('completed matches always open spoiler-safe and reveal only after replay or skip', async () => {
+test('completed matches open spoiler-safe until replay or skip persists a reveal', async () => {
   const [endpoint, reveal, client] = await Promise.all([
     source('netlify/functions/match-centre.mjs'),
     source('netlify/functions/reveal-match.mjs'),
     source('public/phase2d4.js')
   ]);
-  assert.match(endpoint, /revealed: false/);
-  assert.match(endpoint, /reveal: null/);
-  assert.doesNotMatch(reveal, /manager_match_views|\/rest\/v1\/fixtures/);
-  assert.match(reveal, /canonicalPlayedFixture/);
+  assert.match(endpoint, /manager_canonical_match_views/);
+  assert.match(endpoint, /revealed: Boolean\(reveal\?\.revealed_at\)/);
+  assert.match(endpoint, /const reveal = views\[0\] \|\| null/);
+  assert.match(endpoint, /canonical_match_archives/);
+  assert.doesNotMatch(endpoint, /canonical_world_saves/);
+  assert.match(reveal, /manager_canonical_match_views/);
+  assert.match(reveal, /canonical_match_archives/);
+  assert.match(reveal, /replay_completed: Boolean\(existing\?\.replay_completed\) \|\| method === 'replay_completed'/);
+  assert.doesNotMatch(reveal, /canonical_world_saves|\/rest\/v1\/fixtures/);
   assert.match(client, /renderMatchCentre\(\{ \.\.\.data, revealed: true/);
   assert.match(client, /finish\('replay_completed'\)/);
   assert.match(client, /finish\('skip_to_full_time'\)/);
