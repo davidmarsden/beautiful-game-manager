@@ -208,10 +208,36 @@ function applyLineupTimeline(side, events, initial, bench) {
   });
 }
 
-function reassignInactiveActors(events, lineupBySide) {
+function playerRoles(quality = {}) {
+  const roles = { home: new Map(), away: new Map() };
+  for (const side of ['home', 'away']) {
+    const rows = [...(quality?.[side]?.starters || []), ...(quality?.[side]?.bench?.players || [])];
+    for (const player of rows) {
+      const playerId = text(player.player_id);
+      if (playerId) roles[side].set(playerId, player.actual_role || player.required_role || 'unknown');
+    }
+  }
+  return roles;
+}
+
+function actorEligible(event, role) {
+  if (!role || role === 'unknown') return true;
+  if (event.type === 'injury' || event.type === 'substitution') return true;
+  if (['shot', 'big_chance', 'goal'].includes(event.type)) return role !== 'gk';
+  if (event.type === 'penalty' && event.subtype === 'penalty_attempt') return role !== 'gk';
+  if (event.type === 'foul' && event.subtype === 'penalty_foul') return role !== 'gk';
+  if (['foul', 'yellow_card', 'red_card'].includes(event.type)) return role !== 'gk';
+  return true;
+}
+
+function reassignInvalidActors(events, lineupBySide, quality) {
   const active = { home: new Set(lineupBySide.home.starting_xi), away: new Set(lineupBySide.away.starting_xi) };
+  const roles = playerRoles(quality);
   const yellows = { home: new Map(), away: new Map() };
-  const replacement = (side) => [...active[side]].find((playerId) => playerId) || null;
+  const replacement = (side, event) => [...active[side]]
+    .filter((playerId) => actorEligible(event, roles[side].get(playerId)))
+    .sort((left, right) => left.localeCompare(right))[0] || null;
+
   return orderEvents(events.map((event) => ({ ...event }))).map((event) => {
     const side = event.side;
     if (!active[side]) return event;
@@ -220,10 +246,21 @@ function reassignInactiveActors(events, lineupBySide) {
       active[side].add(text(event.player_in_id));
       return event;
     }
+
     let updated = event;
-    if (event.player_id && !active[side].has(text(event.player_id)) && event.type !== 'injury') {
-      updated = { ...event, player_id: replacement(side), reassigned_from_player_id: text(event.player_id) };
+    const actorId = text(event.player_id);
+    const actorIsActive = !actorId || active[side].has(actorId);
+    const actorHasEligibleRole = !actorId || actorEligible(event, roles[side].get(actorId));
+    if (actorId && event.type !== 'injury' && (!actorIsActive || !actorHasEligibleRole)) {
+      const replacementId = replacement(side, event);
+      updated = {
+        ...event,
+        player_id: replacementId,
+        reassigned_from_player_id: actorId,
+        actor_reassignment_reason: !actorIsActive ? 'inactive_actor' : 'ineligible_role'
+      };
     }
+
     if (updated.type === 'yellow_card' && updated.player_id) {
       const playerId = text(updated.player_id);
       const count = (yellows[side].get(playerId) || 0) + 1;
@@ -245,7 +282,7 @@ export function resolveLineupEvents(eventGeneration, contract = {}, quality = {}
     home: applyLineupTimeline('home', combined, home.initial, home.bench),
     away: applyLineupTimeline('away', combined, away.initial, away.bench)
   };
-  const events = reassignInactiveActors(combined, preliminary);
+  const events = reassignInvalidActors(combined, preliminary, quality);
   const lineups = deepFreeze({
     home: applyLineupTimeline('home', events, home.initial, home.bench),
     away: applyLineupTimeline('away', events, away.initial, away.bench)
