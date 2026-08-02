@@ -54,16 +54,19 @@ export default async (request) => {
     const archives = await service(`/rest/v1/canonical_match_archives?fixture_id=eq.${encodeURIComponent(fixtureId)}&world_id=in.(${worldIds.map(encodeURIComponent).join(',')})&select=fixture_id&limit=1`);
     if (!archives[0]) return json({ error: 'Played fixture not found' }, 404);
 
-    const revealedAt = new Date().toISOString();
+    const existingRows = await service(`/rest/v1/manager_match_views?manager_id=eq.${encodeURIComponent(manager.id)}&fixture_id=eq.${encodeURIComponent(fixtureId)}&select=revealed_at,reveal_method,replay_completed&limit=1`).catch(() => []);
+    const existing = existingRows[0] || null;
+    const now = new Date().toISOString();
+    const revealedAt = existing?.revealed_at || now;
     const rows = await service('/rest/v1/manager_match_views?on_conflict=manager_id,fixture_id', {
       method: 'POST',
       body: JSON.stringify({
         manager_id: manager.id,
         fixture_id: fixtureId,
         revealed_at: revealedAt,
-        reveal_method: method,
-        replay_completed: method === 'replay_completed',
-        updated_at: revealedAt
+        reveal_method: existing?.reveal_method || method,
+        replay_completed: Boolean(existing?.replay_completed) || method === 'replay_completed',
+        updated_at: now
       }),
       headers: { prefer: 'resolution=merge-duplicates,return=representation' }
     });
@@ -71,7 +74,7 @@ export default async (request) => {
     return json({
       fixture_id: fixtureId,
       revealed: true,
-      reveal_method: method,
+      reveal_method: rows[0]?.reveal_method || existing?.reveal_method || method,
       revealed_at: rows[0]?.revealed_at || revealedAt
     });
   } catch (error) {
