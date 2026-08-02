@@ -21,6 +21,9 @@ const eventTypeMeta = (type) => {
   return { icon, className: `event-${className}`, label };
 };
 const eventText = (event) => {
+  if (normalType(event.event_type) === 'substitution' && (event.player_out_name || event.player_in_name)) {
+    return `${event.player_out_name || 'Unknown player'} off · ${event.player_in_name || 'Unknown player'} on`;
+  }
   if (event.commentary || event.payload?.commentary) return event.commentary || event.payload.commentary;
   const player = event.player_name || 'Unknown player';
   const meta = eventTypeMeta(event.event_type);
@@ -36,8 +39,14 @@ const performanceBadges = (performance) => {
   if (performance.red_cards) badges.push('🟥');
   return badges.length ? `<span class="player-contributions">${badges.map(mcEscape).join(' ')}</span>` : '';
 };
+const substitutionBadge = (substitution = {}) => {
+  const labels = [];
+  if (mcNumber(substitution.on_minute) !== null) labels.push(`↑ ${mcNumber(substitution.on_minute)}'`);
+  if (mcNumber(substitution.off_minute) !== null) labels.push(`↓ ${mcNumber(substitution.off_minute)}'`);
+  return labels.length ? `<span class="player-substitution">${labels.map(mcEscape).join(' ')}</span>` : '';
+};
 const ratingBadge = (rating) => mcNumber(rating) === null ? '' : `<strong class="match-rating">${mcNumber(rating).toFixed(1)}</strong>`;
-const playerList = (players = []) => players.map((player, index) => `<li><span class="shirt-number">${index + 1}</span><span class="lineup-name">${mcEscape(player.name)}</span>${performanceBadges(player.performance)}${ratingBadge(player.performance?.rating)}</li>`).join('');
+const playerList = (players = []) => players.map((player, index) => `<li><span class="shirt-number">${index + 1}</span><span class="lineup-name">${mcEscape(player.name)}</span>${substitutionBadge(player.substitution)}${performanceBadges(player.performance)}${ratingBadge(player.performance?.rating)}</li>`).join('');
 const eventMarkup = (event, { replay = false } = {}) => {
   const meta = eventTypeMeta(event.event_type);
   const side = event.side === 'home' || event.side === 'away' ? event.side : 'neutral';
