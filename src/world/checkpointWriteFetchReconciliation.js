@@ -14,7 +14,7 @@ function isCheckpointReplacement(url, options = {}) {
 }
 
 function isRetriableStatus(status) {
-  return status === 408 || status === 429 || status === 502 || status === 503 || status === 504 || status >= 500;
+  return status === 408 || status === 429 || status >= 500;
 }
 
 function jsonResponse(body, status) {
@@ -33,6 +33,10 @@ function requestPayload(options = {}) {
   }
 }
 
+function suppressResponse() {
+  return new Response('', { status: 204 });
+}
+
 async function readCanonicalCheckpoint({ fetchImpl, supabaseUrl, serviceRoleKey, worldId }) {
   const response = await fetchImpl(
     `${supabaseUrl}/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&select=world_id,save_checksum,turn_status,updated_at&limit=1`,
@@ -49,6 +53,31 @@ async function readCanonicalCheckpoint({ fetchImpl, supabaseUrl, serviceRoleKey,
   return Array.isArray(rows) ? rows[0] || null : null;
 }
 
+function isUnsafeSubmissionUnlock(url, options, unresolved) {
+  if (!unresolved || String(options.method || '').toUpperCase() !== 'PATCH') return false;
+  const body = requestPayload(options);
+  return String(url).includes('/rest/v1/manager_turn_submissions?')
+    && String(url).includes(`world_id=eq.${encodeURIComponent(unresolved.worldId)}`)
+    && String(url).includes('status=eq.locked')
+    && body?.status === 'submitted';
+}
+
+function isUnsafeCanonicalFailure(url, options, unresolved) {
+  if (!unresolved || String(options.method || '').toUpperCase() !== 'PATCH') return false;
+  const body = requestPayload(options);
+  return String(url).includes('/rest/v1/canonical_world_saves?')
+    && String(url).includes(`world_id=eq.${encodeURIComponent(unresolved.worldId)}`)
+    && String(url).includes(`save_checksum=eq.${encodeURIComponent(unresolved.previousChecksum)}`)
+    && String(url).includes('turn_status=eq.locking')
+    && body?.turn_status === 'failed';
+}
+
+function isFailedRunUpdate(url, options, unresolved) {
+  if (!unresolved || String(options.method || '').toUpperCase() !== 'PATCH') return false;
+  const body = requestPayload(options);
+  return String(url).includes('/rest/v1/world_turn_runs?') && body?.status === 'failed';
+}
+
 /**
  * Wrap fetch so an ambiguous PostgREST checkpoint response is reconciled
  * against the compact authoritative row before the scheduler sees an error.
@@ -57,6 +86,10 @@ async function readCanonicalCheckpoint({ fetchImpl, supabaseUrl, serviceRoleKey,
  * intentionally longer than the database write timeout, so a previous-checksum
  * observation remains pending until the original transaction can no longer
  * become authoritative.
+ *
+ * If certainty is still impossible when the window expires, the wrapper also
+ * protects the old scheduler catch path: it suppresses submission reopening and
+ * canonical failure writes, and records the turn run as reconciliation_required.
  */
 export function createCheckpointReconciliationFetch({
   fetchImpl,
@@ -67,7 +100,24 @@ export function createCheckpointReconciliationFetch({
 }) {
   if (typeof fetchImpl !== 'function') throw new Error('Checkpoint reconciliation requires fetch');
 
+  let unresolvedWrite = null;
+
   return async (url, options = {}) => {
+    if (isUnsafeSubmissionUnlock(url, options, unresolvedWrite)) return suppressResponse();
+    if (isUnsafeCanonicalFailure(url, options, unresolvedWrite)) return suppressResponse();
+
+    if (isFailedRunUpdate(url, options, unresolvedWrite)) {
+      const body = requestPayload(options) || {};
+      return fetchImpl(url, {
+        ...options,
+        body: JSON.stringify({
+          ...body,
+          status: 'reconciliation_required',
+          error_message: unresolvedWrite.reason
+        })
+      });
+    }
+
     if (!isCheckpointReplacement(url, options)) return fetchImpl(url, options);
 
     const startedAt = Date.now();
@@ -123,11 +173,18 @@ export function createCheckpointReconciliationFetch({
       if (remaining > 0) await sleep(Math.min(pollIntervalMs, remaining));
     }
 
+    unresolvedWrite = {
+      worldId,
+      previousChecksum,
+      expectedReplacementChecksum,
+      reason: 'Checkpoint outcome remained ambiguous after bounded reconciliation; canonical lock and submissions were preserved for explicit recovery'
+    };
+
     return jsonResponse({
       accepted: false,
       world_id: worldId,
-      reason: 'checkpoint_write_not_committed',
-      message: 'Canonical checkpoint still had not committed after the bounded settlement window',
+      reason: 'reconciliation_required',
+      message: unresolvedWrite.reason,
       canonical_checksum: lastObservation?.canonical_checksum || null
     }, 504);
   };
