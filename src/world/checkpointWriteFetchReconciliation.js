@@ -34,7 +34,7 @@ function requestPayload(options = {}) {
 }
 
 function suppressResponse() {
-  return new Response('', { status: 204 });
+  return new Response(null, { status: 204 });
 }
 
 async function readCanonicalCheckpoint({ fetchImpl, supabaseUrl, serviceRoleKey, worldId }) {
