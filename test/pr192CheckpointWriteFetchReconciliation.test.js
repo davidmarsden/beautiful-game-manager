@@ -74,25 +74,48 @@ test('returns a terminal conflict when a third checksum becomes authoritative', 
   assert.equal(body.reason, 'checkpoint_conflict');
 });
 
-test('does not claim non-commit until the bounded settlement window expires', async () => {
-  let reads = 0;
+test('preserves the lock and marks the run reconciliation_required when certainty is unavailable', async () => {
+  const writes = [];
   const wrapped = createCheckpointReconciliationFetch({
-    fetchImpl: async (url) => {
+    fetchImpl: async (url, options = {}) => {
       if (String(url).includes('/rpc/')) return new Response('{}', { status: 504 });
-      reads += 1;
-      return canonicalResponse('checksum-before', 'locking');
+      if (String(url).includes('/canonical_world_saves?') && String(options.method || 'GET') === 'GET') {
+        return canonicalResponse('checksum-before', 'locking');
+      }
+      writes.push({ url: String(url), options });
+      return new Response('', { status: 204 });
     },
     supabaseUrl: 'https://example.supabase.co',
     serviceRoleKey: 'service-key',
-    pollIntervalMs: 2,
-    settlementWindowMs: 12
+    pollIntervalMs: 1,
+    settlementWindowMs: 8
   });
 
   const response = await wrapped(rpcUrl, rpcOptions);
-  const body = await response.json();
   assert.equal(response.status, 504);
-  assert.equal(body.reason, 'checkpoint_write_not_committed');
-  assert.ok(reads > 1);
+  assert.equal((await response.json()).reason, 'reconciliation_required');
+
+  const submissionUnlock = await wrapped(
+    'https://example.supabase.co/rest/v1/manager_turn_submissions?world_id=eq.world-alpha&status=eq.locked',
+    { method: 'PATCH', body: JSON.stringify({ status: 'submitted', locked_at: null }) }
+  );
+  assert.equal(submissionUnlock.status, 204);
+
+  const canonicalFailure = await wrapped(
+    'https://example.supabase.co/rest/v1/canonical_world_saves?world_id=eq.world-alpha&save_checksum=eq.checksum-before&turn_status=eq.locking',
+    { method: 'PATCH', body: JSON.stringify({ turn_status: 'failed' }) }
+  );
+  assert.equal(canonicalFailure.status, 204);
+
+  await wrapped(
+    'https://example.supabase.co/rest/v1/world_turn_runs?id=eq.run-1',
+    { method: 'PATCH', body: JSON.stringify({ status: 'failed', error_message: 'Supabase returned 504' }) }
+  );
+
+  assert.equal(writes.length, 1);
+  const runBody = JSON.parse(writes[0].options.body);
+  assert.equal(runBody.status, 'reconciliation_required');
+  assert.match(runBody.error_message, /canonical lock and submissions were preserved/);
 });
 
 test('does not intercept unrelated fetch traffic', async () => {
