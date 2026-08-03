@@ -1,9 +1,9 @@
 import scheduledWorldTurnWorker from './scheduled-world-turn-worker.mjs';
 import { createCheckpointReconciliationFetch } from '../../src/world/checkpointWriteFetchReconciliation.js';
+import { verifyInternalSchedulerRequest } from '../../src/world/internalSchedulerAuth.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const INTERNAL_SECRET = process.env.TBG_INTERNAL_SCHEDULER_SECRET || '';
 
 export async function executeScheduledWorldTurnWithReconciliation() {
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
@@ -29,7 +29,7 @@ export async function executeScheduledWorldTurnWithReconciliation() {
 
 export default async (request) => {
   if (request.method !== 'POST') return;
-  if (!INTERNAL_SECRET || request.headers.get('x-tbg-scheduler-secret') !== INTERNAL_SECRET) {
+  if (!verifyInternalSchedulerRequest(request, SERVICE_ROLE_KEY)) {
     console.error('Rejected unauthorized scheduled-world-turn background invocation');
     return;
   }
