@@ -19,6 +19,7 @@
   function statusText(status) {
     const run = status.run || {};
     if (status.state === 'processing') return `Matchday ${run.matchday || status.matchday || '—'} is processing in the background${run.id ? ` · run ${run.id}` : ''}.`;
+    if (status.state === 'reconciliation_required') return `${run.error_message || 'The checkpoint write could not be confirmed.'} The canonical lock and manager submissions have been preserved for recovery${run.id ? ` · run ${run.id}` : ''}.`;
     if (status.state === 'complete') return `Matchday ${run.matchday || '—'} complete · checkpoint ${String(status.checksum || '').slice(0, 12)} · next matchday ${status.matchday || 'pending'}.`;
     if (status.state === 'failed') {
       const stage = status.diagnostics?.failing_stage ? ` · failing stage ${status.diagnostics.failing_stage}` : '';
@@ -33,7 +34,7 @@
 
   function isNewerThanQueuedBaseline(status, baseline, queuedServerAt, sawProcessing) {
     if (status.state === 'processing') return true;
-    if (sawProcessing && (status.state === 'complete' || status.state === 'failed')) return true;
+    if (sawProcessing && ['complete', 'failed', 'reconciliation_required'].includes(status.state)) return true;
     if (!baseline.unavailable && status.run?.id && status.run.id !== baseline.run?.id) return true;
     if (!baseline.unavailable && status.operation_id && status.operation_id !== baseline.operation_id) return true;
     if (queuedServerAt && status.operation_created_at && new Date(status.operation_created_at).getTime() >= queuedServerAt) return true;
@@ -55,6 +56,12 @@
         output.textContent = belongsToQueuedAttempt
           ? statusText(status)
           : 'Production turn queued. Waiting for the background worker to claim the failed checkpoint…';
+        if (status.state === 'reconciliation_required' && belongsToQueuedAttempt) {
+          button.disabled = true;
+          button.textContent = 'Recovery review required';
+          document.getElementById('reloadWorldState')?.removeAttribute('hidden');
+          return;
+        }
         if (status.state === 'failed' && belongsToQueuedAttempt) {
           button.disabled = false;
           button.textContent = 'Retry failed turn';
