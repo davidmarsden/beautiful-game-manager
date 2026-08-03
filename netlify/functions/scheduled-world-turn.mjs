@@ -1,6 +1,7 @@
 import { executeScheduledWorldTurnWithReconciliation } from './scheduled-world-turn-background.mjs';
+import { createInternalSchedulerHeaders } from '../../src/world/internalSchedulerAuth.js';
 
-const INTERNAL_SECRET = process.env.TBG_INTERNAL_SCHEDULER_SECRET || '';
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -14,12 +15,12 @@ export default async (request) => {
   // which already runs inside a 15-minute background function.
   if (!request) return executeScheduledWorldTurnWithReconciliation();
 
-  if (!INTERNAL_SECRET) return json({ error: 'Internal scheduler secret is not configured' }, 503);
+  if (!SERVICE_ROLE_KEY) return json({ error: 'Scheduled world processing is not configured' }, 503);
 
   const target = new URL('/.netlify/functions/scheduled-world-turn-background', request.url);
   const response = await fetch(target, {
     method: 'POST',
-    headers: { 'x-tbg-scheduler-secret': INTERNAL_SECRET }
+    headers: createInternalSchedulerHeaders(SERVICE_ROLE_KEY)
   });
 
   if (!response.ok) {
