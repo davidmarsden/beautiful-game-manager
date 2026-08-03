@@ -1,4 +1,4 @@
-import { executeScheduledWorldTurnWithReconciliation } from './scheduled-world-turn-background.mjs';
+import { executeScheduledWorldTurnWithReconciliation } from '../internal/execute-scheduled-world-turn.mjs';
 import { createInternalSchedulerHeaders } from '../../src/world/internalSchedulerAuth.js';
 
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
