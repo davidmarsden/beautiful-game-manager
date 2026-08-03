@@ -1,4 +1,4 @@
-import scheduledWorldTurnWorker from './scheduled-world-turn-worker.mjs';
+import scheduledWorldTurnWorker from '../internal/scheduled-world-turn-worker.mjs';
 import { createCheckpointReconciliationFetch } from '../../src/world/checkpointWriteFetchReconciliation.js';
 import { verifyInternalSchedulerRequest } from '../../src/world/internalSchedulerAuth.js';
 
