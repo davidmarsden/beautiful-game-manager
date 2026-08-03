@@ -22,20 +22,23 @@ test('accepts an ambiguous write only when the canonical row has the exact expec
 
   assert.equal(result.outcome, CHECKPOINT_WRITE_OUTCOME.COMMITTED);
   assert.equal(result.accepted, true);
+  assert.equal(result.terminal, true);
   assert.equal(result.canonical_checksum, 'checksum-after');
   assert.match(result.reason, /response was lost/);
 });
 
-test('reports a genuine non-commit when the canonical row still has the previous checksum', () => {
+test('keeps a previous-checksum read pending because the original write may still be in flight', () => {
   const result = reconcileCheckpointWrite(input({
     world_id: 'world-alpha',
     save_checksum: 'checksum-before',
     turn_status: 'locking'
   }));
 
-  assert.equal(result.outcome, CHECKPOINT_WRITE_OUTCOME.NOT_COMMITTED);
+  assert.equal(result.outcome, CHECKPOINT_WRITE_OUTCOME.PENDING);
   assert.equal(result.accepted, false);
+  assert.equal(result.terminal, false);
   assert.equal(result.canonical_checksum, 'checksum-before');
+  assert.match(result.reason, /continue bounded reconciliation polling/);
 });
 
 test('never treats an unrelated third checksum as a successful commit', () => {
@@ -47,6 +50,7 @@ test('never treats an unrelated third checksum as a successful commit', () => {
 
   assert.equal(result.outcome, CHECKPOINT_WRITE_OUTCOME.CONFLICT);
   assert.equal(result.accepted, false);
+  assert.equal(result.terminal, true);
   assert.match(result.reason, /neither the previous nor expected replacement checksum/);
 });
 
@@ -55,6 +59,7 @@ test('does not guess when the canonical checkpoint cannot be read', () => {
 
   assert.equal(result.outcome, CHECKPOINT_WRITE_OUTCOME.UNAVAILABLE);
   assert.equal(result.accepted, false);
+  assert.equal(result.terminal, false);
   assert.equal(result.canonical_checksum, null);
 });
 
@@ -67,6 +72,7 @@ test('rejects a checkpoint row belonging to another world', () => {
 
   assert.equal(result.outcome, CHECKPOINT_WRITE_OUTCOME.CONFLICT);
   assert.equal(result.accepted, false);
+  assert.equal(result.terminal, true);
   assert.match(result.reason, /world-beta/);
 });
 
