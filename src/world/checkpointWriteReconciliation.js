@@ -2,18 +2,23 @@ const text = (value) => String(value || '').trim();
 
 export const CHECKPOINT_WRITE_OUTCOME = Object.freeze({
   COMMITTED: 'committed',
-  NOT_COMMITTED: 'not_committed',
+  PENDING: 'pending',
   CONFLICT: 'conflict',
   UNAVAILABLE: 'unavailable'
 });
 
 /**
- * Reconcile an ambiguous canonical-checkpoint write against the row that is
- * currently authoritative.
+ * Reconcile one authoritative read-back observation after an ambiguous
+ * canonical-checkpoint write response.
  *
- * This deliberately treats only an exact expected replacement checksum as a
- * successful commit. A third checksum is never accepted as success: it means
- * another checkpoint became authoritative and requires explicit recovery.
+ * Only an exact expected replacement checksum proves that the commit
+ * succeeded. Observing the previous checksum does not prove non-commit: the
+ * original RPC may still be running and can become authoritative after this
+ * read. Callers must keep polling within a bounded reconciliation window and
+ * must not reopen submissions or mark the turn failed from a PENDING result.
+ *
+ * A third checksum is never accepted as success. It means another checkpoint
+ * became authoritative and requires explicit recovery.
  */
 export function reconcileCheckpointWrite({
   worldId,
@@ -34,11 +39,12 @@ export function reconcileCheckpointWrite({
     return {
       outcome: CHECKPOINT_WRITE_OUTCOME.UNAVAILABLE,
       accepted: false,
+      terminal: false,
       world_id: expectedWorldId,
       previous_checksum: previous,
       expected_replacement_checksum: expected,
       canonical_checksum: null,
-      reason: 'Canonical checkpoint could not be read after the ambiguous write response'
+      reason: 'Canonical checkpoint could not be read; the write outcome remains unresolved'
     };
   }
 
@@ -49,6 +55,7 @@ export function reconcileCheckpointWrite({
     return {
       outcome: CHECKPOINT_WRITE_OUTCOME.CONFLICT,
       accepted: false,
+      terminal: true,
       world_id: expectedWorldId,
       previous_checksum: previous,
       expected_replacement_checksum: expected,
@@ -61,6 +68,7 @@ export function reconcileCheckpointWrite({
     return {
       outcome: CHECKPOINT_WRITE_OUTCOME.COMMITTED,
       accepted: true,
+      terminal: true,
       world_id: expectedWorldId,
       previous_checksum: previous,
       expected_replacement_checksum: expected,
@@ -72,20 +80,22 @@ export function reconcileCheckpointWrite({
 
   if (canonicalChecksum === previous) {
     return {
-      outcome: CHECKPOINT_WRITE_OUTCOME.NOT_COMMITTED,
+      outcome: CHECKPOINT_WRITE_OUTCOME.PENDING,
       accepted: false,
+      terminal: false,
       world_id: expectedWorldId,
       previous_checksum: previous,
       expected_replacement_checksum: expected,
       canonical_checksum: canonicalChecksum,
       turn_status: canonicalCheckpoint.turn_status || null,
-      reason: 'Canonical checkpoint still matches the previous checksum; the replacement did not commit'
+      reason: 'Canonical checkpoint still matches the previous checksum, but the original write may still be in flight; continue bounded reconciliation polling'
     };
   }
 
   return {
     outcome: CHECKPOINT_WRITE_OUTCOME.CONFLICT,
     accepted: false,
+    terminal: true,
     world_id: expectedWorldId,
     previous_checksum: previous,
     expected_replacement_checksum: expected,
