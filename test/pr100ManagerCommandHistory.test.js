@@ -24,7 +24,7 @@ test('shared-world GET returns full command history for the authenticated manage
 });
 
 test('scheduled processing finalises outcomes and inbox events transactionally', async () => {
-  const scheduler = await source('netlify/functions/scheduled-world-turn.mjs');
+  const scheduler = await source('netlify/internal/scheduled-world-turn-worker.mjs');
   const workflowMigration = await source('supabase/migrations/20260725_pr115_canonical_command_workflows.sql');
   assert.match(scheduler, /\/rest\/v1\/rpc\/finalize_manager_world_command/);
   assert.match(scheduler, /p_reason: reason/);

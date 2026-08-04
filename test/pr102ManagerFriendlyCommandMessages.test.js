@@ -13,7 +13,7 @@ test('shared-world command history resolves player and club IDs to display names
 });
 
 test('production scheduler persists football-language outcomes through the finalisation RPC', async () => {
-  const scheduler = await source('netlify/functions/scheduled-world-turn.mjs');
+  const scheduler = await source('netlify/internal/scheduled-world-turn-worker.mjs');
   assert.match(scheduler, /has been registered for competitive selection/);
   assert.match(scheduler, /has been removed from the registered squad/);
   assert.match(scheduler, /contract has been renewed/);
@@ -24,7 +24,7 @@ test('production scheduler persists football-language outcomes through the final
 
 test('friendly messages retain raw identifiers for audit and links', async () => {
   const endpoint = await source('netlify/functions/shared-world.mjs');
-  const scheduler = await source('netlify/functions/scheduled-world-turn.mjs');
+  const scheduler = await source('netlify/internal/scheduled-world-turn-worker.mjs');
   const migration = await source('supabase/migrations/20260725_pr115b_related_player_outcomes.sql');
   assert.match(endpoint, /\.\.\.rawPayload/);
   assert.match(endpoint, /player_id: playerId, player_name: playerName\(world, playerId\)/);

@@ -1,0 +1,33 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+
+const scheduled = fs.readFileSync(new URL('../netlify/functions/scheduled-world-turn.mjs', import.meta.url), 'utf8');
+const background = fs.readFileSync(new URL('../netlify/functions/scheduled-world-turn-background.mjs', import.meta.url), 'utf8');
+const executor = fs.readFileSync(new URL('../netlify/internal/execute-scheduled-world-turn.mjs', import.meta.url), 'utf8');
+const worker = fs.readFileSync(new URL('../netlify/internal/scheduled-world-turn-worker.mjs', import.meta.url), 'utf8');
+const status = fs.readFileSync(new URL('../netlify/functions/world-turn-status.mjs', import.meta.url), 'utf8');
+
+test('scheduled function only dispatches the background worker', () => {
+  assert.match(scheduled, /scheduled-world-turn-background/);
+  assert.match(scheduled, /dispatched: true/);
+  assert.doesNotMatch(scheduled, /from '.\/scheduled-world-turn-background/);
+  assert.doesNotMatch(scheduled, /executeScheduledTurn/);
+});
+
+test('background entrypoint invokes an internal reconciled executor', () => {
+  assert.match(background, /verifyInternalSchedulerRequest/);
+  assert.match(background, /\.\.\/internal\/execute-scheduled-world-turn\.mjs/);
+  assert.doesNotMatch(background, /createCheckpointReconciliationFetch/);
+});
+
+test('internal executor wraps the preserved scheduler with checkpoint reconciliation', () => {
+  assert.match(executor, /createCheckpointReconciliationFetch/);
+  assert.match(executor, /scheduledWorldTurnWorker/);
+  assert.match(worker, /replace_canonical_world_checkpoint/);
+  assert.match(worker, /export default async/);
+});
+
+test('administrator status exposes reconciliation-required runs', () => {
+  assert.match(status, /reconciliation_required/);
+});
