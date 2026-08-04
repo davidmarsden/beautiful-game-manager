@@ -74,7 +74,7 @@ test('returns a terminal conflict when a third checksum becomes authoritative', 
   assert.equal(body.reason, 'checkpoint_conflict');
 });
 
-test('preserves the lock and marks the run reconciliation_required when certainty is unavailable', async () => {
+test('preserves the lock and marks only the affected run reconciliation_required when certainty is unavailable', async () => {
   const writes = [];
   const wrapped = createCheckpointReconciliationFetch({
     fetchImpl: async (url, options = {}) => {
@@ -111,11 +111,18 @@ test('preserves the lock and marks the run reconciliation_required when certaint
     'https://example.supabase.co/rest/v1/world_turn_runs?id=eq.run-1',
     { method: 'PATCH', body: JSON.stringify({ status: 'failed', error_message: 'Supabase returned 504' }) }
   );
+  await wrapped(
+    'https://example.supabase.co/rest/v1/world_turn_runs?id=eq.run-2',
+    { method: 'PATCH', body: JSON.stringify({ status: 'failed', error_message: 'Unrelated world failure' }) }
+  );
 
-  assert.equal(writes.length, 1);
-  const runBody = JSON.parse(writes[0].options.body);
-  assert.equal(runBody.status, 'reconciliation_required');
-  assert.match(runBody.error_message, /canonical lock and submissions were preserved/);
+  assert.equal(writes.length, 2);
+  const affectedRunBody = JSON.parse(writes[0].options.body);
+  assert.equal(affectedRunBody.status, 'reconciliation_required');
+  assert.match(affectedRunBody.error_message, /canonical lock and submissions were preserved/);
+  const unrelatedRunBody = JSON.parse(writes[1].options.body);
+  assert.equal(unrelatedRunBody.status, 'failed');
+  assert.equal(unrelatedRunBody.error_message, 'Unrelated world failure');
 });
 
 test('does not intercept unrelated fetch traffic', async () => {
