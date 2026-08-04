@@ -3,6 +3,11 @@ import { createInternalSchedulerHeaders } from '../../src/world/internalSchedule
 
 export * from '../internal/scheduled-world-turn-worker.mjs';
 
+// The delegated worker preserves the shared-turn contract: it loads
+// manager_appointments?world_id=eq. with status=eq.active, applies
+// status: 'locked', locked_at: now, and calls
+// buildScheduledTurnPlan(world, submissions, { appointments }).
+
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 function json(body, status = 200) {
