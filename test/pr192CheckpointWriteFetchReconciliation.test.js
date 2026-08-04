@@ -83,7 +83,7 @@ test('preserves the lock and marks the run reconciliation_required when certaint
         return canonicalResponse('checksum-before', 'locking');
       }
       writes.push({ url: String(url), options });
-      return new Response('', { status: 204 });
+      return new Response(null, { status: 204 });
     },
     supabaseUrl: 'https://example.supabase.co',
     serviceRoleKey: 'service-key',
