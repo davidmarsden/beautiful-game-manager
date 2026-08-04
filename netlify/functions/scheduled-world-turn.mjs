@@ -1,7 +1,7 @@
 import { executeScheduledWorldTurnWithReconciliation } from '../internal/execute-scheduled-world-turn.mjs';
 import { createInternalSchedulerHeaders } from '../../src/world/internalSchedulerAuth.js';
 
-export { nextScheduledTurn } from '../internal/scheduled-world-turn-worker.mjs';
+export * from '../internal/scheduled-world-turn-worker.mjs';
 
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
@@ -29,7 +29,7 @@ export default async (request) => {
     return json({ error: `Background turn dispatch failed with ${response.status}` }, 503);
   }
 
-  return json({ accepted: true, dispatched: true }, 202);
+  return json({ accepted: true, dispatched: true });
 };
 
 export const config = { schedule: '*/15 * * * *' };
