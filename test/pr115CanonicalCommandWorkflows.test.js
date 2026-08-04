@@ -92,7 +92,7 @@ test('command RPC permissions enforce appointment and trusted finalisation', () 
 });
 
 test('scheduler keeps unresolved negotiations eligible beyond their original matchday', () => {
-  const scheduler = fs.readFileSync(new URL('../netlify/functions/scheduled-world-turn.mjs', import.meta.url), 'utf8');
+  const scheduler = fs.readFileSync(new URL('../netlify/internal/scheduled-world-turn-worker.mjs', import.meta.url), 'utf8');
   assert.match(scheduler, /effective_matchday=lte\.\$\{matchday\}/);
   assert.match(scheduler, /responseValue\(payload\) === 'accepted'/);
   assert.match(scheduler, /\['declined', 'rejected'\]\.includes\(transferResponse\)/);
