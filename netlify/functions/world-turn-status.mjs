@@ -74,15 +74,14 @@ export default async (request) => {
     else if (world.turn_status === 'failed') state = 'failed';
     else if (completed) state = 'complete';
 
-    const latest = state === 'reconciliation_required'
-      ? reconciliationRequired
-      : state === 'processing'
-        ? processing
-        : state === 'failed'
-          ? failed
-          : state === 'complete'
-            ? completed
-            : null;
+    const latest = state === 'processing'
+      ? processing
+      : state === 'failed'
+        ? failed
+        : state === 'complete'
+          ? completed
+          : null;
+    const selectedRun = state === 'reconciliation_required' ? reconciliationRequired : latest;
 
     return json({
       state,
@@ -92,7 +91,7 @@ export default async (request) => {
       checksum: world.save_checksum,
       turn_status: world.turn_status,
       next_turn_at: world.next_turn_at,
-      run: latest,
+      run: selectedRun,
       operation_id: operation?.operation_id || null,
       operation_status: operation?.status || null,
       operation_created_at: operation?.created_at || null,
