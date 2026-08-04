@@ -6,7 +6,7 @@ const source = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8'
 
 test('production turn preflight repairs every club before first matchday', async () => {
   const helper = await source('src/world/scheduledTurnViability.js');
-  const scheduler = await source('netlify/functions/scheduled-world-turn.mjs');
+  const scheduler = await source('netlify/internal/scheduled-world-turn-worker.mjs');
   assert.match(helper, /Object\.keys\(world\.squad_cycle\.clubs\)\.sort\(\)/);
   assert.match(helper, /executeAiSquadPlan\(world\.squad_cycle, \{ clubId, at: repairAt \}\)/);
   assert.match(helper, /hard_minimum_gap/);
@@ -36,7 +36,7 @@ test('failed unchanged worlds can be retried exactly once by an administrator', 
 });
 
 test('failed processing unlocks manager submissions for a safe retry', async () => {
-  const scheduler = await source('netlify/functions/scheduled-world-turn.mjs');
+  const scheduler = await source('netlify/internal/scheduled-world-turn-worker.mjs');
   assert.match(scheduler, /status=eq\.locked/);
   assert.match(scheduler, /status: 'submitted', locked_at: null/);
   assert.match(scheduler, /turn_status: 'failed'/);
