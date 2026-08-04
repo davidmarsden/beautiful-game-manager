@@ -29,7 +29,7 @@ export default async (request) => {
     return json({ error: `Background turn dispatch failed with ${response.status}` }, 503);
   }
 
-  return json({ accepted: true, dispatched: true });
+  return json({ accepted: true, dispatched: true }, 202);
 };
 
 export const config = { schedule: '*/15 * * * *' };
