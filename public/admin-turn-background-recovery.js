@@ -34,7 +34,8 @@
 
   function isNewerThanQueuedBaseline(status, baseline, queuedServerAt, sawProcessing) {
     if (status.state === 'processing') return true;
-    if (sawProcessing && ['complete', 'failed', 'reconciliation_required'].includes(status.state)) return true;
+    if (sawProcessing && (status.state === 'complete' || status.state === 'failed')) return true;
+    if (sawProcessing && status.state === 'reconciliation_required') return true;
     if (!baseline.unavailable && status.run?.id && status.run.id !== baseline.run?.id) return true;
     if (!baseline.unavailable && status.operation_id && status.operation_id !== baseline.operation_id) return true;
     if (queuedServerAt && status.operation_created_at && new Date(status.operation_created_at).getTime() >= queuedServerAt) return true;
