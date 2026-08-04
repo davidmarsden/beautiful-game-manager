@@ -18,7 +18,7 @@ test('failed-world diagnostics are protected and bound to the unchanged checkpoi
 });
 
 test('automatic scheduler failures persist an authoritative rejected advance incident', async () => {
-  const scheduler = await read('netlify/functions/scheduled-world-turn.mjs');
+  const scheduler = await read('netlify/internal/scheduled-world-turn-worker.mjs');
   assert.match(scheduler, /persistAutomaticFailure/);
   assert.match(scheduler, /scheduled-turn-failure:/);
   assert.match(scheduler, /operation_type: 'advance'/);
