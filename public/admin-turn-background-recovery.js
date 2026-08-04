@@ -114,6 +114,12 @@
       let preflightWarning = '';
       try {
         baseline = { ...(await statusRequest()), unavailable: false };
+        if (baseline.state === 'reconciliation_required') {
+          button.textContent = 'Recovery review required';
+          if (output) output.textContent = statusText(baseline);
+          if (reload) reload.hidden = false;
+          return;
+        }
       } catch (error) {
         if (!isRetriableStatusFailure(error)) throw error;
         preflightWarning = ` Status preflight was unavailable (${error.message}), so server-side replay protection will remain authoritative.`;
