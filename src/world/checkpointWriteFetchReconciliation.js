@@ -72,10 +72,12 @@ function isUnsafeCanonicalFailure(url, options, unresolved) {
     && body?.turn_status === 'failed';
 }
 
-function isFailedRunUpdate(url, options, unresolved) {
-  if (!unresolved || String(options.method || '').toUpperCase() !== 'PATCH') return false;
+function failedRunUpdateId(url, options, unresolved) {
+  if (!unresolved || String(options.method || '').toUpperCase() !== 'PATCH') return null;
   const body = requestPayload(options);
-  return String(url).includes('/rest/v1/world_turn_runs?') && body?.status === 'failed';
+  if (!String(url).includes('/rest/v1/world_turn_runs?') || body?.status !== 'failed') return null;
+  const match = String(url).match(/[?&]id=eq\.([^&]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
 }
 
 /**
@@ -89,7 +91,8 @@ function isFailedRunUpdate(url, options, unresolved) {
  *
  * If certainty is still impossible when the window expires, the wrapper also
  * protects the old scheduler catch path: it suppresses submission reopening and
- * canonical failure writes, and records the turn run as reconciliation_required.
+ * canonical failure writes, and records only the affected turn run as
+ * reconciliation_required.
  */
 export function createCheckpointReconciliationFetch({
   fetchImpl,
@@ -106,16 +109,20 @@ export function createCheckpointReconciliationFetch({
     if (isUnsafeSubmissionUnlock(url, options, unresolvedWrite)) return suppressResponse();
     if (isUnsafeCanonicalFailure(url, options, unresolvedWrite)) return suppressResponse();
 
-    if (isFailedRunUpdate(url, options, unresolvedWrite)) {
-      const body = requestPayload(options) || {};
-      return fetchImpl(url, {
-        ...options,
-        body: JSON.stringify({
-          ...body,
-          status: 'reconciliation_required',
-          error_message: unresolvedWrite.reason
-        })
-      });
+    const failedRunId = failedRunUpdateId(url, options, unresolvedWrite);
+    if (failedRunId) {
+      if (!unresolvedWrite.runId) unresolvedWrite.runId = failedRunId;
+      if (failedRunId === unresolvedWrite.runId) {
+        const body = requestPayload(options) || {};
+        return fetchImpl(url, {
+          ...options,
+          body: JSON.stringify({
+            ...body,
+            status: 'reconciliation_required',
+            error_message: unresolvedWrite.reason
+          })
+        });
+      }
     }
 
     if (!isCheckpointReplacement(url, options)) return fetchImpl(url, options);
@@ -177,6 +184,7 @@ export function createCheckpointReconciliationFetch({
       worldId,
       previousChecksum,
       expectedReplacementChecksum,
+      runId: null,
       reason: 'Checkpoint outcome remained ambiguous after bounded reconciliation; canonical lock and submissions were preserved for explicit recovery'
     };
 
