@@ -2,6 +2,7 @@ import { openTbgPlayerProfile } from './player-profile.js';
 
 let historyDirectory = null;
 let loading = null;
+let portalSnapshot = null;
 
 function storedAccessToken() {
   for (let index = 0; index < localStorage.length; index += 1) {
@@ -16,7 +17,24 @@ function storedAccessToken() {
   return '';
 }
 
+function portalDirectory() {
+  const squad = portalSnapshot?.squad;
+  const clubId = portalSnapshot?.appointment?.club_id || portalSnapshot?.club?.club_id;
+  if (!Array.isArray(squad) || !clubId) return null;
+  return {
+    clubs: {
+      [clubId]: {
+        ...(portalSnapshot.club || {}),
+        club_id: clubId,
+        players: squad
+      }
+    }
+  };
+}
+
 async function directory() {
+  const currentPortal = portalDirectory();
+  if (currentPortal) return currentPortal;
   if (historyDirectory) return historyDirectory;
   if (loading) return loading;
   loading = (async () => {
@@ -49,9 +67,19 @@ function profileRoot(trigger) {
   return trigger.closest('.history-club-host, #historyContent, #squadView, #clubPortal') || document.querySelector('#clubPortal') || document.body;
 }
 
+function followAnchor(trigger) {
+  if (!(trigger instanceof HTMLAnchorElement) || !trigger.href) return;
+  if (trigger.target === '_blank') window.open(trigger.href, '_blank', 'noopener');
+  else window.location.assign(trigger.href);
+}
+
+window.addEventListener('tbg:portal-rendered', (event) => {
+  portalSnapshot = event.detail || null;
+});
+
 document.addEventListener('click', async (event) => {
   const trigger = event.target.closest('.player-link');
-  if (!trigger) return;
+  if (!trigger || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
   event.preventDefault();
   try {
     const match = findPlayer(await directory(), trigger);
@@ -59,5 +87,6 @@ document.addEventListener('click', async (event) => {
     openTbgPlayerProfile(profileRoot(trigger), match.player, match.club);
   } catch (error) {
     console.error('Could not open TBG player profile', error);
+    followAnchor(trigger);
   }
 }, true);
