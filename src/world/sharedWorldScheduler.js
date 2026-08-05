@@ -1,6 +1,7 @@
 import { advancePersistentMatchday, validatePersistentMatchdayWorld } from './persistentMatchdayWorld.js';
 import { loadPersistentWorld, savePersistentWorld } from './persistentSeasonLoop.js';
 import { createLoanEligibilitySnapshot, findWorldFixture, ineligibleLoanPlayerIds } from './loanEligibility.js';
+import { availabilityForPlayer } from '../matchEngine/squadAvailability.js';
 import {
   alignCanonicalFixtureKickoffs,
   DEFAULT_TURN_HOUR_UTC,
@@ -8,7 +9,7 @@ import {
   repairCompletedFixtureKickoffs
 } from './canonicalTurnCalendar.js';
 
-export const SHARED_WORLD_SCHEDULER_VERSION = 'tbg-shared-world-scheduler-v1.5';
+export const SHARED_WORLD_SCHEDULER_VERSION = 'tbg-shared-world-scheduler-v1.6';
 
 const text = (value) => String(value ?? '').trim();
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -51,16 +52,24 @@ function selectedPlayerIds(instruction = {}) {
   return [...(instruction.starting_xi || []), ...(instruction.bench || [])].map(text).filter(Boolean);
 }
 
+function availabilityCalendarForClub(world, clubId) {
+  const division = (world.competition?.divisions || []).find((row) => (row.club_ids || []).includes(text(clubId)));
+  return division ? world.matchday_cycle?.runtimes?.[division.division_id]?.state?.availability || null : null;
+}
+
 export function validateManagerSelectionEligibility(world, clubId, instruction = {}) {
   const selected = selectedPlayerIds(instruction);
   if (!selected.length) return Object.freeze({ valid: true, errors: Object.freeze([]), invalid_player_ids: Object.freeze([]) });
 
-  const club = world.squad_cycle?.clubs?.[text(clubId)];
+  const selectedClubId = text(clubId);
+  const club = world.squad_cycle?.clubs?.[selectedClubId];
   if (!club) return Object.freeze({ valid: false, errors: Object.freeze(['Submission club is not in the canonical world']), invalid_player_ids: Object.freeze(selected) });
 
   const owned = new Set((club.player_ids || []).map(text));
   const registered = new Set((club.registered_player_ids || []).map(text));
   const playerMap = world.squad_cycle?.players || {};
+  const availabilityCalendar = availabilityCalendarForClub(world, selectedClubId);
+  const matchday = Number(world.matchday_cycle?.current_matchday || 1);
   const invalid = [];
   const reasons = [];
 
@@ -79,6 +88,14 @@ export function validateManagerSelectionEligibility(world, clubId, instruction =
     if (player.status && player.status !== 'active') {
       invalid.push(playerId);
       reasons.push(`${playerId} is not active`);
+      continue;
+    }
+    if (availabilityCalendar?.players) {
+      const availability = availabilityForPlayer(availabilityCalendar, playerId, matchday);
+      if (!availability.available) {
+        invalid.push(playerId);
+        reasons.push(`${playerId} is ${availability.reason || 'unavailable'} for matchday ${matchday}`);
+      }
     }
   }
 
