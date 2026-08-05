@@ -15,9 +15,9 @@ const $ = (id) => document.getElementById(id);
 
 async function responseBody(response) {
   const text = await response.text();
-  if (!text) return {};
-  try { return JSON.parse(text); }
-  catch { return { error: text.slice(0, 300) }; }
+  if (!text) return { parsed: true, data: {} };
+  try { return { parsed: true, data: JSON.parse(text) }; }
+  catch { return { parsed: false, data: {}, raw: text.slice(0, 300) }; }
 }
 
 async function request(path, body = null) {
@@ -27,12 +27,14 @@ async function request(path, body = null) {
     headers: { authorization, ...(body ? { 'content-type': 'application/json' } : {}) },
     body: body ? JSON.stringify(body) : undefined
   });
-  const data = await responseBody(response);
+  const result = await responseBody(response);
+  const data = result.data;
   if (!response.ok) {
-    const detail = data.error || data.message || (response.status >= 500
-      ? 'The transfer service is temporarily unavailable. Your offer was not recorded; please try again later.'
-      : 'Transfer request failed');
-    throw new Error(`${detail}${data.error ? '' : ` (HTTP ${response.status})`}`);
+    const serverFallback = `The transfer service is temporarily unavailable. Your offer was not recorded; please try again later. (HTTP ${response.status})`;
+    const detail = response.status >= 500 && !result.parsed
+      ? serverFallback
+      : data.error || data.message || (response.status >= 500 ? serverFallback : `Transfer request failed (HTTP ${response.status})`);
+    throw new Error(detail);
   }
   return data;
 }
