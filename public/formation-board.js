@@ -36,6 +36,7 @@ let syncingLegacy = false;
 let managerEdited = false;
 let allowLegacyImport = false;
 let legacyImportTimer;
+let allowedPlayerIds = null;
 
 const byId = (id) => document.getElementById(id);
 const norm = (value) => String(value ?? '');
@@ -47,25 +48,29 @@ function parsePlayer(label) {
   return { id:norm(input?.value), name:parts[0] || norm(input?.value), position:parts[1] || 'Unknown', rating:parts[2] || '—' };
 }
 
+function selectableLabel(label) {
+  const input = label.querySelector('input');
+  const id = norm(input?.value);
+  return Boolean(id) && !input?.disabled && label.dataset.selectionIneligible !== 'true' && (!allowedPlayerIds || allowedPlayerIds.has(id));
+}
+
 function collectPlayers() {
-  const labels = [...document.querySelectorAll('#startingXi .player-pick')];
+  const labels = [...document.querySelectorAll('#startingXi .player-pick')].filter(selectableLabel);
   players = labels.map(parsePlayer);
   return labels.length > 0;
 }
 
 function currentChecked(zone) {
-  return [...document.querySelectorAll(`input[data-zone="${zone}"]:checked`)].map((input) => norm(input.value));
+  return [...document.querySelectorAll(`input[data-zone="${zone}"]:checked:not(:disabled)`)]
+    .map((input) => norm(input.value))
+    .filter((id) => !allowedPlayerIds || allowedPlayerIds.has(id));
 }
 
 function normalisedSubmission(state = window.tbgPortalState) {
   const raw = state?.current_submission;
   if (!raw) return null;
   const instruction = raw.instruction || {};
-  const submission = {
-    ...raw,
-    ...instruction,
-    tactics: instruction.tactics || raw.tactics || {}
-  };
+  const submission = { ...raw, ...instruction, tactics: instruction.tactics || raw.tactics || {} };
   const startingXi = (submission.starting_xi || []).map(norm);
   const bench = (submission.bench || []).map(norm);
   if (startingXi.length !== 11 || bench.length !== 7) return null;
@@ -118,13 +123,11 @@ function renderBoard() {
     const active = selected?.zone === 'xi' && selected.index === index ? ' selected' : '';
     return `<button type="button" class="formation-slot ${player ? '' : 'empty'}${active}" data-zone="xi" data-index="${index}" data-role="${role}" style="left:${x}%;top:${y}%">${token(player,role)}</button>`;
   }).join('');
-
   byId('formationBench').innerHTML = benchAssignments.map((id,index) => {
     const player = players.find((p) => p.id === id);
     const active = selected?.zone === 'bench' && selected.index === index ? ' selected' : '';
     return `<button type="button" class="bench-slot ${player ? '' : 'empty'}${active}" data-zone="bench" data-index="${index}">${token(player,'BENCH')}</button>`;
   }).join('');
-
   const assigned = new Set([...assignments,...benchAssignments].filter(Boolean));
   byId('formationSquadTray').innerHTML = players.map((player) => `<button type="button" class="tray-player ${assigned.has(player.id) ? 'assigned' : ''} ${selected?.playerId === player.id ? 'selected' : ''}" data-player-id="${player.id}" draggable="true"><span class="tray-rating">${player.rating}</span><span><strong>${player.name}</strong><small>${player.position}</small></span><span>${assigned.has(player.id) ? 'Selected' : 'Available'}</span></button>`).join('');
   byId('xiCount').textContent = `${assignments.filter(Boolean).length}/11 XI`;
@@ -145,17 +148,13 @@ function validateBoard() {
   target.className='formation-validation ok'; target.textContent=`Team ready · ${bench.length} substitute${bench.length===1?'':'s'}`; return true;
 }
 
-function markManagerEdited() {
-  managerEdited = true;
-}
-
+function markManagerEdited() { managerEdited = true; }
 function removePlayer(id) {
   assignments = assignments.map((value) => value === id ? null : value);
   benchAssignments = benchAssignments.map((value) => value === id ? null : value);
 }
-
 function placePlayer(id, zone, index) {
-  if (!id) return;
+  if (!id || (allowedPlayerIds && !allowedPlayerIds.has(id))) return;
   markManagerEdited();
   const target = zone === 'xi' ? assignments : benchAssignments;
   const displaced = target[index];
@@ -170,7 +169,6 @@ function placePlayer(id, zone, index) {
   selected = null;
   renderBoard();
 }
-
 function clickSlot(zone,index) {
   const target = zone === 'xi' ? assignments : benchAssignments;
   const occupant = target[index];
@@ -187,27 +185,29 @@ function clickSlot(zone,index) {
 function syncLegacyInputs() {
   if (!board?.isConnected) return;
   syncingLegacy = true;
-  document.querySelectorAll('input[data-zone="xi"]').forEach((input) => { input.checked = assignments.includes(norm(input.value)); });
-  document.querySelectorAll('input[data-zone="bench"]').forEach((input) => { input.checked = benchAssignments.includes(norm(input.value)); });
-
+  document.querySelectorAll('input[data-zone="xi"]').forEach((input) => { input.checked = !input.disabled && assignments.includes(norm(input.value)); });
+  document.querySelectorAll('input[data-zone="bench"]').forEach((input) => { input.checked = !input.disabled && benchAssignments.includes(norm(input.value)); });
   const xiContainer = byId('startingXi');
   const orderedIds = assignments.filter(Boolean);
   const labels = [...xiContainer.querySelectorAll('.player-pick')];
-  orderedIds.forEach((id) => {
-    const label = labels.find((item) => norm(item.querySelector('input')?.value) === id);
-    if (label) xiContainer.appendChild(label);
-  });
+  orderedIds.forEach((id) => { const label = labels.find((item) => norm(item.querySelector('input')?.value) === id); if (label) xiContainer.appendChild(label); });
   labels.filter((label) => !orderedIds.includes(norm(label.querySelector('input')?.value))).forEach((label) => xiContainer.appendChild(label));
-
   const benchContainer = byId('bench');
   const benchLabels = [...benchContainer.querySelectorAll('.player-pick')];
-  benchAssignments.filter(Boolean).forEach((id) => {
-    const label = benchLabels.find((item) => norm(item.querySelector('input')?.value) === id);
-    if (label) benchContainer.appendChild(label);
-  });
+  benchAssignments.filter(Boolean).forEach((id) => { const label = benchLabels.find((item) => norm(item.querySelector('input')?.value) === id); if (label) benchContainer.appendChild(label); });
   benchLabels.filter((label) => !benchAssignments.includes(norm(label.querySelector('input')?.value))).forEach((label) => benchContainer.appendChild(label));
-  document.querySelector('input[data-zone="xi"]')?.dispatchEvent(new Event('change'));
+  document.querySelector('input[data-zone="xi"]:not(:disabled)')?.dispatchEvent(new Event('change'));
   setTimeout(() => { syncingLegacy = false; }, 0);
+}
+
+function applyEligibility(detail = {}) {
+  allowedPlayerIds = new Set((detail.allowed_player_ids || []).map(norm));
+  collectPlayers();
+  assignments = assignments.map((id) => id && allowedPlayerIds.has(id) ? id : null);
+  benchAssignments = benchAssignments.map((id) => id && allowedPlayerIds.has(id) ? id : null);
+  if (selected?.playerId && !allowedPlayerIds.has(selected.playerId)) selected = null;
+  renderBoard();
+  syncLegacyInputs();
 }
 
 function buildBoard() {
@@ -223,15 +223,13 @@ function buildBoard() {
   legacyBench.classList.add('legacy-team-selectors');
   xiHeading?.classList.add('legacy-team-selectors');
   benchHeading?.classList.add('legacy-team-selectors');
-
   board = document.createElement('section');
   board.id='interactiveFormationBoard';
   board.className='formation-board-shell';
-  board.innerHTML=`<div class="pitch-panel"><div class="pitch-toolbar"><div><strong>Interactive formation</strong><div class="pitch-help">Drag players, or tap a player then tap a slot. Tap two occupied slots to swap.</div></div><div class="selection-counts"><span id="xiCount"></span><span id="benchCount"></span></div></div><div id="formationPitch" class="football-pitch"></div><h3>Substitutes</h3><div id="formationBench" class="bench-board"></div><div id="formationValidation" class="formation-validation"></div><div class="board-actions"><button id="clearFormation" type="button">Clear team</button><button id="autoPickFormation" type="button">Auto-pick strongest XI</button></div></div><aside class="squad-tray-panel"><h3>Squad</h3><div class="pitch-help">Selected players are faded. Tap any player to move them.</div><div id="formationSquadTray" class="squad-tray"></div></aside>`;
+  board.innerHTML=`<div class="pitch-panel"><div class="pitch-toolbar"><div><strong>Interactive formation</strong><div class="pitch-help">Drag players, or tap a player then tap a slot. Tap two occupied slots to swap.</div></div><div class="selection-counts"><span id="xiCount"></span><span id="benchCount"></span></div></div><div id="formationPitch" class="football-pitch"></div><h3>Substitutes</h3><div id="formationBench" class="bench-board"></div><div id="formationValidation" class="formation-validation"></div><div class="board-actions"><button id="clearFormation" type="button">Clear team</button><button id="autoPickFormation" type="button">Auto-pick strongest XI</button></div></div><aside class="squad-tray-panel"><h3>Selectable squad</h3><div class="pitch-help">Only registered and currently available players appear here.</div><div id="formationSquadTray" class="squad-tray"></div></aside>`;
   legacyXi.parentElement.insertBefore(board, xiHeading || legacyXi);
   initialiseAssignments();
   renderBoard();
-
   board.addEventListener('click',(event)=>{
     const slot=event.target.closest('[data-zone][data-index]');
     if(slot) return clickSlot(slot.dataset.zone,Number(slot.dataset.index));
@@ -243,17 +241,12 @@ function buildBoard() {
   board.addEventListener('drop',(event)=>{ const slot=event.target.closest('[data-zone][data-index]'); if(!slot)return; event.preventDefault(); placePlayer(event.dataTransfer.getData('text/plain'),slot.dataset.zone,Number(slot.dataset.index)); });
   byId('clearFormation').addEventListener('click',()=>{markManagerEdited();assignments=Array(11).fill(null);benchAssignments=Array(7).fill(null);selected=null;renderBoard();});
   byId('autoPickFormation').addEventListener('click',()=>{ markManagerEdited(); const sorted=[...players].sort((a,b)=>Number(b.rating)-Number(a.rating)); const gk=sorted.find((p)=>p.position==='Goalkeeper'); const rest=sorted.filter((p)=>p.id!==gk?.id); assignments=[gk?.id||null,...rest.slice(0,10).map((p)=>p.id)]; benchAssignments=rest.slice(10,17).map((p)=>p.id); while(benchAssignments.length<7)benchAssignments.push(null);renderBoard(); });
-
   window.dispatchEvent(new CustomEvent('tbg:formation-board-ready'));
   return true;
 }
 
 function refreshFromPersistedInputs() {
-  if (!board?.isConnected) {
-    board = null;
-    scheduleBoardBuild(100);
-    return;
-  }
+  if (!board?.isConnected) { board = null; scheduleBoardBuild(100); return; }
   if (syncingLegacy || !collectPlayers()) return;
   const checkedXi=currentChecked('xi');
   const checkedBench=currentChecked('bench');
@@ -263,25 +256,13 @@ function refreshFromPersistedInputs() {
   managerEdited=true;
   renderBoard();
 }
-
 function allowExplicitLegacyImport() {
   allowLegacyImport = true;
   clearTimeout(legacyImportTimer);
-  legacyImportTimer = setTimeout(() => {
-    if (allowLegacyImport) refreshFromPersistedInputs();
-    allowLegacyImport = false;
-  }, 250);
+  legacyImportTimer = setTimeout(() => { if (allowLegacyImport) refreshFromPersistedInputs(); allowLegacyImport = false; }, 250);
 }
-
-function waitForTeamLists() {
-  if (buildBoard()) return;
-  scheduleBoardBuild(500);
-}
-
-function scheduleBoardBuild(delay = 0) {
-  clearTimeout(buildRetryTimer);
-  buildRetryTimer = setTimeout(waitForTeamLists, delay);
-}
+function waitForTeamLists() { if (buildBoard()) return; scheduleBoardBuild(500); }
+function scheduleBoardBuild(delay = 0) { clearTimeout(buildRetryTimer); buildRetryTimer = setTimeout(waitForTeamLists, delay); }
 
 window.addEventListener('load',()=>scheduleBoardBuild(300));
 window.addEventListener('tbg:portal-rendered',(event)=>{
@@ -289,6 +270,7 @@ window.addEventListener('tbg:portal-rendered',(event)=>{
   collectPlayers();
   applyCanonicalSubmission(event.detail);
 });
+window.addEventListener('tbg:selection-eligibility-updated',(event)=>applyEligibility(event.detail));
 window.addEventListener('tbg:team-submission-saved',(event)=>{
   if (!event.detail?.state?.current_submission) return;
   managerEdited=false;
@@ -296,9 +278,7 @@ window.addEventListener('tbg:team-submission-saved',(event)=>{
   applyCanonicalSubmission(event.detail.state);
 });
 document.addEventListener('tbg:team-sheet-override', allowExplicitLegacyImport);
-document.addEventListener('click',(event)=>{
-  if (event.target?.closest('#loadPreset, #loadPreviousMatch')) allowExplicitLegacyImport();
-},true);
+document.addEventListener('click',(event)=>{ if (event.target?.closest('#loadPreset, #loadPreviousMatch')) allowExplicitLegacyImport(); },true);
 document.addEventListener('change',(event)=>{
   if (syncingLegacy || !event.target?.matches('input[data-zone="xi"], input[data-zone="bench"]')) return;
   if (event.isTrusted || allowLegacyImport) refreshFromPersistedInputs();
