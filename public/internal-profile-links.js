@@ -32,9 +32,7 @@ function portalDirectory() {
   };
 }
 
-async function directory() {
-  const currentPortal = portalDirectory();
-  if (currentPortal) return currentPortal;
+async function historyDirectoryData() {
   if (historyDirectory) return historyDirectory;
   if (loading) return loading;
   loading = (async () => {
@@ -52,7 +50,7 @@ function findPlayer(data, trigger) {
   const href = trigger instanceof HTMLAnchorElement ? trigger.href : '';
   const playerId = String(trigger.dataset.tbgPlayerId || trigger.dataset.playerId || '').trim();
   const label = trigger.textContent.trim();
-  for (const club of Object.values(data.clubs || {})) {
+  for (const club of Object.values(data?.clubs || {})) {
     const player = (club.players || []).find((candidate) =>
       (playerId && (candidate.tbg_player_id === playerId || candidate.player_id === playerId))
       || (href && (candidate.profile_url === href || candidate.pink_final_profile_url === href))
@@ -61,6 +59,12 @@ function findPlayer(data, trigger) {
     if (player) return { player, club };
   }
   return null;
+}
+
+async function resolvePlayer(trigger) {
+  const localMatch = findPlayer(portalDirectory(), trigger);
+  if (localMatch) return localMatch;
+  return findPlayer(await historyDirectoryData(), trigger);
 }
 
 function profileRoot(trigger) {
@@ -82,7 +86,7 @@ document.addEventListener('click', async (event) => {
   if (!trigger || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
   event.preventDefault();
   try {
-    const match = findPlayer(await directory(), trigger);
+    const match = await resolvePlayer(trigger);
     if (!match) throw new Error('This player is not present in the current canonical world.');
     openTbgPlayerProfile(profileRoot(trigger), match.player, match.club);
   } catch (error) {
