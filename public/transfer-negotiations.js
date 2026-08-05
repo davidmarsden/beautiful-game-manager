@@ -13,6 +13,13 @@ window.fetch = async (...args) => {
 
 const $ = (id) => document.getElementById(id);
 
+async function responseBody(response) {
+  const text = await response.text();
+  if (!text) return { parsed: true, data: {} };
+  try { return { parsed: true, data: JSON.parse(text) }; }
+  catch { return { parsed: false, data: {}, raw: text.slice(0, 300) }; }
+}
+
 async function request(path, body = null) {
   if (!authorization) throw new Error('Portal session is not ready');
   const response = await nativeFetch(path, {
@@ -20,8 +27,15 @@ async function request(path, body = null) {
     headers: { authorization, ...(body ? { 'content-type': 'application/json' } : {}) },
     body: body ? JSON.stringify(body) : undefined
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Transfer request failed');
+  const result = await responseBody(response);
+  const data = result.data;
+  if (!response.ok) {
+    const serverFallback = `The transfer service is temporarily unavailable. Your offer was not recorded; please try again later. (HTTP ${response.status})`;
+    const detail = response.status >= 500 && !result.parsed
+      ? serverFallback
+      : data.error || data.message || (response.status >= 500 ? serverFallback : `Transfer request failed (HTTP ${response.status})`);
+    throw new Error(detail);
+  }
   return data;
 }
 

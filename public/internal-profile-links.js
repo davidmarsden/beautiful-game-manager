@@ -2,6 +2,7 @@ import { openTbgPlayerProfile } from './player-profile.js';
 
 let historyDirectory = null;
 let loading = null;
+let portalSnapshot = null;
 
 function storedAccessToken() {
   for (let index = 0; index < localStorage.length; index += 1) {
@@ -16,7 +17,22 @@ function storedAccessToken() {
   return '';
 }
 
-async function directory() {
+function portalDirectory() {
+  const squad = portalSnapshot?.squad;
+  const clubId = portalSnapshot?.appointment?.club_id || portalSnapshot?.club?.club_id;
+  if (!Array.isArray(squad) || !clubId) return null;
+  return {
+    clubs: {
+      [clubId]: {
+        ...(portalSnapshot.club || {}),
+        club_id: clubId,
+        players: squad
+      }
+    }
+  };
+}
+
+async function historyDirectoryData() {
   if (historyDirectory) return historyDirectory;
   if (loading) return loading;
   loading = (async () => {
@@ -34,7 +50,7 @@ function findPlayer(data, trigger) {
   const href = trigger instanceof HTMLAnchorElement ? trigger.href : '';
   const playerId = String(trigger.dataset.tbgPlayerId || trigger.dataset.playerId || '').trim();
   const label = trigger.textContent.trim();
-  for (const club of Object.values(data.clubs || {})) {
+  for (const club of Object.values(data?.clubs || {})) {
     const player = (club.players || []).find((candidate) =>
       (playerId && (candidate.tbg_player_id === playerId || candidate.player_id === playerId))
       || (href && (candidate.profile_url === href || candidate.pink_final_profile_url === href))
@@ -45,19 +61,36 @@ function findPlayer(data, trigger) {
   return null;
 }
 
+async function resolvePlayer(trigger) {
+  const localMatch = findPlayer(portalDirectory(), trigger);
+  if (localMatch) return localMatch;
+  return findPlayer(await historyDirectoryData(), trigger);
+}
+
 function profileRoot(trigger) {
   return trigger.closest('.history-club-host, #historyContent, #squadView, #clubPortal') || document.querySelector('#clubPortal') || document.body;
 }
 
+function followAnchor(trigger) {
+  if (!(trigger instanceof HTMLAnchorElement) || !trigger.href) return;
+  if (trigger.target === '_blank') window.open(trigger.href, '_blank', 'noopener');
+  else window.location.assign(trigger.href);
+}
+
+window.addEventListener('tbg:portal-rendered', (event) => {
+  portalSnapshot = event.detail || null;
+});
+
 document.addEventListener('click', async (event) => {
   const trigger = event.target.closest('.player-link');
-  if (!trigger) return;
+  if (!trigger || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
   event.preventDefault();
   try {
-    const match = findPlayer(await directory(), trigger);
+    const match = await resolvePlayer(trigger);
     if (!match) throw new Error('This player is not present in the current canonical world.');
     openTbgPlayerProfile(profileRoot(trigger), match.player, match.club);
   } catch (error) {
     console.error('Could not open TBG player profile', error);
+    followAnchor(trigger);
   }
 }, true);
