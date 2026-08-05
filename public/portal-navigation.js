@@ -1,4 +1,5 @@
 import './history.js';
+import './history-load-recovery.js';
 
 const VIEW_ALIASES = new Map([
   ['dashboard', 'dashboard'],
