@@ -336,11 +336,15 @@ begin
   from pg_catalog.pg_policies
   where schemaname = 'public'
     and (
-      coalesce(qual, '') ~ '(^|[^[:alpha:]_])auth\\.uid\\(\\)'
-      or coalesce(with_check, '') ~ '(^|[^[:alpha:]_])auth\\.uid\\(\\)'
-    )
-    and coalesce(qual, '') not like '%SELECT auth.uid()%'
-    and coalesce(with_check, '') not like '%SELECT auth.uid()%';
+      (
+        coalesce(qual, '') ~ '(^|[^[:alpha:]_])auth\.uid\(\)'
+        and coalesce(qual, '') not ilike '%select auth.uid()%'
+      )
+      or (
+        coalesce(with_check, '') ~ '(^|[^[:alpha:]_])auth\.uid\(\)'
+        and coalesce(with_check, '') not ilike '%select auth.uid()%'
+      )
+    );
 
   if direct_auth_policy_count <> 0 then
     raise exception '% public RLS policies still evaluate auth.uid() directly', direct_auth_policy_count;
