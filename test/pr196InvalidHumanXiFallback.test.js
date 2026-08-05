@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { syntheticPlayableLeagueStructure } from '../src/matchEngine/leagueStructureSimulation.js';
 import { createPersistentLeagueWorld } from '../src/world/persistentLeagueWorld.js';
+import { advancePersistentMatchday } from '../src/world/persistentMatchdayWorld.js';
 import {
   buildManagerTurnSubmission,
   buildScheduledTurnPlan,
@@ -87,7 +88,7 @@ test('a locked invalid human XI falls back for that club without failing the sha
 });
 
 test('an injured or suspended selected player is rejected before engine execution', () => {
-  const source = world();
+  const source = advancePersistentMatchday(world()).world;
   const clubId = source.human_club_id;
   const club = source.squad_cycle.clubs[clubId];
   const startingXi = club.registered_player_ids.slice(0, 11);
