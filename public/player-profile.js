@@ -13,6 +13,9 @@ function formatDate(value) {
 }
 
 function availabilityState(player) {
+  const unregistered = player?.registered === false || String(player?.registration_status || '').trim().toLowerCase() === 'unregistered';
+  if (unregistered) return { label: 'Unregistered', tone: 'bad' };
+  if (player?.loaned_out) return { label: 'Loaned out', tone: 'bad' };
   const label = player.injury_status || player.availability || 'Available';
   const normalized = String(label).trim().toLowerCase();
   const negative = normalized.includes('unavailable') || normalized.includes('injur') || normalized.includes('suspend');
@@ -53,7 +56,7 @@ function tabPanel(name, player) {
     return `<div class="tbg-profile-grid">
       ${metric('Fitness', `${player.fitness ?? 100}%`)}
       ${metric('Morale', morale.label, `status-${morale.tone}`)}
-      ${metric('Availability', availability.label, `status-${availability.tone}`)}
+      ${metric('Selection status', availability.label, `status-${availability.tone}`)}
       ${metric('Contract', formatDate(player.contract_expiry || player.contract_end_at || player.contract?.end_at))}
     </div>`;
   }
