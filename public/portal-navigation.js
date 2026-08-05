@@ -1,5 +1,6 @@
 import './history.js';
 import './history-load-recovery.js';
+import './team-selection-eligibility-guard.js';
 
 const VIEW_ALIASES = new Map([
   ['dashboard', 'dashboard'],
