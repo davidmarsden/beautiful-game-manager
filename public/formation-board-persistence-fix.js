@@ -8,6 +8,7 @@
 const qAll = (selector, root = document) => [...root.querySelectorAll(selector)];
 const playerId = (value) => String(value ?? '');
 let pendingCaptainId = null;
+let captainSelectionCapturedThisTurn = false;
 
 function orderedBoardIds(zone) {
   const selector = zone === 'xi'
@@ -76,11 +77,14 @@ window.tbgPersistRenderedBoard = persistRenderedBoard;
 
 document.addEventListener('tbg:captain-selected', (event) => {
   pendingCaptainId = playerId(event.detail?.captain_id) || null;
+  captainSelectionCapturedThisTurn = true;
+  queueMicrotask(() => { captainSelectionCapturedThisTurn = false; });
 });
 
 // Fallback for browsers/paths that do not pass through the tablet touch bridge.
 document.addEventListener('change', (event) => {
   if (event.target?.id !== 'captain' || !event.isTrusted) return;
+  if (captainSelectionCapturedThisTurn) return;
   pendingCaptainId = playerId(event.target.value);
 }, true);
 
