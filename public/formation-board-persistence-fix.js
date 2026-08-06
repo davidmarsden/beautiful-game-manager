@@ -67,12 +67,27 @@ function restorePendingCaptain() {
   return true;
 }
 
+function replacePendingCaptainFromLoadedSheet() {
+  const captain = document.getElementById('captain');
+  pendingCaptainId = captain ? playerId(captain.value) || null : null;
+}
+
 window.tbgPersistRenderedBoard = persistRenderedBoard;
 
 document.addEventListener('change', (event) => {
   if (event.target?.id !== 'captain' || !event.isTrusted) return;
   pendingCaptainId = playerId(event.target.value);
 });
+
+document.addEventListener('tbg:team-sheet-override', () => {
+  pendingCaptainId = null;
+  requestAnimationFrame(replacePendingCaptainFromLoadedSheet);
+  setTimeout(replacePendingCaptainFromLoadedSheet, 100);
+});
+
+document.addEventListener('click', (event) => {
+  if (event.target?.closest('#loadPreset, #loadPreviousMatch')) pendingCaptainId = null;
+}, true);
 
 window.addEventListener('tbg:portal-rendered', () => {
   requestAnimationFrame(restorePendingCaptain);
