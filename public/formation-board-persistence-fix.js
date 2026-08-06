@@ -84,7 +84,11 @@ document.addEventListener('change', (event) => {
   pendingCaptainId = playerId(event.target.value);
 }, true);
 
-document.addEventListener('tbg:team-sheet-override', () => {
+document.addEventListener('tbg:team-sheet-override', (event) => {
+  // Captain/tactics edits deliberately trigger an XI import only to mark the
+  // current sheet as manager-edited. They are not a request to load another
+  // sheet, so do not erase the captain value captured earlier in the same turn.
+  if (event.detail?.source === 'captain_or_tactics_change') return;
   pendingCaptainId = null;
   requestAnimationFrame(replacePendingCaptainFromLoadedSheet);
   setTimeout(replacePendingCaptainFromLoadedSheet, 100);
