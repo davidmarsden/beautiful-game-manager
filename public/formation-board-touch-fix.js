@@ -91,12 +91,17 @@ function install() {
 }
 
 // Captain and tactics live outside formation-board.js, but they are part of the
-// same unsaved manager-owned team sheet. Reuse the explicit import handshake to
-// latch the board's managerEdited state before a later portal render can restore
-// the previous canonical submission over those changes.
+// same unsaved manager-owned team sheet. Preserve a newly chosen captain before
+// the explicit import handshake synchronously refreshes the XI and rebuilds the
+// captain select.
 document.addEventListener('change', (event) => {
   if (!event.isTrusted) return;
   if (!event.target?.matches('#captain, #mentality, #pressing, #tempo, #width, #defensiveLine')) return;
+  if (event.target.id === 'captain') {
+    document.dispatchEvent(new CustomEvent('tbg:captain-selected', {
+      detail: { captain_id: id(event.target.value) }
+    }));
+  }
   importHiddenTeamIntoBoard('captain_or_tactics_change');
 }, true);
 
