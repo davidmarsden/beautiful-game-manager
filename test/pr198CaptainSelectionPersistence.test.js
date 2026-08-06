@@ -5,13 +5,23 @@ import fs from 'node:fs';
 test('unsaved captain selection survives portal refresh until save succeeds', () => {
   const source = fs.readFileSync(new URL('../public/formation-board-persistence-fix.js', import.meta.url), 'utf8');
   assert.match(source, /let pendingCaptainId = null/);
-  assert.match(source, /event\.target\?\.id !== 'captain'/);
-  assert.match(source, /pendingCaptainId = playerId\(event\.target\.value\)/);
+  assert.match(source, /tbg:captain-selected/);
+  assert.match(source, /pendingCaptainId = playerId\(event\.detail\?\.captain_id\) \|\| null/);
   assert.match(source, /tbg:portal-rendered/);
   assert.match(source, /requestAnimationFrame\(restorePendingCaptain\)/);
   assert.match(source, /tbg:team-submission-saved/);
   assert.match(source, /pendingCaptainId = null/);
   assert.match(source, /restorePendingCaptain\(\);\n    persistRenderedBoard\(\)/);
+});
+
+test('the earlier-loaded touch handler preserves captain before XI rerender', () => {
+  const touch = fs.readFileSync(new URL('../public/formation-board-touch-fix.js', import.meta.url), 'utf8');
+  const captainEvent = touch.indexOf("new CustomEvent('tbg:captain-selected'");
+  const importCall = touch.indexOf("importHiddenTeamIntoBoard('captain_or_tactics_change')");
+  assert.ok(captainEvent >= 0);
+  assert.ok(importCall >= 0);
+  assert.ok(captainEvent < importCall);
+  assert.match(touch, /detail: \{ captain_id: id\(event\.target\.value\) \}/);
 });
 
 test('loading a preset or previous match replaces the pending captain override', () => {

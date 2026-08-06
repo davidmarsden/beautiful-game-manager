@@ -74,10 +74,15 @@ function replacePendingCaptainFromLoadedSheet() {
 
 window.tbgPersistRenderedBoard = persistRenderedBoard;
 
+document.addEventListener('tbg:captain-selected', (event) => {
+  pendingCaptainId = playerId(event.detail?.captain_id) || null;
+});
+
+// Fallback for browsers/paths that do not pass through the tablet touch bridge.
 document.addEventListener('change', (event) => {
   if (event.target?.id !== 'captain' || !event.isTrusted) return;
   pendingCaptainId = playerId(event.target.value);
-});
+}, true);
 
 document.addEventListener('tbg:team-sheet-override', () => {
   pendingCaptainId = null;
