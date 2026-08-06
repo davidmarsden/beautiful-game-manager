@@ -7,6 +7,7 @@
 
 const qAll = (selector, root = document) => [...root.querySelectorAll(selector)];
 const playerId = (value) => String(value ?? '');
+let pendingCaptainId = null;
 
 function orderedBoardIds(zone) {
   const selector = zone === 'xi'
@@ -58,10 +59,35 @@ function persistRenderedBoard() {
   return true;
 }
 
+function restorePendingCaptain() {
+  if (!pendingCaptainId) return false;
+  const captain = document.getElementById('captain');
+  if (!captain || ![...captain.options].some((option) => playerId(option.value) === pendingCaptainId)) return false;
+  captain.value = pendingCaptainId;
+  return true;
+}
+
 window.tbgPersistRenderedBoard = persistRenderedBoard;
 
+document.addEventListener('change', (event) => {
+  if (event.target?.id !== 'captain' || !event.isTrusted) return;
+  pendingCaptainId = playerId(event.target.value);
+});
+
+window.addEventListener('tbg:portal-rendered', () => {
+  requestAnimationFrame(restorePendingCaptain);
+  setTimeout(restorePendingCaptain, 100);
+});
+
+window.addEventListener('tbg:team-submission-saved', () => {
+  pendingCaptainId = null;
+});
+
 document.addEventListener('submit', (event) => {
-  if (event.target?.id === 'decisionForm') persistRenderedBoard();
+  if (event.target?.id === 'decisionForm') {
+    restorePendingCaptain();
+    persistRenderedBoard();
+  }
 }, true);
 
 // Preset controls read the hidden selectors directly. Synchronise those selectors
