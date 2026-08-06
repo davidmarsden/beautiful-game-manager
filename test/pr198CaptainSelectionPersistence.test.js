@@ -13,3 +13,12 @@ test('unsaved captain selection survives portal refresh until save succeeds', ()
   assert.match(source, /pendingCaptainId = null/);
   assert.match(source, /restorePendingCaptain\(\);\n    persistRenderedBoard\(\)/);
 });
+
+test('loading a preset or previous match replaces the pending captain override', () => {
+  const source = fs.readFileSync(new URL('../public/formation-board-persistence-fix.js', import.meta.url), 'utf8');
+  assert.match(source, /tbg:team-sheet-override/);
+  assert.match(source, /pendingCaptainId = null;\n  requestAnimationFrame\(replacePendingCaptainFromLoadedSheet\)/);
+  assert.match(source, /setTimeout\(replacePendingCaptainFromLoadedSheet, 100\)/);
+  assert.match(source, /#loadPreset, #loadPreviousMatch/);
+  assert.match(source, /pendingCaptainId = captain \? playerId\(captain\.value\) \|\| null : null/);
+});
