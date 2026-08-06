@@ -74,10 +74,12 @@ function replacePendingCaptainFromLoadedSheet() {
 
 window.tbgPersistRenderedBoard = persistRenderedBoard;
 
+// Capture the native select change before app/formation handlers can synchronously
+// rerender the board and restore the previously saved captain.
 document.addEventListener('change', (event) => {
   if (event.target?.id !== 'captain' || !event.isTrusted) return;
   pendingCaptainId = playerId(event.target.value);
-});
+}, true);
 
 document.addEventListener('tbg:team-sheet-override', () => {
   pendingCaptainId = null;
