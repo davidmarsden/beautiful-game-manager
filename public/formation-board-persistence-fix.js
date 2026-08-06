@@ -74,8 +74,11 @@ function replacePendingCaptainFromLoadedSheet() {
 
 window.tbgPersistRenderedBoard = persistRenderedBoard;
 
-// Capture the native select change before app/formation handlers can synchronously
-// rerender the board and restore the previously saved captain.
+document.addEventListener('tbg:captain-selected', (event) => {
+  pendingCaptainId = playerId(event.detail?.captain_id) || null;
+});
+
+// Fallback for browsers/paths that do not pass through the tablet touch bridge.
 document.addEventListener('change', (event) => {
   if (event.target?.id !== 'captain' || !event.isTrusted) return;
   pendingCaptainId = playerId(event.target.value);
