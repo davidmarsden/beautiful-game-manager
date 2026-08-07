@@ -49,11 +49,16 @@ function pick(player, zone, index) {
 }
 
 function refreshCaptain() {
+  const captain = $("captain");
+  const previousCaptainId = captain.value;
   const selected = [...document.querySelectorAll('input[data-zone="xi"]:checked')];
-  $("captain").innerHTML = selected.map((input) => {
+  captain.innerHTML = selected.map((input) => {
     const player = state.squad.find((row) => row.tbg_player_id === input.value);
     return `<option value="${input.value}">${nameOf(player)}</option>`;
   }).join("");
+  if (previousCaptainId && selected.some((input) => input.value === previousCaptainId)) {
+    captain.value = previousCaptainId;
+  }
 }
 
 function compare(a, b, key) {
