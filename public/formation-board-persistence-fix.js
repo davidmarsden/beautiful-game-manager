@@ -8,6 +8,7 @@
 const qAll = (selector, root = document) => [...root.querySelectorAll(selector)];
 const playerId = (value) => String(value ?? '');
 let pendingCaptainId = null;
+let captainSelectionCapturedThisTurn = false;
 
 function orderedBoardIds(zone) {
   const selector = zone === 'xi'
@@ -76,15 +77,22 @@ window.tbgPersistRenderedBoard = persistRenderedBoard;
 
 document.addEventListener('tbg:captain-selected', (event) => {
   pendingCaptainId = playerId(event.detail?.captain_id) || null;
+  captainSelectionCapturedThisTurn = true;
+  queueMicrotask(() => { captainSelectionCapturedThisTurn = false; });
 });
 
 // Fallback for browsers/paths that do not pass through the tablet touch bridge.
 document.addEventListener('change', (event) => {
   if (event.target?.id !== 'captain' || !event.isTrusted) return;
+  if (captainSelectionCapturedThisTurn) return;
   pendingCaptainId = playerId(event.target.value);
 }, true);
 
-document.addEventListener('tbg:team-sheet-override', () => {
+document.addEventListener('tbg:team-sheet-override', (event) => {
+  // Captain/tactics edits deliberately trigger an XI import only to mark the
+  // current sheet as manager-edited. They are not a request to load another
+  // sheet, so do not erase the captain value captured earlier in the same turn.
+  if (event.detail?.source === 'captain_or_tactics_change') return;
   pendingCaptainId = null;
   requestAnimationFrame(replacePendingCaptainFromLoadedSheet);
   setTimeout(replacePendingCaptainFromLoadedSheet, 100);

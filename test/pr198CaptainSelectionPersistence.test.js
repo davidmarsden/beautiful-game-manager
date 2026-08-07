@@ -24,6 +24,24 @@ test('the earlier-loaded touch handler preserves captain before XI rerender', ()
   assert.match(touch, /detail: \{ captain_id: id\(event\.target\.value\) \}/);
 });
 
+test('captain edit marker does not erase the captain captured in the same event cycle', () => {
+  const source = fs.readFileSync(new URL('../public/formation-board-persistence-fix.js', import.meta.url), 'utf8');
+  const overrideListener = source.match(/document\.addEventListener\('tbg:team-sheet-override',[\s\S]*?\n\}\);/)?.[0] || '';
+  assert.match(overrideListener, /event\.detail\?\.source === 'captain_or_tactics_change'/);
+  assert.match(overrideListener, /return;/);
+  assert.ok(overrideListener.indexOf("captain_or_tactics_change") < overrideListener.indexOf('pendingCaptainId = null'));
+});
+
+test('trusted fallback cannot recapture the captain after synchronous select rebuild', () => {
+  const source = fs.readFileSync(new URL('../public/formation-board-persistence-fix.js', import.meta.url), 'utf8');
+  assert.match(source, /let captainSelectionCapturedThisTurn = false/);
+  assert.match(source, /captainSelectionCapturedThisTurn = true/);
+  assert.match(source, /queueMicrotask\(\(\) => \{ captainSelectionCapturedThisTurn = false; \}\)/);
+  const fallback = source.match(/document\.addEventListener\('change',[\s\S]*?\}, true\);/)?.[0] || '';
+  assert.match(fallback, /if \(captainSelectionCapturedThisTurn\) return/);
+  assert.ok(fallback.indexOf('captainSelectionCapturedThisTurn') < fallback.indexOf('pendingCaptainId = playerId(event.target.value)'));
+});
+
 test('loading a preset or previous match replaces the pending captain override', () => {
   const source = fs.readFileSync(new URL('../public/formation-board-persistence-fix.js', import.meta.url), 'utf8');
   assert.match(source, /tbg:team-sheet-override/);
