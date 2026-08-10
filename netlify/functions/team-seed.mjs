@@ -64,7 +64,7 @@ export default async (request) => {
     const appointment = appointments[0];
     if (!appointment) return json({ error: 'You are not appointed to this club' }, 403);
 
-    const rows = await serverRest(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(appointment.world_id)}&manager_id=eq.${encodeURIComponent(manager.id)}&club_id=eq.${encodeURIComponent(clubId)}&status=in.(submitted,locked,consumed)&select=id,world_id,season_id,matchday,manager_id,club_id,status,submitted_at,instruction&order=matchday.desc,submitted_at.desc&limit=12`);
+    const rows = await serverRest(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(appointment.world_id)}&manager_id=eq.${encodeURIComponent(manager.id)}&club_id=eq.${encodeURIComponent(clubId)}&status=in.(submitted,locked,consumed)&select=id,world_id,season_id,matchday,manager_id,club_id,status,submitted_at,instruction&order=submitted_at.desc&limit=12`);
     const submissions = (rows || []).map(normalizeTurnSubmission);
     const current = fixtureId
       ? submissions.find((row) => String(row.fixture_id || '') === fixtureId && ['submitted', 'locked'].includes(String(row.status))) || null
