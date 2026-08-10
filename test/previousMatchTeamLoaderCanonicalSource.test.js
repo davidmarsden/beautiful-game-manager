@@ -19,3 +19,9 @@ test('current fixture submission is excluded from previous-match history', () =>
   assert.match(source, /String\(row\.fixture_id \|\| ''\) !== fixtureId/);
   assert.match(source, /\['submitted', 'locked'\]\.includes/);
 });
+
+test('previous-match history is ordered chronologically across season boundaries', () => {
+  const source = fs.readFileSync(new URL('../netlify/functions/team-seed.mjs', import.meta.url), 'utf8');
+  assert.match(source, /order=submitted_at\.desc&limit=12/);
+  assert.doesNotMatch(source, /order=matchday\.desc/);
+});
