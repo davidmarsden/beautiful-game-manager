@@ -121,10 +121,14 @@ async function readTurnState(token, worldId) {
   return rows[0] || null;
 }
 
-async function readTransferDirectoryWorld(token, worldId) {
-  const rows = await userSupabase(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&select=save_envelope&limit=1`, token);
+async function readTransferSnapshot(token, worldId) {
+  const rows = await userSupabase(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&select=save_envelope,turn_status&limit=1`, token);
   const stored = rows[0];
-  return stored ? loadPersistentWorld(JSON.stringify(stored.save_envelope)) : null;
+  if (!stored) return null;
+  return {
+    turn_status: stored.turn_status,
+    world: loadPersistentWorld(JSON.stringify(stored.save_envelope))
+  };
 }
 
 export default async (request) => {
@@ -133,12 +137,10 @@ export default async (request) => {
     const token = bearerToken(request);
     if (!token) return json({ error: 'Authentication required' }, 401);
     const current = await identity(token);
-    const stored = await readTurnState(token, current.appointment.world_id);
-    if (!stored) return json({ error: 'The canonical world has not been initialized' }, 409);
 
     if (request.method === 'GET') {
-      const [world, offerRows, managedRows] = await Promise.all([
-        readTransferDirectoryWorld(token, current.appointment.world_id),
+      const [snapshot, offerRows, managedRows] = await Promise.all([
+        readTransferSnapshot(token, current.appointment.world_id),
         serverSupabase('/rest/v1/rpc/get_manager_transfer_inbox_for_user', {
           method: 'POST',
           body: JSON.stringify({
@@ -154,18 +156,20 @@ export default async (request) => {
           })
         })
       ]);
-      if (!world) return json({ error: 'The canonical world has not been initialized' }, 409);
+      if (!snapshot?.world) return json({ error: 'The canonical world has not been initialized' }, 409);
       const managedClubIds = new Set((Array.isArray(managedRows) ? managedRows : []).map((row) => row.club_id));
       return json({
         world_id: current.appointment.world_id,
         club_id: current.appointment.club_id,
-        turn_status: stored.turn_status,
-        directory: transferDirectory(world, current.appointment.club_id, managedClubIds),
-        incoming_offers: (Array.isArray(offerRows) ? offerRows : []).map((row) => projectOffer(world, row))
+        turn_status: snapshot.turn_status,
+        directory: transferDirectory(snapshot.world, current.appointment.club_id, managedClubIds),
+        incoming_offers: (Array.isArray(offerRows) ? offerRows : []).map((row) => projectOffer(snapshot.world, row))
       });
     }
 
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+    const stored = await readTurnState(token, current.appointment.world_id);
+    if (!stored) return json({ error: 'The canonical world has not been initialized' }, 409);
     if (stored.turn_status !== 'open') return json({ error: `World commands are locked while turn is ${stored.turn_status}` }, 409);
     const body = await request.json().catch(() => ({}));
     const proposalId = String(body.proposal_id || '').trim();
