@@ -36,26 +36,32 @@ test('terminal response closes both sides atomically with audit and inbox outcom
   assert.match(migration, /insert into public\.manager_messages/);
 });
 
-test('negotiation API exposes only the appointed club inbox and a compact managed-club football directory', async () => {
+test('negotiation API uses the compact managed-club transfer projection', async () => {
   const api = await read('netlify/functions/transfer-negotiations.mjs');
   assert.match(api, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(api, /serverSupabase\('\/rest\/v1\/rpc\/get_manager_transfer_directory_for_user'/);
   assert.match(api, /serverSupabase\('\/rest\/v1\/rpc\/get_manager_transfer_inbox_for_user'/);
-  assert.match(api, /serverSupabase\('\/rest\/v1\/rpc\/get_managed_transfer_clubs_for_user'/);
   assert.match(api, /serverSupabase\('\/rest\/v1\/rpc\/submit_manager_transfer_response_for_user'/);
   assert.match(api, /p_user_id: current\.user\.id/);
-  assert.match(api, /const managedClubIds = new Set/);
-  assert.match(api, /transferDirectory\(snapshot\.world, current\.appointment\.club_id, managedClubIds\)/);
+  assert.match(api, /directory: snapshot\.directory/);
+  assert.match(api, /projectOffer\(directory, row\)/);
   assert.match(api, /incoming_offers/);
   assert.match(api, /cache-control': 'no-store'/);
-  assert.doesNotMatch(api, /userSupabase\('\/rest\/v1\/rpc\/(get_manager_transfer_inbox|get_managed_transfer_clubs|submit_manager_transfer_response)'/);
+  assert.doesNotMatch(api, /get_managed_transfer_clubs_for_user/);
+  assert.doesNotMatch(api, /loadPersistentWorld|save_envelope|readTransferSnapshot|transferDirectory\(world/);
 });
 
-test('transfer GET keeps envelope and turn status in one canonical snapshot', async () => {
-  const api = await read('netlify/functions/transfer-negotiations.mjs');
-  assert.match(api, /async function readTransferSnapshot[\s\S]*select=save_envelope,turn_status&limit=1/);
-  assert.match(api, /turn_status: stored\.turn_status/);
-  assert.match(api, /world: loadPersistentWorld\(JSON\.stringify\(stored\.save_envelope\)\)/);
-  assert.match(api, /turn_status: snapshot\.turn_status/);
+test('compact transfer directory keeps status and football labels in one server projection', async () => {
+  const migration = await read('supabase/migrations/20260811_compact_transfer_directory.sql');
+  assert.match(migration, /get_manager_transfer_directory_for_user\(\s*p_user_id uuid,\s*p_world_id text/);
+  assert.match(migration, /from public\.canonical_world_saves/);
+  assert.match(migration, /appointment\.status = 'active'/);
+  assert.match(migration, /'turn_status', stored\.turn_status/);
+  assert.match(migration, /'clubs', clubs/);
+  assert.match(migration, /'players', players/);
+  assert.match(migration, /jsonb_array_elements_text/);
+  assert.match(migration, /grant execute on function public\.get_manager_transfer_directory_for_user\(uuid, text\)[\s\S]*to service_role/);
+  assert.match(migration, /authenticated can execute compact transfer directory directly/);
 });
 
 test('transfer response POST does not deserialize the canonical save', async () => {
@@ -64,7 +70,7 @@ test('transfer response POST does not deserialize the canonical save', async () 
   const postIndex = api.indexOf("if (request.method !== 'POST')");
   assert.ok(postIndex >= 0, 'POST branch should be present');
   const postSource = api.slice(postIndex);
-  assert.doesNotMatch(postSource, /readTransferSnapshot|loadPersistentWorld|save_envelope/);
+  assert.doesNotMatch(postSource, /loadPersistentWorld|save_envelope/);
   assert.match(postSource, /const stored = await readTurnState\(token, current\.appointment\.world_id\)/);
   assert.match(postSource, /stored\.turn_status !== 'open'/);
   assert.match(postSource, /submit_manager_transfer_response_for_user/);
