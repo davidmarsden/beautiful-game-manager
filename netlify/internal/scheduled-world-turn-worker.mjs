@@ -265,10 +265,10 @@ async function processWorld(stored, now) {
     });
     if (lockRows.length !== 1) return { world_id: worldId, status: 'skipped', reason: 'World was already claimed or changed' };
     claimed = true;
-    stored = lockRows[0];
+    const claimedStored = lockRows[0];
 
     tracker.begin('load_world');
-    let world = loadPersistentWorld(JSON.stringify(stored.save_envelope));
+    let world = loadPersistentWorld(JSON.stringify(claimedStored.save_envelope));
     const commandDisplayWorld = world;
     seasonId = world.squad_cycle.season_id;
     matchday = world.matchday_cycle?.current_matchday || 1;
