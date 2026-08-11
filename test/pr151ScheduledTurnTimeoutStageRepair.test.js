@@ -11,7 +11,7 @@ test('scheduled turns identify and persist the precise failing stage', async () 
   assert.match(scheduler, /failing_stage: stageSnapshot\.stage/);
   assert.match(scheduler, /stage_elapsed_ms: stageSnapshot\.stage_elapsed_ms/);
   assert.match(scheduler, /stage_timings: stageSnapshot\.stage_timings/);
-  assert.match(scheduler, /tbg-scheduled-world-turn-v1\.8/);
+  assert.match(scheduler, /tbg-scheduled-world-turn-v1\.9/);
 });
 
 test('large canonical checkpoint writes use a checksum-guarded timeout RPC', async () => {
