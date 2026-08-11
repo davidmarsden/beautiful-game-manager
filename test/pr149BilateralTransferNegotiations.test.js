@@ -67,13 +67,14 @@ test('transfer RPC migration removes direct browser execution and grants only se
 
 test('shared-world command submission enforces transfer authority before writing the ledger', async () => {
   const api = await read('netlify/functions/shared-world.mjs');
-  assert.match(api, /async function assertTransferCommand/);
+  assert.match(api, /async function assertTransferCommand\(current, world, type, payload\)/);
   assert.match(api, /clubOwnsPlayer\(world, current\.appointment\.club_id, playerId\)/);
   assert.match(api, /readClubFragment\(world\.world_id, otherClubId\)/);
   assert.match(api, /clubOwnsPlayer\(targetWorld, otherClubId, playerId\)/);
-  assert.match(api, /manager_appointments\?world_id=eq\.\$\{encodeURIComponent\(world\.world_id\)\}&club_id=eq\.\$\{encodeURIComponent\(otherClubId\)\}&status=eq\.active/);
+  assert.match(api, /serverSupabase\(`\/rest\/v1\/manager_appointments\?world_id=eq\.\$\{encodeURIComponent\(world\.world_id\)\}&club_id=eq\.\$\{encodeURIComponent\(otherClubId\)\}&status=eq\.active&select=club_id&limit=1`\)/);
+  assert.doesNotMatch(api, /userSupabase\(`\/rest\/v1\/manager_appointments\?world_id=eq\.\$\{encodeURIComponent\(world\.world_id\)\}&club_id=eq\.\$\{encodeURIComponent\(otherClubId\)\}/);
   assert.match(api, /Transfer offers may only target clubs with an active manager/);
-  const validationIndex = api.indexOf('await assertTransferCommand(token, current, world, type, commandPayload);');
+  const validationIndex = api.indexOf('await assertTransferCommand(current, world, type, commandPayload);');
   const ledgerIndex = api.indexOf("serverSupabase('/rest/v1/rpc/submit_manager_world_command_for_user'");
   assert.ok(validationIndex >= 0 && ledgerIndex > validationIndex, 'transfer authority must be checked before ledger insertion');
 });
