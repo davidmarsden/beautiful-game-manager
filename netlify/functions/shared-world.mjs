@@ -210,7 +210,7 @@ function stableCommandRequestKey({ worldId, managerId, commandType: type, payloa
     command_type: type,
     command_payload: payload || {},
     effective_season_id: seasonId,
-    matchday
+    effective_matchday: matchday
   })).digest('hex');
 }
 
