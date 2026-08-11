@@ -39,3 +39,16 @@ test('watchdog failure cannot block unrelated open worlds', async () => {
   assert.match(source, /try \{[\s\S]*recoverAbandonedScheduledTurns[\s\S]*\} catch \(error\) \{[\s\S]*console\.error\('Scheduled turn stale-lock watchdog failed'/);
   assert.match(source, /const response = await executeScheduledWorldTurnWithReconciliation\(\)/);
 });
+
+test('one stale-lock RPC failure cannot prevent later locking worlds being attempted', async () => {
+  const source = await read('netlify/functions/scheduled-world-turn-background.mjs');
+  const loopIndex = source.indexOf('for (const world of Array.isArray(lockingWorlds) ? lockingWorlds : [])');
+  const rpcIndex = source.indexOf("await service('/rest/v1/rpc/recover_stale_canonical_turn_lock'", loopIndex);
+  const catchIndex = source.indexOf('} catch (error) {', rpcIndex);
+  const returnIndex = source.indexOf('return recovered;', catchIndex);
+
+  assert.ok(loopIndex >= 0 && rpcIndex > loopIndex, 'recovery RPC must run inside the per-world loop');
+  assert.ok(catchIndex > rpcIndex && returnIndex > catchIndex, 'per-world RPC errors must be caught before the sweep returns');
+  assert.match(source.slice(catchIndex, returnIndex), /Scheduled turn stale-lock recovery failed for world/);
+  assert.match(source.slice(catchIndex, returnIndex), /world_id: world\.world_id/);
+});
