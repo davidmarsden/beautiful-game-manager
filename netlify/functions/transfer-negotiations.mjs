@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { loadPersistentWorld } from '../../src/world/persistentSeasonLoop.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
@@ -59,51 +58,23 @@ async function identity(token) {
   return { user, manager, appointment };
 }
 
-function clubName(world, clubId) {
-  return String(world.club_profiles?.[clubId]?.club_name || world.club_profiles?.[clubId]?.canonical_name || clubId || 'Unknown club').trim();
+function directoryIndexes(directory = {}) {
+  return {
+    clubs: new Map((directory.clubs || []).map((club) => [club.club_id, club])),
+    players: new Map((directory.players || []).map((player) => [player.player_id, player]))
+  };
 }
 
-function playerName(world, playerId) {
-  const player = world.squad_cycle?.players?.[playerId];
-  return String(player?.display_name || player?.player_name || player?.name || playerId || 'Unknown player').trim();
-}
-
-function transferDirectory(world, appointedClubId, managedClubIds = new Set()) {
-  const clubs = [];
-  const players = [];
-  for (const [clubId, club] of Object.entries(world.squad_cycle?.clubs || {})) {
-    clubs.push({
-      club_id: clubId,
-      club_name: clubName(world, clubId),
-      appointed: clubId === appointedClubId,
-      managed: managedClubIds.has(clubId)
-    });
-    for (const playerId of club.player_ids || []) {
-      const player = world.squad_cycle?.players?.[playerId] || {};
-      players.push({
-        player_id: playerId,
-        player_name: playerName(world, playerId),
-        club_id: clubId,
-        club_name: clubName(world, clubId),
-        position: player.specific_position || player.primary_position || player.position || '—',
-        rating: Number(player.underlying_ability_rating ?? player.tbg_rating ?? player.rating ?? 0) || null
-      });
-    }
-  }
-  clubs.sort((a, b) => a.club_name.localeCompare(b.club_name));
-  players.sort((a, b) => a.player_name.localeCompare(b.player_name));
-  return { clubs, players };
-}
-
-function projectOffer(world, row) {
+function projectOffer(directory, row) {
   const payload = row.command_payload || {};
   const playerId = payload.playerId || payload.player_id;
+  const { clubs, players } = directoryIndexes(directory);
   return {
     proposal_id: row.id,
     player_id: playerId,
-    player_name: playerName(world, playerId),
+    player_name: players.get(playerId)?.player_name || playerId || 'Unknown player',
     buyer_club_id: row.club_id,
-    buyer_club_name: clubName(world, row.club_id),
+    buyer_club_name: clubs.get(row.club_id)?.club_name || row.club_id || 'Unknown club',
     seller_club_id: payload.otherClubId || payload.other_club_id,
     fee: Number(payload.fee || 0),
     contract_years: Number(payload.contractYears || payload.contract_years || 3),
@@ -121,14 +92,14 @@ async function readTurnState(token, worldId) {
   return rows[0] || null;
 }
 
-async function readTransferSnapshot(token, worldId) {
-  const rows = await userSupabase(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&select=save_envelope,turn_status&limit=1`, token);
-  const stored = rows[0];
-  if (!stored) return null;
-  return {
-    turn_status: stored.turn_status,
-    world: loadPersistentWorld(JSON.stringify(stored.save_envelope))
-  };
+async function readTransferDirectory(current) {
+  return serverSupabase('/rest/v1/rpc/get_manager_transfer_directory_for_user', {
+    method: 'POST',
+    body: JSON.stringify({
+      p_user_id: current.user.id,
+      p_world_id: current.appointment.world_id
+    })
+  });
 }
 
 export default async (request) => {
@@ -139,16 +110,9 @@ export default async (request) => {
     const current = await identity(token);
 
     if (request.method === 'GET') {
-      const [snapshot, offerRows, managedRows] = await Promise.all([
-        readTransferSnapshot(token, current.appointment.world_id),
+      const [snapshot, offerRows] = await Promise.all([
+        readTransferDirectory(current),
         serverSupabase('/rest/v1/rpc/get_manager_transfer_inbox_for_user', {
-          method: 'POST',
-          body: JSON.stringify({
-            p_user_id: current.user.id,
-            p_world_id: current.appointment.world_id
-          })
-        }),
-        serverSupabase('/rest/v1/rpc/get_managed_transfer_clubs_for_user', {
           method: 'POST',
           body: JSON.stringify({
             p_user_id: current.user.id,
@@ -156,14 +120,14 @@ export default async (request) => {
           })
         })
       ]);
-      if (!snapshot?.world) return json({ error: 'The canonical world has not been initialized' }, 409);
-      const managedClubIds = new Set((Array.isArray(managedRows) ? managedRows : []).map((row) => row.club_id));
+      if (!snapshot?.directory) return json({ error: 'The canonical world has not been initialized' }, 409);
+      const directory = snapshot.directory;
       return json({
-        world_id: current.appointment.world_id,
+        world_id: snapshot.world_id || current.appointment.world_id,
         club_id: current.appointment.club_id,
         turn_status: snapshot.turn_status,
-        directory: transferDirectory(snapshot.world, current.appointment.club_id, managedClubIds),
-        incoming_offers: (Array.isArray(offerRows) ? offerRows : []).map((row) => projectOffer(snapshot.world, row))
+        directory,
+        incoming_offers: (Array.isArray(offerRows) ? offerRows : []).map((row) => projectOffer(directory, row))
       });
     }
 
