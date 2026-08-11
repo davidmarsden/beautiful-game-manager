@@ -26,6 +26,15 @@ test('shared world GET short-circuits locking worlds before the heavyweight port
   assert.match(source, /processing: true/);
 });
 
+test('shared world POST rechecks the fragment status after the heavyweight read', async () => {
+  const source = await read('netlify/functions/shared-world.mjs');
+  const fragmentRead = source.indexOf('const context = await readCanonicalFragment(current)');
+  const recheck = source.indexOf("request.method === 'POST' && context.turn_status !== 'open'", fragmentRead);
+  const bodyRead = source.indexOf('const body = await request.json()', fragmentRead);
+  assert.ok(fragmentRead >= 0 && recheck > fragmentRead, 'POST must recheck the newer fragment status');
+  assert.ok(bodyRead > recheck, 'turn status must be rechecked before accepting a write payload');
+});
+
 test('transfer GET checks turn status before compact JSONB directory projection', async () => {
   const source = await read('netlify/functions/transfer-negotiations.mjs');
   const stateRead = source.indexOf('const stored = await readTurnState');
