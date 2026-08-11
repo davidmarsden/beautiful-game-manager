@@ -277,6 +277,7 @@ export default async (request) => {
       is_admin: Boolean(current.manager.is_admin),
       message: 'The shared-world database is ready, but this world has not yet been initialized.'
     });
+    if (request.method === 'POST' && context.turn_status !== 'open') return json({ error: `World commands are locked while turn is ${context.turn_status}` }, 409);
 
     const world = context.world;
     assertAppointment(world, current.appointment);
