@@ -133,7 +133,7 @@ function clubOwnsPlayer(world, clubId, playerId) {
   return Boolean(playerId && world.squad_cycle?.clubs?.[clubId]?.player_ids?.includes(playerId));
 }
 
-async function assertTransferCommand(token, current, world, type, payload) {
+async function assertTransferCommand(current, world, type, payload) {
   if (!['transfer_offer', 'transfer_listing'].includes(type)) return;
   const playerId = payloadValue(payload, 'playerId', 'player_id');
 
@@ -148,7 +148,7 @@ async function assertTransferCommand(token, current, world, type, payload) {
 
   const [targetContext, appointments] = await Promise.all([
     readClubFragment(world.world_id, otherClubId),
-    userSupabase(`/rest/v1/manager_appointments?world_id=eq.${encodeURIComponent(world.world_id)}&club_id=eq.${encodeURIComponent(otherClubId)}&status=eq.active&select=club_id&limit=1`, token)
+    serverSupabase(`/rest/v1/manager_appointments?world_id=eq.${encodeURIComponent(world.world_id)}&club_id=eq.${encodeURIComponent(otherClubId)}&status=eq.active&select=club_id&limit=1`)
   ]);
   const targetWorld = targetContext?.world;
   if (!targetWorld?.squad_cycle?.clubs?.[otherClubId]) throw new Error('Transfer counterpart is not present in the canonical world');
@@ -277,7 +277,7 @@ export default async (request) => {
       if (context.turn_status !== 'open') return json({ error: `World commands are locked while turn is ${context.turn_status}` }, 409);
       const type = commandType(body.command_type);
       const commandPayload = body.command_payload || {};
-      await assertTransferCommand(token, current, world, type, commandPayload);
+      await assertTransferCommand(current, world, type, commandPayload);
       const requestKey = stableCommandRequestKey({
         worldId: world.world_id,
         managerId: current.manager.id,
