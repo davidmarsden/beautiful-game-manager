@@ -31,19 +31,31 @@ export async function recoverAbandonedScheduledTurns(now = new Date().toISOStrin
   const recovered = [];
 
   for (const world of Array.isArray(lockingWorlds) ? lockingWorlds : []) {
-    const result = await service('/rest/v1/rpc/recover_stale_canonical_turn_lock', {
-      method: 'POST',
-      body: JSON.stringify({
-        p_world_id: world.world_id,
-        p_expected_checksum: world.save_checksum,
-        p_expected_updated_at: world.updated_at,
-        p_requested_by: null,
-        p_now: now,
-        p_lease: STALE_TURN_LEASE
-      })
-    });
-    const recovery = Array.isArray(result) ? result[0] : result;
-    if (recovery?.recovered) recovered.push(recovery);
+    try {
+      const result = await service('/rest/v1/rpc/recover_stale_canonical_turn_lock', {
+        method: 'POST',
+        body: JSON.stringify({
+          p_world_id: world.world_id,
+          p_expected_checksum: world.save_checksum,
+          p_expected_updated_at: world.updated_at,
+          p_requested_by: null,
+          p_now: now,
+          p_lease: STALE_TURN_LEASE
+        })
+      });
+      const recovery = Array.isArray(result) ? result[0] : result;
+      if (recovery?.recovered) recovered.push(recovery);
+    } catch (error) {
+      // One malformed or otherwise unrecoverable world must never starve later
+      // stale locks. Leave this candidate untouched for diagnosis/retry and
+      // continue attempting the rest of the sweep independently.
+      console.error('Scheduled turn stale-lock recovery failed for world', {
+        world_id: world.world_id,
+        checksum: world.save_checksum,
+        updated_at: world.updated_at,
+        error: error?.message || String(error)
+      });
+    }
   }
 
   return recovered;
@@ -68,9 +80,8 @@ export default async (request) => {
       });
     }
   } catch (error) {
-    // A watchdog failure must not prevent unrelated open worlds from advancing.
-    // A still-locking world remains protected from duplicate execution and will
-    // be reconsidered on the next 15-minute scheduler sweep.
+    // A watchdog query-level failure must not prevent unrelated open worlds from
+    // advancing. Per-world RPC failures are isolated inside the recovery loop.
     console.error('Scheduled turn stale-lock watchdog failed', error);
   }
 
