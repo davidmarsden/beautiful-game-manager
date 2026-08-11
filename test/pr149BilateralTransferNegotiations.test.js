@@ -43,7 +43,8 @@ test('negotiation API uses the compact managed-club transfer projection', async 
   assert.match(api, /serverSupabase\('\/rest\/v1\/rpc\/get_manager_transfer_inbox_for_user'/);
   assert.match(api, /serverSupabase\('\/rest\/v1\/rpc\/submit_manager_transfer_response_for_user'/);
   assert.match(api, /p_user_id: current\.user\.id/);
-  assert.match(api, /directory: snapshot\.directory/);
+  assert.match(api, /const directory = snapshot\.directory/);
+  assert.match(api, /directory,/);
   assert.match(api, /projectOffer\(directory, row\)/);
   assert.match(api, /incoming_offers/);
   assert.match(api, /cache-control': 'no-store'/);
