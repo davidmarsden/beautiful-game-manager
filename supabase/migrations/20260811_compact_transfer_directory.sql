@@ -131,7 +131,7 @@ begin
           squad_cycle -> 'players' -> owned.player_id ->> 'tbg_rating',
           squad_cycle -> 'players' -> owned.player_id ->> 'rating',
           ''
-        ) ~ '^-?[0-9]+(\\.[0-9]+)?$'
+        ) ~ '^-?[0-9]+([.][0-9]+)?$'
         then coalesce(
           squad_cycle -> 'players' -> owned.player_id ->> 'underlying_ability_rating',
           squad_cycle -> 'players' -> owned.player_id ->> 'tbg_rating',
