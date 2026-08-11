@@ -50,6 +50,19 @@ test('negotiation API exposes only the appointed club inbox and a compact manage
   assert.doesNotMatch(api, /userSupabase\('\/rest\/v1\/rpc\/(get_manager_transfer_inbox|get_managed_transfer_clubs|submit_manager_transfer_response)'/);
 });
 
+test('transfer response POST does not deserialize the canonical save', async () => {
+  const api = await read('netlify/functions/transfer-negotiations.mjs');
+  assert.match(api, /async function readTurnState[\s\S]*select=turn_status&limit=1/);
+  assert.match(api, /async function readTransferDirectoryWorld[\s\S]*select=save_envelope&limit=1/);
+  const postIndex = api.indexOf("if (request.method !== 'POST')");
+  const directoryReadIndex = api.indexOf('readTransferDirectoryWorld(token, current.appointment.world_id)');
+  assert.ok(directoryReadIndex >= 0 && directoryReadIndex < postIndex, 'full canonical save read must be confined to the GET branch');
+  const postSource = api.slice(postIndex);
+  assert.doesNotMatch(postSource, /readTransferDirectoryWorld|loadPersistentWorld|save_envelope/);
+  assert.match(postSource, /stored\.turn_status !== 'open'/);
+  assert.match(postSource, /submit_manager_transfer_response_for_user/);
+});
+
 test('transfer RPC migration removes direct browser execution and grants only service gateways', async () => {
   const migration = await read('supabase/migrations/20260801_transfer_service_role_gateways.sql');
   assert.match(migration, /get_managed_transfer_clubs_for_user\(\s*p_user_id uuid,\s*p_world_id text/);
