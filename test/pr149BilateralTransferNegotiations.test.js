@@ -44,10 +44,30 @@ test('negotiation API exposes only the appointed club inbox and a compact manage
   assert.match(api, /serverSupabase\('\/rest\/v1\/rpc\/submit_manager_transfer_response_for_user'/);
   assert.match(api, /p_user_id: current\.user\.id/);
   assert.match(api, /const managedClubIds = new Set/);
-  assert.match(api, /transferDirectory\(world, current\.appointment\.club_id, managedClubIds\)/);
+  assert.match(api, /transferDirectory\(snapshot\.world, current\.appointment\.club_id, managedClubIds\)/);
   assert.match(api, /incoming_offers/);
   assert.match(api, /cache-control': 'no-store'/);
   assert.doesNotMatch(api, /userSupabase\('\/rest\/v1\/rpc\/(get_manager_transfer_inbox|get_managed_transfer_clubs|submit_manager_transfer_response)'/);
+});
+
+test('transfer GET keeps envelope and turn status in one canonical snapshot', async () => {
+  const api = await read('netlify/functions/transfer-negotiations.mjs');
+  assert.match(api, /async function readTransferSnapshot[\s\S]*select=save_envelope,turn_status&limit=1/);
+  assert.match(api, /turn_status: stored\.turn_status/);
+  assert.match(api, /world: loadPersistentWorld\(JSON\.stringify\(stored\.save_envelope\)\)/);
+  assert.match(api, /turn_status: snapshot\.turn_status/);
+});
+
+test('transfer response POST does not deserialize the canonical save', async () => {
+  const api = await read('netlify/functions/transfer-negotiations.mjs');
+  assert.match(api, /async function readTurnState[\s\S]*select=turn_status&limit=1/);
+  const postIndex = api.indexOf("if (request.method !== 'POST')");
+  assert.ok(postIndex >= 0, 'POST branch should be present');
+  const postSource = api.slice(postIndex);
+  assert.doesNotMatch(postSource, /readTransferSnapshot|loadPersistentWorld|save_envelope/);
+  assert.match(postSource, /const stored = await readTurnState\(token, current\.appointment\.world_id\)/);
+  assert.match(postSource, /stored\.turn_status !== 'open'/);
+  assert.match(postSource, /submit_manager_transfer_response_for_user/);
 });
 
 test('transfer RPC migration removes direct browser execution and grants only service gateways', async () => {
