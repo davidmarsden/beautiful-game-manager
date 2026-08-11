@@ -61,6 +61,7 @@ test('compact transfer directory keeps status and football labels in one server 
   assert.match(migration, /'clubs', clubs/);
   assert.match(migration, /'players', players/);
   assert.match(migration, /jsonb_array_elements_text/);
+  assert.match(migration, /\~ '\^-\?\[0-9\]\+\(\[\.\]\[0-9\]\+\)\?\$'/);
   assert.match(migration, /grant execute on function public\.get_manager_transfer_directory_for_user\(uuid, text\)[\s\S]*to service_role/);
   assert.match(migration, /authenticated can execute compact transfer directory directly/);
 });
