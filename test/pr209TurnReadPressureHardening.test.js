@@ -14,7 +14,8 @@ test('scheduled turn discovery and claim stay metadata-only before one explicit 
   assert.match(source, /turn_status=eq\.open&select=\$\{claimFields\}/);
   assert.doesNotMatch(source, /turn_status=eq\.open[^`]*select=.*save_envelope/);
   assert.match(source, /headers: \{ prefer: 'return=representation' \}/);
-  assert.match(source, /const claimedStored = lockRows\[0\]/);
+  assert.match(source, /if \(lockRows\.length !== 1\) return \{ world_id: worldId, status: 'skipped'/);
+  assert.match(source, /claimed = true/);
 
   const claimIndex = source.indexOf('const lockRows = await service');
   const envelopeReadIndex = source.indexOf('select=save_envelope', claimIndex);
