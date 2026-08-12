@@ -159,9 +159,12 @@ function stressTest2(dataset) {
   const high = resolveTeamContext(highTeam, map, {}, { formation: '4-3-3-wide', style: 'possession', route_to_goal: 'wide' }, q);
   const low = resolveTeamContext(lowTeam, map, {}, { formation: '4-3-3-wide', style: 'possession', route_to_goal: 'wide' }, q);
 
+  // Both strategies consume the same aggregate match minutes. Rotation should
+  // redistribute that load so the identity players are fresher without making
+  // the overall squad less fit; it should not be required to create energy.
   const checks = {
     rigid_selection_accumulates_more_fatigue: rotated.final_identity_unit_fitness > rigid.final_identity_unit_fitness,
-    rotation_preserves_more_squad_fitness: rotated.final_squad_fitness > rigid.final_squad_fitness,
+    rotation_preserves_squad_fitness_without_creating_energy: rotated.final_squad_fitness >= rigid.final_squad_fitness,
     high_familiarity_reduces_dispersion: high.variance.dispersion_multiplier < low.variance.dispersion_multiplier,
     thin_depth_has_a_real_quality_cost: rotated.average_selected_quality < rigid.average_selected_quality
   };
