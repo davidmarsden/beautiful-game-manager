@@ -45,6 +45,23 @@ async function adminIdentity(token) {
   return appointment;
 }
 
+function operationFailureRun(operation, world) {
+  const schedulerResult = operation?.details?.scheduler_result || null;
+  if (operation?.status !== 'rejected' || schedulerResult?.status !== 'failed') return null;
+  return {
+    id: schedulerResult.failed_run_id || null,
+    season_id: world.season_id,
+    matchday: schedulerResult.matchday || world.matchday,
+    previous_checksum: world.save_checksum,
+    next_checksum: null,
+    status: 'failed',
+    scheduled_for: world.next_turn_at,
+    started_at: operation.created_at,
+    completed_at: operation.created_at,
+    error_message: schedulerResult.error || operation.details?.error || 'The queued turn attempt failed.'
+  };
+}
+
 export default async (request) => {
   try {
     if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
@@ -66,18 +83,20 @@ export default async (request) => {
 
     const operations = await service(`/rest/v1/world_operation_events?world_id=eq.${encodeURIComponent(worldId)}&operation_type=eq.advance&or=(previous_checksum.eq.${checksum},replacement_checksum.eq.${checksum})&select=operation_id,status,previous_checksum,replacement_checksum,details,created_at&order=created_at.desc&limit=3`);
     const operation = operations[0] || null;
+    const operationFailedRun = operationFailureRun(operation, world);
     const diagnostics = operation?.details?.diagnostics || operation?.details?.scheduler_result?.diagnostics || null;
 
     let state = 'idle';
     if (reconciliationRequired) state = 'reconciliation_required';
     else if (processing || world.turn_status === 'locking') state = 'processing';
     else if (world.turn_status === 'failed') state = 'failed';
+    else if (operationFailedRun) state = 'failed';
     else if (completed) state = 'complete';
 
     const latest = state === 'processing'
       ? processing
       : state === 'failed'
-        ? failed
+        ? (operationFailedRun || failed)
         : state === 'complete'
           ? completed
           : null;
