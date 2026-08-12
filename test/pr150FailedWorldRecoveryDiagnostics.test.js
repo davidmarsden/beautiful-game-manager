@@ -32,7 +32,7 @@ test('automatic scheduler failures persist an authoritative rejected advance inc
   assert.match(scheduler, /stage_timings: stageSnapshot\.stage_timings/);
   assert.match(scheduler, /persistAutomaticFailure\(\{[\s\S]*stageSnapshot[\s\S]*\}\)/);
   assert.match(scheduler, /operation_id: operationId/);
-  assert.match(scheduler, /tbg-scheduled-world-turn-v1\.8/);
+  assert.match(scheduler, /tbg-scheduled-world-turn-v1\.9/);
 });
 
 test('admin world control explains failures and never destroys the result with an automatic reload', async () => {

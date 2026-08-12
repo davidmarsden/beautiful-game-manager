@@ -7,7 +7,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const TURN_DAYS = String(process.env.TBG_TURN_DAYS || '2,5').split(',').map(Number).filter((day) => day >= 0 && day <= 6);
 const TURN_HOUR_UTC = Number(process.env.TBG_TURN_HOUR_UTC || 20);
-const SCHEDULER_VERSION = 'tbg-scheduled-world-turn-v1.8';
+const SCHEDULER_VERSION = 'tbg-scheduled-world-turn-v1.9';
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -265,10 +265,11 @@ async function processWorld(stored, now) {
     });
     if (lockRows.length !== 1) return { world_id: worldId, status: 'skipped', reason: 'World was already claimed or changed' };
     claimed = true;
+    const claimedStored = lockRows[0];
 
     tracker.begin('load_world');
-    let world = loadPersistentWorld(JSON.stringify(stored.save_envelope));
-    const commandDisplayWorld = loadPersistentWorld(JSON.stringify(stored.save_envelope));
+    let world = loadPersistentWorld(JSON.stringify(claimedStored.save_envelope));
+    const commandDisplayWorld = world;
     seasonId = world.squad_cycle.season_id;
     matchday = world.matchday_cycle?.current_matchday || 1;
 
@@ -436,7 +437,8 @@ async function processWorld(stored, now) {
 export default async () => {
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return json({ error: 'Scheduled world processing is not configured' }, 503);
   const now = new Date().toISOString();
-  const due = await service(`/rest/v1/canonical_world_saves?turn_status=eq.open&next_turn_at=lte.${encodeURIComponent(now)}&select=*`);
+  const fields = 'world_id,save_checksum,season_id,season_number,phase,matchday,next_turn_at,turn_status,updated_at';
+  const due = await service(`/rest/v1/canonical_world_saves?turn_status=eq.open&next_turn_at=lte.${encodeURIComponent(now)}&select=${fields}`);
   const results = [];
   for (const stored of due) results.push(await processWorld(stored, now));
   return json({ version: SCHEDULER_VERSION, checked_at: now, worlds_due: due.length, results });

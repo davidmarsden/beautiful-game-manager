@@ -71,6 +71,50 @@ async function readCanonicalFragment(current) {
   return readClubFragment(current.appointment.world_id, current.appointment.club_id);
 }
 
+async function readCanonicalState(token, current) {
+  const fields = 'world_id,save_checksum,season_id,season_number,phase,matchday,next_turn_at,turn_status,updated_at';
+  const rows = await userSupabase(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(current.appointment.world_id)}&select=${fields}&limit=1`, token);
+  return rows[0] || null;
+}
+
+function lockedWorldResponse(current, state) {
+  const turn = {
+    world_id: state.world_id,
+    season_id: state.season_id,
+    matchday: state.matchday || 1
+  };
+  return {
+    configured: true,
+    has_world: true,
+    processing: true,
+    is_admin: Boolean(current.manager.is_admin),
+    summary: {
+      world_id: state.world_id,
+      season_id: state.season_id,
+      season_number: state.season_number,
+      phase: state.phase,
+      human_club_id: current.appointment.club_id,
+      club_name: current.appointment.club_id,
+      division_name: null,
+      current_matchday: state.matchday || null,
+      maximum_matchday: 38,
+      next_fixture: null
+    },
+    world: {
+      world_id: state.world_id,
+      checksum: state.save_checksum,
+      updated_at: state.updated_at,
+      next_turn_at: state.next_turn_at,
+      turn_status: state.turn_status
+    },
+    appointment: current.appointment,
+    turn,
+    submission: null,
+    commands: [],
+    message: 'The canonical turn is processing. Full club projections are paused until the checkpoint completes.'
+  };
+}
+
 async function readSubmission(token, current, turn) {
   const rows = await userSupabase(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(turn.world_id)}&season_id=eq.${encodeURIComponent(turn.season_id)}&matchday=eq.${turn.matchday}&manager_id=eq.${encodeURIComponent(current.manager.id)}&select=*&limit=1`, token);
   return rows[0] || null;
@@ -210,6 +254,20 @@ export default async (request) => {
     const token = bearerToken(request);
     if (!token) return json({ error: 'Authentication required' }, 401);
     const current = await identity(token);
+    const state = await readCanonicalState(token, current);
+    if (!state) return json({
+      configured: true,
+      has_world: false,
+      world_id: current.appointment.world_id,
+      club_id: current.appointment.club_id,
+      is_admin: Boolean(current.manager.is_admin),
+      message: 'The shared-world database is ready, but this world has not yet been initialized.'
+    });
+
+    if (request.method === 'GET' && state.turn_status === 'locking') return json(lockedWorldResponse(current, state));
+    if (request.method !== 'GET' && request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+    if (request.method === 'POST' && state.turn_status !== 'open') return json({ error: `World commands are locked while turn is ${state.turn_status}` }, 409);
+
     const context = await readCanonicalFragment(current);
     if (!context?.world) return json({
       configured: true,
@@ -219,6 +277,7 @@ export default async (request) => {
       is_admin: Boolean(current.manager.is_admin),
       message: 'The shared-world database is ready, but this world has not yet been initialized.'
     });
+    if (request.method === 'POST' && context.turn_status !== 'open') return json({ error: `World commands are locked while turn is ${context.turn_status}` }, 409);
 
     const world = context.world;
     assertAppointment(world, current.appointment);
@@ -253,11 +312,9 @@ export default async (request) => {
       commands: commandRows.map((row) => commandSummaryImpl(world, row))
     });
 
-    if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
     const body = await request.json().catch(() => ({}));
 
     if (body.type === 'submit_turn') {
-      if (context.turn_status !== 'open') return json({ error: `Turn is ${context.turn_status}` }, 409);
       const submission = buildManagerTurnSubmission(world, {
         managerId: current.manager.id,
         clubId: current.appointment.club_id,
@@ -274,7 +331,6 @@ export default async (request) => {
     }
 
     if (body.type === 'submit_command') {
-      if (context.turn_status !== 'open') return json({ error: `World commands are locked while turn is ${context.turn_status}` }, 409);
       const type = commandType(body.command_type);
       const commandPayload = body.command_payload || {};
       await assertTransferCommand(current, world, type, commandPayload);

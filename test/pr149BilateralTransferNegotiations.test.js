@@ -66,15 +66,15 @@ test('compact transfer directory keeps status and football labels in one server 
   assert.match(migration, /authenticated can execute compact transfer directory directly/);
 });
 
-test('transfer response POST does not deserialize the canonical save', async () => {
+test('transfer response POST checks compact turn metadata and does not deserialize the canonical save', async () => {
   const api = await read('netlify/functions/transfer-negotiations.mjs');
-  assert.match(api, /async function readTurnState[\s\S]*select=turn_status&limit=1/);
+  assert.match(api, /async function readTurnState[\s\S]*select=world_id,turn_status,save_checksum,updated_at&limit=1/);
+  const stateIndex = api.indexOf('const stored = await readTurnState(token, current.appointment.world_id)');
   const postIndex = api.indexOf("if (request.method !== 'POST')");
-  assert.ok(postIndex >= 0, 'POST branch should be present');
+  assert.ok(stateIndex >= 0 && postIndex > stateIndex, 'compact turn state should be shared by GET and POST before the POST branch');
   const postSource = api.slice(postIndex);
   assert.doesNotMatch(postSource, /loadPersistentWorld|save_envelope/);
-  assert.match(postSource, /const stored = await readTurnState\(token, current\.appointment\.world_id\)/);
-  assert.match(postSource, /stored\.turn_status !== 'open'/);
+  assert.match(api, /stored\.turn_status !== 'open'/);
   assert.match(postSource, /submit_manager_transfer_response_for_user/);
 });
 

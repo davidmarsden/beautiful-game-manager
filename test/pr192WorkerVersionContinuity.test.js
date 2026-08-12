@@ -5,5 +5,5 @@ import fs from 'node:fs';
 const worker = fs.readFileSync(new URL('../netlify/internal/scheduled-world-turn-worker.mjs', import.meta.url), 'utf8');
 
 test('preserved worker retains the production scheduler version marker', () => {
-  assert.match(worker, /tbg-scheduled-world-turn-v1\.8/);
+  assert.match(worker, /tbg-scheduled-world-turn-v1\.9/);
 });

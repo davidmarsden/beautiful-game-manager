@@ -88,7 +88,7 @@ function stableResponseKey({ worldId, managerId, proposalId, response }) {
 }
 
 async function readTurnState(token, worldId) {
-  const rows = await userSupabase(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&select=turn_status&limit=1`, token);
+  const rows = await userSupabase(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&select=world_id,turn_status,save_checksum,updated_at&limit=1`, token);
   return rows[0] || null;
 }
 
@@ -108,8 +108,21 @@ export default async (request) => {
     const token = bearerToken(request);
     if (!token) return json({ error: 'Authentication required' }, 401);
     const current = await identity(token);
+    const stored = await readTurnState(token, current.appointment.world_id);
+    if (!stored) return json({ error: 'The canonical world has not been initialized' }, 409);
 
     if (request.method === 'GET') {
+      if (stored.turn_status === 'locking') return json({
+        world_id: stored.world_id || current.appointment.world_id,
+        club_id: current.appointment.club_id,
+        turn_status: stored.turn_status,
+        save_checksum: stored.save_checksum,
+        updated_at: stored.updated_at,
+        processing: true,
+        directory: { clubs: [], players: [] },
+        incoming_offers: []
+      });
+
       const [snapshot, offerRows] = await Promise.all([
         readTransferDirectory(current),
         serverSupabase('/rest/v1/rpc/get_manager_transfer_inbox_for_user', {
@@ -132,8 +145,6 @@ export default async (request) => {
     }
 
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
-    const stored = await readTurnState(token, current.appointment.world_id);
-    if (!stored) return json({ error: 'The canonical world has not been initialized' }, 409);
     if (stored.turn_status !== 'open') return json({ error: `World commands are locked while turn is ${stored.turn_status}` }, 409);
     const body = await request.json().catch(() => ({}));
     const proposalId = String(body.proposal_id || '').trim();
