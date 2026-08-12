@@ -4,15 +4,24 @@ import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('scheduled turn discovery reads metadata only and gets the envelope from the atomic claim', async () => {
+test('scheduled turn discovery and claim stay metadata-only before one explicit envelope load', async () => {
   const source = await read('netlify/internal/scheduled-world-turn-worker.mjs');
   assert.match(source, /const fields = 'world_id,save_checksum,season_id,season_number,phase,matchday,next_turn_at,turn_status,updated_at'/);
   assert.match(source, /next_turn_at=lte\.\$\{encodeURIComponent\(now\)\}&select=\$\{fields\}/);
   assert.doesNotMatch(source, /next_turn_at=lte\.\$\{encodeURIComponent\(now\)\}&select=\*/);
+
+  assert.match(source, /const claimFields = 'world_id,save_checksum,updated_at,turn_status'/);
+  assert.match(source, /turn_status=eq\.open&select=\$\{claimFields\}/);
+  assert.doesNotMatch(source, /turn_status=eq\.open[^`]*select=.*save_envelope/);
   assert.match(source, /headers: \{ prefer: 'return=representation' \}/);
   assert.match(source, /const claimedStored = lockRows\[0\]/);
-  assert.doesNotMatch(source, /stored = lockRows\[0\]/);
-  assert.equal((source.match(/loadPersistentWorld\(JSON\.stringify\(claimedStored\.save_envelope\)\)/g) || []).length, 1);
+
+  const claimIndex = source.indexOf('const lockRows = await service');
+  const envelopeReadIndex = source.indexOf('select=save_envelope', claimIndex);
+  const worldLoadIndex = source.indexOf('loadPersistentWorld(JSON.stringify(envelopeRow.save_envelope))', envelopeReadIndex);
+  assert.ok(claimIndex >= 0 && envelopeReadIndex > claimIndex, 'full envelope must be loaded only after the compact claim succeeds');
+  assert.ok(worldLoadIndex > envelopeReadIndex, 'world deserialisation must use the explicit post-lock envelope read');
+  assert.equal((source.match(/select=save_envelope/g) || []).length, 1);
   assert.match(source, /const commandDisplayWorld = world/);
 });
 

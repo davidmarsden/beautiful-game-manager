@@ -15,7 +15,9 @@ test('turn status only considers runs belonging to the current canonical checkpo
 
 test('turn status exposes the run matching the canonical checkpoint state', async () => {
   const status = await read('netlify/functions/world-turn-status.mjs');
-  assert.match(status, /const latest = state === 'processing'\s*\? processing\s*:\s*state === 'failed'\s*\? failed\s*:\s*state === 'complete'\s*\? completed/s);
+  assert.match(status, /const latest = state === 'processing'\s*\? processing\s*:\s*state === 'failed'\s*\? \(operationFailedRun \|\| failed\)\s*:\s*state === 'complete'\s*\? completed/s);
+  assert.match(status, /else if \(operationFailedRun\) state = 'failed'/);
+  assert.match(status, /operationFailureRun/);
   assert.doesNotMatch(status, /const latest = processing \|\| completed \|\| failed/);
 });
 
