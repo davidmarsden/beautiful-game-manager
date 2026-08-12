@@ -4,12 +4,17 @@ const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, v
 const round = (value, places = 4) => Number(Number(value).toFixed(places));
 const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 
-export const FATIGUE_CONTEXT_VERSION = 'tbg-fatigue-context-v0.1';
+export const FATIGUE_CONTEXT_VERSION = 'tbg-fatigue-context-v0.2';
 export const FATIGUE_CONTEXT_STATE_KEY = 'module_c_fatigue_context';
 
-export const FATIGUE_DIALS = Object.freeze({
+export const FATIGUE_CALIBRATION_BASELINE_DIALS = Object.freeze({
   match_cost_per_90: 35,
-  recovery_per_rest_day: 9,
+  recovery_per_rest_day: 9
+});
+
+export const FATIGUE_DIALS = Object.freeze({
+  match_cost_per_90: 16,
+  recovery_per_rest_day: 5,
   fitness_modifier_floor: 0.60,
   sharpness_modifier_floor: 0.95,
   morale_modifier_minimum: 0.90,
