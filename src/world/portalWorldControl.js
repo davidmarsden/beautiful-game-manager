@@ -15,7 +15,7 @@ import {
 } from '../squadCycle/squadCycle.js';
 import { validatePlayerLifecycleWorld } from './playerLifecycleReconciliation.js';
 
-export const PORTAL_WORLD_CONTROL_VERSION = 'tbg-portal-world-control-v1.0';
+export const PORTAL_WORLD_CONTROL_VERSION = 'tbg-portal-world-control-v1.1';
 
 const text = (value) => String(value ?? '').trim();
 
@@ -38,6 +38,10 @@ function safeCheckpoint(world) {
   return cursors.length === 5
     && new Set(cursors).size === 1
     && cursors[0] === world.matchday_cycle.current_matchday;
+}
+
+function checkpointAllowed(world, context = {}) {
+  return context.authoritativeCheckpoint === true || safeCheckpoint(world);
 }
 
 function controlledClub(world, clubId) {
@@ -150,9 +154,9 @@ export function advancePortalWorld(worldInput, { humanInstruction = {}, daysBetw
   });
 }
 
-export function registerPortalPlayer(worldInput, { playerId, register = true } = {}) {
+export function registerPortalPlayer(worldInput, { playerId, register = true } = {}, context = {}) {
   const world = loadPersistentWorld(savePersistentWorld(worldInput));
-  if (!safeCheckpoint(world)) throw new Error('Registration changes require a persistent checkpoint');
+  if (!checkpointAllowed(world, context)) throw new Error('Registration changes require a persistent checkpoint');
   const club = controlledClub(world);
   const player = activePlayer(world, playerId);
   if (player.club_id !== club.club_id) throw new Error(`${player.tbg_player_id} is not owned by ${club.club_id}`);
@@ -168,9 +172,9 @@ export function registerPortalPlayer(worldInput, { playerId, register = true } =
   });
 }
 
-export function renewPortalContract(worldInput, { playerId, years = 2, wage } = {}) {
+export function renewPortalContract(worldInput, { playerId, years = 2, wage } = {}, context = {}) {
   const world = loadPersistentWorld(savePersistentWorld(worldInput));
-  if (!safeCheckpoint(world)) throw new Error('Contract changes require a persistent checkpoint');
+  if (!checkpointAllowed(world, context)) throw new Error('Contract changes require a persistent checkpoint');
   const club = controlledClub(world);
   const player = activePlayer(world, playerId);
   if (player.club_id !== club.club_id) throw new Error(`${player.tbg_player_id} is not owned by ${club.club_id}`);
@@ -198,9 +202,9 @@ export function transferPortalPlayer(worldInput, {
   fee = 0,
   contractYears = 3,
   wage
-} = {}) {
+} = {}, context = {}) {
   const world = loadPersistentWorld(savePersistentWorld(worldInput));
-  if (!safeCheckpoint(world)) throw new Error('Transfers require a persistent checkpoint');
+  if (!checkpointAllowed(world, context)) throw new Error('Transfers require a persistent checkpoint');
   const humanClub = controlledClub(world);
   const player = activePlayer(world, playerId);
   const other = world.squad_cycle.clubs[text(otherClubId)];
@@ -235,13 +239,13 @@ export function transferPortalPlayer(worldInput, {
   });
 }
 
-export function executePortalWorldCommand(worldInput, command = {}) {
+export function executePortalWorldCommand(worldInput, command = {}, context = {}) {
   const type = text(command.type).toLowerCase();
   if (type === 'save') return savePortalWorld(worldInput);
   if (type === 'advance') return advancePortalWorld(worldInput, command);
-  if (type === 'register_player') return registerPortalPlayer(worldInput, { ...command, register: true });
-  if (type === 'unregister_player') return registerPortalPlayer(worldInput, { ...command, register: false });
-  if (type === 'renew_contract') return renewPortalContract(worldInput, command);
-  if (type === 'transfer_player') return transferPortalPlayer(worldInput, command);
+  if (type === 'register_player') return registerPortalPlayer(worldInput, { ...command, register: true }, context);
+  if (type === 'unregister_player') return registerPortalPlayer(worldInput, { ...command, register: false }, context);
+  if (type === 'renew_contract') return renewPortalContract(worldInput, command, context);
+  if (type === 'transfer_player') return transferPortalPlayer(worldInput, command, context);
   throw new Error(`Unsupported portal world command: ${command.type}`);
 }

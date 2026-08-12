@@ -103,6 +103,13 @@ function commandLabel(type) {
   })[type] || type;
 }
 
+function commandStatusLabel(command) {
+  if (command.negotiation_state === 'accepted_application_failed') return 'application failed';
+  if (command.negotiation_state === 'accepted_applied') return 'accepted';
+  if (command.negotiation_state === 'declined') return 'declined';
+  return command.status;
+}
+
 function commandSubject(command) {
   const payload = command.payload || {};
   const display = command.display || {};
@@ -131,8 +138,9 @@ function renderCommandHistory() {
   list.innerHTML = commands.length ? commands.map((command) => {
     const processed = command.processed_at ? `Processed ${new Date(command.processed_at).toLocaleString()}` : `Submitted ${new Date(command.submitted_at).toLocaleString()}`;
     const outcome = command.outcome_reason ? `<p>${escapeHtml(command.outcome_reason)}</p>` : '<p>Awaiting the next shared-world checkpoint.</p>';
+    const statusLabel = commandStatusLabel(command);
     return `<article class="world-command-history-item" data-status="${escapeHtml(command.status)}">
-      <div class="world-control-heading"><div><strong>${escapeHtml(commandSubject(command))}</strong><small>${escapeHtml(processed)}</small></div><span class="world-control-status">${escapeHtml(command.status)}</span></div>
+      <div class="world-control-heading"><div><strong>${escapeHtml(commandSubject(command))}</strong><small>${escapeHtml(processed)}</small></div><span class="world-control-status">${escapeHtml(statusLabel)}</span></div>
       ${outcome}
       <small>Season ${escapeHtml(command.effective_season_id || '—')} · Matchday ${escapeHtml(command.effective_matchday ?? '—')}</small>
       ${commandTechnicalDetails(command)}
