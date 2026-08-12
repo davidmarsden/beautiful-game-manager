@@ -36,13 +36,24 @@ test('watchdog leaves recovery authority in the existing atomic database RPC', a
 
 test('stale-lock RPC supports modern service keys without weakening its database grants', async () => {
   const migration = await read('supabase/migrations/20260812_service_key_stale_turn_recovery.sql');
+  const functionBody = migration.match(/as \$\$([\s\S]*?)\$\$;/)?.[1] || '';
 
-  assert.doesNotMatch(migration, /request\.jwt\.claim\.role|service role required/);
+  assert.ok(functionBody, 'recovery function body should be present');
+  assert.doesNotMatch(functionBody, /request\.jwt\.claim\.role|service role required/);
   assert.match(migration, /security definer/);
   assert.match(migration, /revoke all on function public\.recover_stale_canonical_turn_lock[\s\S]*from public/);
   assert.match(migration, /revoke all on function public\.recover_stale_canonical_turn_lock[\s\S]*from anon/);
   assert.match(migration, /revoke all on function public\.recover_stale_canonical_turn_lock[\s\S]*from authenticated/);
   assert.match(migration, /grant execute on function public\.recover_stale_canonical_turn_lock[\s\S]*to service_role/);
+});
+
+test('watchdog sends opaque service keys only as apikey and reserves bearer auth for JWTs', async () => {
+  const source = await read('netlify/functions/scheduled-world-turn-background.mjs');
+
+  assert.match(source, /const isJwt = \(value\) => String\(value \|\| ''\)\.split\('\.'\)\.length === 3/);
+  assert.match(source, /apikey: SERVICE_ROLE_KEY/);
+  assert.match(source, /\.\.\.\(isJwt\(SERVICE_ROLE_KEY\) \? \{ authorization: `Bearer \$\{SERVICE_ROLE_KEY\}` \} : \{\}\)/);
+  assert.doesNotMatch(source, /\n\s*authorization: `Bearer \$\{SERVICE_ROLE_KEY\}`,/);
 });
 
 test('watchdog failure cannot block unrelated open worlds', async () => {
