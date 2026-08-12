@@ -46,20 +46,31 @@ async function adminIdentity(token) {
 }
 
 function operationFailureRun(operation, world) {
-  const schedulerResult = operation?.details?.scheduler_result || null;
-  if (operation?.status !== 'rejected' || schedulerResult?.status !== 'failed') return null;
+  if (operation?.status !== 'rejected') return null;
+  const schedulerResult = operation.details?.scheduler_result || null;
+  const automaticFailure = operation.details?.action === 'automatic_scheduled_turn' && Boolean(operation.details?.error);
+  if (schedulerResult?.status !== 'failed' && !automaticFailure) return null;
+  const failure = schedulerResult?.status === 'failed' ? schedulerResult : operation.details;
   return {
-    id: schedulerResult.failed_run_id || null,
-    season_id: world.season_id,
-    matchday: schedulerResult.matchday || world.matchday,
-    previous_checksum: world.save_checksum,
+    id: failure.failed_run_id || null,
+    season_id: failure.season_id || world.season_id,
+    matchday: failure.matchday || failure.before?.matchday || world.matchday,
+    previous_checksum: operation.previous_checksum || world.save_checksum,
     next_checksum: null,
     status: 'failed',
-    scheduled_for: world.next_turn_at,
+    scheduled_for: failure.before?.next_turn_at || world.next_turn_at,
     started_at: operation.created_at,
     completed_at: operation.created_at,
-    error_message: schedulerResult.error || operation.details?.error || 'The queued turn attempt failed.'
+    error_message: failure.error || 'The queued turn attempt failed.'
   };
+}
+
+function operationAttemptIsNewer(operation, completed) {
+  if (!operation) return false;
+  if (!completed) return true;
+  const operationAt = Date.parse(operation.created_at || '') || 0;
+  const completedAt = Date.parse(completed.completed_at || completed.started_at || '') || 0;
+  return operationAt > completedAt;
 }
 
 export default async (request) => {
@@ -82,8 +93,11 @@ export default async (request) => {
     const failed = runs.find((run) => run.status === 'failed' && run.previous_checksum === world.save_checksum) || null;
 
     const operations = await service(`/rest/v1/world_operation_events?world_id=eq.${encodeURIComponent(worldId)}&operation_type=eq.advance&or=(previous_checksum.eq.${checksum},replacement_checksum.eq.${checksum})&select=operation_id,status,previous_checksum,replacement_checksum,details,created_at&order=created_at.desc&limit=3`);
-    const operation = operations[0] || null;
-    const operationFailedRun = operationFailureRun(operation, world);
+    const operationFailure = operations
+      .map((operation) => ({ operation, run: operationFailureRun(operation, world) }))
+      .find((entry) => entry.run && operationAttemptIsNewer(entry.operation, completed)) || null;
+    const operation = operationFailure?.operation || operations[0] || null;
+    const operationFailedRun = operationFailure?.run || null;
     const diagnostics = operation?.details?.diagnostics || operation?.details?.scheduler_result?.diagnostics || null;
 
     let state = 'idle';
