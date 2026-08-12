@@ -258,7 +258,8 @@ async function processWorld(stored, now) {
   let failureDetails = null;
 
   try {
-    const lockRows = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&save_checksum=eq.${encodeURIComponent(previousChecksum)}&turn_status=eq.open`, {
+    const claimFields = 'world_id,save_checksum,updated_at,turn_status';
+    const lockRows = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&save_checksum=eq.${encodeURIComponent(previousChecksum)}&turn_status=eq.open&select=${claimFields}`, {
       method: 'PATCH',
       body: JSON.stringify({ turn_status: 'locking', updated_at: now }),
       headers: { prefer: 'return=representation' }
@@ -268,7 +269,10 @@ async function processWorld(stored, now) {
     const claimedStored = lockRows[0];
 
     tracker.begin('load_world');
-    let world = loadPersistentWorld(JSON.stringify(claimedStored.save_envelope));
+    const envelopeRows = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&save_checksum=eq.${encodeURIComponent(previousChecksum)}&turn_status=eq.locking&select=save_envelope&limit=1`);
+    const envelopeRow = envelopeRows[0] || null;
+    if (!envelopeRow?.save_envelope) throw new Error('Claimed canonical world envelope could not be loaded');
+    let world = loadPersistentWorld(JSON.stringify(envelopeRow.save_envelope));
     const commandDisplayWorld = world;
     seasonId = world.squad_cycle.season_id;
     matchday = world.matchday_cycle?.current_matchday || 1;
