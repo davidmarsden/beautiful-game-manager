@@ -5,10 +5,12 @@ const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const STALE_TURN_LEASE = '00:20:00';
 
+const isJwt = (value) => String(value || '').split('.').length === 3;
+
 function serviceHeaders() {
   return {
     apikey: SERVICE_ROLE_KEY,
-    authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+    ...(isJwt(SERVICE_ROLE_KEY) ? { authorization: `Bearer ${SERVICE_ROLE_KEY}` } : {}),
     accept: 'application/json',
     'content-type': 'application/json'
   };
