@@ -141,7 +141,7 @@ export function applyPendingCommands(worldInput, rows) {
     }
     try {
       world.human_club_id = row.club_id;
-      const execution = executePortalWorldCommand(world, command);
+      const execution = executePortalWorldCommand(world, command, { authoritativeCheckpoint: true });
       world = execution.world;
       results.push({
         id: row.id,
@@ -266,7 +266,6 @@ async function processWorld(stored, now) {
     });
     if (lockRows.length !== 1) return { world_id: worldId, status: 'skipped', reason: 'World was already claimed or changed' };
     claimed = true;
-    const claimedStored = lockRows[0];
 
     tracker.begin('load_world');
     const envelopeRows = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&save_checksum=eq.${encodeURIComponent(previousChecksum)}&turn_status=eq.locking&select=save_envelope&limit=1`);
