@@ -22,7 +22,7 @@ test('scheduled background sweeps stale canonical locks before normal processing
 test('watchdog leaves recovery authority in the existing atomic database RPC', async () => {
   const [source, migration] = await Promise.all([
     read('netlify/functions/scheduled-world-turn-background.mjs'),
-    read('supabase/migrations/20260729_pr155_atomic_stale_turn_lock_recovery.sql')
+    read('supabase/migrations/20260812_service_key_stale_turn_recovery.sql')
   ]);
 
   assert.match(source, /p_requested_by: null/);
@@ -32,6 +32,17 @@ test('watchdog leaves recovery authority in the existing atomic database RPC', a
   assert.match(migration, /set status = 'submitted', locked_at = null/);
   assert.match(migration, /set status = 'failed', error_message = v_reason, completed_at = p_now/);
   assert.match(migration, /set turn_status = 'failed', updated_at = p_now/);
+});
+
+test('stale-lock RPC supports modern service keys without weakening its database grants', async () => {
+  const migration = await read('supabase/migrations/20260812_service_key_stale_turn_recovery.sql');
+
+  assert.doesNotMatch(migration, /request\.jwt\.claim\.role|service role required/);
+  assert.match(migration, /security definer/);
+  assert.match(migration, /revoke all on function public\.recover_stale_canonical_turn_lock[\s\S]*from public/);
+  assert.match(migration, /revoke all on function public\.recover_stale_canonical_turn_lock[\s\S]*from anon/);
+  assert.match(migration, /revoke all on function public\.recover_stale_canonical_turn_lock[\s\S]*from authenticated/);
+  assert.match(migration, /grant execute on function public\.recover_stale_canonical_turn_lock[\s\S]*to service_role/);
 });
 
 test('watchdog failure cannot block unrelated open worlds', async () => {
