@@ -32,8 +32,12 @@ test('background recovery polls a lightweight canonical run ledger', async () =>
 test('a rejected current recovery operation outranks an older completed run on the same checksum', async () => {
   const status = await read('netlify/functions/world-turn-status.mjs');
   assert.match(status, /function operationFailureRun\(operation, world\)/);
-  assert.match(status, /operation\?\.status !== 'rejected' \|\| schedulerResult\?\.status !== 'failed'/);
-  assert.match(status, /const operationFailedRun = operationFailureRun\(operation, world\)/);
+  assert.match(status, /operation\?\.status !== 'rejected'/);
+  assert.match(status, /operation\.details\?\.action === 'automatic_scheduled_turn'/);
+  assert.match(status, /schedulerResult\?\.status !== 'failed' && !automaticFailure/);
+  assert.match(status, /operations\s*\.map\(\(operation\) => \(\{ operation, run: operationFailureRun\(operation, world\) \}\)\)\s*\.find/);
+  assert.match(status, /operationAttemptIsNewer/);
+  assert.match(status, /const operationFailedRun = operationFailure\?\.run \|\| null/);
   const failedOperationState = status.indexOf("else if (operationFailedRun) state = 'failed'");
   const completedState = status.indexOf("else if (completed) state = 'complete'");
   assert.ok(failedOperationState >= 0 && completedState > failedOperationState, 'current rejected retry operation must win over stale completed-run lineage');
