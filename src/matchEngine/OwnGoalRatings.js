@@ -22,13 +22,13 @@ function ownGoalAdjustments(resolution = {}) {
     const defenderId = event.own_goal_player_id ? String(event.own_goal_player_id) : null;
     if (defenderId) penalties.set(defenderId, (penalties.get(defenderId) || 0) + OWN_GOAL_PENALTY);
 
-    // Through Module E the scoring side remains the attacking side, so the event's
-    // ordinary player_id is deliberately an attacking actor. Module G therefore
-    // sees a normal open-play goal unless we remove that accidental reward here.
     const attackingActorId = event.player_id ? String(event.player_id) : null;
     if (attackingActorId) {
       const decisiveContext = afterState > beforeState ? (number(event.minute) >= 75 ? 0.2 : 0.1) : 0;
-      falseRewards.set(attackingActorId, (falseRewards.get(attackingActorId) || 0) + OPEN_PLAY_GOAL_REWARD + decisiveContext);
+      const current = falseRewards.get(attackingActorId) || { goal: 0, context: 0 };
+      current.goal += OPEN_PLAY_GOAL_REWARD;
+      current.context += decisiveContext;
+      falseRewards.set(attackingActorId, current);
     }
   }
 
@@ -40,12 +40,12 @@ function reconcileRows(rows = [], adjustments) {
     if (row.rating === null) return row;
     const playerId = String(row.player_id);
     const penalty = adjustments.penalties.get(playerId) || 0;
-    const falseReward = adjustments.falseRewards.get(playerId) || 0;
-    if (!penalty && !falseReward) return row;
+    const falseReward = adjustments.falseRewards.get(playerId) || { goal: 0, context: 0 };
+    if (!penalty && !falseReward.goal && !falseReward.context) return row;
 
-    const totalAdjustment = penalty + falseReward;
-    const eventImpact = number(row.components?.event_impact) - falseReward - penalty;
-    const matchContext = Math.min(0, number(row.components?.match_context));
+    const totalAdjustment = penalty + falseReward.goal + falseReward.context;
+    const eventImpact = number(row.components?.event_impact) - falseReward.goal - penalty;
+    const matchContext = clamp(number(row.components?.match_context) - falseReward.context, -0.25, 0.25);
     const ownGoalCount = penalty ? Math.round(penalty / OWN_GOAL_PENALTY) : 0;
     return {
       ...row,
@@ -53,7 +53,7 @@ function reconcileRows(rows = [], adjustments) {
       components: row.components ? {
         ...row.components,
         event_impact: Number(eventImpact.toFixed(3)),
-        ...(falseReward ? { match_context: Number(matchContext.toFixed(3)) } : {})
+        match_context: Number(matchContext.toFixed(3))
       } : row.components,
       highlights: ownGoalCount
         ? [...(row.highlights || []).filter((label) => !/^\d+ goals?$/.test(label)), `${ownGoalCount} own goal${ownGoalCount === 1 ? '' : 's'}`]
