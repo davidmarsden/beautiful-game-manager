@@ -1,5 +1,6 @@
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
+const roundRating = (value) => Math.round((value + Number.EPSILON) * 10) / 10;
 
 const OWN_GOAL_PENALTY = 1.15;
 const OPEN_PLAY_GOAL_REWARD = 1.15;
@@ -49,7 +50,7 @@ function reconcileRows(rows = [], adjustments) {
     const ownGoalCount = penalty ? Math.round(penalty / OWN_GOAL_PENALTY) : 0;
     return {
       ...row,
-      rating: Number(clamp(number(row.rating) - totalAdjustment, 1, 10).toFixed(1)),
+      rating: roundRating(clamp(number(row.rating) - totalAdjustment, 1, 10)),
       components: row.components ? {
         ...row.components,
         event_impact: Number(eventImpact.toFixed(3)),
