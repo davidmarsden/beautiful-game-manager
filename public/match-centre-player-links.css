@@ -1,4 +1,5 @@
 @import url('./match-centre-major-events.css');
+@import url('./replay-event-hierarchy.css');
 
 .match-centre-player-link {
   color: inherit;
