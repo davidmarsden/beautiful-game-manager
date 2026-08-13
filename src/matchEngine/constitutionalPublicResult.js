@@ -3,16 +3,19 @@ const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(
 const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 
 export const CONSTITUTIONAL_PUBLIC_RESULT_VERSION = '2d5-v1';
-export const CONSTITUTIONAL_PUBLIC_ADAPTER_VERSION = 'tbg-constitutional-public-adapter-v0.5';
+export const CONSTITUTIONAL_PUBLIC_ADAPTER_VERSION = 'tbg-constitutional-public-adapter-v0.6';
 
 function commentaryByEvent(report = {}) { return new Map((report.commentary || []).map((row) => [String(row.event_id), row.text])); }
 
 function fallbackCommentary(event, sideName) {
   const player = event.player_id ? 'A player' : sideName;
   switch (event.type) {
-    case 'goal': return `GOAL! ${player} scores for ${sideName}.`;
+    case 'goal': return event.own_goal ? `${player} turns the ball into their own net.` : `GOAL! ${player} scores for ${sideName}.`;
     case 'big_chance': return `${player} has a major chance for ${sideName}.`;
-    case 'shot': return event.on_target ? `${player} tests the goalkeeper.` : `${player} sends an effort wide.`;
+    case 'shot':
+      if (event.outcome === 'offside') return `${player} is denied by the offside flag.`;
+      if (event.outcome === 'woodwork') return `${player} hits the woodwork.`;
+      return event.on_target ? `${player} tests the goalkeeper.` : `${player} sends an effort wide.`;
     case 'foul': return event.subtype === 'penalty_foul' ? `${player} concedes a penalty.` : `${player} commits a foul.`;
     case 'penalty':
       if (event.subtype === 'penalty_attempt') return event.outcome === 'goal' ? `GOAL! ${player} scores the penalty.` : event.outcome === 'saved' ? `${player}'s penalty is saved.` : event.outcome === 'retake' ? `The penalty must be retaken.` : `${player} misses the penalty.`;
@@ -49,10 +52,12 @@ function publicEvent(event, report, contract) {
   const sideName = text(team.club_name || team.name || team.display_name || team.club_id) || (event.side === 'home' ? 'Home' : 'Away');
   return {
     event_id: publicEventId(contract, internalEventId), internal_event_id: internalEventId,
+    sequence_id: publicReference(contract, event.sequence_id), sequence_order: event.sequence_order ?? null,
     type: event.type, subtype: event.subtype || null, side: event.side, against_side: event.against_side || null, minute: event.minute,
-    player_id: event.player_id || null, assist_player_id: event.assist_player_id || null,
+    player_id: event.player_id || null, assist_player_id: event.assist_player_id || null, beneficiary_player_id: event.beneficiary_player_id || null,
     player_out_id: event.player_out_id || null, player_in_id: event.player_in_id || null, reason: event.reason || null,
     source_event_id: publicReference(contract, event.source_event_id), parent_event_id: publicReference(contract, event.parent_event_id), linked_event_id: publicReference(contract, event.linked_event_id),
+    chance_origin: event.chance_origin || null, own_goal: event.own_goal === true,
     commentary: commentary || fallbackCommentary(event, sideName), xg: event.xg ?? null, on_target: event.on_target ?? null, outcome: event.outcome || null, official: true
   };
 }
