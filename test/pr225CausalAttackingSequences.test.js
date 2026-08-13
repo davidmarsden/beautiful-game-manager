@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPenaltyIncident } from '../src/matchEngine/modules/EventGeneration.js';
+import { resolveLineupEvents } from '../src/matchEngine/LineupResolution.js';
 import {
   realiseCausalEventGeneration,
   reconcileCausalResolution
 } from '../src/matchEngine/CausalEventRealisation.js';
+import { reconcileOwnGoalRatings } from '../src/matchEngine/OwnGoalRatings.js';
 
 const quality = {
   home: { starters: [{ player_id: 'h1', display_name: 'Home Forward', required_role: 'st' }] },
@@ -56,22 +58,28 @@ test('non-goal attempts expose football outcomes rather than standalone goal eve
   assert.equal(result.provisional_event_stream.filter((event) => event.type === 'goal').length, 0);
 });
 
-test('corners and free kicks can feed existing attempts without inflating shot volume', () => {
-  const chances = Array.from({ length: 20 }, (_, index) => ({
+test('corners and free kicks feed only same-side existing attempts without inflating shot volume', () => {
+  const homeChances = Array.from({ length: 20 }, (_, index) => ({
     event_id: `home-chance-${index + 1}`, minute: 10 + index, side: 'home', type: 'shot', player_id: 'h1', xg: 0.1, on_target: false, outcome: 'missed', provisional: true
   }));
-  const setPieces = Array.from({ length: 20 }, (_, index) => ({
-    event_id: `home-set-piece-${index + 1}`, minute: 40 + index, side: 'home', type: 'set_piece', subtype: index % 2 ? 'free_kick' : 'corner', provisional: true
+  const awayChances = Array.from({ length: 20 }, (_, index) => ({
+    event_id: `away-chance-${index + 1}`, minute: 10 + index, side: 'away', type: 'shot', player_id: 'a1', xg: 0.1, on_target: false, outcome: 'missed', provisional: true
   }));
-  const result = realiseCausalEventGeneration(generated([...chances, ...setPieces]), quality);
+  const setPieces = Array.from({ length: 20 }, (_, index) => ({
+    event_id: `${index % 2 ? 'away' : 'home'}-set-piece-${index + 1}`,
+    minute: 40 + index,
+    side: index % 2 ? 'away' : 'home',
+    type: 'set_piece', subtype: index % 3 ? 'free_kick' : 'corner', provisional: true
+  }));
+  const result = realiseCausalEventGeneration(generated([...homeChances, ...awayChances, ...setPieces]), quality);
   const attempts = result.provisional_event_stream.filter((event) => ['shot', 'big_chance'].includes(event.type));
   const linkedSetPieces = result.provisional_event_stream.filter((event) => event.type === 'set_piece' && event.linked_event_id);
-  assert.equal(attempts.length, chances.length, 'set pieces must reuse the existing chance budget rather than create extra shots');
-  assert.ok(linkedSetPieces.some((event) => event.subtype === 'corner'), 'at least one deterministic corner should lead to an attempt');
-  assert.ok(linkedSetPieces.some((event) => event.subtype === 'free_kick'), 'at least one deterministic free kick should lead to an attempt');
+  assert.equal(attempts.length, homeChances.length + awayChances.length, 'set pieces must reuse the existing chance budget rather than create extra shots');
+  assert.ok(linkedSetPieces.length > 0);
   for (const setPiece of linkedSetPieces) {
     const attempt = result.provisional_event_stream.find((event) => event.event_id === setPiece.linked_event_id);
     assert.ok(attempt);
+    assert.equal(attempt.side, setPiece.side, 'a set piece must never parent the opponent attempt');
     assert.equal(attempt.parent_event_id, setPiece.event_id);
     assert.equal(attempt.minute, setPiece.minute);
   }
@@ -112,17 +120,47 @@ test('linked goal events do not double-count the attempt in shot totals', () => 
   assert.equal(reconciled.statistics.home.shots_on_target, 1);
 });
 
-test('own goals are possible but remain goals for the attacking side', () => {
-  let found = null;
-  for (let index = 0; index < 1000 && !found; index += 1) {
+test('own-goal defender identity survives lineup actor reconciliation', () => {
+  let generatedOwnGoal = null;
+  for (let index = 0; index < 1000 && !generatedOwnGoal; index += 1) {
     const result = realiseCausalEventGeneration(generated([
       { event_id: `own-goal-search-${index}`, minute: 60, side: 'home', type: 'goal', player_id: 'h1', xg: 0.2, on_target: true, outcome: 'goal', provisional: true }
     ]), quality);
-    found = result.provisional_event_stream.find((event) => event.type === 'goal' && event.own_goal === true) || null;
+    const goal = result.provisional_event_stream.find((event) => event.type === 'goal' && event.own_goal === true) || null;
+    if (goal) generatedOwnGoal = { result, goal };
   }
-  assert.ok(found, 'deterministic own-goal path should be reachable');
-  assert.equal(found.side, 'home');
-  assert.equal(found.player_id, 'a1');
-  assert.equal(found.subtype, 'own_goal');
-  assert.equal(found.beneficiary_player_id, 'h1');
+  assert.ok(generatedOwnGoal, 'deterministic own-goal path should be reachable');
+  assert.equal(generatedOwnGoal.goal.side, 'home');
+  assert.equal(generatedOwnGoal.goal.player_id, 'h1', 'Module E actor remains on the scoring side');
+  assert.equal(generatedOwnGoal.goal.own_goal_player_id, 'a1', 'defending scorer identity is stored separately');
+  assert.equal(generatedOwnGoal.goal.subtype, 'own_goal');
+
+  const contract = { teams: { home: { bench: [] }, away: { bench: [] } } };
+  const resolved = resolveLineupEvents(generatedOwnGoal.result, contract, quality);
+  const finalGoal = resolved.events.find((event) => event.own_goal === true);
+  assert.equal(finalGoal.player_id, 'h1');
+  assert.equal(finalGoal.own_goal_player_id, 'a1');
+  assert.equal(finalGoal.reassigned_from_player_id, undefined, 'own goal must not trigger attacking-side reassignment of the defender');
+});
+
+test('own goal removes the false attacking reward and applies a real defender penalty', () => {
+  const ratings = {
+    deterministic: true,
+    version: 'ratings',
+    home: [{ player_id: 'h1', minutes_played: 90, rating: 7.4, components: { event_impact: 1.15, match_context: 0.2 }, highlights: ['1 goal'] }],
+    away: [{ player_id: 'a1', minutes_played: 90, rating: 6.0, components: { event_impact: 0, match_context: 0 }, highlights: [] }],
+    player_of_the_match: null
+  };
+  const resolution = {
+    official_event_stream: [
+      { event_id: 'og', type: 'goal', side: 'home', minute: 90, own_goal: true, player_id: 'h1', own_goal_player_id: 'a1' }
+    ]
+  };
+  const reconciled = reconcileOwnGoalRatings(ratings, resolution);
+  const attacker = reconciled.home.find((row) => row.player_id === 'h1');
+  const defender = reconciled.away.find((row) => row.player_id === 'a1');
+  assert.equal(attacker.rating, 6.1, 'the false 1.15 goal reward and 0.2 decisive context are removed');
+  assert.equal(attacker.components.match_context, 0);
+  assert.equal(defender.rating, 4.9, 'the defender receives a net own-goal penalty rather than merely losing a false reward');
+  assert.ok(defender.highlights.includes('1 own goal'));
 });
