@@ -12,6 +12,33 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
   headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
 });
 
+const replayEventType = (value) => text(value).toLowerCase().replace(/[\s-]+/g, '_');
+const MAJOR_REPLAY_EVENTS = Object.freeze({
+  goal: Object.freeze({ kind: 'goal', label: 'GOAL', hold_ms: 2800, priority: 100 }),
+  penalty_scored: Object.freeze({ kind: 'goal', label: 'PENALTY GOAL', hold_ms: 2800, priority: 100 }),
+  penalty_missed: Object.freeze({ kind: 'penalty', label: 'PENALTY MISSED', hold_ms: 2400, priority: 90 }),
+  penalty_saved: Object.freeze({ kind: 'penalty', label: 'PENALTY SAVED', hold_ms: 2400, priority: 90 }),
+  red_card: Object.freeze({ kind: 'dismissal', label: 'RED CARD', hold_ms: 2400, priority: 80 }),
+  second_yellow: Object.freeze({ kind: 'dismissal', label: 'SECOND YELLOW', hold_ms: 2400, priority: 80 }),
+  penalty_awarded: Object.freeze({ kind: 'penalty', label: 'PENALTY', hold_ms: 2200, priority: 70 })
+});
+
+export function replayPresentationForEvent(event = {}) {
+  const type = replayEventType(event.event_type || event.type || event.kind);
+  const major = MAJOR_REPLAY_EVENTS[type] || null;
+  return major
+    ? { importance: 'major', major: true, ...major }
+    : { importance: 'standard', major: false, kind: 'commentary', label: null, hold_ms: 0, priority: 0 };
+}
+
+function replayBookingKey(event = {}) {
+  const playerId = text(event.player_id || event.tbg_player_id || event.id);
+  if (playerId) return `id:${playerId}`;
+  const playerName = text(event.player_name || event.name).toLowerCase();
+  if (!playerName) return null;
+  return `name:${text(event.side).toLowerCase()}:${playerName}`;
+}
+
 async function canonicalWorld(worldId) {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !worldId) return null;
   const response = await fetch(
@@ -50,12 +77,26 @@ function decoratePlayer(world, row = {}, idField = 'player_id') {
 }
 
 export function decorateMatchCentrePayload(payload = {}, world = null) {
-  const events = (payload.events || []).map((event) => ({
-    ...decoratePlayer(world, event),
-    assist_profile_url: identityFor(world, event.assist_player_id).profile_url,
-    player_on_profile_url: identityFor(world, event.player_on_id || event.in_player_id || event.replacement_player_id).profile_url,
-    player_off_profile_url: identityFor(world, event.player_off_id || event.out_player_id || event.replaced_player_id).profile_url
-  }));
+  const bookings = new Map();
+  const events = (payload.events || []).map((event) => {
+    const type = replayEventType(event.event_type || event.type || event.kind);
+    let replayPresentation = replayPresentationForEvent(event);
+    if (type === 'yellow_card') {
+      const bookingKey = replayBookingKey(event);
+      if (bookingKey) {
+        const bookingCount = (bookings.get(bookingKey) || 0) + 1;
+        bookings.set(bookingKey, bookingCount);
+        if (bookingCount >= 2) replayPresentation = replayPresentationForEvent({ event_type: 'second_yellow' });
+      }
+    }
+    return {
+      ...decoratePlayer(world, event),
+      replay_presentation: replayPresentation,
+      assist_profile_url: identityFor(world, event.assist_player_id).profile_url,
+      player_on_profile_url: identityFor(world, event.player_on_id || event.in_player_id || event.replacement_player_id).profile_url,
+      player_off_profile_url: identityFor(world, event.player_off_id || event.out_player_id || event.replaced_player_id).profile_url
+    };
+  });
 
   const decoratePerformance = (row) => decoratePlayer(world, row);
   const performances = {

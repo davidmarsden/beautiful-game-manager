@@ -20,6 +20,17 @@ const eventTypeMeta = (type) => {
   const [icon, className, label] = exact[key] || (key.includes('goal') ? exact.goal : key.includes('card') ? exact.yellow_card : ['•', 'generic', key.replaceAll('_', ' ')]);
   return { icon, className: `event-${className}`, label };
 };
+const FALLBACK_MAJOR_EVENTS = Object.freeze({
+  goal: { importance: 'major', major: true, kind: 'goal', label: 'GOAL', hold_ms: 2800, priority: 100 },
+  penalty_scored: { importance: 'major', major: true, kind: 'goal', label: 'PENALTY GOAL', hold_ms: 2800, priority: 100 },
+  penalty_missed: { importance: 'major', major: true, kind: 'penalty', label: 'PENALTY MISSED', hold_ms: 2400, priority: 90 },
+  penalty_saved: { importance: 'major', major: true, kind: 'penalty', label: 'PENALTY SAVED', hold_ms: 2400, priority: 90 },
+  red_card: { importance: 'major', major: true, kind: 'dismissal', label: 'RED CARD', hold_ms: 2400, priority: 80 },
+  second_yellow: { importance: 'major', major: true, kind: 'dismissal', label: 'SECOND YELLOW', hold_ms: 2400, priority: 80 },
+  penalty_awarded: { importance: 'major', major: true, kind: 'penalty', label: 'PENALTY', hold_ms: 2200, priority: 70 }
+});
+const eventPresentation = (event = {}) => event.replay_presentation || FALLBACK_MAJOR_EVENTS[normalType(event.event_type)] || { importance: 'standard', major: false, kind: 'commentary', label: null, hold_ms: 0, priority: 0 };
+const isMajorReplayEvent = (event) => eventPresentation(event).major === true;
 const eventText = (event) => {
   if (normalType(event.event_type) === 'substitution' && (event.player_out_name || event.player_in_name)) {
     return `${event.player_out_name || 'Unknown player'} off · ${event.player_in_name || 'Unknown player'} on`;
@@ -49,9 +60,11 @@ const ratingBadge = (rating) => mcNumber(rating) === null ? '' : `<strong class=
 const playerList = (players = []) => players.map((player, index) => `<li><span class="shirt-number">${index + 1}</span><span class="lineup-name">${mcEscape(player.name)}</span>${substitutionBadge(player.substitution)}${performanceBadges(player.performance)}${ratingBadge(player.performance?.rating)}</li>`).join('');
 const eventMarkup = (event, { replay = false } = {}) => {
   const meta = eventTypeMeta(event.event_type);
+  const presentation = eventPresentation(event);
   const side = event.side === 'home' || event.side === 'away' ? event.side : 'neutral';
   const tag = replay ? 'p' : 'li';
-  return `<${tag} class="match-event ${meta.className} side-${side}"><time>${mcEscape(event.minute ?? '—')}'</time><span class="event-icon" aria-label="${mcEscape(meta.label)}">${mcEscape(meta.icon)}</span><span class="event-copy"><strong>${mcEscape(meta.label)}</strong><span>${mcEscape(eventText(event))}</span>${event.assist_player_name ? `<small>↪ ${mcEscape(event.assist_player_name)}</small>` : ''}</span></${tag}>`;
+  const majorClass = presentation.major ? ` major-event major-${mcEscape(presentation.kind)}` : '';
+  return `<${tag} class="match-event ${meta.className} side-${side}${majorClass}" data-replay-importance="${mcEscape(presentation.importance)}"><time>${mcEscape(event.minute ?? '—')}'</time><span class="event-icon" aria-label="${mcEscape(meta.label)}">${mcEscape(meta.icon)}</span><span class="event-copy"><strong>${mcEscape(meta.label)}</strong><span>${mcEscape(eventText(event))}</span>${event.assist_player_name ? `<small>↪ ${mcEscape(event.assist_player_name)}</small>` : ''}</span></${tag}>`;
 };
 const scorerRows = (rows = []) => rows.length ? rows.map((row) => `<li><strong>${mcEscape(row.player_name)}</strong><span>${mcEscape(row.minute)}'${row.penalty ? ' (pen)' : ''}${row.own_goal ? ' (og)' : ''}${row.assist_player_name ? ` · ↪ ${mcEscape(row.assist_player_name)}` : ''}</span></li>`).join('') : '<li><span>No scorers</span></li>';
 const cardsSummary = (rows = []) => rows.length ? rows.map((row) => `${eventTypeMeta(row.event_type).icon} ${mcEscape(row.player_name)} ${mcEscape(row.minute)}'`).join('<br>') : 'None';
@@ -78,9 +91,12 @@ function closeMatchCentre() {
   clearInterval(replayTimer); replayTimer = null; replayState = null;
   const modal = document.getElementById('matchCentreModal'); if (modal) modal.hidden = true;
 }
+function replaySpotlightMarkup() {
+  return '<div id="replaySpotlight" class="replay-spotlight" hidden role="status" aria-live="assertive" aria-atomic="true"></div>';
+}
 function replayMarkup(data) {
   const fixture = data.fixture;
-  return `<section class="teletext-scoreboard spoiler-safe"><div><span>HOME</span><strong>${mcEscape(fixture.home_club_name)}</strong></div><div class="teletext-score"><span id="replayStatus">READY</span><b id="headerReplayScore">0-0</b></div><div><span>AWAY</span><strong>${mcEscape(fixture.away_club_name)}</strong></div></section><section class="spoiler-notice"><strong>RESULT HIDDEN</strong><span>Watch the replay or choose SKIP TO FULL TIME to reveal it.</span></section><section class="match-tab active"><div class="replay-console"><div class="replay-clock" id="replayClock">00'</div><div class="replay-score"><span>${mcEscape(fixture.home_club_name)}</span><b id="replayScore">0-0</b><span>${mcEscape(fixture.away_club_name)}</span></div><div id="replayFeed" class="replay-feed"><p>The result is hidden. Press START when you are ready.</p></div><div class="replay-controls"><button id="replayStart" type="button">START</button><button id="replayPause" type="button">PAUSE</button><button id="replaySkip" type="button">SKIP TO FULL TIME</button><label>Speed<select id="replaySpeed"><option value="900">1×</option><option value="450">2×</option><option value="180">5×</option></select></label></div></div></section>`;
+  return `<section class="teletext-scoreboard spoiler-safe"><div><span>HOME</span><strong>${mcEscape(fixture.home_club_name)}</strong></div><div class="teletext-score"><span id="replayStatus">READY</span><b id="headerReplayScore">0-0</b></div><div><span>AWAY</span><strong>${mcEscape(fixture.away_club_name)}</strong></div></section><section class="spoiler-notice"><strong>RESULT HIDDEN</strong><span>Watch the replay or choose SKIP TO FULL TIME to reveal it.</span></section><section class="match-tab active"><div class="replay-console"><div class="replay-clock" id="replayClock">00'</div><div class="replay-score"><span>${mcEscape(fixture.home_club_name)}</span><b id="replayScore">0-0</b><span>${mcEscape(fixture.away_club_name)}</span></div>${replaySpotlightMarkup()}<div id="replayFeed" class="replay-feed"><p>The result is hidden. Press START when you are ready.</p></div><div class="replay-controls"><button id="replayStart" type="button">START</button><button id="replayPause" type="button">PAUSE</button><button id="replaySkip" type="button">SKIP TO FULL TIME</button><label>Speed<select id="replaySpeed"><option value="900">1×</option><option value="450">2×</option><option value="180">5×</option></select></label></div></div></section>`;
 }
 function renderMatchCentre(data) {
   const modal = ensureMatchCentre(); const content = modal.querySelector('#matchCentreContent'); const fixture = data.fixture;
@@ -90,7 +106,7 @@ function renderMatchCentre(data) {
   const homeSubmission = (data.submissions || []).find((row) => row.club_id === fixture.home_club_id) || {};
   const awaySubmission = (data.submissions || []).find((row) => row.club_id === fixture.away_club_id) || {};
   const events = data.events || []; const potm = summary.player_of_the_match; const ratingsVersion = result.model?.performance_ratings_version || data.ratings_version || null;
-  content.innerHTML = `<section class="teletext-scoreboard"><div><span>HOME</span><strong>${mcEscape(fixture.home_club_name)}</strong></div><div class="teletext-score"><span>FT</span><b>${mcEscape(fixture.home_score)}-${mcEscape(fixture.away_score)}</b></div><div><span>AWAY</span><strong>${mcEscape(fixture.away_club_name)}</strong></div></section><section class="match-summary-grid"><article><h3>${mcEscape(fixture.home_club_name)}</h3><ul>${scorerRows(summary.scorers?.home)}</ul><p><b>Cards</b><br>${cardsSummary(summary.cards?.home)}</p></article><article class="match-stars"><h3>TOP PERFORMERS</h3>${potm ? `<div class="potm"><span>PLAYER OF THE MATCH</span><strong>${mcEscape(potm.player_name)}</strong>${ratingBadge(potm.rating)}</div>` : '<p>Player of the Match unavailable.</p>'}<ol class="top-ratings">${topRatingsMarkup(summary.top_ratings, ratingsVersion)}</ol></article><article><h3>${mcEscape(fixture.away_club_name)}</h3><ul>${scorerRows(summary.scorers?.away)}</ul><p><b>Cards</b><br>${cardsSummary(summary.cards?.away)}</p></article></section><nav class="match-centre-tabs"><button type="button" class="active" data-match-tab="report">REPORT</button><button type="button" data-match-tab="replay">REPLAY</button><button type="button" data-match-tab="lineups">LINE-UPS</button></nav><section id="matchTabReport" class="match-tab active"><div class="teletext-grid"><article class="teletext-panel"><h3>EVENTS</h3><ol class="event-list">${events.length ? events.map((event) => eventMarkup(event)).join('') : '<li>No recorded match events.</li>'}</ol></article><article class="teletext-panel"><h3>MATCH STATISTICS</h3><div class="stat-line"><span>${stats.home?.possession ?? '—'}%</span><b>POSSESSION</b><span>${stats.away?.possession ?? '—'}%</span></div><div class="stat-line"><span>${stats.home?.shots ?? '—'}</span><b>SHOTS</b><span>${stats.away?.shots ?? '—'}</span></div><div class="stat-line"><span>${stats.home?.shots_on_target ?? '—'}</span><b>ON TARGET</b><span>${stats.away?.shots_on_target ?? '—'}</span></div><div class="match-meta">Matchday ${mcEscape(fixture.matchday ?? '—')}<br>${new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(fixture.played_at))}</div></article></div></section><section id="matchTabReplay" class="match-tab"><div class="replay-console"><div class="replay-clock" id="replayClock">00'</div><div class="replay-score"><span>${mcEscape(fixture.home_club_name)}</span><b id="replayScore">0-0</b><span>${mcEscape(fixture.away_club_name)}</span></div><div id="replayFeed" class="replay-feed"><p>Press START to replay the saved match.</p></div><div class="replay-controls"><button id="replayStart" type="button">START</button><button id="replayPause" type="button">PAUSE</button><button id="replaySkip" type="button">FULL TIME</button><label>Speed<select id="replaySpeed"><option value="900">1×</option><option value="450">2×</option><option value="180">5×</option></select></label></div></div></section><section id="matchTabLineups" class="match-tab"><div class="lineups-grid"><article class="teletext-panel"><h3>${mcEscape(fixture.home_club_name)}</h3><p>${mcEscape(homeSubmission.formation || '—')} · ${mcEscape(homeSubmission.submission_source || '—')}</p><ol class="lineup-list">${playerList(homeSubmission.starting_xi)}</ol><h4>SUBSTITUTES</h4><ol class="lineup-list bench">${playerList(homeSubmission.bench)}</ol></article><article class="teletext-panel"><h3>${mcEscape(fixture.away_club_name)}</h3><p>${mcEscape(awaySubmission.formation || '—')} · ${mcEscape(awaySubmission.submission_source || '—')}</p><ol class="lineup-list">${playerList(awaySubmission.starting_xi)}</ol><h4>SUBSTITUTES</h4><ol class="lineup-list bench">${playerList(awaySubmission.bench)}</ol></article></div></section>`;
+  content.innerHTML = `<section class="teletext-scoreboard"><div><span>HOME</span><strong>${mcEscape(fixture.home_club_name)}</strong></div><div class="teletext-score"><span>FT</span><b>${mcEscape(fixture.home_score)}-${mcEscape(fixture.away_score)}</b></div><div><span>AWAY</span><strong>${mcEscape(fixture.away_club_name)}</strong></div></section><section class="match-summary-grid"><article><h3>${mcEscape(fixture.home_club_name)}</h3><ul>${scorerRows(summary.scorers?.home)}</ul><p><b>Cards</b><br>${cardsSummary(summary.cards?.home)}</p></article><article class="match-stars"><h3>TOP PERFORMERS</h3>${potm ? `<div class="potm"><span>PLAYER OF THE MATCH</span><strong>${mcEscape(potm.player_name)}</strong>${ratingBadge(potm.rating)}</div>` : '<p>Player of the Match unavailable.</p>'}<ol class="top-ratings">${topRatingsMarkup(summary.top_ratings, ratingsVersion)}</ol></article><article><h3>${mcEscape(fixture.away_club_name)}</h3><ul>${scorerRows(summary.scorers?.away)}</ul><p><b>Cards</b><br>${cardsSummary(summary.cards?.away)}</p></article></section><nav class="match-centre-tabs"><button type="button" class="active" data-match-tab="report">REPORT</button><button type="button" data-match-tab="replay">REPLAY</button><button type="button" data-match-tab="lineups">LINE-UPS</button></nav><section id="matchTabReport" class="match-tab active"><div class="teletext-grid"><article class="teletext-panel"><h3>EVENTS</h3><ol class="event-list">${events.length ? events.map((event) => eventMarkup(event)).join('') : '<li>No recorded match events.</li>'}</ol></article><article class="teletext-panel"><h3>MATCH STATISTICS</h3><div class="stat-line"><span>${stats.home?.possession ?? '—'}%</span><b>POSSESSION</b><span>${stats.away?.possession ?? '—'}%</span></div><div class="stat-line"><span>${stats.home?.shots ?? '—'}</span><b>SHOTS</b><span>${stats.away?.shots_on_target ?? '—'}</span></div><div class="stat-line"><span>${stats.home?.shots_on_target ?? '—'}</span><b>ON TARGET</b><span>${stats.away?.shots_on_target ?? '—'}</span></div><div class="match-meta">Matchday ${mcEscape(fixture.matchday ?? '—')}<br>${new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(fixture.played_at))}</div></article></div></section><section id="matchTabReplay" class="match-tab"><div class="replay-console"><div class="replay-clock" id="replayClock">00'</div><div class="replay-score"><span>${mcEscape(fixture.home_club_name)}</span><b id="replayScore">0-0</b><span>${mcEscape(fixture.away_club_name)}</span></div>${replaySpotlightMarkup()}<div id="replayFeed" class="replay-feed"><p>Press START to replay the saved match.</p></div><div class="replay-controls"><button id="replayStart" type="button">START</button><button id="replayPause" type="button">PAUSE</button><button id="replaySkip" type="button">FULL TIME</button><label>Speed<select id="replaySpeed"><option value="900">1×</option><option value="450">2×</option><option value="180">5×</option></select></label></div></div></section><section id="matchTabLineups" class="match-tab"><div class="lineups-grid"><article class="teletext-panel"><h3>${mcEscape(fixture.home_club_name)}</h3><p>${mcEscape(homeSubmission.formation || '—')} · ${mcEscape(homeSubmission.submission_source || '—')}</p><ol class="lineup-list">${playerList(homeSubmission.starting_xi)}</ol><h4>SUBSTITUTES</h4><ol class="lineup-list bench">${playerList(homeSubmission.bench)}</ol></article><article class="teletext-panel"><h3>${mcEscape(fixture.away_club_name)}</h3><p>${mcEscape(awaySubmission.formation || '—')} · ${mcEscape(awaySubmission.submission_source || '—')}</p><ol class="lineup-list">${playerList(awaySubmission.starting_xi)}</ol><h4>SUBSTITUTES</h4><ol class="lineup-list bench">${playerList(awaySubmission.bench)}</ol></article></div></section>`;
   modal.hidden = false;
   content.querySelectorAll('[data-match-tab]').forEach((button) => button.addEventListener('click', () => { content.querySelectorAll('[data-match-tab]').forEach((item) => item.classList.toggle('active', item === button)); content.querySelectorAll('.match-tab').forEach((section) => section.classList.toggle('active', section.id === `matchTab${button.dataset.matchTab[0].toUpperCase()}${button.dataset.matchTab.slice(1)}`)); }));
   setupReplay(data, false);
@@ -103,22 +119,69 @@ async function revealMatch(data, method) {
 }
 function setupReplay(data, revealRequired) {
   const events = [...(data.events || [])].sort((a, b) => Number(a.minute) - Number(b.minute));
-  replayState = { minute: 0, home: 0, away: 0, events, nextEvent: 0, data, revealing: false };
+  replayState = { minute: 0, home: 0, away: 0, events, nextEvent: 0, data, revealing: false, holdUntil: 0, spotlightEvent: null, pendingFinish: false };
   const finish = async (method) => { if (!revealRequired || replayState.revealing) return; replayState.revealing = true; try { await revealMatch(data, method); } catch (error) { document.getElementById('replayFeed')?.insertAdjacentHTML('afterbegin', `<p class="replay-error">${mcEscape(error.message)}</p>`); replayState.revealing = false; } };
-  const tick = ({ autoFinish = true } = {}) => {
-    if (!replayState) return; replayState.minute += 1;
+  const setStatus = (value) => { const status = document.getElementById('replayStatus'); if (status) status.textContent = value; };
+  const clearReplaySpotlight = () => {
+    if (!replayState) return;
+    const spotlight = document.getElementById('replaySpotlight');
+    if (spotlight) { spotlight.hidden = true; spotlight.className = 'replay-spotlight'; spotlight.innerHTML = ''; }
+    replayState.spotlightEvent = null; replayState.holdUntil = 0; setStatus(replayState.minute >= 90 ? 'FT' : 'LIVE');
+  };
+  const showReplaySpotlight = (event) => {
+    const presentation = eventPresentation(event); if (!presentation.major) return;
+    const meta = eventTypeMeta(event.event_type); const spotlight = document.getElementById('replaySpotlight'); if (!spotlight) return;
+    replayState.spotlightEvent = event;
+    replayState.holdUntil = Date.now() + Math.max(0, Number(presentation.hold_ms) || 0);
+    spotlight.hidden = false;
+    spotlight.className = `replay-spotlight spotlight-${normalType(presentation.kind || 'major')}`;
+    spotlight.innerHTML = `<span class="spotlight-kicker">${mcEscape(presentation.label || meta.label)}</span><div class="spotlight-main"><span class="spotlight-icon">${mcEscape(meta.icon)}</span><strong>${mcEscape(event.minute ?? replayState.minute)}'</strong><span>${mcEscape(eventText(event))}</span></div><b class="spotlight-score">${replayState.home}-${replayState.away}</b>`;
+    setStatus(presentation.label || meta.label.toUpperCase());
+  };
+  const finalizeReplay = (autoFinish) => {
+    clearInterval(replayTimer); replayTimer = null;
+    if (!events.some((event) => normalType(event.event_type) === 'full_time')) document.getElementById('replayFeed')?.insertAdjacentHTML('afterbegin', '<p class="full-time">90\' FULL TIME</p>');
+    setStatus('FT'); replayState.pendingFinish = false;
+    if (autoFinish) finish('replay_completed');
+  };
+  const tick = ({ autoFinish = true, ignoreHold = false, suppressSpotlight = false } = {}) => {
+    if (!replayState) return;
+    if (!ignoreHold && replayState.holdUntil > Date.now()) return;
+    if (replayState.spotlightEvent) clearReplaySpotlight();
+    if (replayState.pendingFinish || replayState.minute >= 90) { finalizeReplay(autoFinish); return; }
+    replayState.minute += 1;
+    const majorEvents = [];
     while (replayState.nextEvent < events.length && Number(events[replayState.nextEvent].minute) <= replayState.minute) {
       const event = events[replayState.nextEvent++]; const type = normalType(event.event_type);
-      if (type === 'goal' || type === 'penalty_scored') replayState[event.side] += 1;
+      if ((type === 'goal' || type === 'penalty_scored') && (event.side === 'home' || event.side === 'away')) replayState[event.side] += 1;
       document.getElementById('replayFeed')?.insertAdjacentHTML('afterbegin', eventMarkup(event, { replay: true }));
+      if (isMajorReplayEvent(event)) majorEvents.push(event);
     }
     const minute = Math.min(replayState.minute, 90); document.getElementById('replayClock').textContent = `${String(minute).padStart(2, '0')}'`; document.getElementById('replayScore').textContent = `${replayState.home}-${replayState.away}`;
     const headerScore = document.getElementById('headerReplayScore'); if (headerScore) headerScore.textContent = `${replayState.home}-${replayState.away}`;
-    if (replayState.minute >= 90) { clearInterval(replayTimer); replayTimer = null; if (!events.some((event) => normalType(event.event_type) === 'full_time')) document.getElementById('replayFeed')?.insertAdjacentHTML('afterbegin', '<p class="full-time">90\' FULL TIME</p>'); if (autoFinish) finish('replay_completed'); }
+    if (majorEvents.length && !suppressSpotlight) {
+      const selected = majorEvents.sort((a, b) => Number(eventPresentation(b).priority || 0) - Number(eventPresentation(a).priority || 0))[0];
+      showReplaySpotlight(selected);
+    }
+    if (replayState.minute >= 90) {
+      if (replayState.holdUntil > Date.now() && !ignoreHold) replayState.pendingFinish = true;
+      else finalizeReplay(autoFinish);
+    }
   };
-  document.getElementById('replayStart').addEventListener('click', () => { if (replayTimer) return; if (replayState.minute >= 90) { replayState.minute = 0; replayState.home = 0; replayState.away = 0; replayState.nextEvent = 0; document.getElementById('replayFeed').innerHTML = ''; } replayTimer = setInterval(tick, Number(document.getElementById('replaySpeed').value)); });
-  document.getElementById('replayPause').addEventListener('click', () => { clearInterval(replayTimer); replayTimer = null; });
-  document.getElementById('replaySkip').addEventListener('click', async () => { clearInterval(replayTimer); replayTimer = null; while (replayState.minute < 90) tick({ autoFinish: false }); if (revealRequired) await finish('skip_to_full_time'); });
+  document.getElementById('replayStart').addEventListener('click', () => {
+    if (replayTimer) return;
+    if (replayState.minute >= 90) {
+      replayState.minute = 0; replayState.home = 0; replayState.away = 0; replayState.nextEvent = 0; replayState.pendingFinish = false; replayState.holdUntil = 0; replayState.spotlightEvent = null;
+      document.getElementById('replayFeed').innerHTML = ''; document.getElementById('replayScore').textContent = '0-0'; const header = document.getElementById('headerReplayScore'); if (header) header.textContent = '0-0'; clearReplaySpotlight();
+    }
+    setStatus('LIVE'); replayTimer = setInterval(tick, Number(document.getElementById('replaySpeed').value));
+  });
+  document.getElementById('replayPause').addEventListener('click', () => { clearInterval(replayTimer); replayTimer = null; setStatus(replayState?.spotlightEvent ? eventPresentation(replayState.spotlightEvent).label : 'PAUSED'); });
+  document.getElementById('replaySkip').addEventListener('click', async () => {
+    clearInterval(replayTimer); replayTimer = null; clearReplaySpotlight();
+    while (replayState.minute < 90) tick({ autoFinish: false, ignoreHold: true, suppressSpotlight: true });
+    if (revealRequired) await finish('skip_to_full_time');
+  });
   document.getElementById('replaySpeed').addEventListener('change', () => { if (replayTimer) { clearInterval(replayTimer); replayTimer = setInterval(tick, Number(document.getElementById('replaySpeed').value)); } });
 }
 async function openMatchCentre(fixtureId) {
