@@ -51,35 +51,48 @@ function replayBookingKey(event = {}) {
   return `name:${text(event.side).toLowerCase()}:${playerName}`;
 }
 
-function scoredPenaltyKey(row = {}) {
-  const player = text(row.player_id || row.tbg_player_id || row.player_name || row.name).toLowerCase();
-  if (!player) return null;
-  return `${text(row.side).toLowerCase()}:${Number(row.minute) || 0}:${player}`;
+function isScoredPenaltyEvent(event = {}) {
+  return replayEventType(event.event_type || event.type || event.kind) === 'penalty_scored';
 }
 
 function dedupeScoredPenaltyEvents(events = []) {
-  const seen = new Set();
-  return events.filter((event) => {
-    if (replayEventType(event.event_type || event.type || event.kind) !== 'penalty_scored') return true;
-    const key = scoredPenaltyKey(event);
-    if (!key) return true;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
+  const byId = new Map(events.map((event) => [text(event.event_id), event]).filter(([id]) => id));
+  const suppressedIds = new Set();
+  const legacySeen = new Set();
+  const suppressedLegacy = new Set();
 
-function dedupePenaltyScorers(rows = []) {
-  const seen = new Set();
-  return rows.filter((row) => {
-    if (!row.penalty) return true;
-    const player = text(row.player_id || row.player_name).toLowerCase();
-    if (!player) return true;
-    const key = `${Number(row.minute) || 0}:${player}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
+  events.forEach((event, index) => {
+    if (!isScoredPenaltyEvent(event)) return;
+    const eventId = text(event.event_id);
+    const linkedEventId = text(event.linked_event_id || event.payload?.linked_event_id);
+    const sourceEventId = text(event.source_event_id || event.payload?.source_event_id);
+
+    const linkedEvent = linkedEventId ? byId.get(linkedEventId) : null;
+    if (eventId && linkedEvent && isScoredPenaltyEvent(linkedEvent)) {
+      suppressedIds.add(eventId);
+      return;
+    }
+
+    const sourceEvent = sourceEventId ? byId.get(sourceEventId) : null;
+    if (
+      sourceEventId &&
+      sourceEvent &&
+      isScoredPenaltyEvent(sourceEvent) &&
+      text(sourceEvent.linked_event_id || sourceEvent.payload?.linked_event_id) === eventId
+    ) {
+      suppressedIds.add(sourceEventId);
+      return;
+    }
+
+    if (!eventId && !linkedEventId && !sourceEventId) {
+      const player = text(event.player_id || event.tbg_player_id || event.player_name || event.name).toLowerCase();
+      const key = player ? `${text(event.side).toLowerCase()}:${Number(event.minute) || 0}:${player}` : null;
+      if (key && legacySeen.has(key)) suppressedLegacy.add(index);
+      else if (key) legacySeen.add(key);
+    }
   });
+
+  return events.filter((event, index) => !suppressedIds.has(text(event.event_id)) && !suppressedLegacy.has(index));
 }
 
 async function canonicalWorld(worldId) {
@@ -117,6 +130,22 @@ function identityFor(world, playerId, fallback = {}) {
 function decoratePlayer(world, row = {}, idField = 'player_id') {
   const playerId = text(row?.[idField] || row?.player_id || row?.id);
   return { ...row, ...identityFor(world, playerId, row) };
+}
+
+function scorerSummaryFromEvents(events = [], side) {
+  return events
+    .filter((event) => event.side === side && ['goal', 'penalty_scored'].includes(replayEventType(event.event_type)))
+    .map((event) => ({
+      player_id: event.player_id || null,
+      player_name: event.player_name || 'Unknown player',
+      profile_url: event.profile_url || null,
+      assist_player_id: event.assist_player_id || null,
+      assist_player_name: event.assist_player_name || null,
+      assist_profile_url: event.assist_profile_url || null,
+      minute: Number(event.minute) || 0,
+      penalty: replayEventType(event.event_type) === 'penalty_scored' || Boolean(event.penalty || event.payload?.penalty),
+      own_goal: Boolean(event.own_goal || event.payload?.own_goal)
+    }));
 }
 
 export function decorateMatchCentrePayload(payload = {}, world = null) {
@@ -163,16 +192,12 @@ export function decorateMatchCentrePayload(payload = {}, world = null) {
     };
   });
 
-  const decorateGoal = (row) => ({
-    ...decoratePlayer(world, row),
-    assist_profile_url: identityFor(world, row.assist_player_id).profile_url
-  });
   const summary = payload.summary || {};
   const decoratedSummary = {
     ...summary,
     scorers: {
-      home: dedupePenaltyScorers((summary.scorers?.home || []).map(decorateGoal)),
-      away: dedupePenaltyScorers((summary.scorers?.away || []).map(decorateGoal))
+      home: scorerSummaryFromEvents(events, 'home'),
+      away: scorerSummaryFromEvents(events, 'away')
     },
     cards: {
       home: (summary.cards?.home || []).map((row) => decoratePlayer(world, row)),
