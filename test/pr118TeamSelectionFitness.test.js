@@ -17,20 +17,21 @@ test('fitness bands communicate fresh, fit, tired and fatigued states', () => {
   assert.deepEqual(fitnessBand(45), { key: 'fatigued', label: 'Fatigued' });
 });
 
-test('recovery projection uses the canonical nine points per rest day', () => {
-  assert.equal(FITNESS_DIALS.recovery_per_rest_day, 9);
+test('recovery projection uses the recalibrated five points per rest day', () => {
+  assert.equal(FITNESS_DIALS.recovery_per_rest_day, 5);
   assert.equal(recoveryDays('2026-07-24T20:00:00.000Z', '2026-07-28T20:00:00.000Z'), 4);
-  assert.equal(projectedKickoffFitness(61, 4), 97);
+  assert.equal(projectedKickoffFitness(61, 4), 81);
   assert.equal(projectedKickoffFitness(90, 4), 100);
 });
 
-test('post-match projection follows canonical workload dials', () => {
-  assert.equal(FITNESS_DIALS.match_cost_per_90, 35);
+test('post-match projection follows recalibrated workload dials', () => {
+  assert.equal(FITNESS_DIALS.match_cost_per_90, 16);
   const normalCentreForward = projectedPostMatchFitness({ currentFitness: 100, role: 'st', pressing: 'mid', tempo: 'normal', workRate: 50 });
   const highPressWingBack = projectedPostMatchFitness({ currentFitness: 100, role: 'wing_back', pressing: 'high', tempo: 'fast', workRate: 80 });
   const goalkeeper = projectedPostMatchFitness({ currentFitness: 100, role: 'gk', pressing: 'mid', tempo: 'normal', workRate: 50 });
-  assert.equal(normalCentreForward, 65);
+  assert.equal(normalCentreForward, 84);
   assert.ok(highPressWingBack < normalCentreForward);
+  assert.ok(highPressWingBack >= 75 && highPressWingBack <= 76);
   assert.ok(goalkeeper > normalCentreForward);
 });
 

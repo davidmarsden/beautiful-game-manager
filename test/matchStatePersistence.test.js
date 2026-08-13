@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { simulateMatch } from '../src/matchSimulation.js';
+import { FATIGUE_DIALS } from '../src/matchEngine/modules/FatigueContext.js';
 import {
   applyApplicationInMemory,
   buildMatchStateApplication,
+  DEFAULT_RECOVERY_PER_DAY,
   elapsedRestDays,
   hydrateMatchState,
   recoveredFitness
@@ -40,9 +42,11 @@ function contract(fixtureId, kickoffAt, matchState = null) {
   };
 }
 
-test('recovery uses elapsed rest time and is capped at 100', () => {
+test('recovery uses elapsed rest time, the Module C dial and is capped at 100', () => {
+  assert.equal(DEFAULT_RECOVERY_PER_DAY, FATIGUE_DIALS.recovery_per_rest_day);
+  assert.equal(DEFAULT_RECOVERY_PER_DAY, 5);
   assert.equal(elapsedRestDays('2026-07-01T15:00:00Z', '2026-07-03T15:00:00Z'), 2);
-  assert.equal(recoveredFitness({ fitness: 70, season_id: 's1', last_played_at: '2026-07-01T15:00:00Z' }, { season_id: 's1', kickoff_at: '2026-07-03T15:00:00Z' }), 88);
+  assert.equal(recoveredFitness({ fitness: 70, season_id: 's1', last_played_at: '2026-07-01T15:00:00Z' }, { season_id: 's1', kickoff_at: '2026-07-03T15:00:00Z' }), 80);
   assert.equal(recoveredFitness({ fitness: 98, season_id: 's1', last_played_at: '2026-07-01T15:00:00Z' }, { season_id: 's1', kickoff_at: '2026-07-03T15:00:00Z' }), 100);
 });
 

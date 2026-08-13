@@ -1,9 +1,11 @@
+import { FATIGUE_DIALS } from './modules/FatigueContext.js';
+
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 const text = (value) => String(value ?? '').trim();
 
-export const MATCH_STATE_PERSISTENCE_VERSION = 'tbg-match-state-persistence-v0.1';
-export const DEFAULT_RECOVERY_PER_DAY = 9;
+export const MATCH_STATE_PERSISTENCE_VERSION = 'tbg-match-state-persistence-v0.2';
+export const DEFAULT_RECOVERY_PER_DAY = FATIGUE_DIALS.recovery_per_rest_day;
 
 function timestamp(value) {
   const parsed = Date.parse(value || '');

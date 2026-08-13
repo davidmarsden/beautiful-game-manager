@@ -1,6 +1,6 @@
 export const FITNESS_DIALS = Object.freeze({
-  match_cost_per_90: 35,
-  recovery_per_rest_day: 9,
+  match_cost_per_90: 16,
+  recovery_per_rest_day: 5,
   warning_threshold: 70
 });
 
