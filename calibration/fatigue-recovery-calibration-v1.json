@@ -1,0 +1,48 @@
+{
+  "version": "tbg-fatigue-recovery-calibration-v1.0",
+  "accepted": true,
+  "target": {
+    "ordinary_match_cost_points": "roughly 10-22",
+    "ordinary_post_match_fitness": "roughly 72-88 for starters beginning 90-100, with positional spread",
+    "recovery": "meaningful after two clear/rest days",
+    "rotation": "useful in congestion, not compulsory after every ordinary fixture"
+  },
+  "checks": {
+    "normal_mean_cost_in_target": true,
+    "normal_starter_tail_in_target": true,
+    "ordinary_starters_not_below_70": true,
+    "extreme_load_costs_more": true,
+    "extreme_load_can_exceed_normal_ceiling": true,
+    "two_days_recovery_meaningful": true,
+    "ordinary_two_day_congestion_not_compulsory_rotation": true,
+    "repeated_extreme_congestion_creates_rotation_pressure": true,
+    "baseline_materially_reduced": true
+  },
+  "baseline": {
+    "dials": { "match_cost_per_90": 35, "recovery_per_rest_day": 9 },
+    "low": { "mean_cost_90": 29.176, "minimum_cost_90": 19.25, "maximum_cost_90": 32.281, "mean_post_match_from_100": 70.824, "minimum_post_match_from_100": 67.719, "maximum_post_match_from_100": 80.75, "starter_90_100_post_minimum": 57.719, "starter_90_100_post_maximum": 80.75, "below_70_pct": 78.8, "below_60_pct": 18.2, "below_50_pct": 0 },
+    "normal": { "mean_cost_90": 34.682, "minimum_cost_90": 21.7, "maximum_cost_90": 38.5, "mean_post_match_from_100": 65.318, "minimum_post_match_from_100": 61.5, "maximum_post_match_from_100": 78.3, "starter_90_100_post_minimum": 51.5, "starter_90_100_post_maximum": 78.3, "below_70_pct": 93.9, "below_60_pct": 48.5, "below_50_pct": 0 },
+    "extreme": { "mean_cost_90": 47.718, "minimum_cost_90": 29.855, "maximum_cost_90": 52.973, "mean_post_match_from_100": 52.282, "minimum_post_match_from_100": 47.027, "maximum_post_match_from_100": 70.145, "starter_90_100_post_minimum": 37.027, "starter_90_100_post_maximum": 70.145, "below_70_pct": 97, "below_60_pct": 90.9, "below_50_pct": 72.7 },
+    "normal_congestion": [
+      { "game": 1, "kickoff_mean": 100, "kickoff_minimum": 100, "starters_below_rotation_threshold": 0, "mean_fitness_modifier": 1 },
+      { "game": 2, "kickoff_mean": 83.318, "kickoff_minimum": 79.5, "starters_below_rotation_threshold": 6, "mean_fitness_modifier": 0.9572 },
+      { "game": 3, "kickoff_mean": 66.636, "kickoff_minimum": 59, "starters_below_rotation_threshold": 10, "mean_fitness_modifier": 0.8663 }
+    ]
+  },
+  "calibrated": {
+    "dials": { "match_cost_per_90": 16, "recovery_per_rest_day": 5, "fitness_modifier_floor": 0.6, "sharpness_modifier_floor": 0.95, "morale_modifier_minimum": 0.9, "morale_modifier_maximum": 1.1, "cohesion_narrowing_weight": 0.8, "familiarity_narrowing_weight": 0.2, "injury_baseline": 0.002, "injury_fatigue_multiplier": 0.035 },
+    "low": { "mean_cost_90": 13.338, "minimum_cost_90": 8.8, "maximum_cost_90": 14.757, "mean_post_match_from_100": 86.662, "minimum_post_match_from_100": 85.243, "maximum_post_match_from_100": 91.2, "starter_90_100_post_minimum": 75.243, "starter_90_100_post_maximum": 91.2, "below_70_pct": 0, "below_60_pct": 0, "below_50_pct": 0 },
+    "normal": { "mean_cost_90": 15.855, "minimum_cost_90": 9.92, "maximum_cost_90": 17.6, "mean_post_match_from_100": 84.145, "minimum_post_match_from_100": 82.4, "maximum_post_match_from_100": 90.08, "starter_90_100_post_minimum": 72.4, "starter_90_100_post_maximum": 90.08, "below_70_pct": 0, "below_60_pct": 0, "below_50_pct": 0 },
+    "extreme": { "mean_cost_90": 21.814, "minimum_cost_90": 13.648, "maximum_cost_90": 24.216, "mean_post_match_from_100": 78.186, "minimum_post_match_from_100": 75.784, "maximum_post_match_from_100": 86.352, "starter_90_100_post_minimum": 65.784, "starter_90_100_post_maximum": 86.352, "below_70_pct": 30.3, "below_60_pct": 0, "below_50_pct": 0 },
+    "normal_congestion": [
+      { "game": 1, "kickoff_mean": 100, "kickoff_minimum": 100, "starters_below_rotation_threshold": 0, "mean_fitness_modifier": 1 },
+      { "game": 2, "kickoff_mean": 94.138, "kickoff_minimum": 92.4, "starters_below_rotation_threshold": 0, "mean_fitness_modifier": 1 },
+      { "game": 3, "kickoff_mean": 88.276, "kickoff_minimum": 84.8, "starters_below_rotation_threshold": 0, "mean_fitness_modifier": 0.9837 }
+    ],
+    "extreme_congestion": [
+      { "game": 1, "kickoff_mean": 100, "kickoff_minimum": 100, "starters_below_rotation_threshold": 0, "mean_fitness_modifier": 1 },
+      { "game": 2, "kickoff_mean": 88.186, "kickoff_minimum": 85.784, "starters_below_rotation_threshold": 0, "mean_fitness_modifier": 0.9857 },
+      { "game": 3, "kickoff_mean": 76.372, "kickoff_minimum": 71.568, "starters_below_rotation_threshold": 10, "mean_fitness_modifier": 0.9194 }
+    ]
+  }
+}
