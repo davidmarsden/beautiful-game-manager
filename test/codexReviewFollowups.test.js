@@ -32,8 +32,8 @@ test('bootstrap cannot return legacy score state and manager messages are limite
 
 test('skip to full time suppresses replay-completed auto finish', async () => {
   const source = await read('public/phase2d4.js');
-  assert.match(source, /const tick = \(\{ autoFinish = true \} = \{\}\)/);
-  assert.match(source, /tick\(\{ autoFinish: false \}\)/);
+  assert.match(source, /const tick = \(\{ autoFinish = true, ignoreHold = false, suppressSpotlight = false \} = \{\}\)/);
+  assert.match(source, /tick\(\{ autoFinish: false, ignoreHold: true, suppressSpotlight: true \}\)/);
   assert.match(source, /finish\('skip_to_full_time'\)/);
 });
 
