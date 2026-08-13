@@ -13,22 +13,32 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
 });
 
 const replayEventType = (value) => text(value).toLowerCase().replace(/[\s-]+/g, '_');
-const MAJOR_REPLAY_EVENTS = Object.freeze({
-  goal: Object.freeze({ kind: 'goal', label: 'GOAL', hold_ms: 2800, priority: 100 }),
-  penalty_scored: Object.freeze({ kind: 'goal', label: 'PENALTY GOAL', hold_ms: 2800, priority: 100 }),
-  penalty_missed: Object.freeze({ kind: 'penalty', label: 'PENALTY MISSED', hold_ms: 2400, priority: 90 }),
-  penalty_saved: Object.freeze({ kind: 'penalty', label: 'PENALTY SAVED', hold_ms: 2400, priority: 90 }),
-  red_card: Object.freeze({ kind: 'dismissal', label: 'RED CARD', hold_ms: 2400, priority: 80 }),
-  second_yellow: Object.freeze({ kind: 'dismissal', label: 'SECOND YELLOW', hold_ms: 2400, priority: 80 }),
-  penalty_awarded: Object.freeze({ kind: 'penalty', label: 'PENALTY', hold_ms: 2200, priority: 70 })
+const REPLAY_EVENT_PRESENTATIONS = Object.freeze({
+  goal: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'goal', label: 'GOAL', hold_ms: 2800, priority: 100 }),
+  penalty_scored: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'goal', label: 'PENALTY GOAL', hold_ms: 2800, priority: 100 }),
+  penalty_missed: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'penalty', label: 'PENALTY MISSED', hold_ms: 2400, priority: 90 }),
+  penalty_saved: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'penalty', label: 'PENALTY SAVED', hold_ms: 2400, priority: 90 }),
+  red_card: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'dismissal', label: 'RED CARD', hold_ms: 2400, priority: 80 }),
+  second_yellow: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'dismissal', label: 'SECOND YELLOW', hold_ms: 2400, priority: 80 }),
+  penalty_awarded: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'penalty', label: 'PENALTY', hold_ms: 2200, priority: 70 }),
+  yellow_card: Object.freeze({ importance: 'featured', major: false, featured: true, kind: 'booking', label: 'YELLOW CARD', hold_ms: 0, priority: 45 }),
+  free_kick: Object.freeze({ importance: 'featured', major: false, featured: true, kind: 'set_piece', label: 'FREE KICK', hold_ms: 0, priority: 35 }),
+  save: Object.freeze({ importance: 'featured', major: false, featured: true, kind: 'save', label: 'SAVE', hold_ms: 0, priority: 34 }),
+  injury: Object.freeze({ importance: 'featured', major: false, featured: true, kind: 'injury', label: 'INJURY', hold_ms: 0, priority: 33 }),
+  substitution: Object.freeze({ importance: 'featured', major: false, featured: true, kind: 'substitution', label: 'SUBSTITUTION', hold_ms: 0, priority: 25 })
 });
 
 export function replayPresentationForEvent(event = {}) {
   const type = replayEventType(event.event_type || event.type || event.kind);
-  const major = MAJOR_REPLAY_EVENTS[type] || null;
-  return major
-    ? { importance: 'major', major: true, ...major }
-    : { importance: 'standard', major: false, kind: 'commentary', label: null, hold_ms: 0, priority: 0 };
+  return REPLAY_EVENT_PRESENTATIONS[type] || {
+    importance: 'standard',
+    major: false,
+    featured: false,
+    kind: 'commentary',
+    label: null,
+    hold_ms: 0,
+    priority: 0
+  };
 }
 
 function replayBookingKey(event = {}) {
