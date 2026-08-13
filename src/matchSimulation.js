@@ -1,5 +1,5 @@
 import { runEnginePipeline } from './matchEngine/EngineOrchestrator.js';
-import { CONSTITUTIONAL_ENGINE_MODULES } from './matchEngine/modules/index.js';
+import { CONSTITUTIONAL_ENGINE_MODULES } from './matchEngine/modules/eventPipeline.js';
 import { runBootstrapCompatibility } from './matchEngine/bootstrapCompatibility.js';
 import { runConstitutionalPublicResult } from './matchEngine/constitutionalPublicResult.js';
 
@@ -39,7 +39,7 @@ function effectiveWorld(contract, world = {}) {
 /**
  * Public match entry point.
  *
- * Both modes execute the complete A–F constitutional module chain. Following
+ * Both modes execute the complete A–G constitutional module chain. Following
  * the accepted calibration and deterministic shadow comparison, new callers
  * now receive the `constitutional-v1` public result by default. The established
  * compatibility result remains available as an explicit rollback/fallback via
