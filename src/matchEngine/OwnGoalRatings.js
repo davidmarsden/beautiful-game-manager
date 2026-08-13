@@ -1,42 +1,78 @@
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 
-function ownGoalsByPlayer(resolution = {}) {
-  const counts = new Map();
+const OWN_GOAL_PENALTY = 1.15;
+const OPEN_PLAY_GOAL_REWARD = 1.15;
+
+function ownGoalAdjustments(resolution = {}) {
+  const penalties = new Map();
+  const falseRewards = new Map();
+  const score = { home: 0, away: 0 };
+
   for (const event of resolution.official_event_stream || []) {
-    if (event.type !== 'goal' || event.own_goal !== true || !event.player_id) continue;
-    const id = String(event.player_id);
-    counts.set(id, (counts.get(id) || 0) + 1);
+    if (event.type !== 'goal') continue;
+    const side = event.side;
+    const opponent = side === 'home' ? 'away' : 'home';
+    const beforeState = Math.sign(score[side] - score[opponent]);
+    score[side] += 1;
+    const afterState = Math.sign(score[side] - score[opponent]);
+
+    if (event.own_goal !== true) continue;
+
+    const defenderId = event.own_goal_player_id ? String(event.own_goal_player_id) : null;
+    if (defenderId) penalties.set(defenderId, (penalties.get(defenderId) || 0) + OWN_GOAL_PENALTY);
+
+    // Through Module E the scoring side remains the attacking side, so the event's
+    // ordinary player_id is deliberately an attacking actor. Module G therefore
+    // sees a normal open-play goal unless we remove that accidental reward here.
+    const attackingActorId = event.player_id ? String(event.player_id) : null;
+    if (attackingActorId) {
+      const decisiveContext = afterState > beforeState ? (number(event.minute) >= 75 ? 0.2 : 0.1) : 0;
+      falseRewards.set(attackingActorId, (falseRewards.get(attackingActorId) || 0) + OPEN_PLAY_GOAL_REWARD + decisiveContext);
+    }
   }
-  return counts;
+
+  return { penalties, falseRewards };
 }
 
-function reconcileRows(rows = [], ownGoals) {
+function reconcileRows(rows = [], adjustments) {
   return rows.map((row) => {
-    const count = ownGoals.get(String(row.player_id)) || 0;
-    if (!count || row.rating === null) return row;
-    const eventImpact = number(row.components?.event_impact) - count * 1.15;
-    const rating = Number(clamp(number(row.rating) - count * 1.15, 1, 10).toFixed(1));
+    if (row.rating === null) return row;
+    const playerId = String(row.player_id);
+    const penalty = adjustments.penalties.get(playerId) || 0;
+    const falseReward = adjustments.falseRewards.get(playerId) || 0;
+    if (!penalty && !falseReward) return row;
+
+    const totalAdjustment = penalty + falseReward;
+    const eventImpact = number(row.components?.event_impact) - falseReward - penalty;
+    const matchContext = Math.min(0, number(row.components?.match_context));
+    const ownGoalCount = penalty ? Math.round(penalty / OWN_GOAL_PENALTY) : 0;
     return {
       ...row,
-      rating,
-      components: row.components ? { ...row.components, event_impact: Number(eventImpact.toFixed(3)) } : row.components,
-      highlights: [...(row.highlights || []).filter((label) => !/^\d+ goals?$/.test(label)), `${count} own goal${count === 1 ? '' : 's'}`]
+      rating: Number(clamp(number(row.rating) - totalAdjustment, 1, 10).toFixed(1)),
+      components: row.components ? {
+        ...row.components,
+        event_impact: Number(eventImpact.toFixed(3)),
+        ...(falseReward ? { match_context: Number(matchContext.toFixed(3)) } : {})
+      } : row.components,
+      highlights: ownGoalCount
+        ? [...(row.highlights || []).filter((label) => !/^\d+ goals?$/.test(label)), `${ownGoalCount} own goal${ownGoalCount === 1 ? '' : 's'}`]
+        : (row.highlights || []).filter((label) => !/^\d+ goals?$/.test(label))
     };
   }).sort((left, right) => (right.rating ?? -1) - (left.rating ?? -1) || String(left.player_id).localeCompare(String(right.player_id)));
 }
 
 export function reconcileOwnGoalRatings(ratings, resolution) {
   if (!ratings?.deterministic) return ratings;
-  const ownGoals = ownGoalsByPlayer(resolution);
-  if (!ownGoals.size) return ratings;
-  const home = reconcileRows(ratings.home, ownGoals);
-  const away = reconcileRows(ratings.away, ownGoals);
+  const adjustments = ownGoalAdjustments(resolution);
+  if (!adjustments.penalties.size && !adjustments.falseRewards.size) return ratings;
+  const home = reconcileRows(ratings.home, adjustments);
+  const away = reconcileRows(ratings.away, adjustments);
   const rated = [...home, ...away].filter((row) => row.rating !== null)
     .sort((a, b) => b.rating - a.rating || b.minutes_played - a.minutes_played || String(a.player_id).localeCompare(String(b.player_id)));
   return {
     ...ratings,
-    version: `${ratings.version}+own-goal-v0.1`,
+    version: `${ratings.version}+own-goal-v0.2`,
     home,
     away,
     player_of_the_match: rated[0] || null
