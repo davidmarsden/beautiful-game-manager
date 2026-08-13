@@ -52,6 +52,29 @@ test('major-event presentation is derived reproducibly from archived events on e
   assert.equal(first.events[2].replay_presentation.kind, 'dismissal');
 });
 
+test('a canonical second booking is presented as a dismissal without rewriting the archived event type', () => {
+  const archived = {
+    fixture: { world_id: 'world-1', home_club_id: 'home', away_club_id: 'away' },
+    events: [
+      { minute: 21, side: 'away', event_type: 'yellow_card', player_id: 'p7', player_name: 'Twice Booked' },
+      { minute: 38, side: 'home', event_type: 'yellow_card', player_id: 'p8', player_name: 'Other Player' },
+      { minute: 64, side: 'away', event_type: 'yellow_card', player_id: 'p7', player_name: 'Twice Booked' }
+    ],
+    submissions: [],
+    summary: { scorers: { home: [], away: [] }, cards: { home: [], away: [] }, top_ratings: [] },
+    player_performances: { home: [], away: [] }
+  };
+
+  const decorated = decorateMatchCentrePayload(archived, null);
+  assert.equal(decorated.events[0].event_type, 'yellow_card');
+  assert.equal(decorated.events[0].replay_presentation.major, false);
+  assert.equal(decorated.events[1].replay_presentation.major, false);
+  assert.equal(decorated.events[2].event_type, 'yellow_card');
+  assert.equal(decorated.events[2].replay_presentation.label, 'SECOND YELLOW');
+  assert.equal(decorated.events[2].replay_presentation.kind, 'dismissal');
+  assert.equal(decorated.events[2].replay_presentation.major, true);
+});
+
 test('browser replay spotlight holds major moments independently of replay speed and skip bypasses holds', async () => {
   const browser = await read('../public/phase2d4.js');
   const css = await read('../public/match-centre-major-events.css');
