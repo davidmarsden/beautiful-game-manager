@@ -31,6 +31,14 @@ export function replayPresentationForEvent(event = {}) {
     : { importance: 'standard', major: false, kind: 'commentary', label: null, hold_ms: 0, priority: 0 };
 }
 
+function replayBookingKey(event = {}) {
+  const playerId = text(event.player_id || event.tbg_player_id || event.id);
+  if (playerId) return `id:${playerId}`;
+  const playerName = text(event.player_name || event.name).toLowerCase();
+  if (!playerName) return null;
+  return `name:${text(event.side).toLowerCase()}:${playerName}`;
+}
+
 async function canonicalWorld(worldId) {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !worldId) return null;
   const response = await fetch(
@@ -69,13 +77,26 @@ function decoratePlayer(world, row = {}, idField = 'player_id') {
 }
 
 export function decorateMatchCentrePayload(payload = {}, world = null) {
-  const events = (payload.events || []).map((event) => ({
-    ...decoratePlayer(world, event),
-    replay_presentation: replayPresentationForEvent(event),
-    assist_profile_url: identityFor(world, event.assist_player_id).profile_url,
-    player_on_profile_url: identityFor(world, event.player_on_id || event.in_player_id || event.replacement_player_id).profile_url,
-    player_off_profile_url: identityFor(world, event.player_off_id || event.out_player_id || event.replaced_player_id).profile_url
-  }));
+  const bookings = new Map();
+  const events = (payload.events || []).map((event) => {
+    const type = replayEventType(event.event_type || event.type || event.kind);
+    let replayPresentation = replayPresentationForEvent(event);
+    if (type === 'yellow_card') {
+      const bookingKey = replayBookingKey(event);
+      if (bookingKey) {
+        const bookingCount = (bookings.get(bookingKey) || 0) + 1;
+        bookings.set(bookingKey, bookingCount);
+        if (bookingCount >= 2) replayPresentation = replayPresentationForEvent({ event_type: 'second_yellow' });
+      }
+    }
+    return {
+      ...decoratePlayer(world, event),
+      replay_presentation: replayPresentation,
+      assist_profile_url: identityFor(world, event.assist_player_id).profile_url,
+      player_on_profile_url: identityFor(world, event.player_on_id || event.in_player_id || event.replacement_player_id).profile_url,
+      player_off_profile_url: identityFor(world, event.player_off_id || event.out_player_id || event.replaced_player_id).profile_url
+    };
+  });
 
   const decoratePerformance = (row) => decoratePlayer(world, row);
   const performances = {
