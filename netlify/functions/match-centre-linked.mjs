@@ -14,18 +14,18 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
 
 const replayEventType = (value) => text(value).toLowerCase().replace(/[\s-]+/g, '_');
 const REPLAY_EVENT_PRESENTATIONS = Object.freeze({
-  goal: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'goal', label: 'GOAL', hold_ms: 2800, priority: 100 }),
-  penalty_scored: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'goal', label: 'PENALTY GOAL', hold_ms: 2800, priority: 100 }),
+  goal: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'goal', label: 'GOAL', hold_ms: 3200, priority: 100 }),
+  penalty_scored: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'goal', label: 'PENALTY GOAL', hold_ms: 3200, priority: 100 }),
   penalty_missed: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'penalty', label: 'PENALTY MISSED', hold_ms: 2400, priority: 90 }),
   penalty_saved: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'penalty', label: 'PENALTY SAVED', hold_ms: 2400, priority: 90 }),
   red_card: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'dismissal', label: 'RED CARD', hold_ms: 2400, priority: 80 }),
   second_yellow: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'dismissal', label: 'SECOND YELLOW', hold_ms: 2400, priority: 80 }),
   penalty_awarded: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'penalty', label: 'PENALTY', hold_ms: 2200, priority: 70 }),
-  yellow_card: Object.freeze({ importance: 'featured', major: false, featured: true, kind: 'booking', label: 'YELLOW CARD', hold_ms: 0, priority: 45 }),
-  free_kick: Object.freeze({ importance: 'featured', major: false, featured: true, kind: 'set_piece', label: 'FREE KICK', hold_ms: 0, priority: 35 }),
-  save: Object.freeze({ importance: 'featured', major: false, featured: true, kind: 'save', label: 'SAVE', hold_ms: 0, priority: 34 }),
-  injury: Object.freeze({ importance: 'featured', major: false, featured: true, kind: 'injury', label: 'INJURY', hold_ms: 0, priority: 33 }),
-  substitution: Object.freeze({ importance: 'featured', major: false, featured: true, kind: 'substitution', label: 'SUBSTITUTION', hold_ms: 0, priority: 25 })
+  yellow_card: Object.freeze({ importance: 'featured', major: true, featured: true, kind: 'booking', label: 'YELLOW CARD', hold_ms: 1200, priority: 45 }),
+  free_kick: Object.freeze({ importance: 'featured', major: true, featured: true, kind: 'set_piece', label: 'FREE KICK', hold_ms: 1000, priority: 35 }),
+  save: Object.freeze({ importance: 'featured', major: true, featured: true, kind: 'save', label: 'SAVE', hold_ms: 1100, priority: 34 }),
+  injury: Object.freeze({ importance: 'featured', major: true, featured: true, kind: 'injury', label: 'INJURY', hold_ms: 1400, priority: 33 }),
+  substitution: Object.freeze({ importance: 'featured', major: true, featured: true, kind: 'substitution', label: 'SUBSTITUTION', hold_ms: 1000, priority: 25 })
 });
 
 export function replayPresentationForEvent(event = {}) {
@@ -49,6 +49,50 @@ function replayBookingKey(event = {}) {
   const playerName = text(event.player_name || event.name).toLowerCase();
   if (!playerName) return null;
   return `name:${text(event.side).toLowerCase()}:${playerName}`;
+}
+
+function isScoredPenaltyEvent(event = {}) {
+  return replayEventType(event.event_type || event.type || event.kind) === 'penalty_scored';
+}
+
+function dedupeScoredPenaltyEvents(events = []) {
+  const byId = new Map(events.map((event) => [text(event.event_id), event]).filter(([id]) => id));
+  const suppressedIds = new Set();
+  const legacySeen = new Set();
+  const suppressedLegacy = new Set();
+
+  events.forEach((event, index) => {
+    if (!isScoredPenaltyEvent(event)) return;
+    const eventId = text(event.event_id);
+    const linkedEventId = text(event.linked_event_id || event.payload?.linked_event_id);
+    const sourceEventId = text(event.source_event_id || event.payload?.source_event_id);
+
+    const linkedEvent = linkedEventId ? byId.get(linkedEventId) : null;
+    if (eventId && linkedEvent && isScoredPenaltyEvent(linkedEvent)) {
+      suppressedIds.add(eventId);
+      return;
+    }
+
+    const sourceEvent = sourceEventId ? byId.get(sourceEventId) : null;
+    if (
+      sourceEventId &&
+      sourceEvent &&
+      isScoredPenaltyEvent(sourceEvent) &&
+      text(sourceEvent.linked_event_id || sourceEvent.payload?.linked_event_id) === eventId
+    ) {
+      suppressedIds.add(sourceEventId);
+      return;
+    }
+
+    if (!eventId && !linkedEventId && !sourceEventId) {
+      const player = text(event.player_id || event.tbg_player_id || event.player_name || event.name).toLowerCase();
+      const key = player ? `${text(event.side).toLowerCase()}:${Number(event.minute) || 0}:${player}` : null;
+      if (key && legacySeen.has(key)) suppressedLegacy.add(index);
+      else if (key) legacySeen.add(key);
+    }
+  });
+
+  return events.filter((event, index) => !suppressedIds.has(text(event.event_id)) && !suppressedLegacy.has(index));
 }
 
 async function canonicalWorld(worldId) {
@@ -88,9 +132,25 @@ function decoratePlayer(world, row = {}, idField = 'player_id') {
   return { ...row, ...identityFor(world, playerId, row) };
 }
 
+function scorerSummaryFromEvents(events = [], side) {
+  return events
+    .filter((event) => event.side === side && ['goal', 'penalty_scored'].includes(replayEventType(event.event_type)))
+    .map((event) => ({
+      player_id: event.player_id || null,
+      player_name: event.player_name || 'Unknown player',
+      profile_url: event.profile_url || null,
+      assist_player_id: event.assist_player_id || null,
+      assist_player_name: event.assist_player_name || null,
+      assist_profile_url: event.assist_profile_url || null,
+      minute: Number(event.minute) || 0,
+      penalty: replayEventType(event.event_type) === 'penalty_scored' || Boolean(event.penalty || event.payload?.penalty),
+      own_goal: Boolean(event.own_goal || event.payload?.own_goal)
+    }));
+}
+
 export function decorateMatchCentrePayload(payload = {}, world = null) {
   const bookings = new Map();
-  const events = (payload.events || []).map((event) => {
+  const decoratedEvents = (payload.events || []).map((event) => {
     const type = replayEventType(event.event_type || event.type || event.kind);
     let replayPresentation = replayPresentationForEvent(event);
     if (type === 'yellow_card') {
@@ -109,6 +169,7 @@ export function decorateMatchCentrePayload(payload = {}, world = null) {
       player_off_profile_url: identityFor(world, event.player_off_id || event.out_player_id || event.replaced_player_id).profile_url
     };
   });
+  const events = dedupeScoredPenaltyEvents(decoratedEvents);
 
   const decoratePerformance = (row) => decoratePlayer(world, row);
   const performances = {
@@ -131,16 +192,12 @@ export function decorateMatchCentrePayload(payload = {}, world = null) {
     };
   });
 
-  const decorateGoal = (row) => ({
-    ...decoratePlayer(world, row),
-    assist_profile_url: identityFor(world, row.assist_player_id).profile_url
-  });
   const summary = payload.summary || {};
   const decoratedSummary = {
     ...summary,
     scorers: {
-      home: (summary.scorers?.home || []).map(decorateGoal),
-      away: (summary.scorers?.away || []).map(decorateGoal)
+      home: scorerSummaryFromEvents(events, 'home'),
+      away: scorerSummaryFromEvents(events, 'away')
     },
     cards: {
       home: (summary.cards?.home || []).map((row) => decoratePlayer(world, row)),

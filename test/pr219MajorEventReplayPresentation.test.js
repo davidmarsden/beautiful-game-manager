@@ -13,7 +13,7 @@ test('goals, penalties and dismissals are classified as durable major replay mom
     const presentation = replayPresentationForEvent({ event_type: type });
     assert.equal(presentation.major, true);
     assert.equal(presentation.kind, 'goal');
-    assert.ok(presentation.hold_ms >= 2800);
+    assert.ok(presentation.hold_ms >= 3200);
     assert.equal(presentation.priority, 100);
   }
 
@@ -31,13 +31,14 @@ test('goals, penalties and dismissals are classified as durable major replay mom
   }
 });
 
-test('bookings, set pieces, saves, injuries and substitutions are featured without pausing replay', () => {
+test('bookings, set pieces, saves, injuries and substitutions are featured with short replay pauses', () => {
   for (const type of ['yellow_card', 'free_kick', 'save', 'injury', 'substitution']) {
     const presentation = replayPresentationForEvent({ event_type: type });
     assert.equal(presentation.importance, 'featured', `${type} should be visually promoted`);
     assert.equal(presentation.featured, true);
-    assert.equal(presentation.major, false, `${type} should not interrupt replay`);
-    assert.equal(presentation.hold_ms, 0, `${type} should not add a replay hold`);
+    assert.equal(presentation.major, true, `${type} should enter the existing replay hold pipeline`);
+    assert.ok(presentation.hold_ms >= 1000, `${type} should add a visible replay pause`);
+    assert.ok(presentation.hold_ms < 2000, `${type} should remain shorter than a major match moment`);
   }
 });
 
@@ -50,8 +51,8 @@ test('canonical saved shots and big chances use the featured save presentation',
     assert.equal(presentation.importance, 'featured');
     assert.equal(presentation.kind, 'save');
     assert.equal(presentation.label, 'SAVE');
-    assert.equal(presentation.major, false);
-    assert.equal(presentation.hold_ms, 0);
+    assert.equal(presentation.major, true);
+    assert.equal(presentation.hold_ms, 1100);
   }
 
   assert.equal(replayPresentationForEvent({ event_type: 'shot', outcome: 'off_target' }).importance, 'standard');
@@ -77,7 +78,7 @@ test('major-event presentation is derived reproducibly from archived events on e
   assert.equal(first.events[0].replay_presentation.label, 'GOAL');
   assert.equal(first.events[0].replay_presentation.major, true);
   assert.equal(first.events[1].replay_presentation.importance, 'featured');
-  assert.equal(first.events[1].replay_presentation.major, false);
+  assert.equal(first.events[1].replay_presentation.major, true);
   assert.equal(first.events[2].replay_presentation.kind, 'dismissal');
 });
 
@@ -97,15 +98,15 @@ test('a canonical second booking is presented as a dismissal without rewriting t
   const decorated = decorateMatchCentrePayload(archived, null);
   assert.equal(decorated.events[0].event_type, 'yellow_card');
   assert.equal(decorated.events[0].replay_presentation.importance, 'featured');
-  assert.equal(decorated.events[0].replay_presentation.major, false);
-  assert.equal(decorated.events[1].replay_presentation.major, false);
+  assert.equal(decorated.events[0].replay_presentation.major, true);
+  assert.equal(decorated.events[1].replay_presentation.major, true);
   assert.equal(decorated.events[2].event_type, 'yellow_card');
   assert.equal(decorated.events[2].replay_presentation.label, 'SECOND YELLOW');
   assert.equal(decorated.events[2].replay_presentation.kind, 'dismissal');
   assert.equal(decorated.events[2].replay_presentation.major, true);
 });
 
-test('browser replay spotlight holds major moments independently of replay speed and skip bypasses holds', async () => {
+test('browser replay spotlight holds replay moments independently of replay speed and skip bypasses holds', async () => {
   const browser = await read('../public/phase2d4.js');
   const css = await read('../public/match-centre-major-events.css');
 
@@ -123,7 +124,7 @@ test('browser replay spotlight holds major moments independently of replay speed
   assert.match(css, /prefers-reduced-motion/);
 });
 
-test('featured event hierarchy is loaded as a separate non-blocking presentation layer', async () => {
+test('featured event hierarchy is loaded as a separate presentation layer', async () => {
   const loader = await read('../public/match-centre-player-links.css');
   const css = await read('../public/replay-event-hierarchy.css');
 
