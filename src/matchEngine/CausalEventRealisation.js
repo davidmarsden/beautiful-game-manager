@@ -1,7 +1,7 @@
 const text = (value) => String(value ?? '').trim().toLowerCase();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
-export const CAUSAL_EVENT_REALISATION_VERSION = 'tbg-causal-event-realisation-v0.1';
+export const CAUSAL_EVENT_REALISATION_VERSION = 'tbg-causal-event-realisation-v0.2';
 
 function stableUnit(value) {
   let hash = 2166136261;
@@ -68,7 +68,8 @@ function chanceSequence(event, quality) {
     subtype: defender ? 'own_goal' : 'open_play_goal',
     side,
     against_side: defendingSide,
-    player_id: defender?.player_id || event.player_id || null,
+    player_id: event.player_id || null,
+    own_goal_player_id: defender?.player_id || null,
     source_event_id: attemptId,
     parent_event_id: attemptId,
     linked_event_id: null,
@@ -89,15 +90,22 @@ function setPieceShouldLeadToAttempt(event) {
 }
 
 function attachSetPieces(setPieces, sequences) {
-  const available = sequences.filter((sequence) => !sequence.sourceSetPiece);
+  const availableBySide = {
+    home: sequences.filter((sequence) => text(sequence.attempt.side) === 'home' && !sequence.sourceSetPiece),
+    away: sequences.filter((sequence) => text(sequence.attempt.side) === 'away' && !sequence.sourceSetPiece)
+  };
+  const cursors = { home: 0, away: 0 };
   const output = [];
-  let cursor = 0;
   for (const setPiece of setPieces) {
+    const side = text(setPiece.side);
+    const available = availableBySide[side] || [];
+    const cursor = cursors[side] || 0;
     if (!setPieceShouldLeadToAttempt(setPiece) || cursor >= available.length) {
       output.push({ ...setPiece, sequence_id: `sequence-${setPiece.event_id}`, sequence_order: 0 });
       continue;
     }
-    const sequence = available[cursor++];
+    const sequence = available[cursor];
+    cursors[side] = cursor + 1;
     sequence.sourceSetPiece = setPiece;
     const sourceId = `${sequence.sequenceId}-00-set-piece`;
     output.push({
@@ -232,9 +240,9 @@ export function reconcileCausalResolution(resolution) {
   }
   return {
     ...resolution,
-    version: `${resolution.version}+causal-v0.1`,
+    version: `${resolution.version}+causal-v0.2`,
     statistics,
-    consistency: { ...(resolution.consistency || {}), causal_attempts_linked: true, set_piece_sequences_atomic: true, shot_totals_reconciled_after_goal_linking: true }
+    consistency: { ...(resolution.consistency || {}), causal_attempts_linked: true, set_piece_sequences_atomic: true, set_piece_side_integrity: true, own_goal_defender_preserved: true, shot_totals_reconciled_after_goal_linking: true }
   };
 }
 
@@ -245,11 +253,11 @@ export function reconcileOwnGoalCommentary(report, resolution, quality = {}) {
   for (const side of ['home', 'away']) for (const player of quality?.[side]?.starters || []) names.set(String(player.player_id), player.display_name || player.player_id);
   return {
     ...report,
-    version: `${report.version}+causal-v0.1`,
+    version: `${report.version}+causal-v0.2`,
     commentary: report.commentary.map((row) => {
       const event = byEvent.get(String(row.event_id));
       if (!event?.own_goal) return row;
-      const defender = names.get(String(event.player_id)) || 'A defender';
+      const defender = names.get(String(event.own_goal_player_id)) || 'A defender';
       return { ...row, text: `${defender} turns the ball into their own net.` };
     })
   };
