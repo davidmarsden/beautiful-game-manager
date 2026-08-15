@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const migrationPath = new URL('../supabase/migrations/20260815_production_read_path_hardening.sql', import.meta.url);
+const appointmentMigrationPath = new URL('../supabase/migrations/20260815_transfer_directory_appointment_fingerprint.sql', import.meta.url);
 const transferUiPath = new URL('../public/transfer-negotiations.js', import.meta.url);
 
 async function migrationSource() {
@@ -42,6 +43,19 @@ test('manager portal cache contains only the runtime data the portal consumes', 
   assert.doesNotMatch(slimRuntime, /'events'/);
   assert.doesNotMatch(slimRuntime, /'lineup_state'/);
   assert.match(source, /jsonb_build_object\('fixture', row\.value -> 'fixture', 'score', row\.value -> 'score'\)/);
+});
+
+test('transfer directory cache also invalidates when active manager appointments change', async () => {
+  const source = await readFile(appointmentMigrationPath, 'utf8');
+
+  assert.match(source, /add column if not exists appointment_fingerprint text/);
+  assert.match(source, /md5\(coalesce\(string_agg\(appointment\.manager_id::text \|\| ':' \|\| appointment\.club_id/);
+  assert.match(source, /cache\.appointment_fingerprint = current_appointment_fingerprint/);
+  assert.match(source, /appointment_fingerprint = excluded\.appointment_fingerprint/);
+
+  const cacheLookup = source.indexOf('from public.manager_transfer_directory_cache cache');
+  const envelopeLoad = source.indexOf('select save_envelope', cacheLookup);
+  assert.ok(cacheLookup >= 0 && envelopeLoad > cacheLookup, 'appointment-aware cache lookup must still precede canonical envelope load');
 });
 
 test('transfer workspace deduplicates render refreshes but forces refresh after mutations', async () => {
