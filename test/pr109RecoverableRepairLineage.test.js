@@ -43,10 +43,11 @@ test('current legacy repaired failed checkpoint can recover through immutable au
 test('failed status is reopened only after a verified recovery source is selected', async () => {
   const endpoint = await source('netlify/functions/run-due-turn-now.mjs');
   const recoveryIndex = endpoint.indexOf("recovery = { mode: 'retry_repaired_failed_turn'");
-  const reopenIndex = endpoint.indexOf('canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&save_checksum=eq.${encodeURIComponent(before.save_checksum)}&turn_status=eq.failed');
+  const reopenIndex = endpoint.indexOf('await reopenFailedWorldForRetry({ worldId, checksum: before.save_checksum, now })');
   assert.ok(recoveryIndex >= 0);
   assert.ok(reopenIndex > recoveryIndex);
-  assert.match(endpoint, /save_checksum=eq\.\$\{encodeURIComponent\(before\.save_checksum\)\}/);
+  assert.match(endpoint, /const path = `\/rest\/v1\/canonical_world_saves\?world_id=eq\.\$\{encodeURIComponent\(worldId\)\}&save_checksum=eq\.\$\{encodeURIComponent\(checksum\)\}&turn_status=eq\.failed`/);
+  assert.match(endpoint, /checksum: before\.save_checksum/);
   assert.match(endpoint, /Failed world changed before retry; replay rejected/);
 });
 
