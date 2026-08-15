@@ -143,7 +143,7 @@ export function projectManagerPortal(world, clubId, { nextTurnAt = null, weekday
   const division = clubDivision(world, clubId);
   const runtime = runtimeForClub(world, clubId);
   const rawFixtures = (runtime?.fixtures || []).filter((fixture) => fixture.home_club_id === clubId || fixture.away_club_id === clubId);
-  const results = runtime?.results || [];
+  const results = [...(runtime?.archive_results || []), ...(runtime?.results || [])];
   const resultsByFixture = new Map(results.map((result) => [String(result.fixture.fixture_id), result]));
   const fixtures = projectedFixtures(world, rawFixtures, resultsByFixture, nextTurnAt, { weekdaysUtc, hourUtc });
   const completed = fixtures.filter((fixture) => resultsByFixture.has(String(fixture.fixture_id)));
