@@ -107,6 +107,39 @@ function entriesForDivision(values, division) {
     .map((clubId) => [clubId, clone(values[clubId])]));
 }
 
+export function reconcileCrossDivisionRuntimePlayerState(cycle, clubsByDivision = {}) {
+  const playerSnapshot = {};
+  const availabilitySnapshot = {};
+  for (const runtime of Object.values(cycle?.runtimes || {})) {
+    for (const [playerId, state] of Object.entries(runtime?.state?.players || {})) {
+      if (!playerSnapshot[playerId]) playerSnapshot[playerId] = clone(state);
+    }
+    for (const [playerId, state] of Object.entries(runtime?.state?.availability?.players || {})) {
+      if (!availabilitySnapshot[playerId]) availabilitySnapshot[playerId] = clone(state);
+    }
+  }
+
+  for (const [divisionId, clubs] of Object.entries(clubsByDivision || {})) {
+    const runtime = cycle?.runtimes?.[divisionId];
+    if (!runtime?.state) continue;
+    runtime.state.players ||= {};
+    runtime.state.availability ||= { players: {} };
+    runtime.state.availability.players ||= {};
+    for (const club of clubs || []) {
+      for (const player of club.players || []) {
+        const playerId = String(player?.tbg_player_id || '').trim();
+        if (!playerId) continue;
+        if (!runtime.state.players[playerId] && playerSnapshot[playerId]) {
+          runtime.state.players[playerId] = clone(playerSnapshot[playerId]);
+        }
+        if (!runtime.state.availability.players[playerId] && availabilitySnapshot[playerId]) {
+          runtime.state.availability.players[playerId] = clone(availabilitySnapshot[playerId]);
+        }
+      }
+    }
+  }
+}
+
 export function validatePersistentMatchdayWorld(world) {
   const base = validatePersistentLeagueWorld(world);
   const errors = [...base.errors];
@@ -259,9 +292,11 @@ export function advancePersistentMatchday(worldInput, {
   const cycle = world.matchday_cycle;
   const matchday = cycle.current_matchday;
   const resultRows = [];
+  const clubsByDivision = Object.fromEntries(world.competition.divisions.map((division) => [division.division_id, divisionClubs(world, division)]));
+  reconcileCrossDivisionRuntimePlayerState(cycle, clubsByDivision);
   for (const division of world.competition.divisions) {
     const runtime = cycle.runtimes[division.division_id];
-    const clubs = divisionClubs(world, division);
+    const clubs = clubsByDivision[division.division_id];
     resultRows.push({
       division_id: division.division_id,
       ...advanceIncrementalMatchday(runtime, {
