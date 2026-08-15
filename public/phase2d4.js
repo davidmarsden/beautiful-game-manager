@@ -140,7 +140,7 @@ async function revealMatch(data, method) {
 }
 function setupReplay(data, revealRequired) {
   const events = [...(data.events || [])].sort((a, b) => Number(a.minute) - Number(b.minute));
-  replayState = { minute: 0, home: 0, away: 0, events, nextEvent: 0, data, revealing: false, holdUntil: 0, spotlightEvent: null, spotlightQueue: [], pendingFinish: false };
+  replayState = { minute: 0, home: 0, away: 0, events, nextEvent: 0, data, revealing: false, holdUntil: 0, spotlightEvent: null, spotlightMoment: null, spotlightQueue: [], pendingFinish: false };
   const finish = async (method) => { if (!revealRequired || replayState.revealing) return; replayState.revealing = true; try { await revealMatch(data, method); } catch (error) { document.getElementById('replayFeed')?.insertAdjacentHTML('afterbegin', `<p class="replay-error">${mcEscape(error.message)}</p>`); replayState.revealing = false; } };
   const setStatus = (value) => { const status = document.getElementById('replayStatus'); if (status) status.textContent = value; };
   const updateReplayScore = (home = replayState.home, away = replayState.away) => {
@@ -148,27 +148,27 @@ function setupReplay(data, revealRequired) {
     const replayScore = document.getElementById('replayScore'); if (replayScore) replayScore.textContent = score;
     const headerScore = document.getElementById('headerReplayScore'); if (headerScore) headerScore.textContent = score;
   };
-  const clearReplaySpotlight = () => {
-    if (!replayState) return;
-    const spotlight = document.getElementById('replaySpotlight');
-    if (spotlight) { spotlight.hidden = true; spotlight.className = 'replay-spotlight'; spotlight.innerHTML = ''; }
-    replayState.spotlightEvent = null; replayState.holdUntil = 0; updateReplayScore(); setStatus(replayState.minute >= 90 && !replayState.spotlightQueue.length ? 'FT' : 'LIVE');
-  };
   const renderMomentToFeed = (moment) => {
     if (!moment || moment.feedRendered) return;
     const event = moment.event || moment;
     document.getElementById('replayFeed')?.insertAdjacentHTML('afterbegin', eventMarkup(event, { replay: true }));
     moment.feedRendered = true;
   };
+  const clearReplaySpotlight = ({ renderFeed = true } = {}) => {
+    if (!replayState) return;
+    if (renderFeed) renderMomentToFeed(replayState.spotlightMoment);
+    const spotlight = document.getElementById('replaySpotlight');
+    if (spotlight) { spotlight.hidden = true; spotlight.className = 'replay-spotlight'; spotlight.innerHTML = ''; }
+    replayState.spotlightEvent = null; replayState.spotlightMoment = null; replayState.holdUntil = 0; updateReplayScore(); setStatus(replayState.minute >= 90 && !replayState.spotlightQueue.length ? 'FT' : 'LIVE');
+  };
   const showReplaySpotlight = (moment) => {
     const event = moment?.event || moment;
     const presentation = eventPresentation(event); if (!presentation.major) return;
     const meta = eventTypeMeta(event.display_event_type || event.event_type); const spotlight = document.getElementById('replaySpotlight'); if (!spotlight) return;
-    replayState.spotlightEvent = event;
+    replayState.spotlightEvent = event; replayState.spotlightMoment = moment;
     replayState.holdUntil = Date.now() + Math.max(0, Number(presentation.hold_ms) || 0);
     const home = Number.isFinite(Number(moment?.home)) ? Number(moment.home) : replayState.home;
     const away = Number.isFinite(Number(moment?.away)) ? Number(moment.away) : replayState.away;
-    renderMomentToFeed(moment);
     updateReplayScore(home, away);
     spotlight.hidden = false;
     spotlight.className = `replay-spotlight spotlight-${normalType(presentation.kind || 'major')}`;
@@ -214,16 +214,17 @@ function setupReplay(data, revealRequired) {
   document.getElementById('replayStart').addEventListener('click', () => {
     if (replayTimer) return;
     if (replayState.minute >= 90) {
-      replayState.minute = 0; replayState.home = 0; replayState.away = 0; replayState.nextEvent = 0; replayState.pendingFinish = false; replayState.holdUntil = 0; replayState.spotlightEvent = null; replayState.spotlightQueue = [];
-      document.getElementById('replayFeed').innerHTML = ''; updateReplayScore(); clearReplaySpotlight();
+      replayState.minute = 0; replayState.home = 0; replayState.away = 0; replayState.nextEvent = 0; replayState.pendingFinish = false; replayState.holdUntil = 0; replayState.spotlightEvent = null; replayState.spotlightMoment = null; replayState.spotlightQueue = [];
+      document.getElementById('replayFeed').innerHTML = ''; updateReplayScore(); clearReplaySpotlight({ renderFeed: false });
     }
     setStatus('LIVE'); replayTimer = setInterval(tick, Number(document.getElementById('replaySpeed').value));
   });
   document.getElementById('replayPause').addEventListener('click', () => { clearInterval(replayTimer); replayTimer = null; setStatus(replayState?.spotlightEvent ? eventPresentation(replayState.spotlightEvent).label : 'PAUSED'); });
   document.getElementById('replaySkip').addEventListener('click', async () => {
     clearInterval(replayTimer); replayTimer = null;
+    clearReplaySpotlight();
     for (const moment of replayState.spotlightQueue) renderMomentToFeed(moment);
-    clearReplaySpotlight(); replayState.spotlightQueue = []; replayState.pendingFinish = false;
+    replayState.spotlightQueue = []; replayState.pendingFinish = false;
     while (replayState.minute < 90) tick({ autoFinish: false, ignoreHold: true, suppressSpotlight: true });
     if (revealRequired) await finish('skip_to_full_time');
   });
