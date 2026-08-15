@@ -1,7 +1,7 @@
 const text = (value) => String(value ?? '').trim().toLowerCase();
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
-export const CAUSAL_EVENT_REALISATION_VERSION = 'tbg-causal-event-realisation-v0.2';
+export const CAUSAL_EVENT_REALISATION_VERSION = 'tbg-causal-event-realisation-v0.3';
 
 function stableUnit(value) {
   let hash = 2166136261;
@@ -191,6 +191,41 @@ function commentaryHooks(events, limit = 12) {
     .map((event) => ({ minute: event.minute, side: event.side, hook: event.commentary_hook, event_id: event.event_id }));
 }
 
+function materialiseSecondYellowDismissals(events = []) {
+  const bookings = new Map();
+  const explicitSecondYellow = new Set(events
+    .filter((event) => text(event.type) === 'red_card' && text(event.subtype) === 'second_yellow' && event.player_id)
+    .map((event) => String(event.player_id)));
+  const output = [];
+  for (const event of canonicalOrder(events)) {
+    output.push(event);
+    if (text(event.type) !== 'yellow_card' || !event.player_id) continue;
+    const playerId = String(event.player_id);
+    const count = (bookings.get(playerId) || 0) + 1;
+    bookings.set(playerId, count);
+    if (count !== 2 || explicitSecondYellow.has(playerId)) continue;
+    explicitSecondYellow.add(playerId);
+    output.push({
+      event_id: `${event.event_id}-second-yellow-red`,
+      minute: event.minute,
+      side: event.side,
+      against_side: event.against_side || null,
+      type: 'red_card',
+      subtype: 'second_yellow',
+      player_id: event.player_id,
+      source_event_id: event.event_id,
+      parent_event_id: event.event_id,
+      sequence_id: event.sequence_id || `discipline-${event.side}-${playerId}-${event.minute}`,
+      sequence_order: number(event.sequence_order, 0) + 1,
+      provisional: false,
+      official: true,
+      commentary_hook: 'sending_off',
+      dismissal_reason: 'second_yellow'
+    });
+  }
+  return canonicalOrder(output);
+}
+
 export function realiseCausalEventGeneration(eventGeneration, quality = {}) {
   if (!eventGeneration?.provisional_event_stream) return eventGeneration;
   const rawEvents = eventGeneration.provisional_event_stream;
@@ -224,8 +259,9 @@ export function realiseCausalEventGeneration(eventGeneration, quality = {}) {
 
 export function reconcileCausalResolution(resolution) {
   if (!resolution?.official_event_stream) return resolution;
+  const officialEventStream = materialiseSecondYellowDismissals(resolution.official_event_stream);
   const linkedOpenPlayGoals = { home: 0, away: 0 };
-  for (const event of resolution.official_event_stream) {
+  for (const event of officialEventStream) {
     if (text(event.type) === 'goal' && text(event.subtype) !== 'penalty_goal' && event.source_event_id) linkedOpenPlayGoals[text(event.side)] += 1;
   }
   const statistics = {};
@@ -240,25 +276,63 @@ export function reconcileCausalResolution(resolution) {
   }
   return {
     ...resolution,
-    version: `${resolution.version}+causal-v0.2`,
+    version: `${resolution.version}+causal-v0.3`,
+    official_event_stream: officialEventStream,
     statistics,
-    consistency: { ...(resolution.consistency || {}), causal_attempts_linked: true, set_piece_sequences_atomic: true, set_piece_side_integrity: true, own_goal_defender_preserved: true, shot_totals_reconciled_after_goal_linking: true }
+    consistency: {
+      ...(resolution.consistency || {}),
+      causal_attempts_linked: true,
+      set_piece_sequences_atomic: true,
+      set_piece_side_integrity: true,
+      own_goal_defender_preserved: true,
+      shot_totals_reconciled_after_goal_linking: true,
+      second_yellow_dismissals_explicit: true
+    }
   };
+}
+
+function playerName(names, playerId, fallback = 'A player') {
+  return names.get(String(playerId)) || fallback;
+}
+
+function causalCommentary(event, row, names, clubs) {
+  const club = clubs?.[event.side] || (event.side === 'home' ? 'the home side' : 'the away side');
+  const player = playerName(names, event.player_id);
+  if (event.own_goal) {
+    const defender = playerName(names, event.own_goal_player_id, 'A defender');
+    return `${defender} turns the ball into their own net.`;
+  }
+  if (text(event.type) === 'red_card' && text(event.subtype) === 'second_yellow') {
+    return `${player} is shown a second yellow card and is sent off for ${club}.`;
+  }
+  if (text(event.type) === 'goal' && text(event.chance_origin) === 'corner') {
+    return `${player} finishes the move from the resulting corner for ${club}.`;
+  }
+  if (text(event.type) === 'goal' && text(event.chance_origin) === 'free_kick') {
+    return `${player} finishes the move from the resulting free kick for ${club}.`;
+  }
+  if (['shot', 'big_chance'].includes(text(event.type)) && text(event.outcome) === 'goal') {
+    if (text(event.chance_origin) === 'corner') return `${player} meets the corner and gets the decisive effort away for ${club}.`;
+    if (text(event.chance_origin) === 'free_kick') return `${player} meets the free kick and gets the decisive effort away for ${club}.`;
+    return `${player} gets the decisive effort away for ${club}.`;
+  }
+  return row.text;
 }
 
 export function reconcileOwnGoalCommentary(report, resolution, quality = {}) {
   if (!report?.commentary || !resolution?.official_event_stream) return report;
   const byEvent = new Map(resolution.official_event_stream.map((event) => [String(event.event_id), event]));
   const names = new Map();
-  for (const side of ['home', 'away']) for (const player of quality?.[side]?.starters || []) names.set(String(player.player_id), player.display_name || player.player_id);
+  for (const side of ['home', 'away']) {
+    for (const player of quality?.[side]?.starters || []) names.set(String(player.player_id), player.display_name || player.player_id);
+    for (const player of quality?.[side]?.bench?.players || []) names.set(String(player.player_id), player.display_name || player.player_id);
+  }
   return {
     ...report,
-    version: `${report.version}+causal-v0.2`,
+    version: `${report.version}+causal-v0.3`,
     commentary: report.commentary.map((row) => {
       const event = byEvent.get(String(row.event_id));
-      if (!event?.own_goal) return row;
-      const defender = names.get(String(event.own_goal_player_id)) || 'A defender';
-      return { ...row, text: `${defender} turns the ball into their own net.` };
+      return event ? { ...row, text: causalCommentary(event, row, names, report.clubs || {}) } : row;
     })
   };
 }
