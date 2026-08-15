@@ -30,25 +30,40 @@ test('linked goal attempts describe only the attempt and leave the outcome for t
   assert.doesNotMatch(events[1].commentary, /\b\d+\s*(yard|metre|meter)/i);
 });
 
-test('non-goal attempts get a separate display-only outcome reveal', () => {
+test('non-goal attempts get a separate display-only outcome reveal in suspense order', () => {
   const cases = [
     ['saved', 'chance_saved', /goalkeeper.*save/i],
     ['missed', 'chance_missed', /goes wide/i],
+    ['off_target', 'chance_missed', /goes wide/i],
     ['woodwork', 'chance_woodwork', /woodwork/i],
     ['offside', 'chance_offside', /offside/i]
   ];
   for (const [outcome, displayType, revealPattern] of cases) {
     const events = enrichReplayCommentary([
-      { minute: 20, side: 'away', event_type: 'shot', event_id: `shot-${outcome}`, sequence_id: `seq-${outcome}`, sequence_order: 10, player_id: 'p1', player_name: 'Player One', xg: 0.2, outcome }
+      { minute: 20, side: 'away', event_type: 'set_piece', subtype: 'corner', event_id: `corner-${outcome}`, sequence_id: `seq-${outcome}`, sequence_order: 0, commentary: 'Away win a corner.' },
+      { minute: 20, side: 'away', event_type: 'shot', event_id: `shot-${outcome}`, sequence_id: `seq-${outcome}`, sequence_order: 10, player_id: 'p1', player_name: 'Player One', xg: 0.2, outcome, chance_origin: 'corner' }
     ]);
-    assert.equal(events.length, 2);
-    assert.equal(events[0].display_event_type, 'chance_attempt');
-    assert.doesNotMatch(events[0].commentary, /goalkeeper|save|saved|wide|woodwork|offside|goal|net/i);
-    assert.equal(events[1].display_only, true);
-    assert.equal(events[1].display_event_type, displayType);
-    assert.match(events[1].commentary, revealPattern);
-    assert.equal(events[1].replay_presentation.major, true);
+    assert.equal(events.length, 3);
+    assert.equal(events[1].display_event_type, 'chance_attempt');
+    assert.doesNotMatch(events[1].commentary, /goalkeeper|save|saved|wide|woodwork|offside|goal|net/i);
+    assert.equal(events[2].display_only, true);
+    assert.equal(events[2].display_event_type, displayType);
+    assert.match(events[2].commentary, revealPattern);
+    assert.equal(events[2].replay_presentation.major, true);
+    assert.ok(events[0].replay_presentation.priority > events[1].replay_presentation.priority);
+    assert.ok(events[1].replay_presentation.priority > events[2].replay_presentation.priority);
   }
+});
+
+test('unsupported legacy shot outcomes retain their archived outcome-bearing commentary', () => {
+  const events = enrichReplayCommentary([
+    { minute: 22, side: 'home', event_type: 'shot', event_id: 'legacy-shot', player_id: 'p1', player_name: 'Player One', outcome: 'blocked_by_defender', commentary: 'Player One shoots but the defender blocks it.' }
+  ]);
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].display_event_type, undefined);
+  assert.equal(events[0].replay_presentation, undefined);
+  assert.match(events[0].commentary, /defender blocks/i);
 });
 
 test('own goals retain the defender story instead of being rewritten as an attacking finish', () => {
@@ -136,4 +151,38 @@ test('corner, chance and goal are revealed as separate paused beats without feed
   now += 2801;
   intervalTick();
   assert.match(elements.get('replaySpotlight').innerHTML, /Emre Can/);
+});
+
+test('full-time skip flushes already consumed withheld moments into the feed', async () => {
+  const source = await readFile(new URL('../public/phase2d4.js', import.meta.url), 'utf8');
+  const elements = new Map([
+    ['replayFeed', fakeElement()], ['replayClock', fakeElement()], ['replayScore', fakeElement()],
+    ['headerReplayScore', fakeElement()], ['replaySpotlight', fakeElement({ hidden: true })],
+    ['replayStatus', fakeElement()], ['replayStart', fakeElement()], ['replayPause', fakeElement()],
+    ['replaySkip', fakeElement()], ['replaySpeed', fakeElement({ value: '900' })]
+  ]);
+  let intervalTick = null;
+  const context = vm.createContext({
+    console,
+    window: { fetch: async () => ({}) },
+    document: { getElementById(id) { return elements.get(id) || null; }, addEventListener() {}, dispatchEvent() {} },
+    Date, Request: class Request {}, Headers: class Headers {}, CustomEvent: class CustomEvent {}, Intl, encodeURIComponent,
+    setInterval(callback) { intervalTick = callback; return 1; }, clearInterval() {}
+  });
+  vm.runInContext(source, context);
+  const setupReplay = vm.runInContext('setupReplay', context);
+  const chanceEvents = enrichReplayCommentary([
+    { minute: 1, side: 'home', event_type: 'set_piece', subtype: 'corner', event_id: 'corner', sequence_id: 'seq-goal', sequence_order: 0, commentary: 'Home win a corner.' },
+    { minute: 1, side: 'home', event_type: 'shot', event_id: 'shot', sequence_id: 'seq-goal', sequence_order: 10, player_name: 'Scorer', outcome: 'goal', chance_origin: 'corner' },
+    { minute: 1, side: 'home', event_type: 'goal', event_id: 'goal', sequence_id: 'seq-goal', sequence_order: 20, player_name: 'Scorer', source_event_id: 'shot', replay_presentation: { importance: 'major', major: true, kind: 'goal', label: 'GOAL', hold_ms: 2800, priority: 100, sequence_id: 'seq-goal', sequence_order: 20, sequence_role: 'climax' } }
+  ], { home: 'Home FC', away: 'Away FC' });
+  setupReplay({ events: chanceEvents }, false);
+  elements.get('replayStart').handler('click')();
+  intervalTick();
+  assert.doesNotMatch(elements.get('replayFeed').inserted.join('\n'), /GOAL!/i);
+
+  await elements.get('replaySkip').handler('click')();
+  const feed = elements.get('replayFeed').inserted.join('\n');
+  assert.match(feed, /Scorer.*effort/i);
+  assert.match(feed, /GOAL!/i);
 });
