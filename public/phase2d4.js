@@ -10,7 +10,7 @@ const eventTypeMeta = (type) => {
   const key = normalType(type);
   const exact = {
     goal: ['⚽', 'goal', 'Goal'], assist: ['↪', 'assist', 'Assist'], yellow_card: ['🟨', 'yellow-card', 'Yellow card'],
-    red_card: ['🟥', 'red-card', 'Red card'], second_yellow: ['🟥', 'red-card', 'Second yellow'],
+    red_card: ['🟥', 'red-card', 'Red card'], second_yellow: ['🟨🟥', 'red-card', 'Second yellow · red card'],
     penalty_awarded: ['●', 'penalty-awarded', 'Penalty awarded'], penalty_scored: ['⚽ P', 'penalty-scored', 'Penalty scored'],
     penalty_missed: ['✕ P', 'penalty-missed', 'Penalty missed'], penalty_saved: ['🧤 P', 'penalty-saved', 'Penalty saved'],
     free_kick: ['●', 'free-kick', 'Free kick'], foul: ['·', 'foul', 'Foul'], save: ['🧤', 'save', 'Save'],
@@ -26,18 +26,37 @@ const FALLBACK_MAJOR_EVENTS = Object.freeze({
   penalty_missed: { importance: 'major', major: true, kind: 'penalty', label: 'PENALTY MISSED', hold_ms: 2400, priority: 90 },
   penalty_saved: { importance: 'major', major: true, kind: 'penalty', label: 'PENALTY SAVED', hold_ms: 2400, priority: 90 },
   red_card: { importance: 'major', major: true, kind: 'dismissal', label: 'RED CARD', hold_ms: 2400, priority: 80 },
-  second_yellow: { importance: 'major', major: true, kind: 'dismissal', label: 'SECOND YELLOW', hold_ms: 2400, priority: 80 },
+  second_yellow: { importance: 'major', major: true, kind: 'dismissal', label: 'SECOND YELLOW · RED CARD', hold_ms: 2600, priority: 82 },
   penalty_awarded: { importance: 'major', major: true, kind: 'penalty', label: 'PENALTY', hold_ms: 2200, priority: 70 }
 });
 const eventPresentation = (event = {}) => event.replay_presentation || FALLBACK_MAJOR_EVENTS[normalType(event.event_type)] || { importance: 'standard', major: false, kind: 'commentary', label: null, hold_ms: 0, priority: 0 };
 const isMajorReplayEvent = (event) => eventPresentation(event).major === true;
+const orderReplayMoments = (moments = []) => {
+  const goalSequences = new Set(moments
+    .filter((moment) => eventPresentation(moment.event).kind === 'goal')
+    .map((moment) => eventPresentation(moment.event).sequence_id)
+    .filter(Boolean));
+  return moments.map((moment, index) => ({ moment, index })).sort((left, right) => {
+    const leftPresentation = eventPresentation(left.moment.event);
+    const rightPresentation = eventPresentation(right.moment.event);
+    const leftGoalSequence = Boolean(leftPresentation.sequence_id && goalSequences.has(leftPresentation.sequence_id));
+    const rightGoalSequence = Boolean(rightPresentation.sequence_id && goalSequences.has(rightPresentation.sequence_id));
+    if (leftGoalSequence !== rightGoalSequence) return leftGoalSequence ? -1 : 1;
+    if (leftGoalSequence && rightGoalSequence && leftPresentation.sequence_id === rightPresentation.sequence_id) {
+      const sequence = Number(leftPresentation.sequence_order ?? 50) - Number(rightPresentation.sequence_order ?? 50);
+      if (sequence) return sequence;
+    }
+    const priority = Number(rightPresentation.priority || 0) - Number(leftPresentation.priority || 0);
+    return priority || left.index - right.index;
+  }).map(({ moment }) => moment);
+};
 const eventText = (event) => {
   if (normalType(event.event_type) === 'substitution' && (event.player_out_name || event.player_in_name)) {
     return `${event.player_out_name || 'Unknown player'} off · ${event.player_in_name || 'Unknown player'} on`;
   }
   if (event.commentary || event.payload?.commentary) return event.commentary || event.payload.commentary;
   const player = event.player_name || 'Unknown player';
-  const meta = eventTypeMeta(event.event_type);
+  const meta = eventTypeMeta(event.display_event_type || event.event_type);
   if (normalType(event.event_type) === 'goal' || normalType(event.event_type) === 'penalty_scored') return `${meta.label} — ${player}${event.assist_player_name ? ` (assist: ${event.assist_player_name})` : ''}`;
   return `${meta.label.toUpperCase()} — ${player}`;
 };
@@ -59,7 +78,7 @@ const substitutionBadge = (substitution = {}) => {
 const ratingBadge = (rating) => mcNumber(rating) === null ? '' : `<strong class="match-rating">${mcNumber(rating).toFixed(1)}</strong>`;
 const playerList = (players = []) => players.map((player, index) => `<li><span class="shirt-number">${index + 1}</span><span class="lineup-name">${mcEscape(player.name)}</span>${substitutionBadge(player.substitution)}${performanceBadges(player.performance)}${ratingBadge(player.performance?.rating)}</li>`).join('');
 const eventMarkup = (event, { replay = false } = {}) => {
-  const meta = eventTypeMeta(event.event_type);
+  const meta = eventTypeMeta(event.display_event_type || event.event_type);
   const presentation = eventPresentation(event);
   const side = event.side === 'home' || event.side === 'away' ? event.side : 'neutral';
   const tag = replay ? 'p' : 'li';
@@ -136,7 +155,7 @@ function setupReplay(data, revealRequired) {
   const showReplaySpotlight = (moment) => {
     const event = moment?.event || moment;
     const presentation = eventPresentation(event); if (!presentation.major) return;
-    const meta = eventTypeMeta(event.event_type); const spotlight = document.getElementById('replaySpotlight'); if (!spotlight) return;
+    const meta = eventTypeMeta(event.display_event_type || event.event_type); const spotlight = document.getElementById('replaySpotlight'); if (!spotlight) return;
     replayState.spotlightEvent = event;
     replayState.holdUntil = Date.now() + Math.max(0, Number(presentation.hold_ms) || 0);
     const home = Number.isFinite(Number(moment?.home)) ? Number(moment.home) : replayState.home;
@@ -172,7 +191,7 @@ function setupReplay(data, revealRequired) {
     }
     const minute = Math.min(replayState.minute, 90); document.getElementById('replayClock').textContent = `${String(minute).padStart(2, '0')}'`;
     if (minuteMoments.length && !ignoreHold && !suppressSpotlight) {
-      replayState.spotlightQueue.push(...minuteMoments);
+      replayState.spotlightQueue.push(...orderReplayMoments(minuteMoments));
       if (replayState.minute >= 90) replayState.pendingFinish = true;
       showReplaySpotlight(replayState.spotlightQueue.shift());
       return;
