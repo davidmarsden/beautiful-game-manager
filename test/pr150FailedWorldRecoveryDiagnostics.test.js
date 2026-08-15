@@ -69,6 +69,7 @@ test('existing production retry remains checksum and failed-run guarded', async 
   assert.match(api, /previous_checksum=eq\.\$\{encodeURIComponent\(before\.save_checksum\)\}/);
   assert.match(api, /status=eq\.failed/);
   assert.match(api, /retry_failed_turn/);
-  assert.match(api, /save_checksum=eq\.\$\{encodeURIComponent\(before\.save_checksum\)\}[\s\S]*turn_status=eq\.failed/);
+  assert.match(api, /const path = `\/rest\/v1\/canonical_world_saves\?world_id=eq\.\$\{encodeURIComponent\(worldId\)\}&save_checksum=eq\.\$\{encodeURIComponent\(checksum\)\}&turn_status=eq\.failed`/);
+  assert.match(api, /await reopenFailedWorldForRetry\(\{ worldId, checksum: before\.save_checksum, now \}\)/);
   assert.match(api, /Failed world changed before retry; replay rejected/);
 });
