@@ -80,8 +80,18 @@ function attemptCommentary(event, playerName) {
   return `${player} gets a clean strike away.`;
 }
 
+function normalizedOutcome(value) {
+  const key = normal(value);
+  if (['missed', 'miss', 'wide', 'off_target'].includes(key)) return 'missed';
+  if (['saved', 'save'].includes(key)) return 'saved';
+  if (['woodwork', 'post', 'bar'].includes(key)) return 'woodwork';
+  if (['offside', 'offsides'].includes(key)) return 'offside';
+  if (key === 'goal') return 'goal';
+  return key;
+}
+
 function outcomePresentation(outcome) {
-  const key = normal(outcome);
+  const key = normalizedOutcome(outcome);
   if (key === 'saved') return { display_event_type: 'chance_saved', label: 'SAVED', commentary: 'But the goalkeeper gets across to make the save.' };
   if (key === 'missed') return { display_event_type: 'chance_missed', label: 'WIDE', commentary: 'But the effort goes wide.' };
   if (key === 'woodwork') return { display_event_type: 'chance_woodwork', label: 'OFF THE WOODWORK', commentary: 'It crashes back off the woodwork!' };
@@ -96,7 +106,7 @@ function chancePresentation(event, overrides = {}) {
     kind: overrides.kind || 'chance',
     label: overrides.label || 'CHANCE',
     hold_ms: overrides.hold_ms ?? 1800,
-    priority: overrides.priority ?? 92,
+    priority: overrides.priority ?? 94,
     sequence_id: sequenceId(event),
     sequence_order: overrides.sequence_order ?? sequenceOrder(event),
     sequence_role: overrides.sequence_role || 'build_up'
@@ -104,7 +114,7 @@ function chancePresentation(event, overrides = {}) {
 }
 
 function outcomeRevealEvent(attempt) {
-  const outcome = normal(attempt.outcome || attempt.payload?.outcome);
+  const outcome = normalizedOutcome(attempt.outcome || attempt.payload?.outcome);
   if (outcome === 'goal') return null;
   const reveal = outcomePresentation(outcome);
   if (!reveal) return null;
@@ -125,7 +135,7 @@ function outcomeRevealEvent(attempt) {
       kind: 'chance-outcome',
       label: reveal.label,
       hold_ms: 1800,
-      priority: 94,
+      priority: 92,
       sequence_order: sequenceOrder(attempt) + 1,
       sequence_role: 'outcome'
     })
@@ -171,9 +181,9 @@ function stageChanceBuildUps(events) {
     const type = eventType(event);
     const subtype = eventSubtype(event);
     if (type === 'set_piece' && subtype === 'corner') {
-      event.replay_presentation = chancePresentation(event, { kind: 'build-up', label: 'CORNER', hold_ms: 1400, priority: 88, sequence_role: 'source' });
+      event.replay_presentation = chancePresentation(event, { kind: 'build-up', label: 'CORNER', hold_ms: 1400, priority: 96, sequence_role: 'source' });
     } else if (type === 'free_kick' || (type === 'set_piece' && subtype === 'free_kick')) {
-      event.replay_presentation = chancePresentation(event, { kind: 'build-up', label: 'FREE KICK', hold_ms: 1400, priority: 88, sequence_role: 'source' });
+      event.replay_presentation = chancePresentation(event, { kind: 'build-up', label: 'FREE KICK', hold_ms: 1400, priority: 96, sequence_role: 'source' });
     }
   }
 }
@@ -224,16 +234,17 @@ export function enrichReplayCommentary(events = [], clubs = {}) {
   for (const event of ordered) {
     const type = eventType(event);
     if (['shot', 'big_chance'].includes(type)) {
-      const player = text(event.player_name) || byPlayer.get(text(event.player_id)) || 'The attacker';
-      event.commentary = attemptCommentary(event, player);
-      event.display_event_type = 'chance_attempt';
-      event.replay_presentation = chancePresentation(event, { kind: 'chance', label: 'CHANCE', hold_ms: 1800, priority: 92, sequence_role: 'build_up' });
-      expanded.push(event);
       const linkedGoal = sequenceId(event) && goalsBySequence.has(sequenceId(event));
-      if (!linkedGoal) {
-        const reveal = outcomeRevealEvent(event);
-        if (reveal) expanded.push(reveal);
+      const reveal = linkedGoal ? null : outcomeRevealEvent(event);
+      const canStage = Boolean(linkedGoal || reveal);
+      if (canStage) {
+        const player = text(event.player_name) || byPlayer.get(text(event.player_id)) || 'The attacker';
+        event.commentary = attemptCommentary(event, player);
+        event.display_event_type = 'chance_attempt';
+        event.replay_presentation = chancePresentation(event, { kind: 'chance', label: 'CHANCE', hold_ms: 1800, priority: 94, sequence_role: 'build_up' });
       }
+      expanded.push(event);
+      if (reveal) expanded.push(reveal);
       continue;
     }
     expanded.push(event);
