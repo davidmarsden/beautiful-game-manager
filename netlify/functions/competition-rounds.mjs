@@ -97,7 +97,8 @@ export default async (request) => {
     const runtime = division ? world.matchday_cycle?.runtimes?.[division.division_id] : null;
     if (!division || !runtime) return json({ divisions: [], division: null, rounds: [], current_matchday: null });
 
-    const resultsByFixture = new Map((runtime.results || []).map((result) => [String(result.fixture?.fixture_id), result]));
+    const seasonRows = [...(runtime.archive_results || []), ...(runtime.results || [])];
+    const resultsByFixture = new Map(seasonRows.map((result) => [String(result.fixture?.fixture_id), result]));
     const fixtures = (runtime.fixtures || []).map((fixture) => projectRoundFixture(world, fixture, resultsByFixture.get(String(fixture.fixture_id)), appointment.club_id, division.division_id))
       .sort((a, b) => a.matchday - b.matchday || String(a.kickoff_at).localeCompare(String(b.kickoff_at)) || a.fixture_id.localeCompare(b.fixture_id));
     const byMatchday = new Map();
