@@ -1,6 +1,7 @@
 import matchCentre from './match-centre.mjs';
 import { loadPersistentWorld } from '../../src/world/persistentSeasonLoop.js';
 import { projectPinkFinalPlayerIdentity } from '../../src/world/pinkFinalPlayerProfile.js';
+import { cardSummaryFromEvents, enrichReplayCommentary } from '../../src/matchCentre/replayMomentDirector.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -207,7 +208,12 @@ export function decorateMatchCentrePayload(payload = {}, world = null) {
       player_off_profile_url: identityFor(world, event.player_off_id || event.out_player_id || event.replaced_player_id).profile_url
     };
   });
-  const events = dedupeScoredPenaltyEvents(decoratedEvents);
+  const dedupedEvents = dedupeScoredPenaltyEvents(decoratedEvents);
+  const clubs = {
+    home: text(payload.fixture?.home_club_name || payload.fixture?.home_name || payload.fixture?.home_club_id),
+    away: text(payload.fixture?.away_club_name || payload.fixture?.away_name || payload.fixture?.away_club_id)
+  };
+  const events = enrichReplayCommentary(dedupedEvents, clubs);
 
   const decoratePerformance = (row) => decoratePlayer(world, row);
   const performances = {
@@ -238,8 +244,8 @@ export function decorateMatchCentrePayload(payload = {}, world = null) {
       away: scorerSummaryFromEvents(events, 'away')
     },
     cards: {
-      home: (summary.cards?.home || []).map((row) => decoratePlayer(world, row)),
-      away: (summary.cards?.away || []).map((row) => decoratePlayer(world, row))
+      home: cardSummaryFromEvents(events, 'home'),
+      away: cardSummaryFromEvents(events, 'away')
     },
     player_of_the_match: summary.player_of_the_match ? decoratePerformance(summary.player_of_the_match) : null,
     top_ratings: (summary.top_ratings || []).map(decoratePerformance)
