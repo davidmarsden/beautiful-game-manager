@@ -87,12 +87,14 @@ test('same-minute replay moments are held sequentially with score snapshots befo
   assert.equal(elements.get('replayClock').textContent, "90'");
   assert.equal(elements.get('replayScore').textContent, '1-0', 'first queued goal should expose only its score state');
   assert.match(elements.get('replaySpotlight').innerHTML, /First Scorer equalises/);
+  assert.doesNotMatch(elements.get('replayFeed').inserted.join('\n'), /Second Scorer wins it/, 'future same-minute moment must not enter feed before its spotlight');
   assert.doesNotMatch(elements.get('replayFeed').inserted.join('\n'), /FULL TIME/);
 
   now += 3201;
   intervalTick();
   assert.equal(elements.get('replayScore').textContent, '2-0', 'second queued goal should then expose the winning score');
   assert.match(elements.get('replaySpotlight').innerHTML, /Second Scorer wins it/);
+  assert.match(elements.get('replayFeed').inserted.join('\n'), /Second Scorer wins it/);
   assert.doesNotMatch(elements.get('replayFeed').inserted.join('\n'), /FULL TIME/);
 
   now += 3201;
@@ -104,8 +106,12 @@ test('same-minute replay moments are held sequentially with score snapshots befo
 test('replay source explicitly clears queued moments when skipping or restarting', async () => {
   const source = await readFile(sourceUrl, 'utf8');
   assert.match(source, /spotlightQueue:\s*\[\]/);
-  assert.match(source, /minuteMoments\.push\(\{ event, home: replayState\.home, away: replayState\.away \}\)/);
+  assert.match(source, /minuteMoments\.push\(\{ event, home: replayState\.home, away: replayState\.away, feedRendered: false \}\)/);
+  assert.match(source, /const renderMomentToFeed = \(moment\) => \{/);
+  assert.match(source, /if \(!moment \|\| moment\.feedRendered\) return;/);
+  assert.match(source, /renderMomentToFeed\(moment\)/);
   assert.match(source, /showReplaySpotlight\(replayState\.spotlightQueue\.shift\(\)\)/);
+  assert.match(source, /for \(const moment of replayState\.spotlightQueue\) renderMomentToFeed\(moment\)/);
   assert.match(source, /replayState\.spotlightQueue = \[\]/);
   assert.match(source, /ignoreHold: true, suppressSpotlight: true/);
 });
