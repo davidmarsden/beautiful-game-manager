@@ -101,7 +101,7 @@ test('a canonical second booking is presented as a dismissal without rewriting t
   assert.equal(decorated.events[0].replay_presentation.major, true);
   assert.equal(decorated.events[1].replay_presentation.major, true);
   assert.equal(decorated.events[2].event_type, 'yellow_card');
-  assert.equal(decorated.events[2].replay_presentation.label, 'SECOND YELLOW');
+  assert.equal(decorated.events[2].replay_presentation.label, 'SECOND YELLOW · RED CARD');
   assert.equal(decorated.events[2].replay_presentation.kind, 'dismissal');
   assert.equal(decorated.events[2].replay_presentation.major, true);
 });
