@@ -154,6 +154,12 @@ function setupReplay(data, revealRequired) {
     if (spotlight) { spotlight.hidden = true; spotlight.className = 'replay-spotlight'; spotlight.innerHTML = ''; }
     replayState.spotlightEvent = null; replayState.holdUntil = 0; updateReplayScore(); setStatus(replayState.minute >= 90 && !replayState.spotlightQueue.length ? 'FT' : 'LIVE');
   };
+  const renderMomentToFeed = (moment) => {
+    if (!moment || moment.feedRendered) return;
+    const event = moment.event || moment;
+    document.getElementById('replayFeed')?.insertAdjacentHTML('afterbegin', eventMarkup(event, { replay: true }));
+    moment.feedRendered = true;
+  };
   const showReplaySpotlight = (moment) => {
     const event = moment?.event || moment;
     const presentation = eventPresentation(event); if (!presentation.major) return;
@@ -162,10 +168,7 @@ function setupReplay(data, revealRequired) {
     replayState.holdUntil = Date.now() + Math.max(0, Number(presentation.hold_ms) || 0);
     const home = Number.isFinite(Number(moment?.home)) ? Number(moment.home) : replayState.home;
     const away = Number.isFinite(Number(moment?.away)) ? Number(moment.away) : replayState.away;
-    if (moment && !moment.feedRendered) {
-      document.getElementById('replayFeed')?.insertAdjacentHTML('afterbegin', eventMarkup(event, { replay: true }));
-      moment.feedRendered = true;
-    }
+    renderMomentToFeed(moment);
     updateReplayScore(home, away);
     spotlight.hidden = false;
     spotlight.className = `replay-spotlight spotlight-${normalType(presentation.kind || 'major')}`;
@@ -218,7 +221,9 @@ function setupReplay(data, revealRequired) {
   });
   document.getElementById('replayPause').addEventListener('click', () => { clearInterval(replayTimer); replayTimer = null; setStatus(replayState?.spotlightEvent ? eventPresentation(replayState.spotlightEvent).label : 'PAUSED'); });
   document.getElementById('replaySkip').addEventListener('click', async () => {
-    clearInterval(replayTimer); replayTimer = null; clearReplaySpotlight(); replayState.spotlightQueue = []; replayState.pendingFinish = false;
+    clearInterval(replayTimer); replayTimer = null;
+    for (const moment of replayState.spotlightQueue) renderMomentToFeed(moment);
+    clearReplaySpotlight(); replayState.spotlightQueue = []; replayState.pendingFinish = false;
     while (replayState.minute < 90) tick({ autoFinish: false, ignoreHold: true, suppressSpotlight: true });
     if (revealRequired) await finish('skip_to_full_time');
   });
