@@ -5,6 +5,7 @@ let state = null;
 let mounted = false;
 let lastRefreshAt = 0;
 let refreshPromise = null;
+let refreshGeneration = 0;
 const TRANSFER_REFRESH_TTL_MS = 60_000;
 const nativeFetch = window.fetch.bind(window);
 window.fetch = async (...args) => {
@@ -134,15 +135,20 @@ async function refresh({ force = false } = {}) {
   }
   if (!force && refreshPromise) return refreshPromise;
 
-  refreshPromise = request('/api/transfer-negotiations')
+  const generation = ++refreshGeneration;
+  const nextPromise = request('/api/transfer-negotiations')
     .then((nextState) => {
+      if (generation !== refreshGeneration) return state;
       state = nextState;
       lastRefreshAt = Date.now();
       render();
       return state;
     })
-    .finally(() => { refreshPromise = null; });
-  return refreshPromise;
+    .finally(() => {
+      if (refreshPromise === nextPromise) refreshPromise = null;
+    });
+  refreshPromise = nextPromise;
+  return nextPromise;
 }
 
 async function submitProposal() {
