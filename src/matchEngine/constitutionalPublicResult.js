@@ -3,16 +3,29 @@ const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(
 const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 
 export const CONSTITUTIONAL_PUBLIC_RESULT_VERSION = '2d5-v1';
-export const CONSTITUTIONAL_PUBLIC_ADAPTER_VERSION = 'tbg-constitutional-public-adapter-v0.6';
+export const CONSTITUTIONAL_PUBLIC_ADAPTER_VERSION = 'tbg-constitutional-public-adapter-v0.7';
 
 function commentaryByEvent(report = {}) { return new Map((report.commentary || []).map((row) => [String(row.event_id), row.text])); }
 
 function fallbackCommentary(event, sideName) {
   const player = event.player_id ? 'A player' : sideName;
+  const origin = text(event.chance_origin).toLowerCase();
+  const linked = Boolean(event.linked_event_id);
   switch (event.type) {
-    case 'goal': return event.own_goal ? `${player} turns the ball into their own net.` : `GOAL! ${player} scores for ${sideName}.`;
-    case 'big_chance': return `${player} has a major chance for ${sideName}.`;
+    case 'goal':
+      if (event.own_goal) return `${player} turns the ball into their own net.`;
+      if (origin === 'corner') return `GOAL! ${player} finishes the move from the resulting corner for ${sideName}.`;
+      if (origin === 'free_kick') return `GOAL! ${player} finishes the move from the resulting free kick for ${sideName}.`;
+      return `GOAL! ${player} scores for ${sideName}.`;
+    case 'big_chance':
+      if (event.outcome === 'goal' && origin === 'corner') return `${player} meets the corner and gets the decisive effort away.`;
+      if (event.outcome === 'goal' && origin === 'free_kick') return `${player} meets the free kick and gets the decisive effort away.`;
+      if (event.outcome === 'goal') return `${player} gets the decisive effort away for ${sideName}.`;
+      return `${player} has a major chance for ${sideName}.`;
     case 'shot':
+      if (event.outcome === 'goal' && origin === 'corner') return `${player} meets the corner and gets the decisive effort away.`;
+      if (event.outcome === 'goal' && origin === 'free_kick') return `${player} meets the free kick and gets the decisive effort away.`;
+      if (event.outcome === 'goal') return `${player} gets the decisive effort away for ${sideName}.`;
       if (event.outcome === 'offside') return `${player} is denied by the offside flag.`;
       if (event.outcome === 'woodwork') return `${player} hits the woodwork.`;
       return event.on_target ? `${player} tests the goalkeeper.` : `${player} sends an effort wide.`;
@@ -22,9 +35,11 @@ function fallbackCommentary(event, sideName) {
       return `${sideName} are awarded a penalty.`;
     case 'substitution': return event.reason === 'injury' ? `${sideName} make an injury substitution.` : `${sideName} make a substitution.`;
     case 'yellow_card': return `${player} is shown a yellow card.`;
-    case 'red_card': return `RED CARD — ${player} is sent off.`;
+    case 'red_card': return event.subtype === 'second_yellow' ? `SECOND YELLOW — ${player} is sent off.` : `RED CARD — ${player} is sent off.`;
     case 'injury': return `${player} requires treatment for ${sideName}.`;
-    case 'set_piece': return event.subtype === 'corner' ? `${sideName} win a corner.` : `${sideName} win a free kick.`;
+    case 'set_piece':
+      if (event.subtype === 'corner') return linked ? `${sideName} win a corner — and it leads to an immediate chance.` : `${sideName} win a corner.`;
+      return linked ? `${sideName} win a free kick — and it leads to an immediate chance.` : `${sideName} win a free kick.`;
     default: return `${sideName} create an important moment.`;
   }
 }
