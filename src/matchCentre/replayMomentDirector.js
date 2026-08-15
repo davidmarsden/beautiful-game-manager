@@ -61,31 +61,75 @@ function chanceBand(event = {}) {
   return 'medium';
 }
 
-function attemptCommentary(event, scorerName) {
-  const player = scorerName || text(event.player_name) || 'The attacker';
-  const outcome = normal(event.outcome || event.payload?.outcome);
+function attemptCommentary(event, playerName) {
+  const player = playerName || text(event.player_name) || 'The attacker';
   const origin = normal(event.chance_origin || event.payload?.chance_origin);
   const band = chanceBand(event);
 
-  if (outcome === 'goal') {
-    if (origin === 'corner') {
-      if (band === 'very_low' || band === 'low') return `${player} meets the dropping ball cleanly — the goalkeeper cannot get across to it.`;
-      return `${player} gets to the corner first — the goalkeeper cannot keep it out.`;
-    }
-    if (origin === 'free_kick') return `${player} meets the free-kick delivery cleanly — the goalkeeper is beaten.`;
-    if (band === 'very_low') return `${player} lets fly from distance — the goalkeeper cannot get across to it.`;
-    if (band === 'low') return `${player} drives a fierce effort towards goal — the goalkeeper cannot keep it out.`;
-    if (band === 'close') return `${player} gets there from close range — the goalkeeper has no chance.`;
-    return `${player} gets a clean strike away — it beats the goalkeeper.`;
+  // The attempt must never reveal its outcome. Save/miss/goal belongs to the next replay beat.
+  if (origin === 'corner') {
+    if (band === 'very_low' || band === 'low') return `${player} attacks the corner and gets a difficult effort away.`;
+    if (band === 'close' || band === 'good') return `${player} meets the corner with a powerful effort.`;
+    return `${player} gets to the corner first and directs an effort towards goal.`;
   }
+  if (origin === 'free_kick') return `${player} meets the free-kick delivery and sends an effort towards goal.`;
+  if (band === 'very_low') return `${player} lets fly from distance.`;
+  if (band === 'low') return `${player} drives a fierce effort towards goal.`;
+  if (band === 'close') return `${player} gets a close-range effort away.`;
+  if (band === 'good') return `${player} gets a clear sight of goal and shoots.`;
+  return `${player} gets a clean strike away.`;
+}
 
-  if (outcome === 'saved') {
-    if (band === 'very_low') return `${player} tries from distance — the goalkeeper gets down to save.`;
-    if (band === 'close' || band === 'good') return `${player} gets a clear sight of goal — the goalkeeper makes a sharp save.`;
-    return `${player} hits the target — the goalkeeper makes the save.`;
-  }
-
+function outcomePresentation(outcome) {
+  const key = normal(outcome);
+  if (key === 'saved') return { display_event_type: 'chance_saved', label: 'SAVED', commentary: 'But the goalkeeper gets across to make the save.' };
+  if (key === 'missed') return { display_event_type: 'chance_missed', label: 'WIDE', commentary: 'But the effort goes wide.' };
+  if (key === 'woodwork') return { display_event_type: 'chance_woodwork', label: 'OFF THE WOODWORK', commentary: 'It crashes back off the woodwork!' };
+  if (key === 'offside') return { display_event_type: 'chance_offside', label: 'OFFSIDE', commentary: 'But the flag is up — offside.' };
   return null;
+}
+
+function chancePresentation(event, overrides = {}) {
+  return {
+    importance: 'featured',
+    major: true,
+    kind: overrides.kind || 'chance',
+    label: overrides.label || 'CHANCE',
+    hold_ms: overrides.hold_ms ?? 1800,
+    priority: overrides.priority ?? 92,
+    sequence_id: sequenceId(event),
+    sequence_order: overrides.sequence_order ?? sequenceOrder(event),
+    sequence_role: overrides.sequence_role || 'build_up'
+  };
+}
+
+function outcomeRevealEvent(attempt) {
+  const outcome = normal(attempt.outcome || attempt.payload?.outcome);
+  if (outcome === 'goal') return null;
+  const reveal = outcomePresentation(outcome);
+  if (!reveal) return null;
+  return {
+    minute: attempt.minute,
+    side: attempt.side,
+    event_type: 'chance_outcome',
+    display_event_type: reveal.display_event_type,
+    player_id: attempt.player_id,
+    player_name: attempt.player_name,
+    event_id: `${text(attempt.event_id) || `chance-${attempt.minute}`}:outcome`,
+    source_event_id: attempt.event_id || null,
+    sequence_id: sequenceId(attempt),
+    sequence_order: sequenceOrder(attempt) + 1,
+    display_only: true,
+    commentary: reveal.commentary,
+    replay_presentation: chancePresentation(attempt, {
+      kind: 'chance-outcome',
+      label: reveal.label,
+      hold_ms: 1800,
+      priority: 94,
+      sequence_order: sequenceOrder(attempt) + 1,
+      sequence_role: 'outcome'
+    })
+  };
 }
 
 function goalCommentary(goal, attempt, scorerName, clubName) {
@@ -96,7 +140,7 @@ function goalCommentary(goal, attempt, scorerName, clubName) {
 
   if (origin === 'corner') {
     if (band === 'very_low' || band === 'low') return `GOAL! ${player} turns the corner into a superb finish for ${club}.`;
-    return `GOAL! ${player} converts from the corner for ${club}.`;
+    return `GOAL! ${player} powers the corner home for ${club}.`;
   }
   if (origin === 'free_kick') return `GOAL! ${player} finishes the move from the free kick for ${club}.`;
   if (band === 'very_low') return `GOAL! ${player} scores with a superb strike from distance for ${club}.`;
@@ -114,6 +158,24 @@ function findSequenceAttempt(events, goal) {
   const seq = sequenceId(goal);
   if (!seq) return null;
   return events.find((event) => sequenceId(event) === seq && ['shot', 'big_chance'].includes(eventType(event))) || null;
+}
+
+function stageChanceBuildUps(events) {
+  const chanceSequences = new Set(events
+    .filter((event) => ['shot', 'big_chance'].includes(eventType(event)))
+    .map(sequenceId)
+    .filter(Boolean));
+  for (const event of events) {
+    const seq = sequenceId(event);
+    if (!seq || !chanceSequences.has(seq)) continue;
+    const type = eventType(event);
+    const subtype = eventSubtype(event);
+    if (type === 'set_piece' && subtype === 'corner') {
+      event.replay_presentation = chancePresentation(event, { kind: 'build-up', label: 'CORNER', hold_ms: 1400, priority: 88, sequence_role: 'source' });
+    } else if (type === 'free_kick' || (type === 'set_piece' && subtype === 'free_kick')) {
+      event.replay_presentation = chancePresentation(event, { kind: 'build-up', label: 'FREE KICK', hold_ms: 1400, priority: 88, sequence_role: 'source' });
+    }
+  }
 }
 
 export function enrichReplayCommentary(events = [], clubs = {}) {
@@ -153,8 +215,32 @@ export function enrichReplayCommentary(events = [], clubs = {}) {
     }
   }
 
-  for (const goal of ordered.filter((event) => eventType(event) === 'goal')) {
-    const attempt = findSequenceAttempt(ordered, goal);
+  stageChanceBuildUps(ordered);
+
+  const goalsBySequence = new Map(ordered
+    .filter((event) => eventType(event) === 'goal' && sequenceId(event))
+    .map((event) => [sequenceId(event), event]));
+  const expanded = [];
+  for (const event of ordered) {
+    const type = eventType(event);
+    if (['shot', 'big_chance'].includes(type)) {
+      const player = text(event.player_name) || byPlayer.get(text(event.player_id)) || 'The attacker';
+      event.commentary = attemptCommentary(event, player);
+      event.display_event_type = 'chance_attempt';
+      event.replay_presentation = chancePresentation(event, { kind: 'chance', label: 'CHANCE', hold_ms: 1800, priority: 92, sequence_role: 'build_up' });
+      expanded.push(event);
+      const linkedGoal = sequenceId(event) && goalsBySequence.has(sequenceId(event));
+      if (!linkedGoal) {
+        const reveal = outcomeRevealEvent(event);
+        if (reveal) expanded.push(reveal);
+      }
+      continue;
+    }
+    expanded.push(event);
+  }
+
+  for (const goal of expanded.filter((event) => eventType(event) === 'goal')) {
+    const attempt = findSequenceAttempt(expanded, goal);
     const isOwnGoal = goal.own_goal === true || goal.payload?.own_goal === true;
     if (isOwnGoal) {
       const defenderId = text(goal.own_goal_player_id || goal.payload?.own_goal_player_id);
@@ -165,15 +251,11 @@ export function enrichReplayCommentary(events = [], clubs = {}) {
       continue;
     }
     const scorer = text(goal.player_name) || byPlayer.get(text(goal.player_id)) || text(attempt?.player_name) || byPlayer.get(text(attempt?.player_id)) || 'The scorer';
-    if (attempt && normal(attempt.outcome || attempt.payload?.outcome) === 'goal') {
-      const attemptText = attemptCommentary(attempt, scorer);
-      if (attemptText) attempt.commentary = attemptText;
-    }
     const club = text(clubs?.[goal.side]) || text(goal.club_name);
     goal.commentary = goalCommentary(goal, attempt, scorer, club);
   }
 
-  return ordered;
+  return expanded;
 }
 
 export function cardSummaryFromEvents(events = [], side) {
