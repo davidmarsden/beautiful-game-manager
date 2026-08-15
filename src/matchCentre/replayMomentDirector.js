@@ -117,7 +117,7 @@ function findSequenceAttempt(events, goal) {
 }
 
 export function enrichReplayCommentary(events = [], clubs = {}) {
-  const ordered = orderReplayEvents(events).map((event) => ({ ...event }));
+  const ordered = events.map((event) => ({ ...event }));
   const byPlayer = new Map();
   for (const event of ordered) {
     const key = text(event.player_id);
