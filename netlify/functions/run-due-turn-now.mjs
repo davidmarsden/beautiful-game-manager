@@ -9,6 +9,8 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
   headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
 });
 
+const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
 const bearerToken = (request) => {
   const header = request.headers.get('authorization') || '';
   return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
@@ -29,8 +31,57 @@ async function service(path, options = {}) {
     headers: { ...serviceHeaders(), prefer: options.prefer || 'return=representation', ...(options.headers || {}) }
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.message || body.error || `Supabase returned ${response.status}`);
+  if (!response.ok) {
+    const error = new Error(body.message || body.error || `Supabase returned ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
   return body;
+}
+
+function isRetriableServiceError(error) {
+  return !Number.isInteger(error?.status) || error.status === 408 || error.status === 429 || error.status >= 500;
+}
+
+async function canonicalTurnState(worldId) {
+  const rows = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&select=world_id,save_checksum,turn_status,updated_at&limit=1`);
+  return rows[0] || null;
+}
+
+async function reopenFailedWorldForRetry({ worldId, checksum, now, maxAttempts = 4 }) {
+  const path = `/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&save_checksum=eq.${encodeURIComponent(checksum)}&turn_status=eq.failed`;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const reopened = await service(path, {
+        method: 'PATCH',
+        body: JSON.stringify({ turn_status: 'open', updated_at: now }),
+        headers: { prefer: 'return=representation' }
+      });
+      if (reopened.length === 1) return reopened[0];
+
+      const current = await canonicalTurnState(worldId);
+      if (current?.save_checksum === checksum && current.turn_status === 'open') return current;
+      if (!current || current.save_checksum !== checksum || current.turn_status !== 'failed') {
+        throw new Error('Failed world changed before retry; replay rejected');
+      }
+      lastError = new Error('Failed world reopen returned no canonical row');
+    } catch (error) {
+      lastError = error;
+      if (!isRetriableServiceError(error)) throw error;
+
+      const current = await canonicalTurnState(worldId).catch(() => null);
+      if (current?.save_checksum === checksum && current.turn_status === 'open') return current;
+      if (current && (current.save_checksum !== checksum || current.turn_status !== 'failed')) {
+        throw new Error('Failed world changed before retry; replay rejected');
+      }
+    }
+
+    if (attempt < maxAttempts) await sleep(350 * attempt);
+  }
+
+  throw lastError || new Error('Failed world could not be reopened for retry');
 }
 
 async function adminIdentity(token) {
@@ -154,12 +205,7 @@ export default async (request) => {
     if (existing[0]) return json({ error: 'This canonical turn recovery has already been executed or recorded for the current checkpoint state' }, 409);
 
     if (failedStatus) {
-      const reopened = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&save_checksum=eq.${encodeURIComponent(before.save_checksum)}&turn_status=eq.failed`, {
-        method: 'PATCH',
-        body: JSON.stringify({ turn_status: 'open', updated_at: now }),
-        headers: { prefer: 'return=representation' }
-      });
-      if (reopened.length !== 1) return json({ error: 'Failed world changed before retry; replay rejected' }, 409);
+      await reopenFailedWorldForRetry({ worldId, checksum: before.save_checksum, now });
     }
 
     const schedulerResponse = await scheduledWorldTurn();
