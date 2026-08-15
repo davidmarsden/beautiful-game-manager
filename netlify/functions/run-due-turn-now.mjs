@@ -48,6 +48,12 @@ async function canonicalTurnState(worldId) {
   return rows[0] || null;
 }
 
+function recoveryConflict(message) {
+  const error = new Error(message);
+  error.status = 409;
+  return error;
+}
+
 async function reopenFailedWorldForRetry({ worldId, checksum, now, maxAttempts = 4 }) {
   const path = `/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&save_checksum=eq.${encodeURIComponent(checksum)}&turn_status=eq.failed`;
   let lastError = null;
@@ -62,9 +68,11 @@ async function reopenFailedWorldForRetry({ worldId, checksum, now, maxAttempts =
       if (reopened.length === 1) return reopened[0];
 
       const current = await canonicalTurnState(worldId);
-      if (current?.save_checksum === checksum && current.turn_status === 'open') return current;
+      if (current?.save_checksum === checksum && current.turn_status === 'open') {
+        throw recoveryConflict('Failed world reopen was claimed by another recovery; replay rejected');
+      }
       if (!current || current.save_checksum !== checksum || current.turn_status !== 'failed') {
-        throw new Error('Failed world changed before retry; replay rejected');
+        throw recoveryConflict('Failed world changed before retry; replay rejected');
       }
       lastError = new Error('Failed world reopen returned no canonical row');
     } catch (error) {
@@ -74,7 +82,7 @@ async function reopenFailedWorldForRetry({ worldId, checksum, now, maxAttempts =
       const current = await canonicalTurnState(worldId).catch(() => null);
       if (current?.save_checksum === checksum && current.turn_status === 'open') return current;
       if (current && (current.save_checksum !== checksum || current.turn_status !== 'failed')) {
-        throw new Error('Failed world changed before retry; replay rejected');
+        throw recoveryConflict('Failed world changed before retry; replay rejected');
       }
     }
 
@@ -246,7 +254,7 @@ export default async (request) => {
 
     return json(details, result.status === 'complete' ? 200 : 409);
   } catch (error) {
-    const status = /Session|Authentication/.test(error.message) ? 401 : /Administrator/.test(error.message) ? 403 : /already|duplicate|replay|not due|is locking|manual recovery|changed before retry|recovery lineage|Legacy repaired checkpoint/.test(error.message) ? 409 : 503;
+    const status = /Session|Authentication/.test(error.message) ? 401 : /Administrator/.test(error.message) ? 403 : /already|duplicate|replay|not due|is locking|manual recovery|changed before retry|claimed by another recovery|recovery lineage|Legacy repaired checkpoint/.test(error.message) ? 409 : 503;
     return json({ error: error.message }, status);
   }
 };
