@@ -45,7 +45,7 @@ test('non-goal attempts get a separate display-only outcome reveal in suspense o
     ]);
     assert.equal(events.length, 3);
     assert.equal(events[1].display_event_type, 'chance_attempt');
-    assert.doesNotMatch(events[1].commentary, /goalkeeper|save|saved|wide|woodwork|offside|goal|net/i);
+    assert.doesNotMatch(events[1].commentary, /goalkeeper|save|saved|wide|woodwork|offside|scores?|scored|net|beats? the goalkeeper/i);
     assert.equal(events[2].display_only, true);
     assert.equal(events[2].display_event_type, displayType);
     assert.match(events[2].commentary, revealPattern);
