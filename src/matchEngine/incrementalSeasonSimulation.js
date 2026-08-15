@@ -63,7 +63,29 @@ function updateTable(table, fixture, score) {
   home.gd = home.gf - home.ga; away.gd = away.gf - away.ga;
 }
 
+function ensureCurrentClubRuntimeState(state, club) {
+  state.players ||= {};
+  state.clubs ||= {};
+  state.clubs[club.club_id] ||= { previous_starting_xi: null, last_fixture_at: null };
+  state.availability ||= createSquadAvailability([]);
+  state.availability.players ||= {};
+  for (const player of club.players || []) {
+    const id = text(player?.tbg_player_id);
+    if (!id) continue;
+    if (!state.players[id]) state.players[id] = { fitness: 100, sharpness: 100, morale: 50 };
+    if (!state.availability.players[id]) {
+      state.availability.players[id] = {
+        injury_until_matchday: 0,
+        suspension_until_matchday: 0,
+        injury_reason: null,
+        suspension_reason: null
+      };
+    }
+  }
+}
+
 function recoverClub(state, club, kickoffAt) {
+  ensureCurrentClubRuntimeState(state, club);
   const clubState = state.clubs[club.club_id];
   if (!clubState.last_fixture_at) return;
   const elapsed = Math.max(0, (new Date(kickoffAt) - new Date(clubState.last_fixture_at)) / 86400000);
