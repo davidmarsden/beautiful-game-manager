@@ -58,12 +58,16 @@ test('transfer directory cache also invalidates when active manager appointments
   assert.ok(cacheLookup >= 0 && envelopeLoad > cacheLookup, 'appointment-aware cache lookup must still precede canonical envelope load');
 });
 
-test('transfer workspace deduplicates render refreshes but forces refresh after mutations', async () => {
+test('transfer workspace deduplicates render refreshes and suppresses stale in-flight results', async () => {
   const source = await readFile(transferUiPath, 'utf8');
 
   assert.match(source, /const TRANSFER_REFRESH_TTL_MS = 60_000/);
   assert.match(source, /if \(!force && state && now - lastRefreshAt < TRANSFER_REFRESH_TTL_MS\)/);
   assert.match(source, /if \(!force && refreshPromise\) return refreshPromise/);
+  assert.match(source, /let refreshGeneration = 0/);
+  assert.match(source, /const generation = \+\+refreshGeneration/);
+  assert.match(source, /if \(generation !== refreshGeneration\) return state/);
+  assert.match(source, /if \(refreshPromise === nextPromise\) refreshPromise = null/);
   assert.ok((source.match(/await refresh\(\{ force: true \}\)/g) || []).length >= 2, 'offer/listing and response mutations must bypass the cache');
   assert.match(source, /window\.addEventListener\('tbg:portal-rendered',[\s\S]*await refresh\(\)/);
 });
