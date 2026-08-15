@@ -99,7 +99,7 @@ test('standalone second-yellow archive events remain visible in rebuilt card sum
   assert.deepEqual(cards.map((row) => row.event_type), ['second_yellow']);
 });
 
-test('corner, chance and goal are revealed as separate paused beats without feed spoilers', async () => {
+test('corner, chance and goal are revealed as separate paused beats before their feed commentary', async () => {
   const source = await readFile(new URL('../public/phase2d4.js', import.meta.url), 'utf8');
   const elements = new Map([
     ['replayFeed', fakeElement()], ['replayClock', fakeElement()], ['replayScore', fakeElement()],
@@ -145,11 +145,12 @@ test('corner, chance and goal are revealed as separate paused beats without feed
   intervalTick();
   assert.match(elements.get('replaySpotlight').innerHTML, /GOAL!/i);
   assert.equal(elements.get('replayScore').textContent, '1-0');
-  assert.match(elements.get('replayFeed').inserted.join('\n'), /GOAL!/i);
+  assert.doesNotMatch(elements.get('replayFeed').inserted.join('\n'), /GOAL!/i, 'goal commentary must wait until the goal flash has completed');
   assert.doesNotMatch(elements.get('replaySpotlight').innerHTML, /Emre Can/);
 
   now += 2801;
   intervalTick();
+  assert.match(elements.get('replayFeed').inserted.join('\n'), /GOAL!/i, 'goal commentary should enter the feed after the flash');
   assert.match(elements.get('replaySpotlight').innerHTML, /Emre Can/);
 });
 
