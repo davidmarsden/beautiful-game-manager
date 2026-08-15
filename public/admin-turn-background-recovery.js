@@ -53,7 +53,10 @@
         const status = await statusRequest();
         transientErrors = 0;
         const belongsToQueuedAttempt = isNewerThanQueuedBaseline(status, baseline, queuedServerAt, sawProcessing);
-        if (status.state === 'processing') sawProcessing = true;
+        if (status.state === 'processing' && belongsToQueuedAttempt) {
+          sawProcessing = true;
+          button.textContent = 'Turn running in background';
+        }
         output.textContent = belongsToQueuedAttempt
           ? statusText(status)
           : 'Production turn queued. Waiting for the background worker to claim the failed checkpoint…';
@@ -135,7 +138,7 @@
         throw new Error(`Background turn could not be queued (HTTP ${response.status}${text ? ` · ${text.slice(0, 300)}` : ''})`);
       }
       const queuedServerAt = Date.parse(response.headers.get('date') || '') || null;
-      button.textContent = 'Turn running in background';
+      button.textContent = 'Turn queued';
       if (output) output.textContent = `Production turn queued.${preflightWarning} This page will check the canonical run ledger every ten seconds; no long browser connection is being held open.`;
       await pollUntilSettled(output, button, baseline, queuedServerAt);
     } catch (error) {
