@@ -126,7 +126,8 @@ export function enrichReplayCommentary(events = [], clubs = {}) {
   }
 
   const explicitSecondYellow = new Set(ordered
-    .filter((event) => eventType(event) === 'red_card' && eventSubtype(event) === 'second_yellow')
+    .filter((event) => eventType(event) === 'second_yellow'
+      || (eventType(event) === 'red_card' && eventSubtype(event) === 'second_yellow'))
     .map(bookingKey)
     .filter(Boolean));
   const bookings = new Map();
@@ -145,7 +146,7 @@ export function enrichReplayCommentary(events = [], clubs = {}) {
         }
       }
     }
-    if (type === 'red_card' && eventSubtype(event) === 'second_yellow') {
+    if (type === 'second_yellow' || (type === 'red_card' && eventSubtype(event) === 'second_yellow')) {
       const player = text(event.player_name) || byPlayer.get(text(event.player_id)) || 'The player';
       event.commentary = `${player} is sent off after receiving a second yellow card.`;
       event.display_event_type = 'second_yellow';
@@ -154,6 +155,15 @@ export function enrichReplayCommentary(events = [], clubs = {}) {
 
   for (const goal of ordered.filter((event) => eventType(event) === 'goal')) {
     const attempt = findSequenceAttempt(ordered, goal);
+    const isOwnGoal = goal.own_goal === true || goal.payload?.own_goal === true;
+    if (isOwnGoal) {
+      const defenderId = text(goal.own_goal_player_id || goal.payload?.own_goal_player_id);
+      const defender = text(goal.own_goal_player_name || goal.payload?.own_goal_player_name)
+        || byPlayer.get(defenderId);
+      if (defender) goal.commentary = `${defender} turns the ball into their own net.`;
+      else if (!text(goal.commentary || goal.payload?.commentary)) goal.commentary = 'A defender turns the ball into their own net.';
+      continue;
+    }
     const scorer = text(goal.player_name) || byPlayer.get(text(goal.player_id)) || text(attempt?.player_name) || byPlayer.get(text(attempt?.player_id)) || 'The scorer';
     if (attempt && normal(attempt.outcome || attempt.payload?.outcome) === 'goal') {
       const attemptText = attemptCommentary(attempt, scorer);
@@ -170,7 +180,8 @@ export function cardSummaryFromEvents(events = [], side) {
   const rows = [];
   const bookings = new Map();
   const secondYellowKeys = new Set(events
-    .filter((event) => eventType(event) === 'red_card' && eventSubtype(event) === 'second_yellow')
+    .filter((event) => eventType(event) === 'second_yellow'
+      || (eventType(event) === 'red_card' && eventSubtype(event) === 'second_yellow'))
     .map(bookingKey)
     .filter(Boolean));
   const representedSecondYellow = new Set();
@@ -189,6 +200,12 @@ export function cardSummaryFromEvents(events = [], side) {
         event_type: second ? 'second_yellow' : 'yellow_card',
         card_reason: second ? 'second_yellow' : 'booking'
       });
+      continue;
+    }
+    if (type === 'second_yellow') {
+      if (key && representedSecondYellow.has(key)) continue;
+      if (key) representedSecondYellow.add(key);
+      rows.push({ ...event, event_type: 'second_yellow', card_reason: 'second_yellow' });
       continue;
     }
     if (type === 'red_card') {
