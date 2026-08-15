@@ -87,6 +87,7 @@ test('same-minute replay moments are held sequentially with score snapshots befo
   assert.equal(elements.get('replayClock').textContent, "90'");
   assert.equal(elements.get('replayScore').textContent, '1-0', 'first queued goal should expose only its score state');
   assert.match(elements.get('replaySpotlight').innerHTML, /First Scorer equalises/);
+  assert.doesNotMatch(elements.get('replayFeed').inserted.join('\n'), /First Scorer equalises/, 'current spotlight commentary must wait until its hold completes');
   assert.doesNotMatch(elements.get('replayFeed').inserted.join('\n'), /Second Scorer wins it/, 'future same-minute moment must not enter feed before its spotlight');
   assert.doesNotMatch(elements.get('replayFeed').inserted.join('\n'), /FULL TIME/);
 
@@ -94,11 +95,13 @@ test('same-minute replay moments are held sequentially with score snapshots befo
   intervalTick();
   assert.equal(elements.get('replayScore').textContent, '2-0', 'second queued goal should then expose the winning score');
   assert.match(elements.get('replaySpotlight').innerHTML, /Second Scorer wins it/);
-  assert.match(elements.get('replayFeed').inserted.join('\n'), /Second Scorer wins it/);
+  assert.match(elements.get('replayFeed').inserted.join('\n'), /First Scorer equalises/, 'completed first spotlight should now be recorded in the feed');
+  assert.doesNotMatch(elements.get('replayFeed').inserted.join('\n'), /Second Scorer wins it/, 'second goal commentary must wait until its own spotlight hold completes');
   assert.doesNotMatch(elements.get('replayFeed').inserted.join('\n'), /FULL TIME/);
 
   now += 3201;
   intervalTick();
+  assert.match(elements.get('replayFeed').inserted.join('\n'), /Second Scorer wins it/, 'second goal commentary should enter the feed after its spotlight finishes');
   assert.match(elements.get('replayFeed').inserted.join('\n'), /FULL TIME/);
   assert.equal(elements.get('replayStatus').textContent, 'FT');
 });
