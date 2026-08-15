@@ -3,6 +3,10 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => 
 let authorization = '';
 let state = null;
 let mounted = false;
+let lastRefreshAt = 0;
+let refreshPromise = null;
+let refreshGeneration = 0;
+const TRANSFER_REFRESH_TTL_MS = 60_000;
 const nativeFetch = window.fetch.bind(window);
 window.fetch = async (...args) => {
   const headers = args[1]?.headers || (args[0] instanceof Request ? args[0].headers : null);
@@ -123,9 +127,28 @@ function render() {
   renderIncoming();
 }
 
-async function refresh() {
-  state = await request('/api/transfer-negotiations');
-  render();
+async function refresh({ force = false } = {}) {
+  const now = Date.now();
+  if (!force && state && now - lastRefreshAt < TRANSFER_REFRESH_TTL_MS) {
+    render();
+    return state;
+  }
+  if (!force && refreshPromise) return refreshPromise;
+
+  const generation = ++refreshGeneration;
+  const nextPromise = request('/api/transfer-negotiations')
+    .then((nextState) => {
+      if (generation !== refreshGeneration) return state;
+      state = nextState;
+      lastRefreshAt = Date.now();
+      render();
+      return state;
+    })
+    .finally(() => {
+      if (refreshPromise === nextPromise) refreshPromise = null;
+    });
+  refreshPromise = nextPromise;
+  return nextPromise;
 }
 
 async function submitProposal() {
@@ -147,7 +170,7 @@ async function submitProposal() {
         };
     await request('/api/shared-world', { type: 'submit_command', command_type: action === 'listing' ? 'transfer_listing' : 'transfer_offer', command_payload: payload });
     message.textContent = action === 'listing' ? 'Player listed. The request is recorded in your command history.' : 'Offer submitted to the other manager.';
-    await refresh();
+    await refresh({ force: true });
   } catch (error) {
     message.textContent = error.message;
   } finally {
@@ -164,7 +187,7 @@ async function respond(proposalId, response) {
     message.textContent = response === 'accepted'
       ? 'Offer accepted. The transfer will be validated and applied at the next canonical checkpoint.'
       : 'Offer declined. Both clubs will receive the recorded outcome.';
-    await refresh();
+    await refresh({ force: true });
   } catch (error) {
     message.textContent = error.message;
   } finally {
