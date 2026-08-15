@@ -34,10 +34,36 @@ test('a second booking materialises an explicit second-yellow red event without 
   assert.equal(dismissal.minute, 16);
   assert.equal(dismissal.source_event_id, 'home-card-2');
   assert.equal(dismissal.official, true);
+  const secondBookingIndex = reconciled.official_event_stream.findIndex((event) => event.event_id === 'home-card-2');
+  const dismissalIndex = reconciled.official_event_stream.findIndex((event) => event.event_id === dismissal.event_id);
+  assert.ok(secondBookingIndex >= 0 && dismissalIndex === secondBookingIndex + 1, 'second booking must precede its dismissal');
   assert.equal(reconciled.statistics.home.yellow_cards, 2);
   assert.equal(reconciled.statistics.home.red_cards, 1);
   assert.equal(reconciled.statistics.home.second_yellow_dismissals, 1);
   assert.equal(reconciled.consistency.second_yellow_dismissals_explicit, true);
+});
+
+test('an existing explicit red suppresses inferred second-yellow synthesis for the same player', () => {
+  const resolution = {
+    version: 'test-resolution',
+    official_event_stream: [
+      { event_id: 'home-card-1', minute: 9, side: 'home', type: 'yellow_card', player_id: 'p1', official: true },
+      { event_id: 'home-card-2', minute: 16, side: 'home', type: 'yellow_card', player_id: 'p1', official: true },
+      { event_id: 'home-red-1', minute: 16, side: 'home', type: 'red_card', subtype: 'violent_conduct', player_id: 'p1', official: true }
+    ],
+    statistics: {
+      home: { ...stats(), yellow_cards: 2, red_cards: 1, straight_red_cards: 1, second_yellow_dismissals: 0 },
+      away: stats()
+    },
+    consistency: {}
+  };
+
+  const reconciled = reconcileCausalResolution(resolution);
+  const reds = reconciled.official_event_stream.filter((event) => event.type === 'red_card' && event.player_id === 'p1');
+  assert.equal(reds.length, 1);
+  assert.equal(reds[0].event_id, 'home-red-1');
+  assert.equal(reds[0].subtype, 'violent_conduct');
+  assert.equal(reconciled.statistics.home.red_cards, 1);
 });
 
 test('public fallback commentary narrates a linked corner-shot-goal sequence and second-yellow dismissal coherently', () => {
