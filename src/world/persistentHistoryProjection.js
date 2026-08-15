@@ -35,7 +35,7 @@ function liveDivisions(world, managedClubId) {
         club_name: clubName(world, row.club_id),
         is_managed_club: row.club_id === managedClubId
       })),
-      played_fixture_count: (runtime.results || []).length,
+      played_fixture_count: (runtime.archive_results || runtime.state?.applied_run_keys || runtime.results || []).length,
       scheduled_fixture_count: (runtime.fixtures || []).length
     };
   }).sort((a, b) => a.level - b.level);

@@ -9,7 +9,7 @@ import {
 } from './squadAvailability.js';
 import { buildDoubleRoundRobin } from './seasonSimulation.js';
 
-export const INCREMENTAL_SEASON_VERSION = 'tbg-incremental-season-v1.1';
+export const INCREMENTAL_SEASON_VERSION = 'tbg-incremental-season-v1.2';
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
 const round = (value, places = 4) => Number(Number(value).toFixed(places));
@@ -170,8 +170,12 @@ function submittedSource(source = {}) {
   });
 }
 
+function rowsWithInstructionSources(runtime) {
+  return [...(runtime.results || []), ...(runtime.archive_results || [])];
+}
+
 function backfillLegacyInstructionSources(runtime) {
-  for (const row of runtime.results || []) {
+  for (const row of rowsWithInstructionSources(runtime)) {
     for (const side of ['home', 'away']) {
       const team = row.teams?.[side];
       if (team && !team.instruction_source?.type) {
@@ -182,6 +186,65 @@ function backfillLegacyInstructionSources(runtime) {
       }
     }
   }
+}
+
+function archivalEvent(event = {}) {
+  const type = text(event.event_type || event.type || event.kind || event.payload?.event_type || event.payload?.type).toLowerCase();
+  if (!type.includes('goal') && !type.includes('yellow') && !type.includes('red')) return null;
+  return {
+    event_id: event.event_id || null,
+    event_type: event.event_type || event.type || event.kind || null,
+    type: event.type || null,
+    kind: event.kind || null,
+    side: event.side || null,
+    minute: event.minute ?? null,
+    player_id: event.player_id || event.scorer_id || event.actor_player_id || event.booked_player_id || null,
+    scorer_id: event.scorer_id || null,
+    actor_player_id: event.actor_player_id || null,
+    booked_player_id: event.booked_player_id || null,
+    assist_player_id: event.assist_player_id || event.assister_id || null,
+    assister_id: event.assister_id || null,
+    own_goal: Boolean(event.own_goal || event.payload?.own_goal)
+  };
+}
+
+function compactArchiveResult(row = {}) {
+  const compactTeam = (team = {}) => ({
+    starting_xi: [...(team.starting_xi || [])],
+    bench: [...(team.bench || [])],
+    instruction_source: clone(team.instruction_source || fallbackSource())
+  });
+  const compactLineup = (lineup = {}) => ({ players_used: [...(lineup.players_used || [])] });
+  return {
+    fixture: { ...(row.fixture || {}) },
+    score: { ...(row.score || {}) },
+    events: (row.events || []).map(archivalEvent).filter(Boolean),
+    teams: {
+      home: compactTeam(row.teams?.home),
+      away: compactTeam(row.teams?.away)
+    },
+    lineup_state: {
+      home: compactLineup(row.lineup_state?.home),
+      away: compactLineup(row.lineup_state?.away)
+    }
+  };
+}
+
+function ensureArchiveResults(runtime) {
+  runtime.archive_results ||= [];
+  const existing = new Set(runtime.archive_results.map((row) => text(row.fixture?.fixture_id)).filter(Boolean));
+  for (const row of runtime.results || []) {
+    const fixtureId = text(row.fixture?.fixture_id);
+    if (!fixtureId || existing.has(fixtureId)) continue;
+    runtime.archive_results.push(compactArchiveResult(row));
+    existing.add(fixtureId);
+  }
+  return runtime.archive_results;
+}
+
+function seasonResults(runtime) {
+  backfillLegacyInstructionSources(runtime);
+  return ensureArchiveResults(runtime);
 }
 
 function applySubmittedInstruction(team, instruction, club, matchState, availabilityState, matchday) {
@@ -204,9 +267,8 @@ function applySubmittedInstruction(team, instruction, club, matchState, availabi
   team.manager_decision = { ...team.manager_decision, source: 'human', human_override: true };
 }
 
-function metrics(runtime, clubs) {
-  const results = runtime.results;
-  const totalGoals = results.reduce((sum, row) => sum + row.score.home + row.score.away, 0);
+function metrics(runtime, clubs, results = seasonResults(runtime)) {
+  const totalGoals = results.reduce((sum, row) => sum + Number(row.score?.home || 0) + Number(row.score?.away || 0), 0);
   const allStateRows = Object.values(runtime.state.players);
   return Object.freeze({
     total_goals: totalGoals,
@@ -243,6 +305,7 @@ export function createIncrementalSeason({ clubs, seasonId, startAt, daysBetweenR
     state: initialState(clubs),
     table: blankTable(clubs),
     results: [],
+    archive_results: [],
     event_ids: [],
     human_decisions: [],
     counters: {
@@ -262,6 +325,7 @@ export function advanceIncrementalMatchday(runtime, {
 } = {}) {
   if (runtime.completed) throw new Error(`Season already complete: ${runtime.season_id}`);
   backfillLegacyInstructionSources(runtime);
+  ensureArchiveResults(runtime);
   const clubMap = new Map(clubs.map((club) => [club.club_id, club]));
   const fixtures = runtime.fixtures.filter((fixture) => fixture.matchday === runtime.next_matchday);
   if (!fixtures.length) throw new Error(`No fixtures for matchday ${runtime.next_matchday}`);
@@ -341,7 +405,7 @@ export function advanceIncrementalMatchday(runtime, {
     runtime.state.clubs[homeClub.club_id].last_fixture_at = fixture.kickoff_at;
     runtime.state.clubs[awayClub.club_id].last_fixture_at = fixture.kickoff_at;
     updateTable(runtime.table, fixture, result.score);
-    runtime.results.push({
+    const fullResult = {
       fixture: { ...fixture }, score: result.score, outcome: result.outcome, statistics: result.statistics,
       events: (result.events || []).map((row) => ({ ...row })), lineup_state: result.lineup_state,
       teams: {
@@ -350,38 +414,42 @@ export function advanceIncrementalMatchday(runtime, {
       },
       unavailable_before_selection: beforeSelection.unavailable,
       availability_changes: availabilityChanges
-    });
+    };
+    runtime.results.push(fullResult);
+    runtime.archive_results.push(compactArchiveResult(fullResult));
   }
 
   const processedMatchday = runtime.next_matchday;
+  runtime.results = runtime.results.filter((row) => Number(row.fixture?.matchday) === processedMatchday);
   runtime.next_matchday += 1;
-  runtime.completed = runtime.results.length === runtime.fixtures.length;
+  runtime.completed = runtime.state.applied_run_keys.length === runtime.fixtures.length;
   return Object.freeze({
     season_id: runtime.season_id,
     matchday: processedMatchday,
     fixtures_processed: fixtures.length,
-    results_total: runtime.results.length,
+    results_total: runtime.archive_results.length,
+    live_results_retained: runtime.results.length,
     completed: runtime.completed,
     standings: finalTable(runtime.table)
   });
 }
 
 export function incrementalSeasonReport(runtime, { clubs } = {}) {
-  backfillLegacyInstructionSources(runtime);
+  const results = seasonResults(runtime);
   const standings = finalTable(runtime.table);
-  const complete = runtime.completed && runtime.results.length === runtime.fixtures.length;
+  const complete = runtime.completed && runtime.state.applied_run_keys.length === runtime.fixtures.length && results.length === runtime.fixtures.length;
   const checks = Object.freeze({
-    every_fixture_played_once: complete && runtime.state.applied_run_keys.length === runtime.fixtures.length,
+    every_fixture_played_once: complete,
     balanced_played_counts: complete && standings.every((row) => row.played === (clubs.length - 1) * 2),
     goals_for_equals_goals_against: standings.reduce((sum, row) => sum + row.gf, 0) === standings.reduce((sum, row) => sum + row.ga, 0),
     points_reconcile: standings.every((row) => row.points === row.won * 3 + row.drawn),
     records_reconcile: standings.every((row) => row.played === row.won + row.drawn + row.lost),
     globally_unique_event_ids: unique(runtime.event_ids),
-    no_duplicate_state_application: unique(runtime.state.applied_run_keys) && runtime.state.applied_run_keys.length === runtime.results.length,
+    no_duplicate_state_application: unique(runtime.state.applied_run_keys) && runtime.state.applied_run_keys.length === results.length,
     unavailable_players_are_never_selected: runtime.counters.unavailable_selections === 0,
     manager_decision_for_every_team: runtime.counters.manager_decisions === runtime.fixtures.length * 2,
-    every_club_fields_eleven: runtime.results.every((row) => row.teams.home.starting_xi.length === 11 && row.teams.away.starting_xi.length === 11),
-    instruction_source_for_every_team: runtime.results.every((row) => row.teams.home.instruction_source?.type && row.teams.away.instruction_source?.type)
+    every_club_fields_eleven: results.every((row) => row.teams.home.starting_xi.length === 11 && row.teams.away.starting_xi.length === 11),
+    instruction_source_for_every_team: results.every((row) => row.teams.home.instruction_source?.type && row.teams.away.instruction_source?.type)
   });
   const lastMatchday = Math.max(...runtime.fixtures.map((row) => row.matchday));
   return Object.freeze({
@@ -389,10 +457,10 @@ export function incrementalSeasonReport(runtime, { clubs } = {}) {
     season_id: runtime.season_id,
     club_count: clubs.length,
     fixture_count: runtime.fixtures.length,
-    results: Object.freeze(runtime.results.map((row) => Object.freeze(row))),
+    results: Object.freeze(results.map((row) => Object.freeze(row))),
     standings,
     final_availability: availabilitySnapshot(runtime.state.availability, lastMatchday + 1),
-    metrics: metrics(runtime, clubs),
+    metrics: metrics(runtime, clubs, results),
     checks,
     accepted: Object.values(checks).every(Boolean)
   });
