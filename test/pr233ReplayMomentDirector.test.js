@@ -27,6 +27,16 @@ test('legacy linked goal sequences receive descriptive deterministic commentary 
   assert.doesNotMatch(events[1].commentary, /\b\d+\s*(yard|metre|meter)/i);
 });
 
+test('own goals retain the defender story instead of being rewritten as an attacking finish', () => {
+  const events = enrichReplayCommentary([
+    { minute: 42, side: 'home', event_type: 'shot', event_id: 'shot-og', sequence_id: 'seq-og', sequence_order: 10, player_id: 'attacker', player_name: 'Attacker', xg: 0.12, outcome: 'goal' },
+    { minute: 42, side: 'home', event_type: 'goal', event_id: 'goal-og', sequence_id: 'seq-og', sequence_order: 20, player_id: 'attacker', player_name: 'Attacker', own_goal: true, own_goal_player_id: 'defender', own_goal_player_name: 'Defender', source_event_id: 'shot-og', commentary: 'Defender turns the ball into their own net.' }
+  ], { home: 'Home FC', away: 'Away FC' });
+
+  assert.match(events[1].commentary, /Defender turns the ball into their own net/i);
+  assert.doesNotMatch(events[1].commentary, /Attacker.*finish|Attacker.*scores/i);
+});
+
 test('legacy two-yellow archives tell the same dismissal story in commentary and summary', () => {
   const events = enrichReplayCommentary([
     { minute: 9, side: 'home', event_type: 'yellow_card', player_id: 'cam', player_name: 'Eduardo Camavinga', commentary: 'Eduardo Camavinga is shown a yellow card.' },
@@ -37,6 +47,17 @@ test('legacy two-yellow archives tell the same dismissal story in commentary and
   assert.equal(events[1].display_event_type, 'second_yellow');
   assert.match(events[1].commentary, /second yellow.*sent off/i);
   assert.deepEqual(cards.map((row) => row.event_type), ['yellow_card', 'second_yellow']);
+});
+
+test('standalone second-yellow archive events remain visible in rebuilt card summaries', () => {
+  const events = enrichReplayCommentary([
+    { minute: 16, side: 'home', event_type: 'second_yellow', player_id: 'cam', player_name: 'Eduardo Camavinga', commentary: 'Second yellow.' }
+  ]);
+  const cards = cardSummaryFromEvents(events, 'home');
+
+  assert.equal(events[0].display_event_type, 'second_yellow');
+  assert.match(events[0].commentary, /sent off.*second yellow/i);
+  assert.deepEqual(cards.map((row) => row.event_type), ['second_yellow']);
 });
 
 test('same-minute goal moment gets the spotlight before an unrelated substitution', async () => {
