@@ -15,16 +15,40 @@ function fakeElement(overrides = {}) {
   };
 }
 
-test('legacy linked goal sequences receive descriptive deterministic commentary without inventing shot coordinates', () => {
+test('linked goal attempts describe only the attempt and leave the outcome for the goal reveal', () => {
   const events = enrichReplayCommentary([
     { minute: 6, side: 'home', event_type: 'set_piece', subtype: 'corner', event_id: 'corner', sequence_id: 'seq-1', sequence_order: 0, commentary: 'Real Madrid win a corner.' },
     { minute: 6, side: 'home', event_type: 'shot', event_id: 'shot', sequence_id: 'seq-1', sequence_order: 10, player_id: 'vini', player_name: 'Vinicius', xg: 0.071, outcome: 'goal', chance_origin: 'corner', linked_event_id: 'goal', commentary: 'Vinicius tests the goalkeeper.' },
-    { minute: 6, side: 'home', event_type: 'goal', event_id: 'goal', sequence_id: 'seq-1', sequence_order: 20, player_id: 'vini', player_name: 'Vinicius', chance_origin: 'corner', source_event_id: 'shot', commentary: 'Vinicius scores for Real Madrid.' }
+    { minute: 6, side: 'home', event_type: 'goal', event_id: 'goal', sequence_id: 'seq-1', sequence_order: 20, player_id: 'vini', player_name: 'Vinicius', chance_origin: 'corner', source_event_id: 'shot', commentary: 'Vinicius scores for Real Madrid.', replay_presentation: { importance: 'major', major: true, kind: 'goal', label: 'GOAL', hold_ms: 2800, priority: 100, sequence_id: 'seq-1', sequence_order: 20, sequence_role: 'climax' } }
   ], { home: 'Real Madrid', away: 'Borussia Dortmund' });
 
-  assert.match(events[1].commentary, /goalkeeper cannot get across/i);
+  assert.match(events[1].commentary, /attacks the corner.*effort away/i);
+  assert.doesNotMatch(events[1].commentary, /goalkeeper|save|saved|wide|woodwork|goal|net|beats?/i);
+  assert.equal(events[1].replay_presentation.major, true);
+  assert.equal(events[1].replay_presentation.label, 'CHANCE');
   assert.match(events[2].commentary, /GOAL!.*superb finish.*Real Madrid/i);
   assert.doesNotMatch(events[1].commentary, /\b\d+\s*(yard|metre|meter)/i);
+});
+
+test('non-goal attempts get a separate display-only outcome reveal', () => {
+  const cases = [
+    ['saved', 'chance_saved', /goalkeeper.*save/i],
+    ['missed', 'chance_missed', /goes wide/i],
+    ['woodwork', 'chance_woodwork', /woodwork/i],
+    ['offside', 'chance_offside', /offside/i]
+  ];
+  for (const [outcome, displayType, revealPattern] of cases) {
+    const events = enrichReplayCommentary([
+      { minute: 20, side: 'away', event_type: 'shot', event_id: `shot-${outcome}`, sequence_id: `seq-${outcome}`, sequence_order: 10, player_id: 'p1', player_name: 'Player One', xg: 0.2, outcome }
+    ]);
+    assert.equal(events.length, 2);
+    assert.equal(events[0].display_event_type, 'chance_attempt');
+    assert.doesNotMatch(events[0].commentary, /goalkeeper|save|saved|wide|woodwork|offside|goal|net/i);
+    assert.equal(events[1].display_only, true);
+    assert.equal(events[1].display_event_type, displayType);
+    assert.match(events[1].commentary, revealPattern);
+    assert.equal(events[1].replay_presentation.major, true);
+  }
 });
 
 test('own goals retain the defender story instead of being rewritten as an attacking finish', () => {
@@ -60,7 +84,7 @@ test('standalone second-yellow archive events remain visible in rebuilt card sum
   assert.deepEqual(cards.map((row) => row.event_type), ['second_yellow']);
 });
 
-test('same-minute goal moment gets the spotlight before an unrelated substitution', async () => {
+test('corner, chance and goal are revealed as separate paused beats without feed spoilers', async () => {
   const source = await readFile(new URL('../public/phase2d4.js', import.meta.url), 'utf8');
   const elements = new Map([
     ['replayFeed', fakeElement()], ['replayClock', fakeElement()], ['replayScore', fakeElement()],
@@ -79,31 +103,37 @@ test('same-minute goal moment gets the spotlight before an unrelated substitutio
   });
   vm.runInContext(source, context);
   const setupReplay = vm.runInContext('setupReplay', context);
-  setupReplay({ events: [
-    {
-      minute: 60, side: 'away', event_type: 'substitution', commentary: 'Emre Can off · Julian Ryerson on',
-      replay_presentation: { importance: 'featured', major: true, kind: 'substitution', label: 'SUBSTITUTION', hold_ms: 1000, priority: 25 }
-    },
-    {
-      minute: 60, side: 'home', event_type: 'shot', commentary: 'Vinicius drives a fierce effort towards goal — the goalkeeper cannot keep it out.',
-      sequence_id: 'seq-goal', sequence_order: 10,
-      replay_presentation: { importance: 'standard', major: false, kind: 'commentary', label: null, hold_ms: 0, priority: 0, sequence_id: 'seq-goal', sequence_order: 10, sequence_role: 'build_up' }
-    },
-    {
-      minute: 60, side: 'home', event_type: 'goal', commentary: 'GOAL! Vinicius finds the net with a superb strike for Real Madrid.',
-      sequence_id: 'seq-goal', sequence_order: 20,
-      replay_presentation: { importance: 'major', major: true, kind: 'goal', label: 'GOAL', hold_ms: 3200, priority: 100, sequence_id: 'seq-goal', sequence_order: 20, sequence_role: 'climax' }
-    }
-  ] }, false);
+
+  const chanceEvents = enrichReplayCommentary([
+    { minute: 60, side: 'home', event_type: 'set_piece', subtype: 'corner', event_id: 'corner', sequence_id: 'seq-goal', sequence_order: 0, commentary: 'Real Madrid win a corner.' },
+    { minute: 60, side: 'home', event_type: 'shot', event_id: 'shot', sequence_id: 'seq-goal', sequence_order: 10, player_id: 'vini', player_name: 'Vinicius', xg: 0.11, outcome: 'goal', chance_origin: 'corner' },
+    { minute: 60, side: 'home', event_type: 'goal', event_id: 'goal', sequence_id: 'seq-goal', sequence_order: 20, player_id: 'vini', player_name: 'Vinicius', chance_origin: 'corner', source_event_id: 'shot', replay_presentation: { importance: 'major', major: true, kind: 'goal', label: 'GOAL', hold_ms: 2800, priority: 100, sequence_id: 'seq-goal', sequence_order: 20, sequence_role: 'climax' } },
+    { minute: 60, side: 'away', event_type: 'substitution', commentary: 'Emre Can off · Julian Ryerson on', replay_presentation: { importance: 'featured', major: true, kind: 'substitution', label: 'SUBSTITUTION', hold_ms: 1000, priority: 25 } }
+  ], { home: 'Real Madrid', away: 'Borussia Dortmund' });
+  setupReplay({ events: chanceEvents }, false);
 
   elements.get('replayStart').handler('click')();
   for (let minute = 1; minute <= 60; minute += 1) intervalTick();
 
-  assert.match(elements.get('replaySpotlight').innerHTML, /Vinicius finds the net/);
-  assert.doesNotMatch(elements.get('replaySpotlight').innerHTML, /Emre Can/);
-  assert.equal(elements.get('replayScore').textContent, '1-0');
+  assert.match(elements.get('replaySpotlight').innerHTML, /CORNER/i);
+  assert.equal(elements.get('replayScore').textContent, '0-0');
+  assert.doesNotMatch(elements.get('replayFeed').inserted.join('\n'), /GOAL!/i);
 
-  now += 3201;
+  now += 1401;
+  intervalTick();
+  assert.match(elements.get('replaySpotlight').innerHTML, /CHANCE/i);
+  assert.match(elements.get('replaySpotlight').innerHTML, /Vinicius.*effort/i);
+  assert.equal(elements.get('replayScore').textContent, '0-0');
+  assert.doesNotMatch(elements.get('replayFeed').inserted.join('\n'), /GOAL!/i);
+
+  now += 1801;
+  intervalTick();
+  assert.match(elements.get('replaySpotlight').innerHTML, /GOAL!/i);
+  assert.equal(elements.get('replayScore').textContent, '1-0');
+  assert.match(elements.get('replayFeed').inserted.join('\n'), /GOAL!/i);
+  assert.doesNotMatch(elements.get('replaySpotlight').innerHTML, /Emre Can/);
+
+  now += 2801;
   intervalTick();
   assert.match(elements.get('replaySpotlight').innerHTML, /Emre Can/);
 });
