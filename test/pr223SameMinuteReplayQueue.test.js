@@ -107,8 +107,11 @@ test('replay source explicitly clears queued moments when skipping or restarting
   const source = await readFile(sourceUrl, 'utf8');
   assert.match(source, /spotlightQueue:\s*\[\]/);
   assert.match(source, /minuteMoments\.push\(\{ event, home: replayState\.home, away: replayState\.away, feedRendered: false \}\)/);
-  assert.match(source, /!moment\.feedRendered/);
+  assert.match(source, /const renderMomentToFeed = \(moment\) => \{/);
+  assert.match(source, /if \(!moment \|\| moment\.feedRendered\) return;/);
+  assert.match(source, /renderMomentToFeed\(moment\)/);
   assert.match(source, /showReplaySpotlight\(replayState\.spotlightQueue\.shift\(\)\)/);
+  assert.match(source, /for \(const moment of replayState\.spotlightQueue\) renderMomentToFeed\(moment\)/);
   assert.match(source, /replayState\.spotlightQueue = \[\]/);
   assert.match(source, /ignoreHold: true, suppressSpotlight: true/);
 });
