@@ -193,8 +193,8 @@ function commentaryHooks(events, limit = 12) {
 
 function materialiseSecondYellowDismissals(events = []) {
   const bookings = new Map();
-  const explicitSecondYellow = new Set(events
-    .filter((event) => text(event.type) === 'red_card' && text(event.subtype) === 'second_yellow' && event.player_id)
+  const explicitlyDismissed = new Set(events
+    .filter((event) => text(event.type) === 'red_card' && event.player_id)
     .map((event) => String(event.player_id)));
   const output = [];
   for (const event of canonicalOrder(events)) {
@@ -203,8 +203,8 @@ function materialiseSecondYellowDismissals(events = []) {
     const playerId = String(event.player_id);
     const count = (bookings.get(playerId) || 0) + 1;
     bookings.set(playerId, count);
-    if (count !== 2 || explicitSecondYellow.has(playerId)) continue;
-    explicitSecondYellow.add(playerId);
+    if (count !== 2 || explicitlyDismissed.has(playerId)) continue;
+    explicitlyDismissed.add(playerId);
     output.push({
       event_id: `${event.event_id}-second-yellow-red`,
       minute: event.minute,
@@ -215,8 +215,8 @@ function materialiseSecondYellowDismissals(events = []) {
       player_id: event.player_id,
       source_event_id: event.event_id,
       parent_event_id: event.event_id,
-      sequence_id: event.sequence_id || `discipline-${event.side}-${playerId}-${event.minute}`,
-      sequence_order: number(event.sequence_order, 0) + 1,
+      sequence_id: event.sequence_id || event.event_id,
+      sequence_order: number(event.sequence_order, 50) + 1,
       provisional: false,
       official: true,
       commentary_hook: 'sending_off',
