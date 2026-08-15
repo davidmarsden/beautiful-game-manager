@@ -33,9 +33,18 @@
   }
 
   function isNewerThanQueuedBaseline(status, baseline, queuedServerAt, sawProcessing) {
-    if (status.state === 'processing') return true;
     if (sawProcessing && (status.state === 'complete' || status.state === 'failed')) return true;
     if (sawProcessing && status.state === 'reconciliation_required') return true;
+
+    if (status.state === 'processing') {
+      if (baseline.unavailable) return Boolean(status.run?.id || status.operation_id);
+      if (baseline.state !== 'processing') return true;
+      if (status.run?.id && status.run.id !== baseline.run?.id) return true;
+      if (status.operation_id && status.operation_id !== baseline.operation_id) return true;
+      if (queuedServerAt && status.operation_created_at && new Date(status.operation_created_at).getTime() >= queuedServerAt && status.operation_created_at !== baseline.operation_created_at) return true;
+      return false;
+    }
+
     if (!baseline.unavailable && status.run?.id && status.run.id !== baseline.run?.id) return true;
     if (!baseline.unavailable && status.operation_id && status.operation_id !== baseline.operation_id) return true;
     if (queuedServerAt && status.operation_created_at && new Date(status.operation_created_at).getTime() >= queuedServerAt) return true;
@@ -53,7 +62,10 @@
         const status = await statusRequest();
         transientErrors = 0;
         const belongsToQueuedAttempt = isNewerThanQueuedBaseline(status, baseline, queuedServerAt, sawProcessing);
-        if (status.state === 'processing') sawProcessing = true;
+        if (status.state === 'processing' && belongsToQueuedAttempt) {
+          sawProcessing = true;
+          button.textContent = 'Turn running in background';
+        }
         output.textContent = belongsToQueuedAttempt
           ? statusText(status)
           : 'Production turn queued. Waiting for the background worker to claim the failed checkpoint…';
@@ -110,7 +122,7 @@
 
     try {
       if (!authorization) throw new Error('Portal session is not ready');
-      let baseline = { unavailable: true, run: null, operation_id: null, checksum: null };
+      let baseline = { unavailable: true, run: null, operation_id: null, operation_created_at: null, checksum: null, state: null };
       let preflightWarning = '';
       try {
         baseline = { ...(await statusRequest()), unavailable: false };
@@ -135,7 +147,7 @@
         throw new Error(`Background turn could not be queued (HTTP ${response.status}${text ? ` · ${text.slice(0, 300)}` : ''})`);
       }
       const queuedServerAt = Date.parse(response.headers.get('date') || '') || null;
-      button.textContent = 'Turn running in background';
+      button.textContent = 'Turn queued';
       if (output) output.textContent = `Production turn queued.${preflightWarning} This page will check the canonical run ledger every ten seconds; no long browser connection is being held open.`;
       await pollUntilSettled(output, button, baseline, queuedServerAt);
     } catch (error) {
