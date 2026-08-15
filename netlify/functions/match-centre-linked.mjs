@@ -19,20 +19,30 @@ const REPLAY_EVENT_PRESENTATIONS = Object.freeze({
   penalty_missed: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'penalty', label: 'PENALTY MISSED', hold_ms: 2400, priority: 90 }),
   penalty_saved: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'penalty', label: 'PENALTY SAVED', hold_ms: 2400, priority: 90 }),
   red_card: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'dismissal', label: 'RED CARD', hold_ms: 2400, priority: 80 }),
-  second_yellow: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'dismissal', label: 'SECOND YELLOW', hold_ms: 2400, priority: 80 }),
+  second_yellow: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'dismissal', label: 'SECOND YELLOW · RED CARD', hold_ms: 2600, priority: 82 }),
   penalty_awarded: Object.freeze({ importance: 'major', major: true, featured: true, kind: 'penalty', label: 'PENALTY', hold_ms: 2200, priority: 70 }),
   yellow_card: Object.freeze({ importance: 'featured', major: true, featured: true, kind: 'booking', label: 'YELLOW CARD', hold_ms: 1200, priority: 45 }),
+  corner: Object.freeze({ importance: 'featured', major: true, featured: true, kind: 'set_piece', label: 'CORNER', hold_ms: 1000, priority: 36 }),
   free_kick: Object.freeze({ importance: 'featured', major: true, featured: true, kind: 'set_piece', label: 'FREE KICK', hold_ms: 1000, priority: 35 }),
   save: Object.freeze({ importance: 'featured', major: true, featured: true, kind: 'save', label: 'SAVE', hold_ms: 1100, priority: 34 }),
   injury: Object.freeze({ importance: 'featured', major: true, featured: true, kind: 'injury', label: 'INJURY', hold_ms: 1400, priority: 33 }),
   substitution: Object.freeze({ importance: 'featured', major: true, featured: true, kind: 'substitution', label: 'SUBSTITUTION', hold_ms: 1000, priority: 25 })
 });
 
-export function replayPresentationForEvent(event = {}) {
+function replayPresentationType(event = {}) {
   const type = replayEventType(event.event_type || event.type || event.kind);
+  const subtype = replayEventType(event.subtype || event.event_subtype || event.payload?.subtype || event.payload?.event_subtype);
   const outcome = replayEventType(event.outcome || event.payload?.outcome);
-  const presentationType = (type === 'shot' || type === 'big_chance') && outcome === 'saved' ? 'save' : type;
-  return REPLAY_EVENT_PRESENTATIONS[presentationType] || {
+  if (type === 'red_card' && subtype === 'second_yellow') return 'second_yellow';
+  if (type === 'set_piece' && subtype === 'corner') return 'corner';
+  if (type === 'set_piece' && subtype === 'free_kick') return 'free_kick';
+  if ((type === 'shot' || type === 'big_chance') && outcome === 'saved') return 'save';
+  return type;
+}
+
+export function replayPresentationForEvent(event = {}) {
+  const presentationType = replayPresentationType(event);
+  const base = REPLAY_EVENT_PRESENTATIONS[presentationType] || {
     importance: 'standard',
     major: false,
     featured: false,
@@ -40,6 +50,29 @@ export function replayPresentationForEvent(event = {}) {
     label: null,
     hold_ms: 0,
     priority: 0
+  };
+  const origin = replayEventType(event.chance_origin || event.payload?.chance_origin);
+  const sequenceId = text(event.sequence_id || event.payload?.sequence_id) || null;
+  const sequenceOrder = Number.isFinite(Number(event.sequence_order ?? event.payload?.sequence_order))
+    ? Number(event.sequence_order ?? event.payload?.sequence_order)
+    : null;
+  const sequenceRole = presentationType === 'goal'
+    ? 'climax'
+    : presentationType === 'corner' || presentationType === 'free_kick'
+      ? 'source'
+      : sequenceId ? 'build_up' : null;
+  const contextualLabel = presentationType === 'goal' && origin === 'corner'
+    ? 'GOAL · FROM CORNER'
+    : presentationType === 'goal' && origin === 'free_kick'
+      ? 'GOAL · FROM FREE KICK'
+      : base.label;
+  return {
+    ...base,
+    label: contextualLabel,
+    sequence_id: sequenceId,
+    sequence_order: sequenceOrder,
+    sequence_role: sequenceRole,
+    chance_origin: origin || null
   };
 }
 
@@ -150,6 +183,11 @@ function scorerSummaryFromEvents(events = [], side) {
 
 export function decorateMatchCentrePayload(payload = {}, world = null) {
   const bookings = new Map();
+  const explicitSecondYellowKeys = new Set((payload.events || [])
+    .filter((event) => replayEventType(event.event_type || event.type || event.kind) === 'red_card'
+      && replayEventType(event.subtype || event.event_subtype || event.payload?.subtype) === 'second_yellow')
+    .map(replayBookingKey)
+    .filter(Boolean));
   const decoratedEvents = (payload.events || []).map((event) => {
     const type = replayEventType(event.event_type || event.type || event.kind);
     let replayPresentation = replayPresentationForEvent(event);
@@ -158,7 +196,7 @@ export function decorateMatchCentrePayload(payload = {}, world = null) {
       if (bookingKey) {
         const bookingCount = (bookings.get(bookingKey) || 0) + 1;
         bookings.set(bookingKey, bookingCount);
-        if (bookingCount >= 2) replayPresentation = replayPresentationForEvent({ event_type: 'second_yellow' });
+        if (bookingCount >= 2 && !explicitSecondYellowKeys.has(bookingKey)) replayPresentation = replayPresentationForEvent({ event_type: 'second_yellow' });
       }
     }
     return {
