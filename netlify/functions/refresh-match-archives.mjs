@@ -22,6 +22,8 @@ async function service(path, options = {}) {
   return body;
 }
 
+const encoded = (value) => encodeURIComponent(String(value ?? ''));
+
 function clubPlayerIds(world, clubId) {
   const club = world.squad_cycle?.clubs?.[clubId] || {};
   return [...new Set([...(club.player_ids || []), ...(club.registered_player_ids || [])])];
@@ -73,15 +75,39 @@ export function archiveRowsForCanonicalWorld(row) {
   return rows;
 }
 
+export function projectionNeedsEnvelope({ matchday, saveChecksum, currentArchiveRows = [] } = {}) {
+  if (!saveChecksum || Number(matchday || 0) <= 1) return false;
+  return !currentArchiveRows.some((row) => String(row?.fixture_id || '').trim());
+}
+
 export default async () => {
   try {
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return json({ error: 'Match archive projection is not configured' }, 503);
-    const worlds = await service('/rest/v1/canonical_world_saves?turn_status=eq.open&select=world_id,save_checksum,save_envelope,season_id,matchday');
+
+    // Poll only cheap canonical metadata. The 10MB+ save envelope is fetched only
+    // when a checksum has not yet been projected into the match archive.
+    const worlds = await service('/rest/v1/canonical_world_saves?turn_status=eq.open&select=world_id,save_checksum,season_id,matchday');
     let projected = 0;
+    let fullEnvelopeReads = 0;
     const worldResults = [];
 
     for (const worldRow of worlds) {
-      const rows = archiveRowsForCanonicalWorld(worldRow);
+      const currentRows = await service(`/rest/v1/canonical_match_archives?world_id=eq.${encoded(worldRow.world_id)}&source_checksum=eq.${encoded(worldRow.save_checksum)}&select=fixture_id&limit=1`);
+      if (!projectionNeedsEnvelope({ matchday: worldRow.matchday, saveChecksum: worldRow.save_checksum, currentArchiveRows: currentRows })) {
+        worldResults.push({ world_id: worldRow.world_id, checksum: worldRow.save_checksum, projected: 0, skipped_unchanged: true });
+        continue;
+      }
+
+      // Guard the expensive read by the metadata checksum so a concurrent
+      // checkpoint cannot cause us to project an envelope under the wrong checksum.
+      const canonicalRows = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encoded(worldRow.world_id)}&save_checksum=eq.${encoded(worldRow.save_checksum)}&turn_status=eq.open&select=world_id,save_checksum,save_envelope,season_id,matchday&limit=1`);
+      if (canonicalRows.length !== 1) {
+        worldResults.push({ world_id: worldRow.world_id, checksum: worldRow.save_checksum, projected: 0, skipped_stale_metadata: true });
+        continue;
+      }
+      fullEnvelopeReads += 1;
+
+      const rows = archiveRowsForCanonicalWorld(canonicalRows[0]);
       if (rows.length) {
         await service('/rest/v1/canonical_match_archives?on_conflict=fixture_id', {
           method: 'POST',
@@ -90,10 +116,10 @@ export default async () => {
         });
       }
       projected += rows.length;
-      worldResults.push({ world_id: worldRow.world_id, checksum: worldRow.save_checksum, projected: rows.length });
+      worldResults.push({ world_id: worldRow.world_id, checksum: worldRow.save_checksum, projected: rows.length, skipped_unchanged: false });
     }
 
-    return json({ projected, worlds: worldResults });
+    return json({ projected, full_envelope_reads: fullEnvelopeReads, worlds: worldResults });
   } catch (error) {
     return json({ error: error.message }, 503);
   }
