@@ -406,8 +406,8 @@ export function advanceIncrementalMatchday(runtime, {
     runtime.state.clubs[awayClub.club_id].last_fixture_at = fixture.kickoff_at;
     updateTable(runtime.table, fixture, result.score);
     const fullResult = {
-      fixture: { ...fixture }, score: result.score, outcome: result.outcome, statistics: result.statistics,
-      events: (result.events || []).map((row) => ({ ...row })), lineup_state: result.lineup_state,
+      ...clone(result),
+      fixture: { ...fixture },
       teams: {
         home: { starting_xi: [...teams.home.starting_xi], bench: [...teams.home.bench], formation: teams.home.formation, tactics: { ...teams.home.tactics }, manager_decision: { ...teams.home.manager_decision }, instruction_source: clone(instructionSources.home) },
         away: { starting_xi: [...teams.away.starting_xi], bench: [...teams.away.bench], formation: teams.away.formation, tactics: { ...teams.away.tactics }, manager_decision: { ...teams.away.manager_decision }, instruction_source: clone(instructionSources.away) }
