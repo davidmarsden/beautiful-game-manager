@@ -23,6 +23,31 @@ test('manager-facing History, Competition and linked Match Centre no longer read
   assert.match(linked, /get_world_player_identity_directory/);
 });
 
+test('cache readers validate the current canonical checksum before serving a read model', async () => {
+  const [history, rounds] = await Promise.all([
+    readFile(historyUrl, 'utf8'),
+    readFile(roundsUrl, 'utf8')
+  ]);
+  for (const source of [history, rounds]) {
+    assert.match(source, /canonical_world_saves\?world_id=eq\.\$\{worldId\}&select=save_checksum,updated_at/);
+    assert.match(source, /readRow\.source_checksum !== canonicalRow\.save_checksum/);
+    assert.match(source, /World read model is refreshing; please retry shortly/);
+  }
+});
+
+test('service-role cache readers support modern opaque Supabase secret keys', async () => {
+  const [history, rounds, linked] = await Promise.all([
+    readFile(historyUrl, 'utf8'),
+    readFile(roundsUrl, 'utf8'),
+    readFile(linkedUrl, 'utf8')
+  ]);
+  for (const source of [history, rounds, linked]) {
+    assert.match(source, /const isJwt = \(value\) => String\(value \|\| ''\)\.split\('\.'\)\.length === 3/);
+    assert.match(source, /apikey: SUPABASE_SERVICE_ROLE_KEY/);
+    assert.match(source, /isJwt\(SUPABASE_SERVICE_ROLE_KEY\) \? \{ authorization: `Bearer \$\{SUPABASE_SERVICE_ROLE_KEY\}` \} : \{\}/);
+  }
+});
+
 test('World read model preserves the fields required by History and Competition while excluding operational envelopes', () => {
   const world = {
     world_id: 'world-1', display_name: 'TBG', season_number: 1, phase: 'season', clock: { now: '2026-08-17' },
