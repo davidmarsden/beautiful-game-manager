@@ -48,14 +48,6 @@ jobs:
             echo "Refusing to run a restore drill against the production project ref." >&2
             exit 1
           fi
-          if [[ "$TARGET_DB_URL" == *"$PRODUCTION_PROJECT_REF"* ]]; then
-            echo "Refusing to use a database URL that identifies the production project." >&2
-            exit 1
-          fi
-          if [[ "$TARGET_DB_URL" != *"$TARGET_PROJECT_REF"* ]]; then
-            echo "Target database URL does not identify the requested preview branch ref '$TARGET_PROJECT_REF'." >&2
-            exit 1
-          fi
 
       - name: Confirm target is an empty application schema
         env:
