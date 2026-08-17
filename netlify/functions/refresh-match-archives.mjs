@@ -1,3 +1,5 @@
+import { buildWorldReadModel } from '../../src/world/worldReadModel.js';
+
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
@@ -75,26 +77,50 @@ export function archiveRowsForCanonicalWorld(row) {
   return rows;
 }
 
-export function projectionNeedsEnvelope({ matchday, saveChecksum, currentArchiveRows = [] } = {}) {
-  if (!saveChecksum || Number(matchday || 0) <= 1) return false;
-  return !currentArchiveRows.some((row) => String(row?.fixture_id || '').trim());
+export function projectionNeedsEnvelope({ matchday, saveChecksum, currentArchiveRows = [], currentReadModelRows = [] } = {}) {
+  if (!saveChecksum) return false;
+  const archiveCurrent = Number(matchday || 0) <= 1 || currentArchiveRows.some((row) => String(row?.fixture_id || '').trim());
+  const readModelCurrent = currentReadModelRows.some((row) => String(row?.world_id || '').trim());
+  return !(archiveCurrent && readModelCurrent);
+}
+
+export function readModelRowForCanonicalWorld(row) {
+  const world = row?.save_envelope?.world || {};
+  return {
+    world_id: row.world_id,
+    source_checksum: row.save_checksum,
+    read_model: buildWorldReadModel(world),
+    refreshed_at: new Date().toISOString()
+  };
 }
 
 export default async () => {
   try {
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return json({ error: 'Match archive projection is not configured' }, 503);
 
-    // Poll only cheap canonical metadata. The 10MB+ save envelope is fetched only
-    // when a checksum has not yet been projected into the match archive.
+    // Poll only cheap canonical metadata. The 10MB+ save envelope is fetched once
+    // for a new checksum, then used to refresh both match archives and the compact
+    // World/history read model consumed by ordinary manager-facing navigation.
     const worlds = await service('/rest/v1/canonical_world_saves?turn_status=eq.open&select=world_id,save_checksum,season_id,matchday');
     let projected = 0;
+    let readModelsRefreshed = 0;
     let fullEnvelopeReads = 0;
     const worldResults = [];
 
     for (const worldRow of worlds) {
-      const currentRows = await service(`/rest/v1/canonical_match_archives?world_id=eq.${encoded(worldRow.world_id)}&source_checksum=eq.${encoded(worldRow.save_checksum)}&select=fixture_id&limit=1`);
-      if (!projectionNeedsEnvelope({ matchday: worldRow.matchday, saveChecksum: worldRow.save_checksum, currentArchiveRows: currentRows })) {
-        worldResults.push({ world_id: worldRow.world_id, checksum: worldRow.save_checksum, projected: 0, skipped_unchanged: true });
+      const [currentRows, currentReadModelRows] = await Promise.all([
+        Number(worldRow.matchday || 0) <= 1
+          ? Promise.resolve([])
+          : service(`/rest/v1/canonical_match_archives?world_id=eq.${encoded(worldRow.world_id)}&source_checksum=eq.${encoded(worldRow.save_checksum)}&select=fixture_id&limit=1`),
+        service(`/rest/v1/world_read_model_cache?world_id=eq.${encoded(worldRow.world_id)}&source_checksum=eq.${encoded(worldRow.save_checksum)}&select=world_id&limit=1`)
+      ]);
+      if (!projectionNeedsEnvelope({
+        matchday: worldRow.matchday,
+        saveChecksum: worldRow.save_checksum,
+        currentArchiveRows: currentRows,
+        currentReadModelRows
+      })) {
+        worldResults.push({ world_id: worldRow.world_id, checksum: worldRow.save_checksum, projected: 0, read_model_refreshed: false, skipped_unchanged: true });
         continue;
       }
 
@@ -102,12 +128,13 @@ export default async () => {
       // checkpoint cannot cause us to project an envelope under the wrong checksum.
       const canonicalRows = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encoded(worldRow.world_id)}&save_checksum=eq.${encoded(worldRow.save_checksum)}&turn_status=eq.open&select=world_id,save_checksum,save_envelope,season_id,matchday&limit=1`);
       if (canonicalRows.length !== 1) {
-        worldResults.push({ world_id: worldRow.world_id, checksum: worldRow.save_checksum, projected: 0, skipped_stale_metadata: true });
+        worldResults.push({ world_id: worldRow.world_id, checksum: worldRow.save_checksum, projected: 0, read_model_refreshed: false, skipped_stale_metadata: true });
         continue;
       }
       fullEnvelopeReads += 1;
 
-      const rows = archiveRowsForCanonicalWorld(canonicalRows[0]);
+      const canonicalRow = canonicalRows[0];
+      const rows = Number(worldRow.matchday || 0) <= 1 ? [] : archiveRowsForCanonicalWorld(canonicalRow);
       if (rows.length) {
         await service('/rest/v1/canonical_match_archives?on_conflict=fixture_id', {
           method: 'POST',
@@ -115,11 +142,20 @@ export default async () => {
           headers: { prefer: 'resolution=merge-duplicates,return=minimal' }
         });
       }
+
+      const readModelRow = readModelRowForCanonicalWorld(canonicalRow);
+      await service('/rest/v1/world_read_model_cache?on_conflict=world_id', {
+        method: 'POST',
+        body: JSON.stringify(readModelRow),
+        headers: { prefer: 'resolution=merge-duplicates,return=minimal' }
+      });
+
       projected += rows.length;
-      worldResults.push({ world_id: worldRow.world_id, checksum: worldRow.save_checksum, projected: rows.length, skipped_unchanged: false });
+      readModelsRefreshed += 1;
+      worldResults.push({ world_id: worldRow.world_id, checksum: worldRow.save_checksum, projected: rows.length, read_model_refreshed: true, skipped_unchanged: false });
     }
 
-    return json({ projected, full_envelope_reads: fullEnvelopeReads, worlds: worldResults });
+    return json({ projected, read_models_refreshed: readModelsRefreshed, full_envelope_reads: fullEnvelopeReads, worlds: worldResults });
   } catch (error) {
     return json({ error: error.message }, 503);
   }
