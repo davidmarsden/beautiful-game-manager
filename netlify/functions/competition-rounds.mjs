@@ -1,5 +1,4 @@
 import { completedMatchdayKickoff } from '../../src/world/canonicalTurnCalendar.js';
-import { loadPersistentWorld } from '../../src/world/persistentSeasonLoop.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
@@ -10,8 +9,13 @@ const bearer = (request) => {
   const value = request.headers.get('authorization') || '';
   return value.toLowerCase().startsWith('bearer ') ? value.slice(7).trim() : '';
 };
+const isJwt = (value) => String(value || '').split('.').length === 3;
 async function service(path) {
-  const response = await fetch(`${SUPABASE_URL}${path}`, { headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, accept: 'application/json' } });
+  const response = await fetch(`${SUPABASE_URL}${path}`, { headers: {
+    apikey: SUPABASE_SERVICE_ROLE_KEY,
+    ...(isJwt(SUPABASE_SERVICE_ROLE_KEY) ? { authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` } : {}),
+    accept: 'application/json'
+  } });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.message || body.error || `Supabase returned ${response.status}`);
   return body;
@@ -86,10 +90,19 @@ export default async (request) => {
     const appointments = await service(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(profiles[0].id)}&status=eq.active&select=world_id,club_id&limit=1`);
     const appointment = appointments[0];
     if (!appointment) return json({ error: 'Manager has no active world appointment' }, 403);
-    const saves = await service(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(appointment.world_id)}&select=save_envelope&limit=1`);
-    if (!saves[0]?.save_envelope) return json({ error: 'Canonical world has not been initialized' }, 409);
 
-    const world = loadPersistentWorld(JSON.stringify(saves[0].save_envelope));
+    const worldId = encodeURIComponent(appointment.world_id);
+    const [readRows, canonicalRows] = await Promise.all([
+      service(`/rest/v1/world_read_model_cache?world_id=eq.${worldId}&select=read_model,source_checksum,refreshed_at&limit=1`),
+      service(`/rest/v1/canonical_world_saves?world_id=eq.${worldId}&select=save_checksum,updated_at&limit=1`)
+    ]);
+    const readRow = readRows[0];
+    const canonicalRow = canonicalRows[0];
+    if (!readRow?.read_model || !canonicalRow?.save_checksum || readRow.source_checksum !== canonicalRow.save_checksum) {
+      return json({ error: 'World read model is refreshing; please retry shortly' }, 503);
+    }
+
+    const world = readRow.read_model;
     const availableDivisions = divisions(world);
     const requestedId = String(new URL(request.url).searchParams.get('division_id') || '').trim();
     const managedDivision = availableDivisions.find((row) => row.club_ids?.includes(appointment.club_id));
@@ -112,10 +125,11 @@ export default async (request) => {
       managed_club_id: appointment.club_id,
       current_matchday: Number(world.matchday_cycle?.current_matchday || 1),
       maximum_matchday: Number(world.matchday_cycle?.maximum_matchday || Math.max(0, ...byMatchday.keys())),
-      rounds: [...byMatchday.entries()].map(([matchday, roundFixtures]) => ({ matchday, fixtures: roundFixtures }))
+      rounds: [...byMatchday.entries()].map(([matchday, roundFixtures]) => ({ matchday, fixtures: roundFixtures })),
+      canonical_source: { checksum: canonicalRow.save_checksum, updated_at: canonicalRow.updated_at, source: 'world_read_model_cache' }
     });
   } catch (error) {
-    const status = /Session|Authentication/.test(error.message) ? 401 : /appointment|canonical|world/i.test(error.message) ? 409 : 500;
+    const status = /Session|Authentication/.test(error.message) ? 401 : /appointment|canonical|world|read model/i.test(error.message) ? 409 : 500;
     return json({ error: error.message }, status);
   }
 };
