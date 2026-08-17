@@ -1,5 +1,4 @@
 import matchCentre from './match-centre.mjs';
-import { loadPersistentWorld } from '../../src/world/persistentSeasonLoop.js';
 import { projectPinkFinalPlayerIdentity } from '../../src/world/pinkFinalPlayerProfile.js';
 import { cardSummaryFromEvents, enrichReplayCommentary } from '../../src/matchCentre/replayMomentDirector.js';
 
@@ -44,45 +43,25 @@ function replayPresentationType(event = {}) {
 export function replayPresentationForEvent(event = {}) {
   const presentationType = replayPresentationType(event);
   const base = REPLAY_EVENT_PRESENTATIONS[presentationType] || {
-    importance: 'standard',
-    major: false,
-    featured: false,
-    kind: 'commentary',
-    label: null,
-    hold_ms: 0,
-    priority: 0
+    importance: 'standard', major: false, featured: false, kind: 'commentary', label: null, hold_ms: 0, priority: 0
   };
   const origin = replayEventType(event.chance_origin || event.payload?.chance_origin);
   const sequenceId = text(event.sequence_id || event.payload?.sequence_id) || null;
   const sequenceOrder = Number.isFinite(Number(event.sequence_order ?? event.payload?.sequence_order))
-    ? Number(event.sequence_order ?? event.payload?.sequence_order)
-    : null;
-  const sequenceRole = presentationType === 'goal'
-    ? 'climax'
-    : presentationType === 'corner' || presentationType === 'free_kick'
-      ? 'source'
+    ? Number(event.sequence_order ?? event.payload?.sequence_order) : null;
+  const sequenceRole = presentationType === 'goal' ? 'climax'
+    : presentationType === 'corner' || presentationType === 'free_kick' ? 'source'
       : sequenceId ? 'build_up' : null;
-  const contextualLabel = presentationType === 'goal' && origin === 'corner'
-    ? 'GOAL · FROM CORNER'
-    : presentationType === 'goal' && origin === 'free_kick'
-      ? 'GOAL · FROM FREE KICK'
-      : base.label;
-  return {
-    ...base,
-    label: contextualLabel,
-    sequence_id: sequenceId,
-    sequence_order: sequenceOrder,
-    sequence_role: sequenceRole,
-    chance_origin: origin || null
-  };
+  const contextualLabel = presentationType === 'goal' && origin === 'corner' ? 'GOAL · FROM CORNER'
+    : presentationType === 'goal' && origin === 'free_kick' ? 'GOAL · FROM FREE KICK' : base.label;
+  return { ...base, label: contextualLabel, sequence_id: sequenceId, sequence_order: sequenceOrder, sequence_role: sequenceRole, chance_origin: origin || null };
 }
 
 function replayBookingKey(event = {}) {
   const playerId = text(event.player_id || event.tbg_player_id || event.id);
   if (playerId) return `id:${playerId}`;
   const playerName = text(event.player_name || event.name).toLowerCase();
-  if (!playerName) return null;
-  return `name:${text(event.side).toLowerCase()}:${playerName}`;
+  return playerName ? `name:${text(event.side).toLowerCase()}:${playerName}` : null;
 }
 
 function isScoredPenaltyEvent(event = {}) {
@@ -94,30 +73,18 @@ function dedupeScoredPenaltyEvents(events = []) {
   const suppressedIds = new Set();
   const legacySeen = new Set();
   const suppressedLegacy = new Set();
-
   events.forEach((event, index) => {
     if (!isScoredPenaltyEvent(event)) return;
     const eventId = text(event.event_id);
     const linkedEventId = text(event.linked_event_id || event.payload?.linked_event_id);
     const sourceEventId = text(event.source_event_id || event.payload?.source_event_id);
-
     const linkedEvent = linkedEventId ? byId.get(linkedEventId) : null;
-    if (eventId && linkedEvent && isScoredPenaltyEvent(linkedEvent)) {
-      suppressedIds.add(eventId);
-      return;
-    }
-
+    if (eventId && linkedEvent && isScoredPenaltyEvent(linkedEvent)) { suppressedIds.add(eventId); return; }
     const sourceEvent = sourceEventId ? byId.get(sourceEventId) : null;
-    if (
-      sourceEventId &&
-      sourceEvent &&
-      isScoredPenaltyEvent(sourceEvent) &&
-      text(sourceEvent.linked_event_id || sourceEvent.payload?.linked_event_id) === eventId
-    ) {
-      suppressedIds.add(sourceEventId);
-      return;
+    if (sourceEventId && sourceEvent && isScoredPenaltyEvent(sourceEvent)
+      && text(sourceEvent.linked_event_id || sourceEvent.payload?.linked_event_id) === eventId) {
+      suppressedIds.add(sourceEventId); return;
     }
-
     if (!eventId && !linkedEventId && !sourceEventId) {
       const player = text(event.player_id || event.tbg_player_id || event.player_name || event.name).toLowerCase();
       const key = player ? `${text(event.side).toLowerCase()}:${Number(event.minute) || 0}:${player}` : null;
@@ -125,25 +92,24 @@ function dedupeScoredPenaltyEvents(events = []) {
       else if (key) legacySeen.add(key);
     }
   });
-
   return events.filter((event, index) => !suppressedIds.has(text(event.event_id)) && !suppressedLegacy.has(index));
 }
 
-async function canonicalWorld(worldId) {
+async function playerIdentityWorld(worldId) {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !worldId) return null;
-  const response = await fetch(
-    `${SUPABASE_URL}/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&select=save_envelope&limit=1`,
-    {
-      headers: {
-        apikey: SUPABASE_SERVICE_ROLE_KEY,
-        authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        accept: 'application/json'
-      }
-    }
-  );
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_world_player_identity_directory`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      accept: 'application/json',
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({ p_world_id: worldId })
+  });
   if (!response.ok) return null;
-  const rows = await response.json().catch(() => []);
-  return rows[0]?.save_envelope ? loadPersistentWorld(JSON.stringify(rows[0].save_envelope)) : null;
+  const players = await response.json().catch(() => ({}));
+  return { world_id: worldId, squad_cycle: { players: players || {} } };
 }
 
 function identityFor(world, playerId, fallback = {}) {
@@ -167,8 +133,7 @@ function decoratePlayer(world, row = {}, idField = 'player_id') {
 }
 
 function scorerSummaryFromEvents(events = [], side) {
-  return events
-    .filter((event) => event.side === side && ['goal', 'penalty_scored'].includes(replayEventType(event.event_type)))
+  return events.filter((event) => event.side === side && ['goal', 'penalty_scored'].includes(replayEventType(event.event_type)))
     .map((event) => ({
       player_id: event.player_id || null,
       player_name: event.player_name || 'Unknown player',
@@ -187,8 +152,7 @@ export function decorateMatchCentrePayload(payload = {}, world = null) {
   const explicitSecondYellowKeys = new Set((payload.events || [])
     .filter((event) => replayEventType(event.event_type || event.type || event.kind) === 'red_card'
       && replayEventType(event.subtype || event.event_subtype || event.payload?.subtype) === 'second_yellow')
-    .map(replayBookingKey)
-    .filter(Boolean));
+    .map(replayBookingKey).filter(Boolean));
   const decoratedEvents = (payload.events || []).map((event) => {
     const type = replayEventType(event.event_type || event.type || event.kind);
     let replayPresentation = replayPresentationForEvent(event);
@@ -201,8 +165,7 @@ export function decorateMatchCentrePayload(payload = {}, world = null) {
       }
     }
     return {
-      ...decoratePlayer(world, event),
-      replay_presentation: replayPresentation,
+      ...decoratePlayer(world, event), replay_presentation: replayPresentation,
       assist_profile_url: identityFor(world, event.assist_player_id).profile_url,
       player_on_profile_url: identityFor(world, event.player_on_id || event.in_player_id || event.replacement_player_id).profile_url,
       player_off_profile_url: identityFor(world, event.player_off_id || event.out_player_id || event.replaced_player_id).profile_url
@@ -214,18 +177,18 @@ export function decorateMatchCentrePayload(payload = {}, world = null) {
     away: text(payload.fixture?.away_club_name || payload.fixture?.away_name || payload.fixture?.away_club_id)
   };
   const events = enrichReplayCommentary(dedupedEvents, clubs);
-
   const decoratePerformance = (row) => decoratePlayer(world, row);
   const performances = {
     home: (payload.player_performances?.home || []).map(decoratePerformance),
     away: (payload.player_performances?.away || []).map(decoratePerformance)
   };
   const performanceById = new Map([...performances.home, ...performances.away].map((row) => [text(row.player_id), row]));
-
   const submissions = (payload.submissions || []).map((submission) => {
     const decorateLineupPlayer = (player) => {
       const identity = identityFor(world, player.id || player.player_id, player);
-      const performance = player.performance ? { ...player.performance, ...identityFor(world, player.performance.player_id || player.id, player.performance) } : performanceById.get(text(player.id)) || null;
+      const performance = player.performance
+        ? { ...player.performance, ...identityFor(world, player.performance.player_id || player.id, player.performance) }
+        : performanceById.get(text(player.id)) || null;
       return { ...player, ...identity, performance };
     };
     return {
@@ -235,29 +198,15 @@ export function decorateMatchCentrePayload(payload = {}, world = null) {
       captain_profile_url: identityFor(world, submission.captain_id).profile_url
     };
   });
-
   const summary = payload.summary || {};
   const decoratedSummary = {
     ...summary,
-    scorers: {
-      home: scorerSummaryFromEvents(events, 'home'),
-      away: scorerSummaryFromEvents(events, 'away')
-    },
-    cards: {
-      home: cardSummaryFromEvents(events, 'home'),
-      away: cardSummaryFromEvents(events, 'away')
-    },
+    scorers: { home: scorerSummaryFromEvents(events, 'home'), away: scorerSummaryFromEvents(events, 'away') },
+    cards: { home: cardSummaryFromEvents(events, 'home'), away: cardSummaryFromEvents(events, 'away') },
     player_of_the_match: summary.player_of_the_match ? decoratePerformance(summary.player_of_the_match) : null,
     top_ratings: (summary.top_ratings || []).map(decoratePerformance)
   };
-
-  return {
-    ...payload,
-    events,
-    submissions,
-    summary: decoratedSummary,
-    player_performances: performances
-  };
+  return { ...payload, events, submissions, summary: decoratedSummary, player_performances: performances };
 }
 
 export default async (request) => {
@@ -265,6 +214,6 @@ export default async (request) => {
   if (!response.ok) return response;
   const payload = await response.json().catch(() => null);
   if (!payload) return json({ error: 'Match Centre returned an invalid payload' }, 500);
-  const world = await canonicalWorld(payload.fixture?.world_id);
+  const world = await playerIdentityWorld(payload.fixture?.world_id);
   return json(decorateMatchCentrePayload(payload, world), response.status);
 };
