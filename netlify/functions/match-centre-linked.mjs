@@ -11,6 +11,7 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
   headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
 });
+const isJwt = (value) => String(value || '').split('.').length === 3;
 
 const replayEventType = (value) => text(value).toLowerCase().replace(/[\s-]+/g, '_');
 const REPLAY_EVENT_PRESENTATIONS = Object.freeze({
@@ -101,7 +102,7 @@ async function playerIdentityWorld(worldId) {
     method: 'POST',
     headers: {
       apikey: SUPABASE_SERVICE_ROLE_KEY,
-      authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      ...(isJwt(SUPABASE_SERVICE_ROLE_KEY) ? { authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` } : {}),
       accept: 'application/json',
       'content-type': 'application/json'
     },
