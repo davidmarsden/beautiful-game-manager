@@ -1,0 +1,187 @@
+name: Manual Supabase logical restore drill
+
+on:
+  workflow_dispatch:
+    inputs:
+      backup_run_id:
+        description: GitHub Actions run ID that produced the logical backup artifact
+        required: true
+        default: "30718322989"
+        type: string
+      target_project_ref:
+        description: Supabase preview-branch project ref to restore into
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PRODUCTION_PROJECT_REF: edarvglbzuefveqcjpdt
+
+jobs:
+  restore:
+    name: Restore verified backup into isolated branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Require isolated target connection
+        env:
+          TARGET_DB_URL: ${{ secrets.SUPABASE_RESTORE_DRILL_DB_URL }}
+          TARGET_PROJECT_REF: ${{ inputs.target_project_ref }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TARGET_DB_URL" ]; then
+            echo "SUPABASE_RESTORE_DRILL_DB_URL is not configured as a GitHub Actions secret." >&2
+            exit 1
+          fi
+          if [ -z "$TARGET_PROJECT_REF" ]; then
+            echo "target_project_ref is required." >&2
+            exit 1
+          fi
+          if [ "$TARGET_PROJECT_REF" = "$PRODUCTION_PROJECT_REF" ]; then
+            echo "Refusing to run a restore drill against the production project ref." >&2
+            exit 1
+          fi
+          if [[ "$TARGET_DB_URL" == *"$PRODUCTION_PROJECT_REF"* ]]; then
+            echo "Refusing to use a database URL that identifies the production project." >&2
+            exit 1
+          fi
+          if [[ "$TARGET_DB_URL" != *"$TARGET_PROJECT_REF"* ]]; then
+            echo "Target database URL does not identify the requested preview branch ref '$TARGET_PROJECT_REF'." >&2
+            exit 1
+          fi
+
+      - name: Confirm target is an empty application schema
+        env:
+          TARGET_DB_URL: ${{ secrets.SUPABASE_RESTORE_DRILL_DB_URL }}
+        run: |
+          set -euo pipefail
+          existing="$(psql "$TARGET_DB_URL" -Atqc "select to_regclass('public.canonical_world_saves') is not null")"
+          if [ "$existing" != "f" ]; then
+            echo "Refusing restore: public.canonical_world_saves already exists on the target." >&2
+            exit 1
+          fi
+
+      - name: Download private backup artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tbg-supabase-logical-backup-${{ inputs.backup_run_id }}
+          path: restore
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.backup_run_id }}
+
+      - name: Verify backup bundle
+        run: bash scripts/security/verify-supabase-logical-backup.sh restore
+
+      - name: Record expected public-table counts and canonical checksum
+        run: |
+          set -euo pipefail
+          bundle="$(find restore -mindepth 1 -maxdepth 1 -type d -name 'tbg-supabase-*' | sort | tail -n 1)"
+          python - "$bundle/data.sql" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          lines = path.read_text(encoding='utf-8').splitlines()
+          counts = {}
+          canonical_checksum = None
+          canonical_columns = None
+          current_table = None
+          current_count = 0
+
+          copy_re = re.compile(r'^COPY "public"\."([^"]+)" \((.*)\) FROM stdin;$')
+          for line in lines:
+              match = copy_re.match(line)
+              if match:
+                  current_table = match.group(1)
+                  current_count = 0
+                  canonical_columns = [c.strip().strip('"') for c in match.group(2).split(',')] if current_table == 'canonical_world_saves' else None
+                  continue
+              if current_table is None:
+                  continue
+              if line == r'\.':
+                  counts[current_table] = current_count
+                  current_table = None
+                  canonical_columns = None
+                  continue
+              current_count += 1
+              if canonical_columns and canonical_checksum is None:
+                  fields = line.split('\t')
+                  canonical_checksum = fields[canonical_columns.index('save_checksum')]
+
+          with open('expected-public-counts.tsv', 'w', encoding='utf-8') as handle:
+              for table, count in sorted(counts.items()):
+                  handle.write(f'{table}\t{count}\n')
+          Path('expected-canonical-checksum.txt').write_text((canonical_checksum or '') + '\n', encoding='utf-8')
+          if not counts or not canonical_checksum:
+              raise SystemExit('Could not derive expected public table counts/checksum from backup data.sql')
+          PY
+
+      - name: Restore roles, schema and data with psql
+        env:
+          TARGET_DB_URL: ${{ secrets.SUPABASE_RESTORE_DRILL_DB_URL }}
+        run: |
+          set -euo pipefail
+          bundle="$(find restore -mindepth 1 -maxdepth 1 -type d -name 'tbg-supabase-*' | sort | tail -n 1)"
+          psql "$TARGET_DB_URL" \
+            --single-transaction \
+            --variable ON_ERROR_STOP=1 \
+            --file "$bundle/roles.sql" \
+            --file "$bundle/schema.sql" \
+            --command 'SET session_replication_role = replica' \
+            --file "$bundle/data.sql"
+
+      - name: Validate restored application data
+        env:
+          TARGET_DB_URL: ${{ secrets.SUPABASE_RESTORE_DRILL_DB_URL }}
+          TARGET_PROJECT_REF: ${{ inputs.target_project_ref }}
+          BACKUP_RUN_ID: ${{ inputs.backup_run_id }}
+        run: |
+          set -euo pipefail
+          failed=0
+          {
+            echo "backup_run_id=$BACKUP_RUN_ID"
+            echo "target_project_ref=$TARGET_PROJECT_REF"
+            echo "validated_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > restore-report.txt
+
+          while IFS=$'\t' read -r table expected; do
+            actual="$(psql "$TARGET_DB_URL" -Atqc "select count(*) from public.\"$table\"")"
+            printf '%s expected=%s actual=%s\n' "$table" "$expected" "$actual" | tee -a restore-report.txt
+            if [ "$actual" != "$expected" ]; then
+              failed=1
+            fi
+          done < expected-public-counts.tsv
+
+          expected_checksum="$(tr -d '\n' < expected-canonical-checksum.txt)"
+          actual_checksum="$(psql "$TARGET_DB_URL" -Atqc "select save_checksum from public.canonical_world_saves where world_id='tbg-world-1' limit 1")"
+          printf 'canonical_checksum expected=%s actual=%s\n' "$expected_checksum" "$actual_checksum" | tee -a restore-report.txt
+          if [ -z "$actual_checksum" ] || [ "$actual_checksum" != "$expected_checksum" ]; then
+            failed=1
+          fi
+
+          if [ "$failed" -ne 0 ]; then
+            echo "Restore validation failed." >&2
+            exit 1
+          fi
+          echo "restore_validation=PASS" | tee -a restore-report.txt
+
+      - name: Upload restore drill report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tbg-supabase-restore-drill-${{ github.run_id }}
+          path: |
+            restore-report.txt
+            expected-public-counts.tsv
+            expected-canonical-checksum.txt
+          if-no-files-found: warn
+          retention-days: 30
