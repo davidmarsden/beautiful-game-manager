@@ -9,6 +9,7 @@ const PINK_FINAL_BASE_URL = process.env.PINK_FINAL_BASE_URL || undefined;
 const PINK_FINAL_CLUB_BASE_URL = process.env.PINK_FINAL_CLUB_BASE_URL || undefined;
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 const tokenOf = (request) => { const header = request.headers.get('authorization') || ''; return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : ''; };
+const isJwt = (value) => String(value || '').split('.').length === 3;
 
 async function supabase(path, token) {
   const response = await fetch(`${SUPABASE_URL}${path}`, { headers: { apikey: SUPABASE_ANON_KEY, authorization: `Bearer ${token}`, accept: 'application/json' } });
@@ -21,7 +22,7 @@ async function service(path) {
   const response = await fetch(`${SUPABASE_URL}${path}`, {
     headers: {
       apikey: SUPABASE_SERVICE_ROLE_KEY,
-      authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      ...(isJwt(SUPABASE_SERVICE_ROLE_KEY) ? { authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` } : {}),
       accept: 'application/json'
     }
   });
@@ -45,11 +46,18 @@ export default async (request) => {
     const appointment = appointments[0];
     if (!appointment) return json({ error: 'No active club appointment' }, 409);
 
-    const readRows = await service(`/rest/v1/world_read_model_cache?world_id=eq.${encodeURIComponent(appointment.world_id)}&select=read_model,source_checksum,refreshed_at&limit=1`);
+    const worldId = encodeURIComponent(appointment.world_id);
+    const [readRows, canonicalRows] = await Promise.all([
+      service(`/rest/v1/world_read_model_cache?world_id=eq.${worldId}&select=read_model,source_checksum,refreshed_at&limit=1`),
+      service(`/rest/v1/canonical_world_saves?world_id=eq.${worldId}&select=save_checksum,updated_at&limit=1`)
+    ]);
     const readRow = readRows[0];
-    if (!readRow?.read_model) return json({ error: 'World read model is refreshing; please retry shortly' }, 503);
+    const canonicalRow = canonicalRows[0];
+    if (!readRow?.read_model || !canonicalRow?.save_checksum || readRow.source_checksum !== canonicalRow.save_checksum) {
+      return json({ error: 'World read model is refreshing; please retry shortly' }, 503);
+    }
 
-    const reportRows = await supabase(`/rest/v1/season_match_report_bundles?world_id=eq.${encodeURIComponent(appointment.world_id)}&select=report_store_key,season_id,reports&order=season_id.desc`, token).catch(() => []);
+    const reportRows = await supabase(`/rest/v1/season_match_report_bundles?world_id=eq.${worldId}&select=report_store_key,season_id,reports&order=season_id.desc`, token).catch(() => []);
     const world = readRow.read_model;
     const projection = {
       ...projectPersistentHistory(world, {
@@ -67,7 +75,7 @@ export default async (request) => {
     return json({
       ...history,
       clubs,
-      canonical_source: { checksum: readRow.source_checksum, updated_at: readRow.refreshed_at, source: 'world_read_model_cache' }
+      canonical_source: { checksum: canonicalRow.save_checksum, updated_at: canonicalRow.updated_at, source: 'world_read_model_cache' }
     });
   } catch (error) {
     return json({ error: error.message }, 503);
