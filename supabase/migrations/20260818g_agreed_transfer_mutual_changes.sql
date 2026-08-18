@@ -85,6 +85,9 @@ begin
   limit 1;
   if manager_id_value is null then raise exception 'No active manager appointment for this user and world'; end if;
 
+  request_lock_key := pg_catalog.hashtextextended(concat_ws('|', p_world_id, p_deal_id::text), 0);
+  perform pg_catalog.pg_advisory_xact_lock(request_lock_key);
+
   select * into existing_request
   from public.transfer_deal_change_requests request
   where request.world_id = p_world_id
@@ -92,11 +95,15 @@ begin
     and request.request_key = p_request_key
   limit 1;
   if existing_request.id is not null then
-    return jsonb_build_object('change_request_id', existing_request.id, 'status', existing_request.status, 'idempotent', true);
+    return jsonb_build_object(
+      'change_request_id', existing_request.id,
+      'deal_id', existing_request.deal_id,
+      'revision_no', existing_request.revision_no,
+      'change_type', existing_request.change_type,
+      'status', existing_request.status,
+      'idempotent', true
+    );
   end if;
-
-  request_lock_key := pg_catalog.hashtextextended(concat_ws('|', p_world_id, p_deal_id::text), 0);
-  perform pg_catalog.pg_advisory_xact_lock(request_lock_key);
 
   select * into deal_row
   from public.transfer_deals deal
@@ -200,16 +207,6 @@ begin
   limit 1;
   if manager_id_value is null then raise exception 'No active manager appointment for this user and world'; end if;
 
-  select * into existing_response
-  from public.transfer_deal_change_requests request
-  where request.world_id = p_world_id
-    and request.responded_by_manager_id = manager_id_value
-    and request.response_request_key = p_request_key
-  limit 1;
-  if existing_response.id is not null then
-    return jsonb_build_object('change_request_id', existing_response.id, 'status', existing_response.status, 'idempotent', true);
-  end if;
-
   select * into change_row
   from public.transfer_deal_change_requests request
   where request.id = p_change_request_id and request.world_id = p_world_id;
@@ -217,6 +214,26 @@ begin
 
   request_lock_key := pg_catalog.hashtextextended(concat_ws('|', p_world_id, change_row.deal_id::text), 0);
   perform pg_catalog.pg_advisory_xact_lock(request_lock_key);
+
+  select * into existing_response
+  from public.transfer_deal_change_requests request
+  where request.world_id = p_world_id
+    and request.responded_by_manager_id = manager_id_value
+    and request.response_request_key = p_request_key
+  limit 1;
+  if existing_response.id is not null then
+    select * into deal_row
+    from public.transfer_deals deal
+    where deal.id = existing_response.deal_id and deal.world_id = p_world_id;
+    return jsonb_build_object(
+      'change_request_id', existing_response.id,
+      'deal_id', existing_response.deal_id,
+      'status', existing_response.status,
+      'deal_status', deal_row.status,
+      'revision_no', deal_row.current_revision_no,
+      'idempotent', true
+    );
+  end if;
 
   select * into change_row
   from public.transfer_deal_change_requests request
@@ -256,7 +273,7 @@ begin
       jsonb_build_object('change_request_id', change_row.id, 'revision_no', change_row.revision_no, 'change_type', change_row.change_type, 'club_id', club_id_value)
     );
 
-    return jsonb_build_object('change_request_id', change_row.id, 'deal_id', deal_row.id, 'status', change_row.status, 'deal_status', deal_row.status);
+    return jsonb_build_object('change_request_id', change_row.id, 'deal_id', deal_row.id, 'status', change_row.status, 'deal_status', deal_row.status, 'revision_no', deal_row.current_revision_no);
   end if;
 
   if change_row.change_type = 'cancellation' then
@@ -278,7 +295,7 @@ begin
       jsonb_build_object('change_request_id', change_row.id, 'revision_no', change_row.revision_no, 'proposed_by_club_id', change_row.requested_by_club_id, 'accepted_by_club_id', club_id_value)
     );
 
-    return jsonb_build_object('change_request_id', change_row.id, 'deal_id', deal_row.id, 'status', change_row.status, 'deal_status', deal_row.status);
+    return jsonb_build_object('change_request_id', change_row.id, 'deal_id', deal_row.id, 'status', change_row.status, 'deal_status', deal_row.status, 'revision_no', deal_row.current_revision_no);
   end if;
 
   select * into current_revision
