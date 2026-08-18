@@ -112,6 +112,45 @@ export default async (request) => {
       return json({ accepted: true, action, offer: result, message: 'Legacy transfer offer withdrawn immediately.' });
     }
 
+    if (['accept_offer', 'decline_offer', 'counter_offer'].includes(action)) {
+      const dealId = String(body.deal_id || body.dealId || '').trim();
+      const revisionNo = Number(body.revision_no ?? body.revisionNo);
+      if (!dealId) return json({ error: 'Deal is required' }, 400);
+      if (!Number.isInteger(revisionNo) || revisionNo < 1) return json({ error: 'Exact deal revision is required' }, 400);
+      const responseAction = action === 'accept_offer' ? 'accept' : action === 'decline_offer' ? 'decline' : 'counter';
+      const fee = Math.max(0, Number(body.fee ?? 0) || 0);
+      const contractYears = Math.max(1, Math.min(5, Number(body.contract_years ?? body.contractYears ?? 3) || 3));
+      const key = requestKey({
+        user_id: current.user.id,
+        world_id: current.appointment.world_id,
+        action: responseAction,
+        deal_id: dealId,
+        revision_no: revisionNo,
+        fee: responseAction === 'counter' ? fee : null,
+        contract_years: responseAction === 'counter' ? contractYears : null,
+        client_request_id: clientRequestId
+      });
+      const result = await serverSupabase('/rest/v1/rpc/respond_manager_transfer_deal_for_user', {
+        method: 'POST',
+        body: JSON.stringify({
+          p_user_id: current.user.id,
+          p_world_id: current.appointment.world_id,
+          p_deal_id: dealId,
+          p_revision_no: revisionNo,
+          p_action: responseAction,
+          p_fee: responseAction === 'counter' ? fee : null,
+          p_contract_years: responseAction === 'counter' ? contractYears : null,
+          p_request_key: key
+        })
+      });
+      const message = responseAction === 'accept'
+        ? 'Transfer terms agreed. The deal is ready for the grace-period stage.'
+        : responseAction === 'decline'
+          ? 'Transfer offer declined.'
+          : 'Counter-offer sent immediately.';
+      return json({ accepted: true, action, deal: result, message });
+    }
+
     if (['list', 'withdraw'].includes(action)) {
       const playerId = String(body.player_id || body.playerId || '').trim();
       const askingFee = Math.max(0, Number(body.asking_fee ?? body.askingFee ?? 0) || 0);
@@ -181,7 +220,7 @@ export default async (request) => {
   } catch (error) {
     const message = String(error?.message || 'Transfer market request failed');
     const status = /Session|Authentication/.test(message) ? 401
-      : /required|owned|listing action|offer action|active transfer listing|read model|canonical world|appointment|selling club|offer|deal/i.test(message) ? 409
+      : /required|owned|listing action|response action|active transfer listing|read model|canonical world|appointment|selling club|offer|deal|revision|participant|approved/i.test(message) ? 409
         : 503;
     return json({ error: message }, status);
   }

@@ -68,6 +68,13 @@ function ensureTransfersView() {
   return view;
 }
 
+function handleFirstClassResponseClick(event) {
+  const button = event.target.closest('[data-deal-response]');
+  if (!button) return false;
+  respondFirstClassOffer(button);
+  return true;
+}
+
 function mount() {
   if (mounted) return;
   const view = ensureTransfersView();
@@ -79,7 +86,7 @@ function mount() {
   oldWorkspace?.remove();
   view.innerHTML = `
     <section id="transferNegotiationWorkspace" class="world-control-card transfer-negotiation-workspace">
-      <div class="world-control-heading"><div><h2>Transfers</h2><p>Listings and new offers are live immediately and no longer wait for a matchday checkpoint.</p></div><span id="transferNegotiationStatus" class="world-control-status">Loading…</span></div>
+      <div class="world-control-heading"><div><h2>Transfers</h2><p>Listings and negotiations are live immediately. Every counter creates a new immutable deal revision.</p></div><span id="transferNegotiationStatus" class="world-control-status">Loading…</span></div>
       <div class="transfer-negotiation-grid">
         <article class="transfer-negotiation-compose">
           <h3>New proposal</h3>
@@ -101,6 +108,7 @@ function mount() {
   $('negotiationClub').addEventListener('change', renderPlayerOptions);
   $('submitNegotiation').addEventListener('click', submitProposal);
   $('incomingTransferOffers').addEventListener('click', (event) => {
+    if (handleFirstClassResponseClick(event)) return;
     const button = event.target.closest('[data-legacy-transfer-response]');
     if (button) respondLegacyOffer(button.dataset.proposalId, button.dataset.legacyTransferResponse);
   });
@@ -109,6 +117,7 @@ function mount() {
     if (button) withdrawListing(button.dataset.playerId);
   });
   $('outgoingTransferOffers').addEventListener('click', (event) => {
+    if (handleFirstClassResponseClick(event)) return;
     const legacyButton = event.target.closest('[data-withdraw-legacy-offer]');
     if (legacyButton) {
       withdrawLegacyOffer(legacyButton.dataset.proposalId);
@@ -153,28 +162,59 @@ function renderPlayerOptions() {
   $('submitNegotiation').disabled = !options;
 }
 
+function revisionHistory(offer) {
+  const revisions = offer.revision_history || [];
+  if (revisions.length < 2) return '';
+  return `<details class="transfer-revision-history"><summary>${revisions.length} deal revisions</summary>${revisions.map((revision) => {
+    const summary = revision.summary || {};
+    return `<div><strong>Revision ${escapeHtml(revision.revision_no)}</strong> · £${Number(summary.fee || 0).toLocaleString('en-GB')} · ${escapeHtml(summary.contract_years || 3)} seasons</div>`;
+  }).join('')}</details>`;
+}
+
+function responseControls(offer) {
+  if (offer.status === 'agreed') return '<span class="world-control-status">Terms agreed</span>';
+  if (!offer.requires_action) return '<span class="world-control-status">Awaiting other club</span>';
+  return `<div class="first-class-response-controls">
+    <div class="world-control-actions">
+      <button type="button" class="primary-action" data-deal-response="accept_offer" data-deal-id="${escapeHtml(offer.deal_id)}" data-revision-no="${escapeHtml(offer.revision_no)}">Accept</button>
+      <button type="button" data-deal-response="decline_offer" data-deal-id="${escapeHtml(offer.deal_id)}" data-revision-no="${escapeHtml(offer.revision_no)}">Decline</button>
+    </div>
+    <div class="transfer-counter-controls">
+      <label>Counter fee<input data-counter-fee type="number" min="0" step="1" value="${escapeHtml(offer.fee || 0)}"></label>
+      <label>Contract<select data-counter-contract>${[1,2,3,4,5].map((years) => `<option value="${years}"${Number(offer.contract_years || 3) === years ? ' selected' : ''}>${years} season${years === 1 ? '' : 's'}</option>`).join('')}</select></label>
+      <button type="button" data-deal-response="counter_offer" data-deal-id="${escapeHtml(offer.deal_id)}" data-revision-no="${escapeHtml(offer.revision_no)}">Counter</button>
+    </div>
+  </div>`;
+}
+
 function offerCard(offer, { outgoing = false } = {}) {
   const suppliedName = outgoing ? offer.seller_club_name : offer.buyer_club_name;
   const counterpartId = outgoing ? offer.seller_club_id : offer.buyer_club_id;
   const counterpart = suppliedName && suppliedName !== counterpartId ? suppliedName : clubName(counterpartId);
   const label = outgoing ? `Offer to ${counterpart}` : `Offer from ${counterpart}`;
-  return `<article class="incoming-transfer-offer">
-    <div><strong>${escapeHtml(offer.player_name || offer.player_id)}</strong><span>${escapeHtml(label)} · £${Number(offer.fee || 0).toLocaleString('en-GB')}</span><small>${escapeHtml(offer.contract_years || 3)}-season contract · ${escapeHtml(new Date(offer.created_at).toLocaleString('en-GB'))}</small></div>
-    ${outgoing ? `<div class="world-control-actions"><button type="button" data-withdraw-offer data-deal-id="${escapeHtml(offer.deal_id)}">Withdraw offer</button></div>` : '<div class="world-control-actions"><span class="world-control-status">Awaiting first-class response controls</span></div>'}
+  const controls = offer.requires_action || offer.status === 'agreed'
+    ? responseControls(offer)
+    : outgoing
+      ? `<button type="button" data-withdraw-offer data-deal-id="${escapeHtml(offer.deal_id)}">Withdraw offer</button>`
+      : responseControls(offer);
+  return `<article class="incoming-transfer-offer" data-first-class-deal="${escapeHtml(offer.deal_id)}">
+    <div><strong>${escapeHtml(offer.player_name || offer.player_id)}</strong><span>${escapeHtml(label)} · £${Number(offer.fee || 0).toLocaleString('en-GB')}</span><small>Revision ${escapeHtml(offer.revision_no || 1)} · ${escapeHtml(offer.contract_years || 3)}-season contract · ${escapeHtml(new Date(offer.updated_at || offer.created_at).toLocaleString('en-GB'))}</small>${revisionHistory(offer)}</div>
+    <div class="world-control-actions">${controls}</div>
   </article>`;
 }
 
 function renderIncoming() {
-  if (!$('incomingTransferOffers')) return;
+  if (!$('incomingTransferOffers')) return 0;
   const firstClass = market?.incoming_offers || [];
   const legacy = state?.incoming_offers || [];
   const cards = firstClass.map((offer) => offerCard(offer));
   legacy.forEach((offer) => cards.push(`<article class="incoming-transfer-offer legacy-transfer-offer"><div><strong>${escapeHtml(offer.player_name)}</strong><span>Legacy offer from ${escapeHtml(offer.buyer_club_name)} · £${Number(offer.fee || 0).toLocaleString('en-GB')}</span><small>Submitted before first-class negotiations · remains on the legacy response path</small></div><div class="world-control-actions"><button type="button" class="primary-action" data-legacy-transfer-response="accepted" data-proposal-id="${escapeHtml(offer.proposal_id)}">Accept</button><button type="button" data-legacy-transfer-response="declined" data-proposal-id="${escapeHtml(offer.proposal_id)}">Decline</button></div></article>`));
   $('incomingTransferOffers').innerHTML = cards.length ? cards.join('') : '<p>No transfer offers are awaiting your response.</p>';
+  return cards.length;
 }
 
 function renderOutgoing() {
-  if (!$('outgoingTransferOffers')) return;
+  if (!$('outgoingTransferOffers')) return 0;
   const offers = market?.outgoing_offers || [];
   const legacy = market?.legacy_outgoing_offers || [];
   const cards = offers.map((offer) => offerCard(offer, { outgoing: true }));
@@ -183,28 +223,27 @@ function renderOutgoing() {
     cards.push(`<article class="incoming-transfer-offer legacy-transfer-offer"><div><strong>${escapeHtml(offer.player_name || offer.player_id)}</strong><span>Legacy offer to ${escapeHtml(sellerName)} · £${Number(offer.fee || 0).toLocaleString('en-GB')}</span><small>${escapeHtml(offer.contract_years || 3)}-season contract · submitted before first-class negotiations</small></div><div class="world-control-actions"><button type="button" data-withdraw-legacy-offer data-proposal-id="${escapeHtml(offer.proposal_id)}">Withdraw offer</button></div></article>`);
   });
   $('outgoingTransferOffers').innerHTML = cards.length ? cards.join('') : '<p>No active outgoing offers.</p>';
+  return cards.length;
 }
 
 function renderListings() {
-  if (!$('activeTransferListings')) return;
+  if (!$('activeTransferListings')) return 0;
   const listings = (market?.listings || []).filter((listing) => listing.is_own_listing);
   $('activeTransferListings').innerHTML = listings.length ? listings.map((listing) => `
     <article class="incoming-transfer-offer">
       <div><strong>${escapeHtml(listing.player_name || listing.player_id)}</strong><span>Listed for £${Number(listing.asking_fee || 0).toLocaleString('en-GB')}</span><small>Live now · updated ${escapeHtml(new Date(listing.updated_at).toLocaleString('en-GB'))}</small></div>
       <div class="world-control-actions"><button type="button" data-withdraw-listing data-player-id="${escapeHtml(listing.player_id)}">Withdraw listing</button></div>
     </article>`).join('') : '<p>No players are currently transfer listed.</p>';
+  return listings.length;
 }
 
 function render() {
   if (!state || !mounted) return;
-  const listingCount = (market?.listings || []).filter((listing) => listing.is_own_listing).length;
-  const outgoingCount = (market?.outgoing_offers?.length || 0) + (market?.legacy_outgoing_offers?.length || 0);
-  const incomingCount = (market?.incoming_offers?.length || 0) + (state?.incoming_offers?.length || 0);
-  $('transferNegotiationStatus').textContent = `${incomingCount} incoming · ${outgoingCount} outgoing · ${listingCount} listed`;
   renderComposer();
-  renderIncoming();
-  renderOutgoing();
-  renderListings();
+  const incomingCount = renderIncoming();
+  const outgoingCount = renderOutgoing();
+  const listingCount = renderListings();
+  $('transferNegotiationStatus').textContent = `${incomingCount} incoming · ${outgoingCount} outgoing · ${listingCount} listed`;
 }
 
 async function refresh({ force = false } = {}) {
@@ -263,6 +302,29 @@ async function submitProposal() {
     message.textContent = error.message;
   } finally {
     renderPlayerOptions();
+  }
+}
+
+async function respondFirstClassOffer(button) {
+  const card = button.closest('[data-first-class-deal]');
+  const action = button.dataset.dealResponse;
+  const dealId = button.dataset.dealId;
+  const revisionNo = Number(button.dataset.revisionNo);
+  const message = $('transferNegotiationMessage');
+  const body = { action, deal_id: dealId, revision_no: revisionNo, client_request_id: clientRequestId() };
+  if (action === 'counter_offer') {
+    body.fee = Number(card?.querySelector('[data-counter-fee]')?.value) || 0;
+    body.contract_years = Number(card?.querySelector('[data-counter-contract]')?.value) || 3;
+  }
+  card?.querySelectorAll('[data-deal-response]').forEach((control) => { control.disabled = true; });
+  message.textContent = action === 'accept_offer' ? 'Accepting exact deal revision…' : action === 'decline_offer' ? 'Declining transfer offer…' : 'Sending counter-offer…';
+  try {
+    const result = await request('/api/transfer-deals', body);
+    message.textContent = result.message || 'Transfer negotiation updated.';
+    await refresh({ force: true });
+  } catch (error) {
+    message.textContent = error.message;
+    await refresh({ force: true }).catch(() => render());
   }
 }
 
