@@ -2,6 +2,7 @@ import { advancePersistentMatchday, validatePersistentMatchdayWorld } from './pe
 import { loadPersistentWorld, savePersistentWorld } from './persistentSeasonLoop.js';
 import { createLoanEligibilitySnapshot, findWorldFixture, ineligibleLoanPlayerIds } from './loanEligibility.js';
 import { availabilityForPlayer } from '../matchEngine/squadAvailability.js';
+import { competitiveRegistration } from './registrationEligibility.js';
 import {
   alignCanonicalFixtureKickoffs,
   DEFAULT_TURN_HOUR_UTC,
@@ -66,7 +67,6 @@ export function validateManagerSelectionEligibility(world, clubId, instruction =
   if (!club) return Object.freeze({ valid: false, errors: Object.freeze(['Submission club is not in the canonical world']), invalid_player_ids: Object.freeze(selected) });
 
   const owned = new Set((club.player_ids || []).map(text));
-  const registered = new Set((club.registered_player_ids || []).map(text));
   const playerMap = world.squad_cycle?.players || {};
   const availabilityCalendar = availabilityCalendarForClub(world, selectedClubId);
   const matchday = Number(world.matchday_cycle?.current_matchday || 1);
@@ -80,7 +80,7 @@ export function validateManagerSelectionEligibility(world, clubId, instruction =
       reasons.push(`${playerId} is not owned by the submitted club`);
       continue;
     }
-    if (!registered.has(playerId)) {
+    if (!competitiveRegistration(world, club, playerId, player).registered) {
       invalid.push(playerId);
       reasons.push(`${playerId} is not registered for competitive selection`);
       continue;
