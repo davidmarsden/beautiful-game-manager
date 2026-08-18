@@ -122,8 +122,11 @@ test('manager portal provides transfer selectors and preserves retry-safe legacy
   assert.match(script, /data-legacy-transfer-response="declined"/);
   assert.match(script, /£\$\{Number\(offer\.fee/);
   assert.match(script, /remains on the legacy response path/);
-  assert.match(script, /async function respondLegacyOffer[\s\S]*finally \{[\s\S]*renderIncoming\(\);[\s\S]*\}/);
-  assert.match(script, /request\('\/api\/transfer-negotiations'/);
+  assert.match(script, /async function respondLegacyOffer/);
+  assert.match(script, /document\.querySelectorAll\('\[data-legacy-transfer-response\]'\)[\s\S]*button\.disabled = true/);
+  assert.match(script, /respondLegacyOffer[\s\S]*await request\('\/api\/transfer-negotiations'/);
+  assert.match(script, /respondLegacyOffer[\s\S]*await refresh\(\{ force: true \}\)/);
+  assert.match(script, /respondLegacyOffer[\s\S]*catch \(error\)[\s\S]*renderIncoming\(\)/);
   assert.match(css, /transfer-negotiation-grid/);
   assert.match(css, /@media\(max-width:560px\)/);
 });
