@@ -15,6 +15,9 @@ test('first-class transfer responses are exact-revision, participant-gated and i
   assert.match(sql, /pg_advisory_xact_lock\(request_lock_key\)/i);
   assert.match(sql, /event\.request_key = p_request_key/i);
   assert.match(sql, /Your club is not a participant/i);
+  assert.match(sql, /where p\.deal_id = deal_row\.id and p\.club_id = club_id_value/i);
+  assert.doesNotMatch(sql, /p\.manager_id = manager_id_value/);
+  assert.match(sql, /values\(current_revision\.id, club_id_value, manager_id_value, 'approved'\)/i);
   assert.match(sql, /Your club has already approved this exact revision/i);
   assert.match(sql, /action_value not in \('accept', 'decline', 'counter'\)/i);
   assert.match(sql, /to service_role/i);
