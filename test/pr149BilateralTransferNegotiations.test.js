@@ -107,7 +107,7 @@ test('shared-world command submission enforces transfer authority before writing
   assert.ok(validationIndex >= 0 && ledgerIndex > validationIndex, 'transfer authority must be checked before ledger insertion');
 });
 
-test('manager portal provides selectors controls and retry-safe transfer responses', async () => {
+test('manager portal provides transfer selectors and preserves retry-safe legacy responses', async () => {
   const [html, script, css] = await Promise.all([
     read('public/index.html'),
     read('public/transfer-negotiations.js'),
@@ -115,14 +115,18 @@ test('manager portal provides selectors controls and retry-safe transfer respons
   ]);
   assert.match(html, /transfer-negotiations\.css/);
   assert.match(html, /transfer-negotiations\.js/);
-  assert.match(script, /Transfer negotiations/);
+  assert.match(script, /<h2>Transfers<\/h2>/);
   assert.match(script, /negotiationClub/);
   assert.match(script, /negotiationPlayer/);
-  assert.match(script, /data-transfer-response="accepted"/);
-  assert.match(script, /data-transfer-response="declined"/);
+  assert.match(script, /data-legacy-transfer-response="accepted"/);
+  assert.match(script, /data-legacy-transfer-response="declined"/);
   assert.match(script, /£\$\{Number\(offer\.fee/);
-  assert.match(script, /next canonical checkpoint/);
-  assert.match(script, /async function respond[\s\S]*finally \{[\s\S]*renderIncoming\(\);[\s\S]*\}/);
+  assert.match(script, /remains on the legacy response path/);
+  assert.match(script, /async function respondLegacyOffer/);
+  assert.match(script, /document\.querySelectorAll\('\[data-legacy-transfer-response\]'\)[\s\S]*button\.disabled = true/);
+  assert.match(script, /respondLegacyOffer[\s\S]*await request\('\/api\/transfer-negotiations'/);
+  assert.match(script, /respondLegacyOffer[\s\S]*await refresh\(\{ force: true \}\)/);
+  assert.match(script, /respondLegacyOffer[\s\S]*catch \(error\)[\s\S]*renderIncoming\(\)/);
   assert.match(css, /transfer-negotiation-grid/);
   assert.match(css, /@media\(max-width:560px\)/);
 });

@@ -11,6 +11,8 @@ const VIEW_ALIASES = new Map([
   ['history', 'history'],
   ['competition', 'competitions'],
   ['competitions', 'competitions'],
+  ['transfers', 'transfers'],
+  ['transfer market', 'transfers'],
   ['world', 'world']
 ]);
 
@@ -44,6 +46,33 @@ function installHistoryShell() {
   }
 }
 
+function installTransfersShell() {
+  const workspace = document.querySelector('.workspace');
+  const tabs = workspace?.querySelector('.tabs');
+  if (tabs && !tabs.querySelector('[data-view="transfers"]')) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.view = 'transfers';
+    button.textContent = 'Transfers';
+    const competition = tabs.querySelector('[data-view="competitions"]');
+    if (competition) competition.before(button);
+    else tabs.append(button);
+  }
+  if (workspace && !document.getElementById('transfersView')) {
+    const section = document.createElement('div');
+    section.id = 'transfersView';
+    section.className = 'view';
+    section.hidden = true;
+    section.innerHTML = '<div class="empty-state">Loading transfer market…</div>';
+    workspace.append(section);
+  }
+}
+
+function installDynamicShells() {
+  installHistoryShell();
+  installTransfersShell();
+}
+
 function normaliseView(value) {
   return VIEW_ALIASES.get(String(value || '').trim().toLowerCase()) || null;
 }
@@ -61,7 +90,7 @@ function viewFromTarget(target) {
 }
 
 export function showPortalView(viewName, { focus = false } = {}) {
-  installHistoryShell();
+  installDynamicShells();
   const view = normaliseView(viewName);
   if (!view) return false;
   const target = document.getElementById(`${view}View`);
@@ -98,10 +127,10 @@ function handleNavigation(event) {
   showPortalView(view);
 }
 
-installHistoryShell();
+installDynamicShells();
 document.addEventListener('click', handleNavigation, true);
 window.addEventListener('tbg:portal-rendered', () => {
-  installHistoryShell();
+  installDynamicShells();
   const requested = requestedInitialView();
   if (!showPortalView(requested)) showPortalView('dashboard');
 }, { once: true });

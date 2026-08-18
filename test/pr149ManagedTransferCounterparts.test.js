@@ -20,6 +20,6 @@ test('bilateral offers target active human-managed clubs only', async () => {
   assert.match(compactMigration, /'managed', true/);
   assert.match(api, /get_manager_transfer_directory_for_user/);
   assert.doesNotMatch(api, /get_managed_transfer_clubs_for_user|managedClubIds\.has\(clubId\)/);
-  assert.match(ui, /club\.managed/);
-  assert.match(ui, /No other managed clubs available/);
+  assert.match(ui, /clubs\(\)\.filter\(\(club\) => club\.club_id !== ownClub && club\.managed\)/);
+  assert.match(ui, /No other human-managed clubs available/);
 });
