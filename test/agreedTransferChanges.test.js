@@ -14,7 +14,21 @@ test('agreed transfer changes require mutual consent and preserve existing terms
   assert.match(sql, /The proposing club cannot approve its own agreed-deal change/i);
   assert.match(sql, /action_value not in \('accept', 'reject'\)/i);
   assert.match(sql, /if action_value = 'reject'/i);
-  assert.match(sql, /existing agreed terms/i.test(sql) ? /existing agreed terms/i : /set status = 'rejected'/i);
+  assert.match(sql, /set status = 'rejected'/i);
+});
+
+test('agreed change proposal and response retries serialize before idempotency checks', async () => {
+  const sql = await readFile(migrationUrl, 'utf8');
+  const proposalStart = sql.indexOf('create or replace function public.propose_manager_transfer_agreed_change_for_user');
+  const responseStart = sql.indexOf('create or replace function public.respond_manager_transfer_agreed_change_for_user');
+  const projectionStart = sql.indexOf('create or replace function public.get_manager_transfer_agreed_changes_for_user');
+  const proposal = sql.slice(proposalStart, responseStart);
+  const response = sql.slice(responseStart, projectionStart);
+  assert.ok(proposal.indexOf('pg_advisory_xact_lock(request_lock_key)') < proposal.indexOf('requested_by_manager_id = manager_id_value'));
+  assert.ok(response.indexOf('pg_advisory_xact_lock(request_lock_key)') < response.indexOf('responded_by_manager_id = manager_id_value'));
+  assert.match(response, /'deal_status', deal_row\.status/i);
+  assert.match(response, /'revision_no', deal_row\.current_revision_no/i);
+  assert.match(response, /'idempotent', true/i);
 });
 
 test('accepted amendment creates a new immutable agreed revision with both club approvals', async () => {
