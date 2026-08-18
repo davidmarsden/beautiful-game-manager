@@ -63,8 +63,16 @@ begin
       cache_row.read_model #>> array['club_profiles',coalesce(offer.command_payload->>'otherClubId', offer.command_payload->>'other_club_id'),'club_name'],
       cache_row.read_model #>> array['club_profiles',coalesce(offer.command_payload->>'otherClubId', offer.command_payload->>'other_club_id'),'canonical_name']
     ),
-    'fee', coalesce((offer.command_payload->>'fee')::numeric, 0),
-    'contract_years', coalesce((offer.command_payload->>'contractYears')::integer, (offer.command_payload->>'contract_years')::integer, 3),
+    'fee', case
+      when coalesce(offer.command_payload->>'fee', '') ~ '^-?[0-9]+([.][0-9]+)?$'
+        then (offer.command_payload->>'fee')::numeric
+      else 0
+    end,
+    'contract_years', case
+      when coalesce(offer.command_payload->>'contractYears', offer.command_payload->>'contract_years', '') ~ '^[0-9]+$'
+        then greatest(1, least(coalesce(offer.command_payload->>'contractYears', offer.command_payload->>'contract_years')::integer, 5))
+      else 3
+    end,
     'created_at', offer.submitted_at,
     'status', offer.status,
     'negotiation_state', offer.negotiation_state
