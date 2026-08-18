@@ -47,7 +47,9 @@ test('listing hardening serializes identical retries and retires stale ownership
 test('transfer-deals gateway supports opaque Supabase service keys and never reads save_envelope', async () => {
   const source = await readFile(endpointUrl, 'utf8');
   assert.match(source, /const isJwt = \(value\) => String\(value \|\| ''\)\.split\('\.'\)\.length === 3/);
-  assert.match(source, /apikey: SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(source, /headers:\s*\{[\s\S]*apikey: apiKey/);
+  assert.match(source, /const serverSupabase = \(path, options = \{\}\) => requestSupabase\(path, \{[\s\S]*apiKey: SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(source, /\.\.\.\(isJwt\(SUPABASE_SERVICE_ROLE_KEY\) \? \{ bearer: SUPABASE_SERVICE_ROLE_KEY \} : \{\}\)/);
   assert.match(source, /get_manager_transfer_market_for_user/);
   assert.match(source, /set_manager_transfer_listing_for_user/);
   assert.doesNotMatch(source, /save_envelope/i);
