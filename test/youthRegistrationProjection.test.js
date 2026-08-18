@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { projectManagerPortal } from '../src/world/managerPortalProjection.js';
+import { validateManagerSelectionEligibility } from '../src/world/sharedWorldScheduler.js';
 
 function worldFixture() {
   return {
@@ -20,7 +21,7 @@ function worldFixture() {
       clubs: {
         'club-1': {
           club_id: 'club-1',
-          player_ids: ['senior-1', 'youth-1'],
+          player_ids: ['senior-1', 'youth-1', 'academy-1', 'adult-unregistered'],
           registered_player_ids: ['senior-1']
         }
       },
@@ -40,6 +41,23 @@ function worldFixture() {
           age: 20,
           registered: true,
           position: 'GK'
+        },
+        'academy-1': {
+          tbg_player_id: 'academy-1',
+          display_name: 'Academy Marker Player',
+          club_id: 'club-1',
+          age: 23,
+          registered: true,
+          squad_registration: 'academy',
+          position: 'CB'
+        },
+        'adult-unregistered': {
+          tbg_player_id: 'adult-unregistered',
+          display_name: 'Unregistered Adult',
+          club_id: 'club-1',
+          age: 28,
+          registered: false,
+          position: 'CF'
         }
       },
       contracts: {}
@@ -48,7 +66,7 @@ function worldFixture() {
       current_matchday: 1,
       maximum_matchday: 1,
       runtimes: {
-        d1: { fixtures: [], results: [], archive_results: [], table: {} }
+        d1: { fixtures: [], results: [], archive_results: [], table: {}, state: { availability: { players: {} } } }
       }
     }
   };
@@ -58,10 +76,29 @@ test('youth-exempt players are not projected as unregistered merely because they
   const portal = projectManagerPortal(worldFixture(), 'club-1');
   const senior = portal.squad.find((player) => player.tbg_player_id === 'senior-1');
   const youth = portal.squad.find((player) => player.tbg_player_id === 'youth-1');
+  const academy = portal.squad.find((player) => player.tbg_player_id === 'academy-1');
 
   assert.equal(senior.registered, true);
   assert.equal(senior.registration_status, 'registered');
   assert.equal(youth.youth_eligible_at_season_start, true);
   assert.equal(youth.registered, true);
   assert.equal(youth.registration_status, 'youth_exempt');
+  assert.equal(academy.youth_eligible_at_season_start, true);
+  assert.equal(academy.registration_status, 'youth_exempt');
+});
+
+test('authoritative submission eligibility honours the same youth exemption as the portal', () => {
+  const world = worldFixture();
+  const eligible = validateManagerSelectionEligibility(world, 'club-1', {
+    starting_xi: ['senior-1', 'youth-1', 'academy-1']
+  });
+  assert.equal(eligible.valid, true);
+  assert.deepEqual(eligible.invalid_player_ids, []);
+
+  const adult = validateManagerSelectionEligibility(world, 'club-1', {
+    starting_xi: ['adult-unregistered']
+  });
+  assert.equal(adult.valid, false);
+  assert.deepEqual(adult.invalid_player_ids, ['adult-unregistered']);
+  assert.match(adult.errors[0], /not registered for competitive selection/);
 });
