@@ -66,7 +66,7 @@ function worldFixture() {
       current_matchday: 1,
       maximum_matchday: 1,
       runtimes: {
-        d1: { fixtures: [], results: [], archive_results: [], table: {}, state: { availability: { players: {} } } }
+        d1: { fixtures: [], results: [], archive_results: [], table: {}, state: {} }
       }
     }
   };
