@@ -120,9 +120,15 @@ begin
         player_id
       ),
       'buyer_club_id', buyer_club_id,
-      'buyer_club_name', coalesce(cache_row.read_model #>> array['directory','clubs',buyer_club_id,'club_name'], buyer_club_id),
+      'buyer_club_name', coalesce(
+        cache_row.read_model #>> array['club_profiles',buyer_club_id,'club_name'],
+        cache_row.read_model #>> array['club_profiles',buyer_club_id,'canonical_name']
+      ),
       'seller_club_id', seller_club_id,
-      'seller_club_name', coalesce(cache_row.read_model #>> array['directory','clubs',seller_club_id,'club_name'], seller_club_id),
+      'seller_club_name', coalesce(
+        cache_row.read_model #>> array['club_profiles',seller_club_id,'club_name'],
+        cache_row.read_model #>> array['club_profiles',seller_club_id,'canonical_name']
+      ),
       'fee', fee,
       'contract_years', contract_years,
       'created_at', created_at,
@@ -138,9 +144,15 @@ begin
         player_id
       ),
       'buyer_club_id', buyer_club_id,
-      'buyer_club_name', coalesce(cache_row.read_model #>> array['directory','clubs',buyer_club_id,'club_name'], buyer_club_id),
+      'buyer_club_name', coalesce(
+        cache_row.read_model #>> array['club_profiles',buyer_club_id,'club_name'],
+        cache_row.read_model #>> array['club_profiles',buyer_club_id,'canonical_name']
+      ),
       'seller_club_id', seller_club_id,
-      'seller_club_name', coalesce(cache_row.read_model #>> array['directory','clubs',seller_club_id,'club_name'], seller_club_id),
+      'seller_club_name', coalesce(
+        cache_row.read_model #>> array['club_profiles',seller_club_id,'club_name'],
+        cache_row.read_model #>> array['club_profiles',seller_club_id,'canonical_name']
+      ),
       'fee', fee,
       'contract_years', contract_years,
       'created_at', created_at,
