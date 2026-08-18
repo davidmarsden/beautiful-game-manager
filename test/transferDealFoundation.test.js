@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const migrationUrl = new URL('../supabase/migrations/20260818_transfer_deal_foundation.sql', import.meta.url);
+const hardeningUrl = new URL('../supabase/migrations/20260818c_transfer_listing_concurrency_and_ownership.sql', import.meta.url);
 const endpointUrl = new URL('../netlify/functions/transfer-deals.mjs', import.meta.url);
 const uiUrl = new URL('../public/transfer-negotiations.js', import.meta.url);
 
@@ -31,6 +32,16 @@ test('live listings are service-gated, idempotent and validated against the curr
   assert.match(sql, /revoke all on function public\.set_manager_transfer_listing_for_user[\s\S]*from public, anon, authenticated/i);
   assert.match(sql, /grant execute on function public\.set_manager_transfer_listing_for_user[\s\S]*to service_role/i);
   assert.match(sql, /alter table public\.transfer_market_listings enable row level security/i);
+});
+
+test('listing hardening serializes identical retries and retires stale ownership listings', async () => {
+  const sql = await readFile(hardeningUrl, 'utf8');
+  assert.match(sql, /pg_advisory_xact_lock\(request_lock_key\)/i);
+  assert.match(sql, /hashtextextended/i);
+  assert.match(sql, /listing_row\.club_id <> club_id_value/i);
+  assert.match(sql, /'ownership-change:' \|\| stale_listing\.id::text \|\| ':' \|\| canonical_checksum/i);
+  assert.match(sql, /'reason', 'canonical_player_ownership_changed'/i);
+  assert.match(sql, /read_model #>> array\['squad_cycle','players',listing\.player_id,'club_id'\][\s\S]*= listing\.club_id/i);
 });
 
 test('transfer-deals gateway supports opaque Supabase service keys and never reads save_envelope', async () => {
