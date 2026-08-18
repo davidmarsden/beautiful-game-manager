@@ -95,7 +95,7 @@ function mount() {
         <article><h3>Your active listings</h3><div id="activeTransferListings"></div></article>
       </div>
       <p id="transferNegotiationMessage" class="world-control-message" aria-live="polite"></p>
-      <aside class="transfer-legacy-note"><strong>Legacy request history</strong><p>Offers submitted before the first-class deal system remain in World request history. Outstanding legacy offers can still be accepted or declined here until they reach a terminal state.</p></aside>
+      <aside class="transfer-legacy-note"><strong>Legacy request history</strong><p>Offers submitted before the first-class deal system remain in World request history. Outstanding legacy incoming offers can still be accepted or declined here; outstanding legacy outgoing offers can be withdrawn until the other club responds.</p></aside>
     </section>`;
   $('negotiationAction').addEventListener('change', renderComposer);
   $('negotiationClub').addEventListener('change', renderPlayerOptions);
@@ -109,6 +109,11 @@ function mount() {
     if (button) withdrawListing(button.dataset.playerId);
   });
   $('outgoingTransferOffers').addEventListener('click', (event) => {
+    const legacyButton = event.target.closest('[data-withdraw-legacy-offer]');
+    if (legacyButton) {
+      withdrawLegacyOffer(legacyButton.dataset.proposalId);
+      return;
+    }
     const button = event.target.closest('[data-withdraw-offer]');
     if (button) withdrawOffer(button.dataset.dealId);
   });
@@ -171,7 +176,13 @@ function renderIncoming() {
 function renderOutgoing() {
   if (!$('outgoingTransferOffers')) return;
   const offers = market?.outgoing_offers || [];
-  $('outgoingTransferOffers').innerHTML = offers.length ? offers.map((offer) => offerCard(offer, { outgoing: true })).join('') : '<p>No active outgoing first-class offers.</p>';
+  const legacy = market?.legacy_outgoing_offers || [];
+  const cards = offers.map((offer) => offerCard(offer, { outgoing: true }));
+  legacy.forEach((offer) => {
+    const sellerName = offer.seller_club_name || clubName(offer.seller_club_id);
+    cards.push(`<article class="incoming-transfer-offer legacy-transfer-offer"><div><strong>${escapeHtml(offer.player_name || offer.player_id)}</strong><span>Legacy offer to ${escapeHtml(sellerName)} · £${Number(offer.fee || 0).toLocaleString('en-GB')}</span><small>${escapeHtml(offer.contract_years || 3)}-season contract · submitted before first-class negotiations</small></div><div class="world-control-actions"><button type="button" data-withdraw-legacy-offer data-proposal-id="${escapeHtml(offer.proposal_id)}">Withdraw offer</button></div></article>`);
+  });
+  $('outgoingTransferOffers').innerHTML = cards.length ? cards.join('') : '<p>No active outgoing offers.</p>';
 }
 
 function renderListings() {
@@ -187,7 +198,7 @@ function renderListings() {
 function render() {
   if (!state || !mounted) return;
   const listingCount = (market?.listings || []).filter((listing) => listing.is_own_listing).length;
-  const outgoingCount = market?.outgoing_offers?.length || 0;
+  const outgoingCount = (market?.outgoing_offers?.length || 0) + (market?.legacy_outgoing_offers?.length || 0);
   const incomingCount = (market?.incoming_offers?.length || 0) + (state?.incoming_offers?.length || 0);
   $('transferNegotiationStatus').textContent = `${incomingCount} incoming · ${outgoingCount} outgoing · ${listingCount} listed`;
   renderComposer();
@@ -211,7 +222,7 @@ async function refresh({ force = false } = {}) {
       if (negotiationResult.status === 'fulfilled') state = negotiationResult.value;
       else if (!state) throw negotiationResult.reason;
       if (marketResult.status === 'fulfilled') market = marketResult.value;
-      else if (!market) market = { listings: [], incoming_offers: [], outgoing_offers: [] };
+      else if (!market) market = { listings: [], incoming_offers: [], outgoing_offers: [], legacy_outgoing_offers: [] };
       lastRefreshAt = Date.now();
       render();
       return state;
@@ -272,6 +283,20 @@ async function withdrawOffer(dealId) {
   try {
     await request('/api/transfer-deals', { action: 'withdraw_offer', deal_id: dealId, client_request_id: clientRequestId() });
     message.textContent = 'Transfer offer withdrawn immediately.';
+    await refresh({ force: true });
+  } catch (error) {
+    message.textContent = error.message;
+    renderOutgoing();
+  }
+}
+
+async function withdrawLegacyOffer(proposalId) {
+  const message = $('transferNegotiationMessage');
+  message.textContent = 'Withdrawing legacy transfer offer…';
+  document.querySelectorAll('[data-withdraw-legacy-offer]').forEach((button) => { button.disabled = true; });
+  try {
+    await request('/api/transfer-deals', { action: 'withdraw_legacy_offer', proposal_id: proposalId, client_request_id: clientRequestId() });
+    message.textContent = 'Legacy transfer offer withdrawn immediately.';
     await refresh({ force: true });
   } catch (error) {
     message.textContent = error.message;
