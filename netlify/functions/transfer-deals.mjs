@@ -58,15 +58,8 @@ async function identity(token) {
   return { user, manager, appointment };
 }
 
-function requestKey({ userId, worldId, action, playerId, askingFee, clientRequestId }) {
-  return createHash('sha256').update(JSON.stringify({
-    user_id: userId,
-    world_id: worldId,
-    action,
-    player_id: playerId,
-    asking_fee: askingFee,
-    client_request_id: clientRequestId
-  })).digest('hex');
+function requestKey(payload) {
+  return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
 
 export default async (request) => {
@@ -79,58 +72,93 @@ export default async (request) => {
     if (request.method === 'GET') {
       const market = await serverSupabase('/rest/v1/rpc/get_manager_transfer_market_for_user', {
         method: 'POST',
-        body: JSON.stringify({
-          p_user_id: current.user.id,
-          p_world_id: current.appointment.world_id
-        })
+        body: JSON.stringify({ p_user_id: current.user.id, p_world_id: current.appointment.world_id })
       });
-      return json(market || { world_id: current.appointment.world_id, club_id: current.appointment.club_id, listings: [] });
+      return json(market || {
+        world_id: current.appointment.world_id,
+        club_id: current.appointment.club_id,
+        listings: [],
+        outgoing_offers: [],
+        incoming_offers: []
+      });
     }
 
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
     const body = await request.json().catch(() => ({}));
     const action = String(body.action || '').trim().toLowerCase();
-    const playerId = String(body.player_id || body.playerId || '').trim();
-    const askingFee = Math.max(0, Number(body.asking_fee ?? body.askingFee ?? 0) || 0);
     const clientRequestId = String(body.client_request_id || body.clientRequestId || '').trim() || randomUUID();
 
-    if (!['list', 'withdraw'].includes(action)) return json({ error: 'Action must be list or withdraw' }, 400);
-    if (!playerId) return json({ error: 'Player is required' }, 400);
+    if (['list', 'withdraw'].includes(action)) {
+      const playerId = String(body.player_id || body.playerId || '').trim();
+      const askingFee = Math.max(0, Number(body.asking_fee ?? body.askingFee ?? 0) || 0);
+      if (!playerId) return json({ error: 'Player is required' }, 400);
+      const key = requestKey({
+        user_id: current.user.id,
+        world_id: current.appointment.world_id,
+        action,
+        player_id: playerId,
+        asking_fee: askingFee,
+        client_request_id: clientRequestId
+      });
+      const rows = await serverSupabase('/rest/v1/rpc/set_manager_transfer_listing_for_user', {
+        method: 'POST',
+        body: JSON.stringify({
+          p_user_id: current.user.id,
+          p_world_id: current.appointment.world_id,
+          p_player_id: playerId,
+          p_action: action,
+          p_asking_fee: askingFee,
+          p_request_key: key
+        })
+      });
+      const listing = Array.isArray(rows) ? rows[0] : rows;
+      return json({ accepted: true, action, listing,
+        message: action === 'withdraw' ? 'Transfer listing withdrawn immediately.' : 'Player listed for transfer immediately.' });
+    }
 
-    const key = requestKey({
-      userId: current.user.id,
-      worldId: current.appointment.world_id,
-      action,
-      playerId,
-      askingFee,
-      clientRequestId
-    });
+    if (['offer', 'withdraw_offer'].includes(action)) {
+      const playerId = String(body.player_id || body.playerId || '').trim();
+      const sellerClubId = String(body.seller_club_id || body.sellerClubId || '').trim();
+      const fee = Math.max(0, Number(body.fee || 0) || 0);
+      const contractYears = Math.max(1, Math.min(5, Number(body.contract_years ?? body.contractYears ?? 3) || 3));
+      const dealId = String(body.deal_id || body.dealId || '').trim() || null;
+      if (action === 'offer' && (!playerId || !sellerClubId)) return json({ error: 'Player and selling club are required' }, 400);
+      if (action === 'withdraw_offer' && !dealId) return json({ error: 'Deal is required' }, 400);
+      const key = requestKey({
+        user_id: current.user.id,
+        world_id: current.appointment.world_id,
+        action,
+        player_id: playerId,
+        seller_club_id: sellerClubId,
+        fee,
+        contract_years: contractYears,
+        deal_id: dealId,
+        client_request_id: clientRequestId
+      });
+      const result = await serverSupabase('/rest/v1/rpc/set_manager_transfer_offer_for_user', {
+        method: 'POST',
+        body: JSON.stringify({
+          p_user_id: current.user.id,
+          p_world_id: current.appointment.world_id,
+          p_action: action,
+          p_player_id: playerId || null,
+          p_seller_club_id: sellerClubId || null,
+          p_fee: fee,
+          p_contract_years: contractYears,
+          p_deal_id: dealId,
+          p_request_key: key
+        })
+      });
+      return json({ accepted: true, action, deal: result,
+        message: action === 'withdraw_offer' ? 'Transfer offer withdrawn immediately.' : 'Transfer offer sent immediately.' });
+    }
 
-    const rows = await serverSupabase('/rest/v1/rpc/set_manager_transfer_listing_for_user', {
-      method: 'POST',
-      body: JSON.stringify({
-        p_user_id: current.user.id,
-        p_world_id: current.appointment.world_id,
-        p_player_id: playerId,
-        p_action: action,
-        p_asking_fee: askingFee,
-        p_request_key: key
-      })
-    });
-    const listing = Array.isArray(rows) ? rows[0] : rows;
-    return json({
-      accepted: true,
-      action,
-      listing,
-      message: action === 'withdraw'
-        ? 'Transfer listing withdrawn immediately.'
-        : 'Player listed for transfer immediately.'
-    });
+    return json({ error: 'Unsupported transfer action' }, 400);
   } catch (error) {
     const message = String(error?.message || 'Transfer market request failed');
     const status = /Session|Authentication/.test(message) ? 401
-      : /required|owned|listing action|active transfer listing|read model|canonical world|appointment/i.test(message) ? 409
+      : /required|owned|listing action|offer action|active transfer listing|read model|canonical world|appointment|selling club|offer|deal/i.test(message) ? 409
         : 503;
     return json({ error: message }, status);
   }
