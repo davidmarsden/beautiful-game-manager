@@ -62,7 +62,7 @@ test('transfer workspace deduplicates render refreshes and suppresses stale in-f
   const source = await readFile(transferUiPath, 'utf8');
 
   assert.match(source, /const TRANSFER_REFRESH_TTL_MS = 60_000/);
-  assert.match(source, /if \(!force && state && now - lastRefreshAt < TRANSFER_REFRESH_TTL_MS\)/);
+  assert.match(source, /if \(!force && state && market && now - lastRefreshAt < TRANSFER_REFRESH_TTL_MS\)/);
   assert.match(source, /if \(!force && refreshPromise\) return refreshPromise/);
   assert.match(source, /let refreshGeneration = 0/);
   assert.match(source, /const generation = \+\+refreshGeneration/);

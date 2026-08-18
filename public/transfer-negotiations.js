@@ -2,6 +2,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => 
 
 let authorization = '';
 let state = null;
+let market = null;
 let mounted = false;
 let lastRefreshAt = 0;
 let refreshPromise = null;
@@ -34,7 +35,7 @@ async function request(path, body = null) {
   const result = await responseBody(response);
   const data = result.data;
   if (!response.ok) {
-    const serverFallback = `The transfer service is temporarily unavailable. Your offer was not recorded; please try again later. (HTTP ${response.status})`;
+    const serverFallback = `The transfer service is temporarily unavailable. Your request was not recorded; please try again later. (HTTP ${response.status})`;
     const detail = response.status >= 500 && !result.parsed
       ? serverFallback
       : data.error || data.message || (response.status >= 500 ? serverFallback : `Transfer request failed (HTTP ${response.status})`);
@@ -50,7 +51,7 @@ function mount() {
   if (legacy) legacy.hidden = true;
   $('worldControls')?.insertAdjacentHTML('afterend', `
     <section id="transferNegotiationWorkspace" class="world-control-card transfer-negotiation-workspace">
-      <div class="world-control-heading"><div><h3>Transfer negotiations</h3><p>Make offers to other managed clubs and answer proposals addressed to your club. Accepted deals are applied at the next canonical checkpoint.</p></div><span id="transferNegotiationStatus" class="world-control-status">Loading…</span></div>
+      <div class="world-control-heading"><div><h3>Transfer negotiations</h3><p>Transfer listings are live immediately. Offers and responses remain on the existing checkpoint workflow while the wider deal system is upgraded.</p></div><span id="transferNegotiationStatus" class="world-control-status">Loading…</span></div>
       <div class="transfer-negotiation-grid">
         <article class="transfer-negotiation-compose">
           <h4>New proposal</h4>
@@ -65,6 +66,10 @@ function mount() {
           <h4>Incoming offers</h4>
           <div id="incomingTransferOffers"></div>
         </article>
+        <article>
+          <h4>Your active listings</h4>
+          <div id="activeTransferListings"></div>
+        </article>
       </div>
       <p id="transferNegotiationMessage" class="world-control-message" aria-live="polite"></p>
     </section>`);
@@ -74,6 +79,10 @@ function mount() {
   $('incomingTransferOffers').addEventListener('click', (event) => {
     const button = event.target.closest('[data-transfer-response]');
     if (button) respond(button.dataset.proposalId, button.dataset.transferResponse);
+  });
+  $('activeTransferListings').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-withdraw-listing]');
+    if (button) withdrawListing(button.dataset.playerId);
   });
 }
 
@@ -90,7 +99,7 @@ function renderComposer() {
   const managedCounterparts = clubs().filter((club) => club.club_id !== ownClub && club.managed);
   $('negotiationClub').innerHTML = managedCounterparts
     .map((club) => `<option value="${escapeHtml(club.club_id)}">${escapeHtml(club.club_name)}</option>`).join('');
-  $('submitNegotiation').textContent = action === 'listing' ? 'List player for transfer' : 'Submit transfer offer';
+  $('submitNegotiation').textContent = action === 'listing' ? 'List player now' : 'Submit transfer offer';
   if (action === 'offer' && !managedCounterparts.length) {
     $('negotiationPlayer').innerHTML = '<option value="">No other managed clubs available</option>';
     $('submitNegotiation').disabled = true;
@@ -105,7 +114,7 @@ function renderPlayerOptions() {
   const options = players().filter((player) => player.club_id === clubId)
     .map((player) => `<option value="${escapeHtml(player.player_id)}">${escapeHtml(player.player_name)} · ${escapeHtml(player.position)}${player.rating ? ` · ${escapeHtml(player.rating)}` : ''}</option>`).join('');
   $('negotiationPlayer').innerHTML = options || '<option value="">No players available</option>';
-  $('submitNegotiation').disabled = !options || state?.turn_status !== 'open';
+  $('submitNegotiation').disabled = !options || (action === 'offer' && state?.turn_status !== 'open');
 }
 
 function renderIncoming() {
@@ -120,26 +129,48 @@ function renderIncoming() {
     </article>`).join('') : '<p>No transfer offers are awaiting your response.</p>';
 }
 
+function renderListings() {
+  if (!$('activeTransferListings')) return;
+  const listings = (market?.listings || []).filter((listing) => listing.is_own_listing);
+  $('activeTransferListings').innerHTML = listings.length ? listings.map((listing) => `
+    <article class="incoming-transfer-offer">
+      <div><strong>${escapeHtml(listing.player_name || listing.player_id)}</strong><span>Listed for £${Number(listing.asking_fee || 0).toLocaleString('en-GB')}</span><small>Live now · updated ${escapeHtml(new Date(listing.updated_at).toLocaleString('en-GB'))}</small></div>
+      <div class="world-control-actions">
+        <button type="button" data-withdraw-listing data-player-id="${escapeHtml(listing.player_id)}">Withdraw listing</button>
+      </div>
+    </article>`).join('') : '<p>No players are currently transfer listed.</p>';
+}
+
 function render() {
   if (!state) return;
-  $('transferNegotiationStatus').textContent = state.turn_status === 'open' ? `${state.incoming_offers.length} awaiting response` : `World ${state.turn_status}`;
+  const listingCount = (market?.listings || []).filter((listing) => listing.is_own_listing).length;
+  $('transferNegotiationStatus').textContent = state.turn_status === 'open'
+    ? `${state.incoming_offers.length} awaiting response · ${listingCount} listed`
+    : `World ${state.turn_status} · ${listingCount} listed`;
   renderComposer();
   renderIncoming();
+  renderListings();
 }
 
 async function refresh({ force = false } = {}) {
   const now = Date.now();
-  if (!force && state && now - lastRefreshAt < TRANSFER_REFRESH_TTL_MS) {
+  if (!force && state && market && now - lastRefreshAt < TRANSFER_REFRESH_TTL_MS) {
     render();
     return state;
   }
   if (!force && refreshPromise) return refreshPromise;
 
   const generation = ++refreshGeneration;
-  const nextPromise = request('/api/transfer-negotiations')
-    .then((nextState) => {
+  const nextPromise = Promise.allSettled([
+    request('/api/transfer-negotiations'),
+    request('/api/transfer-deals')
+  ])
+    .then(([negotiationResult, marketResult]) => {
       if (generation !== refreshGeneration) return state;
-      state = nextState;
+      if (negotiationResult.status === 'fulfilled') state = negotiationResult.value;
+      else if (!state) throw negotiationResult.reason;
+      if (marketResult.status === 'fulfilled') market = marketResult.value;
+      else if (!market) market = { listings: [] };
       lastRefreshAt = Date.now();
       render();
       return state;
@@ -151,30 +182,61 @@ async function refresh({ force = false } = {}) {
   return nextPromise;
 }
 
+function clientRequestId() {
+  return window.crypto?.randomUUID ? window.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 async function submitProposal() {
   const message = $('transferNegotiationMessage');
   const action = $('negotiationAction').value;
   const playerId = $('negotiationPlayer').value;
   if (!playerId) return;
-  message.textContent = action === 'listing' ? 'Submitting transfer listing…' : 'Submitting transfer offer…';
+  message.textContent = action === 'listing' ? 'Publishing transfer listing…' : 'Submitting transfer offer…';
   $('submitNegotiation').disabled = true;
   try {
-    const payload = action === 'listing'
-      ? { direction: 'sell', playerId, fee: Number($('negotiationFee').value) || 0 }
-      : {
-          direction: 'buy',
-          playerId,
-          otherClubId: $('negotiationClub').value,
-          fee: Number($('negotiationFee').value) || 0,
-          contractYears: Number($('negotiationContractYears').value) || 3
-        };
-    await request('/api/shared-world', { type: 'submit_command', command_type: action === 'listing' ? 'transfer_listing' : 'transfer_offer', command_payload: payload });
-    message.textContent = action === 'listing' ? 'Player listed. The request is recorded in your command history.' : 'Offer submitted to the other manager.';
+    if (action === 'listing') {
+      await request('/api/transfer-deals', {
+        action: 'list',
+        player_id: playerId,
+        asking_fee: Number($('negotiationFee').value) || 0,
+        client_request_id: clientRequestId()
+      });
+      message.textContent = 'Player listed immediately. The listing is live in the transfer market now.';
+    } else {
+      const payload = {
+        direction: 'buy',
+        playerId,
+        otherClubId: $('negotiationClub').value,
+        fee: Number($('negotiationFee').value) || 0,
+        contractYears: Number($('negotiationContractYears').value) || 3
+      };
+      await request('/api/shared-world', { type: 'submit_command', command_type: 'transfer_offer', command_payload: payload });
+      message.textContent = 'Offer submitted to the other manager.';
+    }
     await refresh({ force: true });
   } catch (error) {
     message.textContent = error.message;
   } finally {
     renderPlayerOptions();
+  }
+}
+
+async function withdrawListing(playerId) {
+  const message = $('transferNegotiationMessage');
+  message.textContent = 'Withdrawing transfer listing…';
+  document.querySelectorAll('[data-withdraw-listing]').forEach((button) => { button.disabled = true; });
+  try {
+    await request('/api/transfer-deals', {
+      action: 'withdraw',
+      player_id: playerId,
+      client_request_id: clientRequestId()
+    });
+    message.textContent = 'Transfer listing withdrawn immediately.';
+    await refresh({ force: true });
+  } catch (error) {
+    message.textContent = error.message;
+  } finally {
+    renderListings();
   }
 }
 
