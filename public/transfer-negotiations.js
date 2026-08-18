@@ -1,4 +1,6 @@
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
+const parseMoney = (value) => Math.max(0, Number(String(value ?? '').replace(/[^0-9.-]/g, '')) || 0);
+const formatMoney = (value) => `£${parseMoney(value).toLocaleString('en-GB')}`;
 
 let authorization = '';
 let state = null;
@@ -75,6 +77,13 @@ function handleFirstClassResponseClick(event) {
   return true;
 }
 
+function handleAgreedChangeClick(event) {
+  const button = event.target.closest('[data-agreed-change-action]');
+  if (!button) return false;
+  respondAgreedChange(button);
+  return true;
+}
+
 function mount() {
   if (mounted) return;
   const view = ensureTransfersView();
@@ -86,14 +95,14 @@ function mount() {
   oldWorkspace?.remove();
   view.innerHTML = `
     <section id="transferNegotiationWorkspace" class="world-control-card transfer-negotiation-workspace">
-      <div class="world-control-heading"><div><h2>Transfers</h2><p>Listings and negotiations are live immediately. Every counter creates a new immutable deal revision.</p></div><span id="transferNegotiationStatus" class="world-control-status">Loading…</span></div>
+      <div class="world-control-heading"><div><h2>Transfers</h2><p>Listings and negotiations are live immediately. Every counter or mutually agreed amendment creates a new immutable deal revision.</p></div><span id="transferNegotiationStatus" class="world-control-status">Loading…</span></div>
       <div class="transfer-negotiation-grid">
         <article class="transfer-negotiation-compose">
           <h3>New proposal</h3>
           <label>Action<select id="negotiationAction"><option value="offer">Make an offer</option><option value="listing">List an owned player</option></select></label>
           <label id="negotiationClubLabel">Selling club<select id="negotiationClub"></select></label>
           <label>Player<select id="negotiationPlayer"></select></label>
-          <label>Fee<input id="negotiationFee" type="number" min="0" step="1" value="0"></label>
+          <label>Fee<input id="negotiationFee" data-money-input type="text" inputmode="numeric" value="£0"></label>
           <label id="negotiationContractLabel">Proposed contract<select id="negotiationContractYears"><option value="1">1 season</option><option value="2">2 seasons</option><option value="3" selected>3 seasons</option><option value="4">4 seasons</option><option value="5">5 seasons</option></select></label>
           <button id="submitNegotiation" class="primary-action" type="button">Send offer now</button>
         </article>
@@ -109,6 +118,7 @@ function mount() {
   $('submitNegotiation').addEventListener('click', submitProposal);
   $('incomingTransferOffers').addEventListener('click', (event) => {
     if (handleFirstClassResponseClick(event)) return;
+    if (handleAgreedChangeClick(event)) return;
     const button = event.target.closest('[data-legacy-transfer-response]');
     if (button) respondLegacyOffer(button.dataset.proposalId, button.dataset.legacyTransferResponse);
   });
@@ -118,6 +128,7 @@ function mount() {
   });
   $('outgoingTransferOffers').addEventListener('click', (event) => {
     if (handleFirstClassResponseClick(event)) return;
+    if (handleAgreedChangeClick(event)) return;
     const legacyButton = event.target.closest('[data-withdraw-legacy-offer]');
     if (legacyButton) {
       withdrawLegacyOffer(legacyButton.dataset.proposalId);
@@ -125,6 +136,12 @@ function mount() {
     }
     const button = event.target.closest('[data-withdraw-offer]');
     if (button) withdrawOffer(button.dataset.dealId);
+  });
+  view.addEventListener('focusin', (event) => {
+    if (event.target.matches?.('[data-money-input]')) event.target.value = String(parseMoney(event.target.value));
+  });
+  view.addEventListener('focusout', (event) => {
+    if (event.target.matches?.('[data-money-input]')) event.target.value = formatMoney(event.target.value);
   });
 }
 
@@ -167,12 +184,41 @@ function revisionHistory(offer) {
   if (revisions.length < 2) return '';
   return `<details class="transfer-revision-history"><summary>${revisions.length} deal revisions</summary>${revisions.map((revision) => {
     const summary = revision.summary || {};
-    return `<div><strong>Revision ${escapeHtml(revision.revision_no)}</strong> · £${Number(summary.fee || 0).toLocaleString('en-GB')} · ${escapeHtml(summary.contract_years || 3)} seasons</div>`;
+    return `<div><strong>Revision ${escapeHtml(revision.revision_no)}</strong> · ${formatMoney(summary.fee || 0)} · ${escapeHtml(summary.contract_years || 3)} seasons</div>`;
   }).join('')}</details>`;
 }
 
+function agreedDealControls(offer) {
+  const pending = offer.pending_change;
+  if (pending) {
+    const proposed = pending.change_type === 'amendment'
+      ? `Amend to ${formatMoney(pending.proposed_fee || 0)} · ${escapeHtml(pending.proposed_contract_years || 3)} seasons`
+      : 'Cancel this agreed transfer by mutual consent';
+    if (pending.requested_by_you) {
+      return `<div class="first-class-response-controls"><span class="world-control-status">Terms agreed · awaiting completion</span><small>${proposed} · awaiting other club</small></div>`;
+    }
+    return `<div class="first-class-response-controls">
+      <span class="world-control-status">Terms agreed · change proposed</span>
+      <small>${proposed}</small>
+      <div class="world-control-actions">
+        <button type="button" class="primary-action" data-agreed-change-action="accept_agreed_change" data-change-request-id="${escapeHtml(pending.change_request_id)}">${pending.change_type === 'cancellation' ? 'Agree to cancel' : 'Accept amendment'}</button>
+        <button type="button" data-agreed-change-action="reject_agreed_change" data-change-request-id="${escapeHtml(pending.change_request_id)}">Keep agreed deal</button>
+      </div>
+    </div>`;
+  }
+  return `<div class="first-class-response-controls">
+    <span class="world-control-status">Terms agreed · awaiting completion</span>
+    <div class="transfer-counter-controls">
+      <label>Amended fee<input data-amendment-fee data-money-input type="text" inputmode="numeric" value="${escapeHtml(formatMoney(offer.fee || 0))}"></label>
+      <label>Contract<select data-amendment-contract>${[1,2,3,4,5].map((years) => `<option value="${years}"${Number(offer.contract_years || 3) === years ? ' selected' : ''}>${years} season${years === 1 ? '' : 's'}</option>`).join('')}</select></label>
+      <button type="button" data-agreed-change-action="propose_agreed_amendment" data-deal-id="${escapeHtml(offer.deal_id)}" data-revision-no="${escapeHtml(offer.revision_no)}">Propose amendment</button>
+    </div>
+    <button type="button" data-agreed-change-action="propose_agreed_cancellation" data-deal-id="${escapeHtml(offer.deal_id)}" data-revision-no="${escapeHtml(offer.revision_no)}">Propose cancellation</button>
+  </div>`;
+}
+
 function responseControls(offer) {
-  if (offer.status === 'agreed') return '<span class="world-control-status">Terms agreed</span>';
+  if (offer.status === 'agreed') return agreedDealControls(offer);
   if (!offer.requires_action) return '<span class="world-control-status">Awaiting other club</span>';
   return `<div class="first-class-response-controls">
     <div class="world-control-actions">
@@ -180,7 +226,7 @@ function responseControls(offer) {
       <button type="button" data-deal-response="decline_offer" data-deal-id="${escapeHtml(offer.deal_id)}" data-revision-no="${escapeHtml(offer.revision_no)}">Decline</button>
     </div>
     <div class="transfer-counter-controls">
-      <label>Counter fee<input data-counter-fee type="number" min="0" step="1" value="${escapeHtml(offer.fee || 0)}"></label>
+      <label>Counter fee<input data-counter-fee data-money-input type="text" inputmode="numeric" value="${escapeHtml(formatMoney(offer.fee || 0))}"></label>
       <label>Contract<select data-counter-contract>${[1,2,3,4,5].map((years) => `<option value="${years}"${Number(offer.contract_years || 3) === years ? ' selected' : ''}>${years} season${years === 1 ? '' : 's'}</option>`).join('')}</select></label>
       <button type="button" data-deal-response="counter_offer" data-deal-id="${escapeHtml(offer.deal_id)}" data-revision-no="${escapeHtml(offer.revision_no)}">Counter</button>
     </div>
@@ -198,7 +244,7 @@ function offerCard(offer, { outgoing = false } = {}) {
       ? `<button type="button" data-withdraw-offer data-deal-id="${escapeHtml(offer.deal_id)}">Withdraw offer</button>`
       : responseControls(offer);
   return `<article class="incoming-transfer-offer" data-first-class-deal="${escapeHtml(offer.deal_id)}">
-    <div><strong>${escapeHtml(offer.player_name || offer.player_id)}</strong><span>${escapeHtml(label)} · £${Number(offer.fee || 0).toLocaleString('en-GB')}</span><small>Revision ${escapeHtml(offer.revision_no || 1)} · ${escapeHtml(offer.contract_years || 3)}-season contract · ${escapeHtml(new Date(offer.updated_at || offer.created_at).toLocaleString('en-GB'))}</small>${revisionHistory(offer)}</div>
+    <div><strong>${escapeHtml(offer.player_name || offer.player_id)}</strong><span>${escapeHtml(label)} · ${formatMoney(offer.fee || 0)}</span><small>Revision ${escapeHtml(offer.revision_no || 1)} · ${escapeHtml(offer.contract_years || 3)}-season contract · ${escapeHtml(new Date(offer.updated_at || offer.created_at).toLocaleString('en-GB'))}</small>${revisionHistory(offer)}</div>
     <div class="world-control-actions">${controls}</div>
   </article>`;
 }
@@ -208,7 +254,7 @@ function renderIncoming() {
   const firstClass = market?.incoming_offers || [];
   const legacy = state?.incoming_offers || [];
   const cards = firstClass.map((offer) => offerCard(offer));
-  legacy.forEach((offer) => cards.push(`<article class="incoming-transfer-offer legacy-transfer-offer"><div><strong>${escapeHtml(offer.player_name)}</strong><span>Legacy offer from ${escapeHtml(offer.buyer_club_name)} · £${Number(offer.fee || 0).toLocaleString('en-GB')}</span><small>Submitted before first-class negotiations · remains on the legacy response path</small></div><div class="world-control-actions"><button type="button" class="primary-action" data-legacy-transfer-response="accepted" data-proposal-id="${escapeHtml(offer.proposal_id)}">Accept</button><button type="button" data-legacy-transfer-response="declined" data-proposal-id="${escapeHtml(offer.proposal_id)}">Decline</button></div></article>`));
+  legacy.forEach((offer) => cards.push(`<article class="incoming-transfer-offer legacy-transfer-offer"><div><strong>${escapeHtml(offer.player_name)}</strong><span>Legacy offer from ${escapeHtml(offer.buyer_club_name)} · ${formatMoney(offer.fee || 0)}</span><small>Submitted before first-class negotiations · remains on the legacy response path</small></div><div class="world-control-actions"><button type="button" class="primary-action" data-legacy-transfer-response="accepted" data-proposal-id="${escapeHtml(offer.proposal_id)}">Accept</button><button type="button" data-legacy-transfer-response="declined" data-proposal-id="${escapeHtml(offer.proposal_id)}">Decline</button></div></article>`));
   $('incomingTransferOffers').innerHTML = cards.length ? cards.join('') : '<p>No transfer offers are awaiting your response.</p>';
   return cards.length;
 }
@@ -220,7 +266,7 @@ function renderOutgoing() {
   const cards = offers.map((offer) => offerCard(offer, { outgoing: true }));
   legacy.forEach((offer) => {
     const sellerName = offer.seller_club_name || clubName(offer.seller_club_id);
-    cards.push(`<article class="incoming-transfer-offer legacy-transfer-offer"><div><strong>${escapeHtml(offer.player_name || offer.player_id)}</strong><span>Legacy offer to ${escapeHtml(sellerName)} · £${Number(offer.fee || 0).toLocaleString('en-GB')}</span><small>${escapeHtml(offer.contract_years || 3)}-season contract · submitted before first-class negotiations</small></div><div class="world-control-actions"><button type="button" data-withdraw-legacy-offer data-proposal-id="${escapeHtml(offer.proposal_id)}">Withdraw offer</button></div></article>`);
+    cards.push(`<article class="incoming-transfer-offer legacy-transfer-offer"><div><strong>${escapeHtml(offer.player_name || offer.player_id)}</strong><span>Legacy offer to ${escapeHtml(sellerName)} · ${formatMoney(offer.fee || 0)}</span><small>${escapeHtml(offer.contract_years || 3)}-season contract · submitted before first-class negotiations</small></div><div class="world-control-actions"><button type="button" data-withdraw-legacy-offer data-proposal-id="${escapeHtml(offer.proposal_id)}">Withdraw offer</button></div></article>`);
   });
   $('outgoingTransferOffers').innerHTML = cards.length ? cards.join('') : '<p>No active outgoing offers.</p>';
   return cards.length;
@@ -231,7 +277,7 @@ function renderListings() {
   const listings = (market?.listings || []).filter((listing) => listing.is_own_listing);
   $('activeTransferListings').innerHTML = listings.length ? listings.map((listing) => `
     <article class="incoming-transfer-offer">
-      <div><strong>${escapeHtml(listing.player_name || listing.player_id)}</strong><span>Listed for £${Number(listing.asking_fee || 0).toLocaleString('en-GB')}</span><small>Live now · updated ${escapeHtml(new Date(listing.updated_at).toLocaleString('en-GB'))}</small></div>
+      <div><strong>${escapeHtml(listing.player_name || listing.player_id)}</strong><span>Listed for ${formatMoney(listing.asking_fee || 0)}</span><small>Live now · updated ${escapeHtml(new Date(listing.updated_at).toLocaleString('en-GB'))}</small></div>
       <div class="world-control-actions"><button type="button" data-withdraw-listing data-player-id="${escapeHtml(listing.player_id)}">Withdraw listing</button></div>
     </article>`).join('') : '<p>No players are currently transfer listed.</p>';
   return listings.length;
@@ -284,14 +330,14 @@ async function submitProposal() {
   $('submitNegotiation').disabled = true;
   try {
     if (action === 'listing') {
-      await request('/api/transfer-deals', { action: 'list', player_id: playerId, asking_fee: Number($('negotiationFee').value) || 0, client_request_id: clientRequestId() });
+      await request('/api/transfer-deals', { action: 'list', player_id: playerId, asking_fee: parseMoney($('negotiationFee').value), client_request_id: clientRequestId() });
       message.textContent = 'Player listed immediately. The listing is live now.';
     } else {
       await request('/api/transfer-deals', {
         action: 'offer',
         player_id: playerId,
         seller_club_id: $('negotiationClub').value,
-        fee: Number($('negotiationFee').value) || 0,
+        fee: parseMoney($('negotiationFee').value),
         contract_years: Number($('negotiationContractYears').value) || 3,
         client_request_id: clientRequestId()
       });
@@ -313,7 +359,7 @@ async function respondFirstClassOffer(button) {
   const message = $('transferNegotiationMessage');
   const body = { action, deal_id: dealId, revision_no: revisionNo, client_request_id: clientRequestId() };
   if (action === 'counter_offer') {
-    body.fee = Number(card?.querySelector('[data-counter-fee]')?.value) || 0;
+    body.fee = parseMoney(card?.querySelector('[data-counter-fee]')?.value);
     body.contract_years = Number(card?.querySelector('[data-counter-contract]')?.value) || 3;
   }
   card?.querySelectorAll('[data-deal-response]').forEach((control) => { control.disabled = true; });
@@ -321,6 +367,36 @@ async function respondFirstClassOffer(button) {
   try {
     const result = await request('/api/transfer-deals', body);
     message.textContent = result.message || 'Transfer negotiation updated.';
+    await refresh({ force: true });
+  } catch (error) {
+    message.textContent = error.message;
+    await refresh({ force: true }).catch(() => render());
+  }
+}
+
+async function respondAgreedChange(button) {
+  const card = button.closest('[data-first-class-deal]');
+  const action = button.dataset.agreedChangeAction;
+  const message = $('transferNegotiationMessage');
+  const body = { action, client_request_id: clientRequestId() };
+  if (action === 'propose_agreed_amendment' || action === 'propose_agreed_cancellation') {
+    body.deal_id = button.dataset.dealId;
+    body.revision_no = Number(button.dataset.revisionNo);
+    if (action === 'propose_agreed_amendment') {
+      body.fee = parseMoney(card?.querySelector('[data-amendment-fee]')?.value);
+      body.contract_years = Number(card?.querySelector('[data-amendment-contract]')?.value) || 3;
+    }
+  } else {
+    body.change_request_id = button.dataset.changeRequestId;
+  }
+  card?.querySelectorAll('[data-agreed-change-action]').forEach((control) => { control.disabled = true; });
+  message.textContent = action === 'propose_agreed_amendment' ? 'Proposing amendment…'
+    : action === 'propose_agreed_cancellation' ? 'Proposing mutual cancellation…'
+      : action === 'accept_agreed_change' ? 'Confirming mutual change…'
+        : 'Keeping existing agreed terms…';
+  try {
+    const result = await request('/api/transfer-deals', body);
+    message.textContent = result.message || 'Agreed transfer updated.';
     await refresh({ force: true });
   } catch (error) {
     message.textContent = error.message;
