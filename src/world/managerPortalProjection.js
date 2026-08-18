@@ -1,4 +1,5 @@
 import { canonicalMatchdayKickoffs, completedMatchdayKickoff } from './canonicalTurnCalendar.js';
+import { competitiveRegistration, isYouthRegistrationExempt } from './registrationEligibility.js';
 
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = null) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -68,34 +69,6 @@ function decorateFixture(world, clubId, fixture, result = null) {
   };
 }
 
-function youthEligible(player, contract) {
-  const contractRegistration = text(contract?.squad_registration).toLowerCase();
-  if (['youth', 'youth_eligible', 'youth_only', 'academy'].includes(contractRegistration)) return true;
-  if (player?.youth_eligible_at_season_start !== undefined) return Boolean(player.youth_eligible_at_season_start);
-  return number(player?.season_start_age ?? player?.age, 99) <= 21;
-}
-
-function currentRegistration(world, club, playerId, player, contract) {
-  if (youthEligible(player, contract)) return { registered: true, status: 'youth_exempt' };
-  if (Array.isArray(club?.registered_player_ids)) {
-    const registered = club.registered_player_ids.includes(playerId);
-    return { registered, status: registered ? 'registered' : 'unregistered' };
-  }
-  const registration = world.squad_cycle?.state?.registrations?.[playerId];
-  if (typeof registration === 'boolean') return { registered: registration, status: registration ? 'registered' : 'unregistered' };
-  if (registration && typeof registration === 'object') {
-    if (typeof registration.registered === 'boolean') {
-      return { registered: registration.registered, status: registration.registered ? 'registered' : 'unregistered' };
-    }
-    if (registration.status) {
-      const registered = registration.status === 'registered';
-      return { registered, status: registered ? 'registered' : 'unregistered' };
-    }
-  }
-  const registered = Boolean(player?.registered);
-  return { registered, status: registered ? 'registered' : 'unregistered' };
-}
-
 function projectPlayer(world, club, playerId, index) {
   const player = world.squad_cycle.players[playerId];
   const contract = player?.contract_id ? world.squad_cycle.contracts?.[player.contract_id] : null;
@@ -105,8 +78,8 @@ function projectPlayer(world, club, playerId, index) {
   const currentMatchday = world.matchday_cycle?.current_matchday || 1;
   const injured = Number(availability.injury_until_matchday || 0) >= currentMatchday;
   const suspended = Number(availability.suspension_until_matchday || 0) >= currentMatchday;
-  const registration = currentRegistration(world, club, playerId, player, contract);
-  const isYouthEligible = youthEligible(player, contract);
+  const registration = competitiveRegistration(world, club, playerId, player);
+  const isYouthEligible = isYouthRegistrationExempt(player, contract);
   return {
     ...player,
     registered: registration.registered,
