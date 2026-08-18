@@ -68,15 +68,32 @@ function decorateFixture(world, clubId, fixture, result = null) {
   };
 }
 
-function currentRegistration(world, club, playerId, player) {
-  if (Array.isArray(club?.registered_player_ids)) return club.registered_player_ids.includes(playerId);
-  const registration = world.squad_cycle?.state?.registrations?.[playerId];
-  if (typeof registration === 'boolean') return registration;
-  if (registration && typeof registration === 'object') {
-    if (typeof registration.registered === 'boolean') return registration.registered;
-    if (registration.status) return registration.status === 'registered';
+function youthEligible(player, contract) {
+  const contractRegistration = text(contract?.squad_registration).toLowerCase();
+  if (['youth', 'youth_eligible', 'youth_only', 'academy'].includes(contractRegistration)) return true;
+  if (player?.youth_eligible_at_season_start !== undefined) return Boolean(player.youth_eligible_at_season_start);
+  return number(player?.season_start_age ?? player?.age, 99) <= 21;
+}
+
+function currentRegistration(world, club, playerId, player, contract) {
+  if (youthEligible(player, contract)) return { registered: true, status: 'youth_exempt' };
+  if (Array.isArray(club?.registered_player_ids)) {
+    const registered = club.registered_player_ids.includes(playerId);
+    return { registered, status: registered ? 'registered' : 'unregistered' };
   }
-  return Boolean(player?.registered);
+  const registration = world.squad_cycle?.state?.registrations?.[playerId];
+  if (typeof registration === 'boolean') return { registered: registration, status: registration ? 'registered' : 'unregistered' };
+  if (registration && typeof registration === 'object') {
+    if (typeof registration.registered === 'boolean') {
+      return { registered: registration.registered, status: registration.registered ? 'registered' : 'unregistered' };
+    }
+    if (registration.status) {
+      const registered = registration.status === 'registered';
+      return { registered, status: registered ? 'registered' : 'unregistered' };
+    }
+  }
+  const registered = Boolean(player?.registered);
+  return { registered, status: registered ? 'registered' : 'unregistered' };
 }
 
 function projectPlayer(world, club, playerId, index) {
@@ -88,11 +105,12 @@ function projectPlayer(world, club, playerId, index) {
   const currentMatchday = world.matchday_cycle?.current_matchday || 1;
   const injured = Number(availability.injury_until_matchday || 0) >= currentMatchday;
   const suspended = Number(availability.suspension_until_matchday || 0) >= currentMatchday;
-  const registered = currentRegistration(world, club, playerId, player);
+  const registration = currentRegistration(world, club, playerId, player, contract);
+  const isYouthEligible = youthEligible(player, contract);
   return {
     ...player,
-    registered,
-    registration_status: registered ? 'registered' : 'unregistered',
+    registered: registration.registered,
+    registration_status: registration.status,
     squad_number: number(player?.squad_number, index + 1),
     specific_position: text(player?.specific_position || player?.position || player?.primary_position || player?.position_group) || 'Unknown',
     fitness: number(condition.fitness, 100),
@@ -101,7 +119,7 @@ function projectPlayer(world, club, playerId, index) {
     contract_expiry: text(contract?.end_at) || 'Open-ended',
     transfer_listed: Boolean(player?.transfer_listed),
     loan_listed: Boolean(player?.loan_listed),
-    youth_eligible_at_season_start: Boolean(player?.youth_eligible_at_season_start ?? (number(player?.season_start_age ?? player?.age, 99) <= 21)),
+    youth_eligible_at_season_start: isYouthEligible,
     loaned_out: Boolean(player?.loaned_out),
     profile_url: player?.profile_url || null
   };
