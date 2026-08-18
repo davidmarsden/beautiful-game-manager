@@ -24,7 +24,7 @@ test('transfer deal foundation is first-class and separate from manager_world_co
 
 test('live listings are service-gated, idempotent and validated against the current compact world model', async () => {
   const sql = await readFile(migrationUrl, 'utf8');
-  assert.match(sql, /unique\(world_id, manager_id, request_key\)/i);
+  assert.match(sql, /unique\s*\(\s*world_id\s*,\s*manager_id\s*,\s*request_key\s*\)/i);
   assert.match(sql, /cache_row\.source_checksum <> canonical_checksum/i);
   assert.match(sql, /Only a player owned by the appointed club can be listed or withdrawn/i);
   assert.match(sql, /set_manager_transfer_listing_for_user/i);
