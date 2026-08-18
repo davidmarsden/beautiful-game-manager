@@ -70,16 +70,25 @@ export default async (request) => {
     const current = await identity(token);
 
     if (request.method === 'GET') {
-      const market = await serverSupabase('/rest/v1/rpc/get_manager_transfer_market_for_user', {
-        method: 'POST',
-        body: JSON.stringify({ p_user_id: current.user.id, p_world_id: current.appointment.world_id })
-      });
-      return json(market || {
-        world_id: current.appointment.world_id,
-        club_id: current.appointment.club_id,
-        listings: [],
-        outgoing_offers: [],
-        incoming_offers: []
+      const [market, legacyOutgoing] = await Promise.all([
+        serverSupabase('/rest/v1/rpc/get_manager_transfer_market_for_user', {
+          method: 'POST',
+          body: JSON.stringify({ p_user_id: current.user.id, p_world_id: current.appointment.world_id })
+        }),
+        serverSupabase('/rest/v1/rpc/get_manager_legacy_outgoing_transfer_offers_for_user', {
+          method: 'POST',
+          body: JSON.stringify({ p_user_id: current.user.id, p_world_id: current.appointment.world_id })
+        })
+      ]);
+      return json({
+        ...(market || {
+          world_id: current.appointment.world_id,
+          club_id: current.appointment.club_id,
+          listings: [],
+          outgoing_offers: [],
+          incoming_offers: []
+        }),
+        legacy_outgoing_offers: Array.isArray(legacyOutgoing) ? legacyOutgoing : []
       });
     }
 
@@ -88,6 +97,20 @@ export default async (request) => {
     const body = await request.json().catch(() => ({}));
     const action = String(body.action || '').trim().toLowerCase();
     const clientRequestId = String(body.client_request_id || body.clientRequestId || '').trim() || randomUUID();
+
+    if (action === 'withdraw_legacy_offer') {
+      const proposalId = String(body.proposal_id || body.proposalId || '').trim();
+      if (!proposalId) return json({ error: 'Transfer offer is required' }, 400);
+      const result = await serverSupabase('/rest/v1/rpc/withdraw_manager_legacy_transfer_offer_for_user', {
+        method: 'POST',
+        body: JSON.stringify({
+          p_user_id: current.user.id,
+          p_world_id: current.appointment.world_id,
+          p_proposal_id: proposalId
+        })
+      });
+      return json({ accepted: true, action, offer: result, message: 'Legacy transfer offer withdrawn immediately.' });
+    }
 
     if (['list', 'withdraw'].includes(action)) {
       const playerId = String(body.player_id || body.playerId || '').trim();
