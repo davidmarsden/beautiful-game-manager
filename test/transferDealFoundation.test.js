@@ -59,6 +59,9 @@ test('first-class offers use immutable revisions, participants, legs and an appe
   assert.match(sql, /Only the manager who made this offer can withdraw it/i);
   assert.match(sql, /Only a negotiating offer can be withdrawn/i);
   assert.match(sql, /revoke update, delete on table public\.transfer_deal_events from service_role/i);
+  assert.match(sql, /array\['club_profiles',buyer_club_id,'club_name'\]/i);
+  assert.match(sql, /array\['club_profiles',seller_club_id,'canonical_name'\]/i);
+  assert.doesNotMatch(sql, /array\['directory','clubs'/i);
   assert.doesNotMatch(sql, /manager_world_commands/i);
 });
 
@@ -90,6 +93,14 @@ test('Transfers UI makes listing, offers and buyer withdrawal immediate without 
   assert.match(source, /Transfer offer withdrawn immediately/);
   assert.doesNotMatch(source, /command_type: 'transfer_offer'/);
   assert.doesNotMatch(source, /command_type: 'transfer_listing'/);
+});
+
+test('outstanding legacy incoming offers retain their existing accept and decline path', async () => {
+  const source = await readFile(uiUrl, 'utf8');
+  assert.match(source, /data-legacy-transfer-response="accepted"/);
+  assert.match(source, /data-legacy-transfer-response="declined"/);
+  assert.match(source, /respondLegacyOffer\(button\.dataset\.proposalId, button\.dataset\.legacyTransferResponse\)/);
+  assert.match(source, /request\('\/api\/transfer-negotiations', \{ proposal_id: proposalId, response \}\)/);
 });
 
 test('portal navigation exposes Transfers as a first-class route', async () => {
