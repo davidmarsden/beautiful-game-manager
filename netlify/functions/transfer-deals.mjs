@@ -62,6 +62,16 @@ function requestKey(payload) {
   return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
 
+function attachPendingChanges(market, changes) {
+  const byDeal = new Map((Array.isArray(changes) ? changes : []).map((change) => [change.deal_id, change]));
+  const decorate = (offers) => (Array.isArray(offers) ? offers : []).map((offer) => ({ ...offer, pending_change: byDeal.get(offer.deal_id) || null }));
+  return {
+    ...market,
+    incoming_offers: decorate(market?.incoming_offers),
+    outgoing_offers: decorate(market?.outgoing_offers)
+  };
+}
+
 export default async (request) => {
   try {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured' }, 503);
@@ -70,7 +80,7 @@ export default async (request) => {
     const current = await identity(token);
 
     if (request.method === 'GET') {
-      const [market, legacyOutgoing] = await Promise.all([
+      const [market, legacyOutgoing, agreedChanges] = await Promise.all([
         serverSupabase('/rest/v1/rpc/get_manager_transfer_market_for_user', {
           method: 'POST',
           body: JSON.stringify({ p_user_id: current.user.id, p_world_id: current.appointment.world_id })
@@ -78,16 +88,21 @@ export default async (request) => {
         serverSupabase('/rest/v1/rpc/get_manager_legacy_outgoing_transfer_offers_for_user', {
           method: 'POST',
           body: JSON.stringify({ p_user_id: current.user.id, p_world_id: current.appointment.world_id })
-        })
-      ]);
-      return json({
-        ...(market || {
-          world_id: current.appointment.world_id,
-          club_id: current.appointment.club_id,
-          listings: [],
-          outgoing_offers: [],
-          incoming_offers: []
         }),
+        serverSupabase('/rest/v1/rpc/get_manager_transfer_agreed_changes_for_user', {
+          method: 'POST',
+          body: JSON.stringify({ p_user_id: current.user.id, p_world_id: current.appointment.world_id })
+        }).catch(() => [])
+      ]);
+      const decoratedMarket = attachPendingChanges(market || {
+        world_id: current.appointment.world_id,
+        club_id: current.appointment.club_id,
+        listings: [],
+        outgoing_offers: [],
+        incoming_offers: []
+      }, agreedChanges);
+      return json({
+        ...decoratedMarket,
         legacy_outgoing_offers: Array.isArray(legacyOutgoing) ? legacyOutgoing : []
       });
     }
@@ -110,6 +125,76 @@ export default async (request) => {
         })
       });
       return json({ accepted: true, action, offer: result, message: 'Legacy transfer offer withdrawn immediately.' });
+    }
+
+    if (['propose_agreed_amendment', 'propose_agreed_cancellation'].includes(action)) {
+      const dealId = String(body.deal_id || body.dealId || '').trim();
+      const revisionNo = Number(body.revision_no ?? body.revisionNo);
+      if (!dealId) return json({ error: 'Deal is required' }, 400);
+      if (!Number.isInteger(revisionNo) || revisionNo < 1) return json({ error: 'Exact agreed revision is required' }, 400);
+      const changeType = action === 'propose_agreed_amendment' ? 'amendment' : 'cancellation';
+      const fee = Math.max(0, Number(body.fee ?? 0) || 0);
+      const contractYears = Math.max(1, Math.min(5, Number(body.contract_years ?? body.contractYears ?? 3) || 3));
+      const key = requestKey({
+        user_id: current.user.id,
+        world_id: current.appointment.world_id,
+        action,
+        deal_id: dealId,
+        revision_no: revisionNo,
+        fee: changeType === 'amendment' ? fee : null,
+        contract_years: changeType === 'amendment' ? contractYears : null,
+        client_request_id: clientRequestId
+      });
+      const result = await serverSupabase('/rest/v1/rpc/propose_manager_transfer_agreed_change_for_user', {
+        method: 'POST',
+        body: JSON.stringify({
+          p_user_id: current.user.id,
+          p_world_id: current.appointment.world_id,
+          p_deal_id: dealId,
+          p_revision_no: revisionNo,
+          p_change_type: changeType,
+          p_fee: changeType === 'amendment' ? fee : null,
+          p_contract_years: changeType === 'amendment' ? contractYears : null,
+          p_request_key: key
+        })
+      });
+      return json({
+        accepted: true,
+        action,
+        change: result,
+        message: changeType === 'amendment'
+          ? 'Amendment proposed. The existing agreed terms remain in force unless the other club accepts the change.'
+          : 'Mutual cancellation proposed. The existing agreed deal remains in force unless the other club accepts cancellation.'
+      });
+    }
+
+    if (['accept_agreed_change', 'reject_agreed_change'].includes(action)) {
+      const changeRequestId = String(body.change_request_id || body.changeRequestId || '').trim();
+      if (!changeRequestId) return json({ error: 'Change request is required' }, 400);
+      const responseAction = action === 'accept_agreed_change' ? 'accept' : 'reject';
+      const key = requestKey({
+        user_id: current.user.id,
+        world_id: current.appointment.world_id,
+        action,
+        change_request_id: changeRequestId,
+        client_request_id: clientRequestId
+      });
+      const result = await serverSupabase('/rest/v1/rpc/respond_manager_transfer_agreed_change_for_user', {
+        method: 'POST',
+        body: JSON.stringify({
+          p_user_id: current.user.id,
+          p_world_id: current.appointment.world_id,
+          p_change_request_id: changeRequestId,
+          p_action: responseAction,
+          p_request_key: key
+        })
+      });
+      const message = responseAction === 'reject'
+        ? 'Proposed change rejected. The existing agreed terms remain in force.'
+        : result?.deal_status === 'mutually_cancelled'
+          ? 'Both clubs agreed to cancel the transfer.'
+          : 'Both clubs agreed the amendment. The new immutable revision is now the agreed deal.';
+      return json({ accepted: true, action, change: result, message });
     }
 
     if (['accept_offer', 'decline_offer', 'counter_offer'].includes(action)) {
@@ -220,7 +305,7 @@ export default async (request) => {
   } catch (error) {
     const message = String(error?.message || 'Transfer market request failed');
     const status = /Session|Authentication/.test(message) ? 401
-      : /required|owned|listing action|response action|active transfer listing|read model|canonical world|appointment|selling club|offer|deal|revision|participant|approved/i.test(message) ? 409
+      : /required|owned|listing action|response action|change response|agreed-deal change|active transfer listing|read model|canonical world|appointment|selling club|offer|deal|revision|participant|approved|pending change/i.test(message) ? 409
         : 503;
     return json({ error: message }, status);
   }

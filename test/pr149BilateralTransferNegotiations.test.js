@@ -120,7 +120,7 @@ test('manager portal provides transfer selectors and preserves retry-safe legacy
   assert.match(script, /negotiationPlayer/);
   assert.match(script, /data-legacy-transfer-response="accepted"/);
   assert.match(script, /data-legacy-transfer-response="declined"/);
-  assert.match(script, /£\$\{Number\(offer\.fee/);
+  assert.match(script, /formatMoney\(offer\.fee/);
   assert.match(script, /remains on the legacy response path/);
   assert.match(script, /async function respondLegacyOffer/);
   assert.match(script, /document\.querySelectorAll\('\[data-legacy-transfer-response\]'\)[\s\S]*button\.disabled = true/);
