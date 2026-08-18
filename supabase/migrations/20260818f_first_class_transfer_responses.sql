@@ -88,7 +88,7 @@ begin
 
   select * into participant
   from public.transfer_deal_participants p
-  where p.deal_id = deal_row.id and p.club_id = club_id_value and p.manager_id = manager_id_value;
+  where p.deal_id = deal_row.id and p.club_id = club_id_value;
   if participant.deal_id is null then raise exception 'Your club is not a participant in this transfer deal'; end if;
 
   select * into buyer from public.transfer_deal_participants p where p.deal_id = deal_row.id and p.role = 'buyer' limit 1;
