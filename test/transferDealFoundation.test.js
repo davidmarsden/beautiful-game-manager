@@ -83,6 +83,16 @@ test('legacy outgoing bridge exposes only unanswered buyer offers and withdraws 
   assert.match(sql, /grant execute on function public\.withdraw_manager_legacy_transfer_offer_for_user[\s\S]*to service_role/i);
 });
 
+test('legacy outgoing bridge tolerates malformed historical fee and contract fields', async () => {
+  const sql = await readFile(legacyBridgeUrl, 'utf8');
+  assert.match(sql, /coalesce\(offer\.command_payload->>'fee', ''\) ~ '\^-\?\[0-9\]\+\(\[\.\]\[0-9\]\+\)\?\$'/i);
+  assert.match(sql, /else 0\s+end/i);
+  assert.match(sql, /coalesce\(offer\.command_payload->>'contractYears', offer\.command_payload->>'contract_years', ''\) ~ '\^\[0-9\]\+\$'/i);
+  assert.match(sql, /greatest\(1, least\([\s\S]*::integer, 5\)\)/i);
+  assert.match(sql, /else 3\s+end/i);
+  assert.doesNotMatch(sql, /coalesce\(\(offer\.command_payload->>'fee'\)::numeric, 0\)/i);
+});
+
 test('transfer-deals gateway supports opaque Supabase service keys and never reads save_envelope', async () => {
   const source = await readFile(endpointUrl, 'utf8');
   assert.match(source, /const isJwt = \(value\) => String\(value \|\| ''\)\.split\('\.'\)\.length === 3/);
