@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 const migrationUrl = new URL('../supabase/migrations/20260818_transfer_deal_foundation.sql', import.meta.url);
 const hardeningUrl = new URL('../supabase/migrations/20260818c_transfer_listing_concurrency_and_ownership.sql', import.meta.url);
 const offerUrl = new URL('../supabase/migrations/20260818d_first_class_transfer_offers.sql', import.meta.url);
+const legacyBridgeUrl = new URL('../supabase/migrations/20260818e_legacy_outgoing_transfer_bridge.sql', import.meta.url);
 const endpointUrl = new URL('../netlify/functions/transfer-deals.mjs', import.meta.url);
 const uiUrl = new URL('../public/transfer-negotiations.js', import.meta.url);
 const navigationUrl = new URL('../public/portal-navigation.js', import.meta.url);
@@ -65,6 +66,23 @@ test('first-class offers use immutable revisions, participants, legs and an appe
   assert.doesNotMatch(sql, /manager_world_commands/i);
 });
 
+test('legacy outgoing bridge exposes only unanswered buyer offers and withdraws through audited finalization', async () => {
+  const sql = await readFile(legacyBridgeUrl, 'utf8');
+  assert.match(sql, /get_manager_legacy_outgoing_transfer_offers_for_user/i);
+  assert.match(sql, /offer\.manager_id = manager_id_value/i);
+  assert.match(sql, /offer\.command_type = 'transfer_offer'/i);
+  assert.match(sql, /offer\.status = 'pending'/i);
+  assert.match(sql, /response\.referenced_command_id = offer\.id/i);
+  assert.match(sql, /not exists/i);
+  assert.match(sql, /withdraw_manager_legacy_transfer_offer_for_user/i);
+  assert.match(sql, /Only a pending legacy transfer offer can be withdrawn/i);
+  assert.match(sql, /already received a response and can no longer be withdrawn/i);
+  assert.match(sql, /finalize_manager_world_command/i);
+  assert.match(sql, /'superseded'/i);
+  assert.match(sql, /'withdrawn'/i);
+  assert.match(sql, /grant execute on function public\.withdraw_manager_legacy_transfer_offer_for_user[\s\S]*to service_role/i);
+});
+
 test('transfer-deals gateway supports opaque Supabase service keys and never reads save_envelope', async () => {
   const source = await readFile(endpointUrl, 'utf8');
   assert.match(source, /const isJwt = \(value\) => String\(value \|\| ''\)\.split\('\.'\)\.length === 3/);
@@ -72,6 +90,8 @@ test('transfer-deals gateway supports opaque Supabase service keys and never rea
   assert.match(source, /const serverSupabase = \(path, options = \{\}\) => requestSupabase\(path, \{[\s\S]*apiKey: SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(source, /\.\.\.\(isJwt\(SUPABASE_SERVICE_ROLE_KEY\) \? \{ bearer: SUPABASE_SERVICE_ROLE_KEY \} : \{\}\)/);
   assert.match(source, /get_manager_transfer_market_for_user/);
+  assert.match(source, /get_manager_legacy_outgoing_transfer_offers_for_user/);
+  assert.match(source, /withdraw_manager_legacy_transfer_offer_for_user/);
   assert.match(source, /set_manager_transfer_listing_for_user/);
   assert.match(source, /set_manager_transfer_offer_for_user/);
   assert.match(source, /\['offer', 'withdraw_offer'\]/);
@@ -101,6 +121,15 @@ test('outstanding legacy incoming offers retain their existing accept and declin
   assert.match(source, /data-legacy-transfer-response="declined"/);
   assert.match(source, /respondLegacyOffer\(button\.dataset\.proposalId, button\.dataset\.legacyTransferResponse\)/);
   assert.match(source, /request\('\/api\/transfer-negotiations', \{ proposal_id: proposalId, response \}\)/);
+});
+
+test('outstanding legacy outgoing offers are visible and withdrawable until a response exists', async () => {
+  const source = await readFile(uiUrl, 'utf8');
+  assert.match(source, /legacy_outgoing_offers/);
+  assert.match(source, /data-withdraw-legacy-offer/);
+  assert.match(source, /withdrawLegacyOffer\(legacyButton\.dataset\.proposalId\)/);
+  assert.match(source, /action: 'withdraw_legacy_offer'/);
+  assert.match(source, /Legacy transfer offer withdrawn immediately/);
 });
 
 test('portal navigation exposes Transfers as a first-class route', async () => {
