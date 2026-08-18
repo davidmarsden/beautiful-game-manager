@@ -4,8 +4,10 @@ import { readFile } from 'node:fs/promises';
 
 const migrationUrl = new URL('../supabase/migrations/20260818_transfer_deal_foundation.sql', import.meta.url);
 const hardeningUrl = new URL('../supabase/migrations/20260818c_transfer_listing_concurrency_and_ownership.sql', import.meta.url);
+const offerUrl = new URL('../supabase/migrations/20260818d_first_class_transfer_offers.sql', import.meta.url);
 const endpointUrl = new URL('../netlify/functions/transfer-deals.mjs', import.meta.url);
 const uiUrl = new URL('../public/transfer-negotiations.js', import.meta.url);
+const navigationUrl = new URL('../public/portal-navigation.js', import.meta.url);
 
 test('transfer deal foundation is first-class and separate from manager_world_commands', async () => {
   const sql = await readFile(migrationUrl, 'utf8');
@@ -44,6 +46,22 @@ test('listing hardening serializes identical retries and retires stale ownership
   assert.match(sql, /read_model #>> array\['squad_cycle','players',listing\.player_id,'club_id'\][\s\S]*= listing\.club_id/i);
 });
 
+test('first-class offers use immutable revisions, participants, legs and an append-only event ledger', async () => {
+  const sql = await readFile(offerUrl, 'utf8');
+  assert.match(sql, /create table if not exists public\.transfer_deal_events/i);
+  assert.match(sql, /event_type in \('offered', 'withdrawn'\)/i);
+  assert.match(sql, /set_manager_transfer_offer_for_user/i);
+  assert.match(sql, /insert into public\.transfer_deal_revisions/i);
+  assert.match(sql, /insert into public\.transfer_deal_participants/i);
+  assert.match(sql, /insert into public\.transfer_deal_legs/i);
+  assert.match(sql, /insert into public\.transfer_deal_approvals/i);
+  assert.match(sql, /status = 'withdrawn'/i);
+  assert.match(sql, /Only the manager who made this offer can withdraw it/i);
+  assert.match(sql, /Only a negotiating offer can be withdrawn/i);
+  assert.match(sql, /revoke update, delete on table public\.transfer_deal_events from service_role/i);
+  assert.doesNotMatch(sql, /manager_world_commands/i);
+});
+
 test('transfer-deals gateway supports opaque Supabase service keys and never reads save_envelope', async () => {
   const source = await readFile(endpointUrl, 'utf8');
   assert.match(source, /const isJwt = \(value\) => String\(value \|\| ''\)\.split\('\.'\)\.length === 3/);
@@ -52,17 +70,31 @@ test('transfer-deals gateway supports opaque Supabase service keys and never rea
   assert.match(source, /\.\.\.\(isJwt\(SUPABASE_SERVICE_ROLE_KEY\) \? \{ bearer: SUPABASE_SERVICE_ROLE_KEY \} : \{\}\)/);
   assert.match(source, /get_manager_transfer_market_for_user/);
   assert.match(source, /set_manager_transfer_listing_for_user/);
+  assert.match(source, /set_manager_transfer_offer_for_user/);
+  assert.match(source, /\['offer', 'withdraw_offer'\]/);
   assert.doesNotMatch(source, /save_envelope/i);
   assert.doesNotMatch(source, /manager_world_commands/i);
 });
 
-test('World UI publishes and withdraws listings immediately instead of queuing transfer_listing commands', async () => {
+test('Transfers UI makes listing, offers and buyer withdrawal immediate without matchday commands', async () => {
   const source = await readFile(uiUrl, 'utf8');
-  assert.match(source, /request\('\/api\/transfer-deals', \{\s*action: 'list'/);
-  assert.match(source, /request\('\/api\/transfer-deals', \{\s*action: 'withdraw'/);
-  assert.match(source, /Player listed immediately/);
-  assert.match(source, /Transfer listing withdrawn immediately/);
-  assert.doesNotMatch(source, /command_type: action === 'listing' \? 'transfer_listing'/);
+  assert.match(source, /data-view = 'transfers'|dataset\.view = 'transfers'/);
+  assert.match(source, /<h2>Transfers<\/h2>/);
+  assert.match(source, /<h3>Outgoing offers<\/h3>/);
+  assert.match(source, /data-withdraw-offer/);
+  assert.match(source, /action: 'offer'/);
+  assert.match(source, /action: 'withdraw_offer'/);
+  assert.match(source, /action: 'list'/);
+  assert.match(source, /action: 'withdraw'/);
+  assert.match(source, /Offer sent immediately/);
+  assert.match(source, /Transfer offer withdrawn immediately/);
+  assert.doesNotMatch(source, /command_type: 'transfer_offer'/);
   assert.doesNotMatch(source, /command_type: 'transfer_listing'/);
-  assert.match(source, /command_type: 'transfer_offer'/);
+});
+
+test('portal navigation exposes Transfers as a first-class route', async () => {
+  const source = await readFile(navigationUrl, 'utf8');
+  assert.match(source, /\['transfers', 'transfers'\]/);
+  assert.match(source, /button\.dataset\.view = 'transfers'/);
+  assert.match(source, /section\.id = 'transfersView'/);
 });
