@@ -62,7 +62,7 @@ test('first-team cap rejects a 26th senior even when the youth cohort has room',
   }), /first-team squad limit reached \(25\)/);
 });
 
-test('world read model drops heavyweight runtime/player state but preserves history and transfer identity fields', () => {
+test('world read model drops heavyweight runtime/player state but preserves History condition and availability fields', () => {
   const world = {
     world_id: 'world-1',
     season_number: 1,
@@ -80,7 +80,7 @@ test('world read model drops heavyweight runtime/player state but preserves hist
     },
     matchday_cycle: {
       season_id: 'season-1', current_matchday: 9, maximum_matchday: 38, turn_calendar: {},
-      runtimes: { d1: { fixtures: [], table: {}, archive_results: [], results: [], state: { players: { p1: { fitness: 12 } }, availability: { players: { p1: { injury_until_matchday: 99 } } } } } }
+      runtimes: { d1: { fixtures: [], table: {}, archive_results: [], results: [], state: { players: { p1: { fitness: 12, morale: 'Poor', hidden_engine_state: 'drop-me' } }, availability: { players: { p1: { injury_until_matchday: 99, suspension_until_matchday: 0, hidden_availability_state: 'drop-me' } } }, hidden_runtime_state: 'drop-me' } } }
     },
     history: { archives: [] },
     completed_seasons: []
@@ -89,7 +89,12 @@ test('world read model drops heavyweight runtime/player state but preserves hist
   assert.equal(model.squad_cycle.players.p1.display_name, 'Player One');
   assert.equal(model.squad_cycle.players.p1.market_value_eur, undefined);
   assert.equal(model.squad_cycle.players.p1.ability_profile, undefined);
-  assert.equal(model.matchday_cycle.runtimes.d1.state, undefined);
+  assert.equal(model.matchday_cycle.runtimes.d1.state.players.p1.fitness, 12);
+  assert.equal(model.matchday_cycle.runtimes.d1.state.players.p1.morale, 'Poor');
+  assert.equal(model.matchday_cycle.runtimes.d1.state.players.p1.hidden_engine_state, undefined);
+  assert.equal(model.matchday_cycle.runtimes.d1.state.availability.players.p1.injury_until_matchday, 99);
+  assert.equal(model.matchday_cycle.runtimes.d1.state.availability.players.p1.hidden_availability_state, undefined);
+  assert.equal(model.matchday_cycle.runtimes.d1.state.hidden_runtime_state, undefined);
   assert.deepEqual(model.squad_cycle.squad_limits, { first_team: 25, youth: 25 });
 });
 
