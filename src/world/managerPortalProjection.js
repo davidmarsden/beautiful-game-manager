@@ -152,6 +152,9 @@ export function projectManagerPortal(world, clubId, { nextTurnAt = null, weekday
   const decoratedFixtures = fixtures
     .map((fixture) => decorateFixture(world, clubId, fixture, resultsByFixture.get(String(fixture.fixture_id))))
     .sort((a, b) => a.matchday - b.matchday || String(a.kickoff_at).localeCompare(String(b.kickoff_at)));
+  const splitLimits = world.squad_cycle?.squad_limits || {};
+  const firstTeamCapacity = Number(splitLimits.first_team || 25);
+  const youthTeamCapacity = Number(splitLimits.youth || 25);
 
   return {
     world: {
@@ -181,8 +184,8 @@ export function projectManagerPortal(world, clubId, { nextTurnAt = null, weekday
       squad: {
         player_ids: [...(club.player_ids || [])],
         registered_player_ids: [...(club.registered_player_ids || [])],
-        first_team_capacity: world.squad_cycle.registration_limit || 25,
-        youth_team_capacity: 20
+        first_team_capacity: firstTeamCapacity,
+        youth_team_capacity: youthTeamCapacity
       }
     },
     squad,

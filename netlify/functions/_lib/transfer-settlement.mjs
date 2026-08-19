@@ -45,7 +45,7 @@ function updateOwnershipProjection(world, playerId, toClubId) {
 }
 
 function deterministicSettlementError(error) {
-  return /Transfer window is closed|Unknown player|Unknown club|is not owned by|already belongs to|registration limit reached|Registration is closed|Contract end must be after|Cannot save invalid world/i.test(String(error?.message || error));
+  return /Transfer window is closed|Unknown player|Unknown club|is not owned by|already belongs to|registration limit reached|first-team squad limit reached|youth squad limit reached|Registration is closed|Contract end must be after|Cannot save invalid world/i.test(String(error?.message || error));
 }
 
 async function reconcileSettlement(dealId, replacementChecksum) {

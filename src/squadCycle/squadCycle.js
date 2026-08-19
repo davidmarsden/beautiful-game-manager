@@ -3,8 +3,10 @@ const integer = (value, fallback = 0) => Number.isInteger(Number(value)) ? Numbe
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
 
-export const SQUAD_CYCLE_VERSION = 'tbg-squad-cycle-v1.2';
+export const SQUAD_CYCLE_VERSION = 'tbg-squad-cycle-v1.3';
 export const DEFAULT_REGISTRATION_LIMIT = 25;
+export const DEFAULT_FIRST_TEAM_SQUAD_LIMIT = 25;
+export const DEFAULT_YOUTH_SQUAD_LIMIT = 25;
 export const DEFAULT_YOUTH_INTAKE_SIZE = 3;
 
 const DAY = 86400000;
@@ -36,6 +38,37 @@ function hash(value) {
 
 function playerId(player) {
   return text(player?.tbg_player_id || player?.player_id || player?.id);
+}
+
+export function isYouthSquadPlayer(player = {}) {
+  if (typeof player.youth_eligible_at_season_start === 'boolean') return player.youth_eligible_at_season_start;
+  const age = integer(player.season_start_age ?? player.age, 99);
+  return age <= 21;
+}
+
+function squadLimits(state) {
+  const configured = state?.squad_limits || {};
+  return {
+    first_team: Math.max(1, integer(configured.first_team, DEFAULT_FIRST_TEAM_SQUAD_LIMIT)),
+    youth: Math.max(1, integer(configured.youth, DEFAULT_YOUTH_SQUAD_LIMIT))
+  };
+}
+
+function normaliseSquadLimits(state) {
+  const limits = squadLimits(state);
+  state.squad_limits = limits;
+  return limits;
+}
+
+function squadCohort(player) {
+  return isYouthSquadPlayer(player) ? 'youth' : 'first_team';
+}
+
+function cohortCount(state, target, cohort, ids = target.player_ids) {
+  return (ids || []).reduce((count, id) => {
+    const player = state.players[id];
+    return count + (player && squadCohort(player) === cohort ? 1 : 0);
+  }, 0);
 }
 
 function clonePlayer(player) {
@@ -116,12 +149,28 @@ function buildReplacementContract({ player, clubId, atIso, endAt, wage, oldContr
   };
 }
 
+function assertSquadCapacity(state, target, player) {
+  const limits = normaliseSquadLimits(state);
+  const cohort = squadCohort(player);
+  const count = cohortCount(state, target, cohort);
+  if (count >= limits[cohort]) {
+    const label = cohort === 'youth' ? 'youth' : 'first-team';
+    throw new Error(`${target.club_id} ${label} squad limit reached (${limits[cohort]})`);
+  }
+}
+
 function assertRegistrationPossible(state, target, atIso, playerIdValue) {
   if (!registrationOpen(state, atIso)) throw new Error(`Registration is closed at ${atIso}`);
+  const player = ownedPlayer(state, playerIdValue);
   const existing = state.registrations[playerIdValue];
   const alreadyRegisteredHere = existing?.registered && existing.club_id === target.club_id;
-  if (!alreadyRegisteredHere && target.registered_player_ids.length >= state.registration_limit) {
-    throw new Error(`${target.club_id} registration limit reached`);
+  if (alreadyRegisteredHere) return;
+  const cohort = squadCohort(player);
+  const limits = normaliseSquadLimits(state);
+  const count = cohortCount(state, target, cohort, target.registered_player_ids);
+  if (count >= limits[cohort]) {
+    const label = cohort === 'youth' ? 'youth' : 'first-team';
+    throw new Error(`${target.club_id} ${label} registration limit reached (${limits[cohort]})`);
   }
 }
 
@@ -145,7 +194,12 @@ export function defaultSquadCycleCalendar({ seasonId = 'season', seasonStart = '
   });
 }
 
-export function createSquadCycleState({ clubs = [], seasonId = 'season', seasonStart, seasonEnd, registrationLimit = DEFAULT_REGISTRATION_LIMIT } = {}) {
+export function createSquadCycleState({
+  clubs = [], seasonId = 'season', seasonStart, seasonEnd,
+  registrationLimit = DEFAULT_REGISTRATION_LIMIT,
+  firstTeamSquadLimit = DEFAULT_FIRST_TEAM_SQUAD_LIMIT,
+  youthSquadLimit = DEFAULT_YOUTH_SQUAD_LIMIT
+} = {}) {
   if (!Array.isArray(clubs) || clubs.length < 2) throw new Error('Squad cycle requires at least two clubs');
   const calendar = defaultSquadCycleCalendar({ seasonId, seasonStart, seasonEnd });
   const state = {
@@ -153,6 +207,10 @@ export function createSquadCycleState({ clubs = [], seasonId = 'season', seasonS
     season_id: seasonId,
     calendar,
     registration_limit: integer(registrationLimit, DEFAULT_REGISTRATION_LIMIT),
+    squad_limits: {
+      first_team: Math.max(1, integer(firstTeamSquadLimit, DEFAULT_FIRST_TEAM_SQUAD_LIMIT)),
+      youth: Math.max(1, integer(youthSquadLimit, DEFAULT_YOUTH_SQUAD_LIMIT))
+    },
     clubs: Object.create(null),
     players: Object.create(null),
     contracts: Object.create(null),
@@ -249,6 +307,7 @@ export function transferPlayer(state, { playerId: idValue, fromClubId, toClubId,
   if (from.club_id === to.club_id) throw new Error('Transfer requires two different clubs');
   if (player.club_id !== from.club_id || !from.player_ids.includes(player.tbg_player_id)) throw new Error(`${player.tbg_player_id} is not owned by ${from.club_id}`);
   if (to.player_ids.includes(player.tbg_player_id)) throw new Error(`${player.tbg_player_id} already belongs to ${to.club_id}`);
+  assertSquadCapacity(state, to, player);
 
   const oldContract = state.contracts[player.contract_id];
   const nextContract = buildReplacementContract({
@@ -303,7 +362,9 @@ export function generateYouthIntake(state, { clubId, at = state.calendar.youth_i
   const target = club(state, clubId);
   const positions = ['Goalkeeper', 'Centre-Back', 'Central Midfield', 'Right Winger', 'Centre-Forward', 'Left-Back'];
   const created = [];
+  const limits = normaliseSquadLimits(state);
   for (let index = 0; index < integer(count, DEFAULT_YOUTH_INTAKE_SIZE); index += 1) {
+    if (cohortCount(state, target, 'youth') >= limits.youth) break;
     const seed = hash(`${state.season_id}:${target.club_id}:${index}`);
     const id = `${target.club_id}-youth-${state.season_id}-${index + 1}`;
     if (state.players[id]) throw new Error(`Youth intake already generated: ${id}`);
@@ -312,6 +373,7 @@ export function generateYouthIntake(state, { clubId, at = state.calendar.youth_i
       display_name: `${target.club_name} Youth ${index + 1}`,
       club_id: target.club_id,
       age: 16 + (seed % 3),
+      youth_eligible_at_season_start: true,
       position: positions[seed % positions.length],
       underlying_ability_rating: 65 + (seed % 6),
       youth_intake_season: state.season_id
@@ -337,25 +399,38 @@ export function generateYouthIntake(state, { clubId, at = state.calendar.youth_i
 }
 
 export function squadCycleSnapshot(state) {
-  const clubs = Object.values(state.clubs).map((row) => Object.freeze({
-    club_id: row.club_id,
-    squad_size: row.player_ids.length,
-    registered_size: row.registered_player_ids.length,
-    player_ids: Object.freeze([...row.player_ids]),
-    registered_player_ids: Object.freeze([...row.registered_player_ids])
-  }));
+  const limits = normaliseSquadLimits(state);
+  const clubs = Object.values(state.clubs).map((row) => {
+    const firstTeamSize = cohortCount(state, row, 'first_team');
+    const youthSize = cohortCount(state, row, 'youth');
+    const firstTeamRegistered = cohortCount(state, row, 'first_team', row.registered_player_ids);
+    const youthRegistered = cohortCount(state, row, 'youth', row.registered_player_ids);
+    return Object.freeze({
+      club_id: row.club_id,
+      squad_size: row.player_ids.length,
+      first_team_size: firstTeamSize,
+      youth_size: youthSize,
+      registered_size: row.registered_player_ids.length,
+      first_team_registered: firstTeamRegistered,
+      youth_registered: youthRegistered,
+      player_ids: Object.freeze([...row.player_ids]),
+      registered_player_ids: Object.freeze([...row.registered_player_ids])
+    });
+  });
   const activeContracts = Object.values(state.contracts).filter((row) => row.status === 'active');
   const freeAgents = Object.values(state.players).filter((row) => !row.club_id);
   const checks = Object.freeze({
     every_owned_player_appears_once: Object.values(state.players).filter((row) => row.club_id).every((player) => state.clubs[player.club_id]?.player_ids.filter((id) => id === player.tbg_player_id).length === 1),
     registrations_match_ownership: Object.values(state.registrations).every((row) => !row.registered || state.players[row.player_id]?.club_id === row.club_id),
-    no_club_exceeds_registration_limit: clubs.every((row) => row.registered_size <= state.registration_limit),
+    no_club_exceeds_split_squad_limits: clubs.every((row) => row.first_team_size <= limits.first_team && row.youth_size <= limits.youth),
+    no_club_exceeds_split_registration_limits: clubs.every((row) => row.first_team_registered <= limits.first_team && row.youth_registered <= limits.youth),
     every_owned_player_has_active_contract: Object.values(state.players).filter((row) => row.club_id).every((player) => state.contracts[player.contract_id]?.status === 'active'),
     event_ids_are_unique: new Set(state.events.map((row) => row.event_id)).size === state.events.length
   });
   return Object.freeze({
     version: SQUAD_CYCLE_VERSION,
     season_id: state.season_id,
+    squad_limits: Object.freeze({ ...limits }),
     clubs: Object.freeze(clubs),
     player_count: Object.keys(state.players).length,
     active_contract_count: activeContracts.length,
