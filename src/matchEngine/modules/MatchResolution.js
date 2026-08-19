@@ -50,33 +50,53 @@ function validateEvent(event, seenIds) {
 
 function orderEvents(events) { return events.sort((left, right) => left.minute - right.minute || left.event_id.localeCompare(right.event_id)); }
 
-export function spreadDuplicateOrdinaryFoulMinutes(events = []) {
-  const occupied = new Map();
-  return events.map((event) => {
-    const type = text(event?.type || event?.event_type);
-    const subtype = text(event?.subtype || event?.event_subtype);
-    const playerId = String(event?.player_id || '').trim();
-    const side = text(event?.side);
-    const originalMinute = Math.trunc(number(event?.minute, -1));
-    if (type !== 'foul' || subtype !== 'ordinary_foul' || !playerId || !['home', 'away'].includes(side)
-      || originalMinute < 1 || originalMinute > 120) return event;
+function ordinaryFoulIdentity(event = {}) {
+  const type = text(event?.type || event?.event_type);
+  const subtype = text(event?.subtype || event?.event_subtype);
+  const playerId = String(event?.player_id || '').trim();
+  const side = text(event?.side);
+  const minute = Math.trunc(number(event?.minute, -1));
+  if (type !== 'foul' || subtype !== 'ordinary_foul' || !playerId || !['home', 'away'].includes(side)
+    || minute < 1 || minute > 120) return null;
+  return { key: `${side}:${playerId}`, minute };
+}
 
-    const key = `${side}:${playerId}`;
-    const used = occupied.get(key) || new Set();
-    let minute = originalMinute;
-    if (used.has(minute)) {
-      let forward = minute + 1;
-      while (forward <= 120 && used.has(forward)) forward += 1;
-      if (forward <= 120) minute = forward;
-      else {
-        let backward = minute - 1;
-        while (backward >= 1 && used.has(backward)) backward -= 1;
-        if (backward >= 1) minute = backward;
-      }
+export function spreadDuplicateOrdinaryFoulMinutes(events = []) {
+  const reservedOriginalMinutes = new Map();
+  for (const event of events) {
+    const identity = ordinaryFoulIdentity(event);
+    if (!identity) continue;
+    const reserved = reservedOriginalMinutes.get(identity.key) || new Set();
+    reserved.add(identity.minute);
+    reservedOriginalMinutes.set(identity.key, reserved);
+  }
+
+  const seenOriginalMinutes = new Map();
+  const reassignedMinutes = new Map();
+  return events.map((event) => {
+    const identity = ordinaryFoulIdentity(event);
+    if (!identity) return event;
+
+    const seen = seenOriginalMinutes.get(identity.key) || new Map();
+    const occurrence = seen.get(identity.minute) || 0;
+    seen.set(identity.minute, occurrence + 1);
+    seenOriginalMinutes.set(identity.key, seen);
+    if (occurrence === 0) return event;
+
+    const reserved = reservedOriginalMinutes.get(identity.key) || new Set();
+    const reassigned = reassignedMinutes.get(identity.key) || new Set();
+    let minute = identity.minute;
+    let forward = minute + 1;
+    while (forward <= 120 && (reserved.has(forward) || reassigned.has(forward))) forward += 1;
+    if (forward <= 120) minute = forward;
+    else {
+      let backward = minute - 1;
+      while (backward >= 1 && (reserved.has(backward) || reassigned.has(backward))) backward -= 1;
+      if (backward >= 1) minute = backward;
     }
-    used.add(minute);
-    occupied.set(key, used);
-    return minute === originalMinute ? event : { ...event, minute };
+    reassigned.add(minute);
+    reassignedMinutes.set(identity.key, reassigned);
+    return minute === identity.minute ? event : { ...event, minute };
   });
 }
 
@@ -190,10 +210,13 @@ function projectedStateChanges(events, fatigue, lineups, contract = {}) {
 
 export function resolveMatch(eventGeneration, fatigue = {}, options = {}) {
   if (!eventGeneration?.provisional_event_stream) throw new Error('Module E requires Module D event generation');
-  const lineupResolution = resolveLineupEvents(eventGeneration, options.contract, options.quality);
-  const coherentEvents = spreadDuplicateOrdinaryFoulMinutes(lineupResolution.events);
+  const coherentGeneration = {
+    ...eventGeneration,
+    provisional_event_stream: spreadDuplicateOrdinaryFoulMinutes(eventGeneration.provisional_event_stream)
+  };
+  const lineupResolution = resolveLineupEvents(coherentGeneration, options.contract, options.quality);
   const seenIds = new Set();
-  const events = orderEvents(coherentEvents.map((event) => validateEvent(event, seenIds)));
+  const events = orderEvents(lineupResolution.events.map((event) => validateEvent(event, seenIds)));
   validateLinks(events);
   const score = events.reduce((result, event) => { if (event.type === 'goal') result[event.side] += 1; return result; }, { home: 0, away: 0 });
   const expected = eventGeneration.expected || {};
