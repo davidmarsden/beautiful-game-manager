@@ -23,17 +23,20 @@ test('free-agent signing uses the governed pool and CAS-safe canonical settlemen
 
 test('free-agent acquisition requests are idempotent and persist terminal history', async () => {
   const migration = await read('supabase/migrations/20260819f_free_agent_live_settlement.sql');
+  const checksumGuard = await read('supabase/migrations/20260819g_free_agent_settlement_checksum_guard.sql');
   const history = await read('netlify/functions/transfer-history.mjs');
 
   assert.match(migration, /create table if not exists public\.player_acquisitions/);
   assert.match(migration, /player_acquisitions_request_key_uidx/);
   assert.match(migration, /create_free_agent_acquisition_for_user/);
   assert.match(migration, /apply_free_agent_acquisition_settlement/);
-  assert.match(migration, /where world_id = acquisition_row\.world_id[\s\S]*save_checksum = p_expected_checksum[\s\S]*turn_status = 'open'/);
   assert.match(migration, /world_read_model_cache/);
   assert.match(migration, /get_manager_player_acquisition_history_for_user/);
   assert.match(migration, /revoke all on public\.player_acquisitions from public, anon, authenticated/);
   assert.match(migration, /grant execute on function public\.apply_free_agent_acquisition_settlement[\s\S]*to service_role/);
+
+  assert.match(checksumGuard, /replacement_checksum_value/);
+  assert.match(checksumGuard, /where world_id = acquisition_row\.world_id[\s\S]*save_checksum = p_expected_checksum[\s\S]*turn_status = 'open'/);
 
   assert.match(history, /get_manager_player_acquisition_history_for_user/);
   assert.match(history, /\.sort\(\(a, b\) => historyTime\(b\) - historyTime\(a\)\)/);
