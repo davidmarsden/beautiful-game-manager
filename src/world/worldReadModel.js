@@ -9,18 +9,80 @@ function compactRuntime(runtime = {}) {
   };
 }
 
+function compactPlayer(player = {}, playerId = null) {
+  return {
+    tbg_player_id: player.tbg_player_id || player.player_id || player.id || playerId,
+    player_id: player.player_id || player.tbg_player_id || player.id || playerId,
+    display_name: player.display_name || player.player_name || player.full_name || player.name || playerId,
+    player_name: player.player_name || player.display_name || player.full_name || player.name || playerId,
+    club_id: player.club_id || player.tbg_club_id || player.current_club_id || null,
+    age: player.age ?? null,
+    season_start_age: player.season_start_age ?? null,
+    youth_eligible_at_season_start: player.youth_eligible_at_season_start,
+    squad_registration: player.squad_registration || player.registration_group || player.squad_status || null,
+    specific_position: player.specific_position || player.position || player.primary_position || player.position_group || null,
+    position: player.position || player.specific_position || player.primary_position || player.position_group || null,
+    position_group: player.position_group || null,
+    underlying_ability_rating: player.underlying_ability_rating ?? player.tbg_rating ?? player.rating ?? null,
+    rating: player.rating ?? player.underlying_ability_rating ?? player.tbg_rating ?? null,
+    contract_id: player.contract_id || null,
+    squad_number: player.squad_number ?? null,
+    morale: player.morale || null,
+    registered: player.registered,
+    transfer_listed: Boolean(player.transfer_listed),
+    loan_listed: Boolean(player.loan_listed),
+    loaned_out: Boolean(player.loaned_out),
+    loan_status: player.loan_status || null,
+    loan_club_name: player.loan_club_name || null,
+    profile_url: player.profile_url || null,
+    source_profile_url: player.source_profile_url || null,
+    pink_final_profile_url: player.pink_final_profile_url || null,
+    public_profile_url: player.public_profile_url || null,
+    pink_final_route_key: player.pink_final_route_key || null,
+    profile_route_key: player.profile_route_key || null,
+    canonical_profile_key: player.canonical_profile_key || null,
+    profile_published: player.profile_published,
+    pink_final_profile_published: player.pink_final_profile_published,
+    public_profile_published: player.public_profile_published,
+    publication_status: player.publication_status || null,
+    profile_status: player.profile_status || null,
+    synthetic: Boolean(player.synthetic || player.generated || player.generated_youth || player.academy_generated),
+    generated: Boolean(player.generated),
+    generated_youth: Boolean(player.generated_youth),
+    academy_generated: Boolean(player.academy_generated),
+    generation_source: player.generation_source || player.player_source || player.source || player.origin || null
+  };
+}
+
+function compactContract(contract = {}, contractId = null) {
+  return {
+    contract_id: contract.contract_id || contractId,
+    player_id: contract.player_id || null,
+    club_id: contract.club_id || null,
+    end_at: contract.end_at || null,
+    status: contract.status || null,
+    squad_registration: contract.squad_registration || null
+  };
+}
+
+function compactObjectMap(source = {}, mapper) {
+  return Object.fromEntries(Object.entries(source || {}).map(([key, value]) => [key, mapper(value, key)]));
+}
+
 /**
  * Build the manager-facing World/history read model.
  *
- * The canonical save is the authoritative write/checkpoint envelope and contains
- * substantially more operational state than History, Competition and archived
- * Match Centre navigation require. Runtime player/availability state is deliberately
- * omitted here: it duplicates the canonical squad/player universe and was making a
- * post-settlement read-model refresh almost as large as the canonical save itself.
+ * The canonical save is the authoritative write/checkpoint envelope. This cache is
+ * deliberately a read projection, not a second copy of the world. Runtime player
+ * state and heavyweight scouting/engine player metadata are excluded so a transfer
+ * settlement cannot turn every subsequent World/History read into a multi-megabyte
+ * operational checkpoint read.
  */
 export function buildWorldReadModel(world = {}) {
   const runtimes = Object.fromEntries(Object.entries(world.matchday_cycle?.runtimes || {})
     .map(([divisionId, runtime]) => [divisionId, compactRuntime(runtime)]));
+  const players = compactObjectMap(world.squad_cycle?.players || {}, compactPlayer);
+  const contracts = compactObjectMap(world.squad_cycle?.contracts || {}, compactContract);
 
   return {
     world_id: world.world_id || null,
@@ -38,8 +100,8 @@ export function buildWorldReadModel(world = {}) {
       registration_limit: world.squad_cycle?.registration_limit ?? null,
       squad_limits: clone(world.squad_cycle?.squad_limits || { first_team: 25, youth: 25 }),
       clubs: clone(world.squad_cycle?.clubs || {}),
-      players: clone(world.squad_cycle?.players || {}),
-      contracts: clone(world.squad_cycle?.contracts || {}),
+      players,
+      contracts,
       state: {
         registrations: clone(world.squad_cycle?.state?.registrations || world.squad_cycle?.registrations || {})
       }
