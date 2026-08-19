@@ -106,8 +106,17 @@ test('transfer windows reject closed-date moves and accept open-window transfers
 });
 
 test('a transfer rejected by destination capacity leaves all state unchanged', () => {
-  const state = foundationState({ registrationLimit: 19 });
-  const playerId = state.clubs['club-1'].player_ids[0];
+  const senior = (id) => ({ tbg_player_id: id, display_name: id, age: 24, position: 'Central Midfield', underlying_ability_rating: 80 });
+  const state = createSquadCycleState({
+    clubs: [
+      { club_id: 'club-1', club_name: 'Club 1', players: [senior('seller-player')] },
+      { club_id: 'club-2', club_name: 'Club 2', players: Array.from({ length: 25 }, (_, index) => senior(`buyer-${index + 1}`)) }
+    ],
+    seasonId: 'pr65-capacity',
+    seasonStart: '2026-08-01T00:00:00.000Z',
+    seasonEnd: '2027-06-30T23:59:59.000Z'
+  });
+  const playerId = 'seller-player';
   const before = serialisableState(state);
 
   assert.throws(() => transferPlayer(state, {
@@ -116,7 +125,7 @@ test('a transfer rejected by destination capacity leaves all state unchanged', (
     toClubId: 'club-2',
     at: '2026-07-15T12:00:00.000Z',
     contractEndAt: '2030-06-30T23:59:59.000Z'
-  }), /registration limit reached/);
+  }), /first-team squad limit reached \(25\)/);
 
   assert.deepEqual(serialisableState(state), before);
   assert.equal(state.players[playerId].club_id, 'club-1');
