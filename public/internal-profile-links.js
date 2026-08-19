@@ -1,6 +1,5 @@
 import './transfer-grace-pending-fix.js';
 import './transfer-history.js';
-import './split-squad-cap-display.js';
 import { openTbgPlayerProfile } from './player-profile.js';
 
 let historyDirectory = null;
