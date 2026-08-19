@@ -1,6 +1,11 @@
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
 const parseMoney = (value) => Math.max(0, Number(String(value ?? '').replace(/[^0-9.-]/g, '')) || 0);
 const formatMoney = (value) => `£${parseMoney(value).toLocaleString('en-GB')}`;
+const formatDeadline = (value) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' });
+};
 
 let authorization = '';
 let state = null;
@@ -188,17 +193,42 @@ function revisionHistory(offer) {
   }).join('')}</details>`;
 }
 
+function lifecyclePresentation(offer) {
+  const lifecycle = offer.lifecycle || {};
+  if (lifecycle.effective_state === 'grace_period') {
+    return {
+      label: 'Deal agreed · mistake grace',
+      detail: `Unilateral cancellation available until ${formatDeadline(lifecycle.grace_expires_at)} · transfer completes at ${formatDeadline(lifecycle.settle_at)}`,
+      canCancelInGrace: Boolean(lifecycle.can_cancel_in_grace)
+    };
+  }
+  if (lifecycle.effective_state === 'binding') {
+    return {
+      label: 'Deal binding · awaiting completion',
+      detail: `Transfer completes at ${formatDeadline(lifecycle.settle_at)} · cancellation now requires mutual consent`,
+      canCancelInGrace: false
+    };
+  }
+  return {
+    label: 'Terms agreed · awaiting completion',
+    detail: lifecycle.settle_at ? `Transfer completes at ${formatDeadline(lifecycle.settle_at)}` : '',
+    canCancelInGrace: false
+  };
+}
+
 function agreedDealControls(offer) {
   const pending = offer.pending_change;
+  const lifecycle = lifecyclePresentation(offer);
   if (pending) {
     const proposed = pending.change_type === 'amendment'
       ? `Amend to ${formatMoney(pending.proposed_fee || 0)} · ${escapeHtml(pending.proposed_contract_years || 3)} seasons`
       : 'Cancel this agreed transfer by mutual consent';
     if (pending.requested_by_you) {
-      return `<div class="first-class-response-controls"><span class="world-control-status">Terms agreed · awaiting completion</span><small>${proposed} · awaiting other club</small></div>`;
+      return `<div class="first-class-response-controls"><span class="world-control-status">${lifecycle.label}</span>${lifecycle.detail ? `<small>${escapeHtml(lifecycle.detail)}</small>` : ''}<small>${proposed} · awaiting other club</small></div>`;
     }
     return `<div class="first-class-response-controls">
-      <span class="world-control-status">Terms agreed · change proposed</span>
+      <span class="world-control-status">${lifecycle.label} · change proposed</span>
+      ${lifecycle.detail ? `<small>${escapeHtml(lifecycle.detail)}</small>` : ''}
       <small>${proposed}</small>
       <div class="world-control-actions">
         <button type="button" class="primary-action" data-agreed-change-action="accept_agreed_change" data-change-request-id="${escapeHtml(pending.change_request_id)}">${pending.change_type === 'cancellation' ? 'Agree to cancel' : 'Accept amendment'}</button>
@@ -206,8 +236,13 @@ function agreedDealControls(offer) {
       </div>
     </div>`;
   }
+  const graceButton = lifecycle.canCancelInGrace
+    ? `<button type="button" class="primary-action" data-agreed-change-action="cancel_in_grace" data-deal-id="${escapeHtml(offer.deal_id)}">Cancel during mistake grace</button>`
+    : '';
   return `<div class="first-class-response-controls">
-    <span class="world-control-status">Terms agreed · awaiting completion</span>
+    <span class="world-control-status">${lifecycle.label}</span>
+    ${lifecycle.detail ? `<small>${escapeHtml(lifecycle.detail)}</small>` : ''}
+    ${graceButton}
     <div class="transfer-counter-controls">
       <label>Amended fee<input data-amendment-fee data-money-input type="text" inputmode="numeric" value="${escapeHtml(formatMoney(offer.fee || 0))}"></label>
       <label>Contract<select data-amendment-contract>${[1,2,3,4,5].map((years) => `<option value="${years}"${Number(offer.contract_years || 3) === years ? ' selected' : ''}>${years} season${years === 1 ? '' : 's'}</option>`).join('')}</select></label>
@@ -379,7 +414,9 @@ async function respondAgreedChange(button) {
   const action = button.dataset.agreedChangeAction;
   const message = $('transferNegotiationMessage');
   const body = { action, client_request_id: clientRequestId() };
-  if (action === 'propose_agreed_amendment' || action === 'propose_agreed_cancellation') {
+  if (action === 'cancel_in_grace') {
+    body.deal_id = button.dataset.dealId;
+  } else if (action === 'propose_agreed_amendment' || action === 'propose_agreed_cancellation') {
     body.deal_id = button.dataset.dealId;
     body.revision_no = Number(button.dataset.revisionNo);
     if (action === 'propose_agreed_amendment') {
@@ -390,10 +427,11 @@ async function respondAgreedChange(button) {
     body.change_request_id = button.dataset.changeRequestId;
   }
   card?.querySelectorAll('[data-agreed-change-action]').forEach((control) => { control.disabled = true; });
-  message.textContent = action === 'propose_agreed_amendment' ? 'Proposing amendment…'
-    : action === 'propose_agreed_cancellation' ? 'Proposing mutual cancellation…'
-      : action === 'accept_agreed_change' ? 'Confirming mutual change…'
-        : 'Keeping existing agreed terms…';
+  message.textContent = action === 'cancel_in_grace' ? 'Cancelling during mistake grace…'
+    : action === 'propose_agreed_amendment' ? 'Proposing amendment…'
+      : action === 'propose_agreed_cancellation' ? 'Proposing mutual cancellation…'
+        : action === 'accept_agreed_change' ? 'Confirming mutual change…'
+          : 'Keeping existing agreed terms…';
   try {
     const result = await request('/api/transfer-deals', body);
     message.textContent = result.message || 'Agreed transfer updated.';
