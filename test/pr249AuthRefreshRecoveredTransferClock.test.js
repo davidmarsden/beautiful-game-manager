@@ -8,7 +8,7 @@ test('harmless Supabase auth events do not re-render an already running portal',
   const app = await read('public/app.js');
   assert.match(app, /supabase\.auth\.onAuthStateChange\(async \(event, nextSession\)/);
   assert.match(app, /const sameUser = Boolean\(previousSession\?\.user\?\.id && previousSession\.user\.id === session\.user\?\.id\)/);
-  assert.match(app, /\['INITIAL_SESSION', 'TOKEN_REFRESHED', 'USER_UPDATED'\]\.includes\(event\)/);
+  assert.match(app, /\['INITIAL_SESSION', 'SIGNED_IN', 'TOKEN_REFRESHED', 'USER_UPDATED'\]\.includes\(event\)/);
   assert.match(app, /if \(harmlessSessionRefresh\) return;/);
   assert.match(app, /youth_team_capacity \?\? 25/);
 });
