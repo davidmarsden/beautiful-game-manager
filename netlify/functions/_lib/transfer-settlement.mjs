@@ -1,5 +1,6 @@
 import { loadPersistentWorld, savePersistentWorld } from '../../../src/world/persistentSeasonLoop.js';
 import { transferPlayer } from '../../../src/squadCycle/squadCycle.js';
+import { buildWorldReadModel } from '../../../src/world/worldReadModel.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -67,8 +68,8 @@ async function settleOne(due) {
   if (before.turn_status !== 'open') return { deal_id: due.deal_id, status: 'skipped', reason: `world_${before.turn_status}` };
 
   try {
-    const at = new Date().toISOString();
     const world = loadPersistentWorld(JSON.stringify(before.save_envelope));
+    const at = new Date(world.clock).toISOString();
     transferPlayer(world.squad_cycle, {
       playerId: due.player_id,
       fromClubId: due.from_club_id,
@@ -84,13 +85,14 @@ async function settleOne(due) {
       save_version: envelope.save_version,
       save_checksum: envelope.checksum,
       save_envelope: envelope,
+      read_model: buildWorldReadModel(world),
       season_id: world.squad_cycle.season_id,
       season_number: world.season_number,
       phase: world.phase,
       matchday: world.matchday_cycle?.current_matchday ?? before.matchday,
       next_turn_at: before.next_turn_at,
       turn_status: before.turn_status,
-      updated_at: at
+      updated_at: new Date().toISOString()
     };
 
     let atomic;
