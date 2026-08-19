@@ -152,7 +152,11 @@ $$;
 with candidate as (
   select deal.id,
          player_leg.to_club_id,
-         coalesce((cache.read_model #>> array['squad_cycle','players',player_leg.player_id,'age'])::integer, 99) as player_age,
+         case
+           when coalesce(cache.read_model #>> array['squad_cycle','players',player_leg.player_id,'age'], '') ~ '^[0-9]+$'
+             then (cache.read_model #>> array['squad_cycle','players',player_leg.player_id,'age'])::integer
+           else 99
+         end as player_age,
          cache.read_model
   from public.transfer_deals deal
   join public.transfer_deal_revisions revision
@@ -173,8 +177,8 @@ with candidate as (
     from jsonb_each(coalesce(candidate.read_model #> '{squad_cycle,players}', '{}'::jsonb)) player(key,value)
     where coalesce(player.value->>'club_id', '') = candidate.to_club_id
       and case when candidate.player_age <= 21
-        then coalesce((player.value->>'age')::integer, 99) <= 21
-        else coalesce((player.value->>'age')::integer, 99) > 21 end
+        then coalesce(player.value->>'age', '') ~ '^[0-9]+$' and (player.value->>'age')::integer <= 21
+        else not (coalesce(player.value->>'age', '') ~ '^[0-9]+$') or (player.value->>'age')::integer > 21 end
   ) < 25
 )
 update public.transfer_deals deal
