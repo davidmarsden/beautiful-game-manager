@@ -50,6 +50,36 @@ function validateEvent(event, seenIds) {
 
 function orderEvents(events) { return events.sort((left, right) => left.minute - right.minute || left.event_id.localeCompare(right.event_id)); }
 
+export function spreadDuplicateOrdinaryFoulMinutes(events = []) {
+  const occupied = new Map();
+  return events.map((event) => {
+    const type = text(event?.type || event?.event_type);
+    const subtype = text(event?.subtype || event?.event_subtype);
+    const playerId = String(event?.player_id || '').trim();
+    const side = text(event?.side);
+    const originalMinute = Math.trunc(number(event?.minute, -1));
+    if (type !== 'foul' || subtype !== 'ordinary_foul' || !playerId || !['home', 'away'].includes(side)
+      || originalMinute < 1 || originalMinute > 120) return event;
+
+    const key = `${side}:${playerId}`;
+    const used = occupied.get(key) || new Set();
+    let minute = originalMinute;
+    if (used.has(minute)) {
+      let forward = minute + 1;
+      while (forward <= 120 && used.has(forward)) forward += 1;
+      if (forward <= 120) minute = forward;
+      else {
+        let backward = minute - 1;
+        while (backward >= 1 && used.has(backward)) backward -= 1;
+        if (backward >= 1) minute = backward;
+      }
+    }
+    used.add(minute);
+    occupied.set(key, used);
+    return minute === originalMinute ? event : { ...event, minute };
+  });
+}
+
 function validateLinks(events) {
   const byId = new Map(events.map((event) => [event.event_id, event]));
   const awards = events.filter((event) => event.type === 'penalty' && event.subtype === 'penalty_awarded');
@@ -161,8 +191,9 @@ function projectedStateChanges(events, fatigue, lineups, contract = {}) {
 export function resolveMatch(eventGeneration, fatigue = {}, options = {}) {
   if (!eventGeneration?.provisional_event_stream) throw new Error('Module E requires Module D event generation');
   const lineupResolution = resolveLineupEvents(eventGeneration, options.contract, options.quality);
+  const coherentEvents = spreadDuplicateOrdinaryFoulMinutes(lineupResolution.events);
   const seenIds = new Set();
-  const events = orderEvents(lineupResolution.events.map((event) => validateEvent(event, seenIds)));
+  const events = orderEvents(coherentEvents.map((event) => validateEvent(event, seenIds)));
   validateLinks(events);
   const score = events.reduce((result, event) => { if (event.type === 'goal') result[event.side] += 1; return result; }, { home: 0, away: 0 });
   const expected = eventGeneration.expected || {};
