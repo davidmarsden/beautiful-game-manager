@@ -93,6 +93,11 @@ begin
   select min(decision_at) into shared_decision_at
   from public.free_agent_offers
   where world_id = p_world_id and player_id = p_player_id and status = 'pending';
+
+  if shared_decision_at is not null and shared_decision_at <= now() then
+    raise exception 'The free-agent offer window has closed';
+  end if;
+
   shared_decision_at := coalesce(shared_decision_at, now() + interval '6 hours');
 
   select * into existing_offer
@@ -225,11 +230,33 @@ begin
 end;
 $$;
 
+create or replace function public.get_due_free_agent_world_ids(
+  p_limit integer default 20
+) returns table(world_id text)
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select due.world_id
+  from (
+    select offer.world_id, min(offer.decision_at) as earliest_due
+    from public.free_agent_offers offer
+    where offer.status = 'pending'
+      and offer.decision_at <= now()
+    group by offer.world_id
+  ) due
+  order by due.earliest_due asc, due.world_id asc
+  limit greatest(1, least(coalesce(p_limit, 20), 100));
+$$;
+
 revoke all on function public.submit_free_agent_offer_for_user(uuid,text,text,text,text,jsonb,integer,bigint,text) from public, anon, authenticated;
 grant execute on function public.submit_free_agent_offer_for_user(uuid,text,text,text,text,jsonb,integer,bigint,text) to service_role;
 revoke all on function public.get_manager_free_agent_offers_for_user(uuid,text,integer) from public, anon, authenticated;
 grant execute on function public.get_manager_free_agent_offers_for_user(uuid,text,integer) to service_role;
 revoke all on function public.get_manager_free_agent_offer_history_for_user(uuid,text,integer) from public, anon, authenticated;
 grant execute on function public.get_manager_free_agent_offer_history_for_user(uuid,text,integer) to service_role;
+revoke all on function public.get_due_free_agent_world_ids(integer) from public, anon, authenticated;
+grant execute on function public.get_due_free_agent_world_ids(integer) to service_role;
 
 commit;
