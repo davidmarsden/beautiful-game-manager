@@ -9,6 +9,28 @@ const sequenceOrder = (event = {}) => Number.isFinite(Number(event.sequence_orde
   ? Number(event.sequence_order ?? event.payload?.sequence_order)
   : 50;
 
+function eventIdentity(event = {}, index = 0) {
+  const id = text(event.event_id);
+  if (id) return `id:${id}`;
+  const source = text(event.source_event_id);
+  if (event.display_only && source) return `display:${eventType(event)}:${source}`;
+  const seq = sequenceId(event);
+  if (seq) return `seq:${seq}:${eventType(event)}:${sequenceOrder(event)}:${text(event.player_id || event.player_name)}`;
+  return `index:${index}`;
+}
+
+function dedupeReplayEvents(events = []) {
+  const seen = new Set();
+  const result = [];
+  events.forEach((event, index) => {
+    const key = eventIdentity(event, index);
+    if (seen.has(key)) return;
+    seen.add(key);
+    result.push(event);
+  });
+  return result;
+}
+
 function bookingKey(event = {}) {
   const playerId = text(event.player_id || event.tbg_player_id || event.id);
   if (playerId) return `id:${playerId}`;
@@ -66,7 +88,6 @@ function attemptCommentary(event, playerName) {
   const origin = normal(event.chance_origin || event.payload?.chance_origin);
   const band = chanceBand(event);
 
-  // The attempt must never reveal its outcome. Save/miss/goal belongs to the next replay beat.
   if (origin === 'corner') {
     if (band === 'very_low' || band === 'low') return `${player} attacks the corner and gets a difficult effort away.`;
     if (band === 'close' || band === 'good') return `${player} meets the corner with a powerful effort.`;
@@ -118,6 +139,7 @@ function outcomeRevealEvent(attempt) {
   if (outcome === 'goal') return null;
   const reveal = outcomePresentation(outcome);
   if (!reveal) return null;
+  const sourceId = text(attempt.event_id) || `chance-${attempt.minute}-${text(attempt.player_id || attempt.player_name)}`;
   return {
     minute: attempt.minute,
     side: attempt.side,
@@ -125,8 +147,8 @@ function outcomeRevealEvent(attempt) {
     display_event_type: reveal.display_event_type,
     player_id: attempt.player_id,
     player_name: attempt.player_name,
-    event_id: `${text(attempt.event_id) || `chance-${attempt.minute}`}:outcome`,
-    source_event_id: attempt.event_id || null,
+    event_id: `${sourceId}:outcome`,
+    source_event_id: attempt.event_id || sourceId,
     sequence_id: sequenceId(attempt),
     sequence_order: sequenceOrder(attempt) + 1,
     display_only: true,
@@ -189,7 +211,7 @@ function stageChanceBuildUps(events) {
 }
 
 export function enrichReplayCommentary(events = [], clubs = {}) {
-  const ordered = events.map((event) => ({ ...event }));
+  const ordered = dedupeReplayEvents(events.map((event) => ({ ...event })));
   const byPlayer = new Map();
   for (const event of ordered) {
     const key = text(event.player_id);
@@ -211,7 +233,9 @@ export function enrichReplayCommentary(events = [], clubs = {}) {
       if (key) {
         const count = (bookings.get(key) || 0) + 1;
         bookings.set(key, count);
-        if (count >= 2 && !explicitSecondYellow.has(key)) {
+        if (count >= 2 && explicitSecondYellow.has(key)) {
+          event.replay_suppressed = true;
+        } else if (count >= 2) {
           const player = text(event.player_name) || byPlayer.get(text(event.player_id)) || 'The player';
           event.commentary = `${player} is shown a second yellow card and is sent off.`;
           event.display_event_type = 'second_yellow';
@@ -230,12 +254,18 @@ export function enrichReplayCommentary(events = [], clubs = {}) {
   const goalsBySequence = new Map(ordered
     .filter((event) => eventType(event) === 'goal' && sequenceId(event))
     .map((event) => [sequenceId(event), event]));
+  const existingOutcomeBySource = new Map(ordered
+    .filter((event) => eventType(event) === 'chance_outcome' && text(event.source_event_id))
+    .map((event) => [text(event.source_event_id), event]));
   const expanded = [];
   for (const event of ordered) {
+    if (event.replay_suppressed) continue;
     const type = eventType(event);
     if (['shot', 'big_chance'].includes(type)) {
       const linkedGoal = sequenceId(event) && goalsBySequence.has(sequenceId(event));
-      const reveal = linkedGoal ? null : outcomeRevealEvent(event);
+      const sourceId = text(event.event_id);
+      const existingReveal = sourceId ? existingOutcomeBySource.get(sourceId) : null;
+      const reveal = linkedGoal ? null : (existingReveal || outcomeRevealEvent(event));
       const canStage = Boolean(linkedGoal || reveal);
       if (canStage) {
         const player = text(event.player_name) || byPlayer.get(text(event.player_id)) || 'The attacker';
@@ -244,14 +274,15 @@ export function enrichReplayCommentary(events = [], clubs = {}) {
         event.replay_presentation = chancePresentation(event, { kind: 'chance', label: 'CHANCE', hold_ms: 1800, priority: 94, sequence_role: 'build_up' });
       }
       expanded.push(event);
-      if (reveal) expanded.push(reveal);
+      if (reveal && !existingReveal) expanded.push(reveal);
       continue;
     }
     expanded.push(event);
   }
 
-  for (const goal of expanded.filter((event) => eventType(event) === 'goal')) {
-    const attempt = findSequenceAttempt(expanded, goal);
+  const deduped = dedupeReplayEvents(expanded);
+  for (const goal of deduped.filter((event) => eventType(event) === 'goal')) {
+    const attempt = findSequenceAttempt(deduped, goal);
     const isOwnGoal = goal.own_goal === true || goal.payload?.own_goal === true;
     if (isOwnGoal) {
       const defenderId = text(goal.own_goal_player_id || goal.payload?.own_goal_player_id);
@@ -266,7 +297,7 @@ export function enrichReplayCommentary(events = [], clubs = {}) {
     goal.commentary = goalCommentary(goal, attempt, scorer, club);
   }
 
-  return expanded;
+  return deduped;
 }
 
 export function cardSummaryFromEvents(events = [], side) {
