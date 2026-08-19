@@ -1,11 +1,33 @@
 const clone = (value) => JSON.parse(JSON.stringify(value ?? null));
 
+function compactRuntimePlayerState(player = {}) {
+  return {
+    fitness: player.fitness ?? null,
+    morale: player.morale ?? null
+  };
+}
+
+function compactRuntimeAvailability(player = {}) {
+  return {
+    injury_until_matchday: player.injury_until_matchday ?? null,
+    suspension_until_matchday: player.suspension_until_matchday ?? null
+  };
+}
+
 function compactRuntime(runtime = {}) {
   return {
     fixtures: clone(runtime.fixtures || []),
     table: clone(runtime.table || {}),
     archive_results: clone(runtime.archive_results || []),
-    results: clone(runtime.results || [])
+    results: clone(runtime.results || []),
+    state: {
+      players: Object.fromEntries(Object.entries(runtime.state?.players || {})
+        .map(([playerId, player]) => [playerId, compactRuntimePlayerState(player)])),
+      availability: {
+        players: Object.fromEntries(Object.entries(runtime.state?.availability?.players || {})
+          .map(([playerId, player]) => [playerId, compactRuntimeAvailability(player)]))
+      }
+    }
   };
 }
 
@@ -73,10 +95,10 @@ function compactObjectMap(source = {}, mapper) {
  * Build the manager-facing World/history read model.
  *
  * The canonical save is the authoritative write/checkpoint envelope. This cache is
- * deliberately a read projection, not a second copy of the world. Runtime player
- * state and heavyweight scouting/engine player metadata are excluded so a transfer
- * settlement cannot turn every subsequent World/History read into a multi-megabyte
- * operational checkpoint read.
+ * deliberately a read projection, not a second copy of the world. Only the runtime
+ * player condition/availability fields consumed by History and the manager portal
+ * are retained; heavyweight scouting/engine metadata and unrelated runtime state are
+ * excluded so transfer settlement does not turn reads into checkpoint-sized payloads.
  */
 export function buildWorldReadModel(world = {}) {
   const runtimes = Object.fromEntries(Object.entries(world.matchday_cycle?.runtimes || {})
