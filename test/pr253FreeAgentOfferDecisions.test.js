@@ -19,12 +19,17 @@ test('free agents use a six-hour competing-offer window instead of immediate man
   assert.match(ui, /six-hour offer window/);
 });
 
-test('all clubs share the first offer deadline and a manager can revise terms without extending it', async () => {
+test('all clubs share the first offer deadline, revisions do not extend it, and expired windows reject new terms', async () => {
   const migration = await read('supabase/migrations/20260819i_free_agent_offer_decisions.sql');
   assert.match(migration, /select min\(decision_at\)/);
+  assert.match(migration, /shared_decision_at is not null and shared_decision_at <= now\(\)/);
+  assert.match(migration, /The free-agent offer window has closed/);
   assert.match(migration, /shared_decision_at := coalesce\(shared_decision_at, now\(\) \+ interval '6 hours'\)/);
   assert.match(migration, /where world_id = p_world_id and manager_id = manager_id_value and player_id = p_player_id and status = 'pending'/);
   assert.match(migration, /set club_id = club_id_value,[\s\S]*contract_years = p_contract_years,[\s\S]*wage = p_wage/);
+  const replayIndex = migration.indexOf('request_key = p_request_key');
+  const deadlineIndex = migration.indexOf('shared_decision_at is not null and shared_decision_at <= now()');
+  assert.ok(replayIndex >= 0 && deadlineIndex > replayIndex, 'idempotent request replay must remain valid after the deadline');
 });
 
 test('player expectation makes implausibly low offers rejectable while strong offers can qualify', () => {
@@ -55,11 +60,22 @@ test('due player decisions settle on the existing CAS-safe acquisition path and 
   assert.match(scheduler, /schedule: '\*\/5 \* \* \* \*'/);
 });
 
-test('free-agent offer UI preserves request identity on network retry and refreshes after accepted decisions', async () => {
+test('scheduled decisions choose distinct due worlds before applying the world limit', async () => {
+  const migration = await read('supabase/migrations/20260819i_free_agent_offer_decisions.sql');
+  const scheduler = await read('netlify/functions/_lib/free-agent-offer-scheduler.mjs');
+  assert.match(migration, /get_due_free_agent_world_ids/);
+  assert.match(migration, /group by offer\.world_id/);
+  assert.match(migration, /min\(offer\.decision_at\) as earliest_due/);
+  assert.match(scheduler, /rpc\/get_due_free_agent_world_ids/);
+  assert.doesNotMatch(scheduler, /select=world_id[\s\S]*limit=/);
+});
+
+test('free-agent offer UI preserves request identity on network retry, avoids observer mutation loops and refreshes after accepted decisions', async () => {
   const ui = await read('public/free-agent-offer-ui.js');
   assert.match(ui, /tbg-free-agent-offer-request:/);
   assert.match(ui, /sessionStorage\.getItem\(key\)/);
   assert.match(ui, /sessionStorage\.removeItem\(request\.key\)/);
+  assert.match(ui, /if \(button\.textContent !== 'Make offer'\) button\.textContent = 'Make offer'/);
   assert.match(ui, /tbg-free-agent-accepted-seen:/);
   assert.match(ui, /window\.location\.reload\(\)/);
 });
