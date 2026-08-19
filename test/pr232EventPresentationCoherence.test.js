@@ -136,6 +136,7 @@ test('explicit second-yellow archive events prevent the legacy second booking fr
   };
 
   const decorated = decorateMatchCentrePayload(payload, null);
-  assert.equal(decorated.events[1].replay_presentation.label, 'YELLOW CARD');
-  assert.equal(decorated.events[2].replay_presentation.label, 'SECOND YELLOW · RED CARD');
+  assert.equal(decorated.events.length, 2);
+  assert.equal(decorated.events[0].replay_presentation.label, 'YELLOW CARD');
+  assert.equal(decorated.events[1].replay_presentation.label, 'SECOND YELLOW · RED CARD');
 });

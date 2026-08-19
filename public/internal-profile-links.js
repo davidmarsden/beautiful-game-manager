@@ -1,3 +1,4 @@
+import './transfer-grace-pending-fix.js';
 import { openTbgPlayerProfile } from './player-profile.js';
 
 let historyDirectory = null;
