@@ -20,7 +20,7 @@ test('history club inspection uses the shared full squad renderer', () => {
   assert.match(renderer, /data-availability-filter/);
 });
 
-test('history projection uses canonical runtime state and registration capacity', () => {
+test('history projection uses canonical runtime state and split squad capacity', () => {
   const world = {
     world_id: 'world-1', season_number: 1, phase: 'season',
     club_profiles: { alpha: { club_name: 'Alpha' } },
@@ -35,6 +35,7 @@ test('history projection uses canonical runtime state and registration capacity'
     },
     squad_cycle: {
       season_id: 'world-1:season-1', registration_limit: 22,
+      squad_limits: { first_team: 25, youth: 25 },
       clubs: { alpha: { player_ids: ['p1', 'p2'], registered_player_ids: ['p1', 'p2'] } },
       contracts: { c1: { end_at: '2026-10-01' } },
       players: {
@@ -49,7 +50,8 @@ test('history projection uses canonical runtime state and registration capacity'
   assert.equal(club.players[0].morale, 'Excellent');
   assert.equal(club.players[0].contract_expiry, '2026-10-01');
   assert.equal(club.players[1].injury_status, 'Injured');
-  assert.equal(club.squad_rules.first_team_capacity, 22);
+  assert.equal(club.squad_rules.first_team_capacity, 25);
+  assert.equal(club.squad_rules.youth_team_capacity, 25);
   assert.equal(club.contracts[0].player_name, 'Keeper One');
 });
 
