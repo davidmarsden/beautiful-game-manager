@@ -116,6 +116,11 @@ async function canonicalWorld(worldId) {
   return loadPersistentWorld(JSON.stringify(rows[0].save_envelope));
 }
 
+async function managerUserId(managerId) {
+  const rows = await service(`/rest/v1/manager_profiles?id=eq.${encodeURIComponent(managerId)}&select=user_id&limit=1`);
+  return rows[0]?.user_id || null;
+}
+
 function decisionReason(evaluation, winner = false) {
   if (winner) return `player_accepted_best_offer; expected_wage=${evaluation.expectedWage}; score=${evaluation.score}`;
   if (evaluation.score < evaluation.minimumScore) return `terms_below_expectation; expected_wage=${evaluation.expectedWage}; score=${evaluation.score}`;
@@ -159,8 +164,19 @@ export async function resolveDueFreeAgentOffers({ worldId, limit = 5 } = {}) {
 
     let winner = null;
     for (const row of qualifying) {
+      const userId = await managerUserId(row.offer.manager_id);
+      if (!userId) {
+        await patchOffer(row.offer.id, {
+          status: 'application_failed',
+          offer_score: row.evaluation.score,
+          minimum_score: row.evaluation.minimumScore,
+          decision_reason: 'manager_user_identity_missing',
+          terminal_at: new Date().toISOString()
+        });
+        continue;
+      }
       const result = await signFreeAgent({
-        userId: row.offer.manager_id,
+        userId,
         worldId,
         player: row.offer.player_snapshot,
         contractYears: row.offer.contract_years,
@@ -197,7 +213,7 @@ export async function resolveDueFreeAgentOffers({ worldId, limit = 5 } = {}) {
       terminal_at: new Date().toISOString()
     });
     for (const row of ranked) {
-      if (row.offer.id === winner.offer.id || row.offer.status !== 'pending') continue;
+      if (row.offer.id === winner.offer.id) continue;
       await patchOffer(row.offer.id, {
         status: 'rejected',
         offer_score: row.evaluation.score,
