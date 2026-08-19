@@ -105,6 +105,11 @@ document.addEventListener('click', (event) => {
   if (event.target.closest('[data-view="transfers"]')) setTimeout(() => maybeMount(true), 0);
 });
 
+document.addEventListener('tbg:transfer-history-refresh', () => {
+  lastLoadedAt = 0;
+  maybeMount(true);
+});
+
 const observer = new MutationObserver(() => maybeMount(false));
 observer.observe(document.documentElement, { childList: true, subtree: true });
 maybeMount(false);
