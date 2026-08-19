@@ -23,23 +23,32 @@ test('mistake-grace cancellation is participant-gated, locked and audit-safe', a
   assert.match(sql, /cancelled_during_mistake_grace/);
 });
 
-test('due settlement uses checksum CAS and updates canonical read model atomically', async () => {
-  const sql = await read('supabase/migrations/20260819a_transfer_grace_binding_settlement.sql');
-  assert.match(sql, /get_due_transfer_settlements/);
-  assert.match(sql, /deal\.settle_at <= now\(\)/);
-  assert.match(sql, /apply_transfer_deal_settlement/);
-  assert.match(sql, /save_checksum = p_expected_checksum/);
-  assert.match(sql, /turn_status = 'open'/);
-  assert.match(sql, /world_read_model_cache/);
-  assert.match(sql, /source_checksum = excluded\.source_checksum/);
-  assert.match(sql, /set status = 'completed'/);
-  assert.match(sql, /settlement_replacement_checksum/);
+test('due settlement uses checksum CAS and updates a compact canonical read model atomically', async () => {
+  const [lifecycleSql, compactSql] = await Promise.all([
+    read('supabase/migrations/20260819a_transfer_grace_binding_settlement.sql'),
+    read('supabase/migrations/20260819b_transfer_settlement_compact_read_model.sql')
+  ]);
+  assert.match(lifecycleSql, /get_due_transfer_settlements/);
+  assert.match(lifecycleSql, /deal\.settle_at <= now\(\)/);
+  assert.match(compactSql, /apply_transfer_deal_settlement/);
+  assert.match(compactSql, /save_checksum = p_expected_checksum/);
+  assert.match(compactSql, /turn_status = 'open'/);
+  assert.match(compactSql, /replacement_read_model jsonb := p_replacement->'read_model'/);
+  assert.match(compactSql, /world_read_model_cache/);
+  assert.match(compactSql, /values\(deal_row\.world_id, replacement_checksum, replacement_read_model, now\(\)\)/);
+  assert.doesNotMatch(compactSql, /p_replacement->'save_envelope'->'world'/);
+  assert.match(compactSql, /source_checksum = excluded\.source_checksum/);
+  assert.match(compactSql, /set status = 'completed'/);
+  assert.match(compactSql, /settlement_replacement_checksum/);
 });
 
-test('settlement runner applies governed transfer and reconciles ambiguous outcomes', async () => {
+test('settlement runner applies governed transfer on the canonical world clock and reconciles ambiguous outcomes', async () => {
   const source = await read('netlify/functions/_lib/transfer-settlement.mjs');
   assert.match(source, /loadPersistentWorld/);
   assert.match(source, /savePersistentWorld/);
+  assert.match(source, /const at = new Date\(world\.clock\)\.toISOString\(\)/);
+  assert.doesNotMatch(source, /const at = new Date\(\)\.toISOString\(\)/);
+  assert.match(source, /buildWorldReadModel\(world\)/);
   assert.match(source, /transferPlayer\(world\.squad_cycle/);
   assert.match(source, /apply_transfer_deal_settlement/);
   assert.match(source, /reconcileSettlement/);
@@ -60,12 +69,21 @@ test('settlement runs independently of matchday turns and opportunistically on t
   assert.match(gateway, /15-minute mistake-grace period/);
 });
 
-test('manager UI explains grace and binding deadlines and exposes unilateral grace cancellation', async () => {
-  const source = await read('public/transfer-negotiations.js');
+test('manager UI explains grace and binding deadlines and preserves unilateral grace cancellation during pending changes', async () => {
+  const [source, pendingFix, loader] = await Promise.all([
+    read('public/transfer-negotiations.js'),
+    read('public/transfer-grace-pending-fix.js'),
+    read('public/internal-profile-links.js')
+  ]);
   assert.match(source, /Deal agreed · mistake grace/);
   assert.match(source, /Unilateral cancellation available until/);
   assert.match(source, /Deal binding · awaiting completion/);
   assert.match(source, /cancellation now requires mutual consent/);
   assert.match(source, /data-agreed-change-action="cancel_in_grace"/);
   assert.match(source, /Cancelling during mistake grace/);
+  assert.match(pendingFix, /Deal agreed · mistake grace/);
+  assert.match(pendingFix, /data-agreed-change-action|agreedChangeAction/);
+  assert.match(pendingFix, /cancel_in_grace/);
+  assert.match(pendingFix, /dataset\.firstClassDeal/);
+  assert.match(loader, /transfer-grace-pending-fix\.js/);
 });
