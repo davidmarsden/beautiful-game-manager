@@ -131,6 +131,9 @@ export default async (request) => {
       serverSupabase(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(world.world_id)}&season_id=eq.${encodeURIComponent(world.squad_cycle.season_id)}&matchday=eq.${currentMatchday}&manager_id=eq.${encodeURIComponent(manager.id)}&club_id=eq.${encodeURIComponent(appointment.club_id)}&select=*&order=submitted_at.desc&limit=1`, {}, 'Could not load current submission').catch(() => [])
     ]);
     const messages = managerMessages(rawMessages, world, context.created_at);
+    const splitLimits = world.squad_cycle?.squad_limits || {};
+    const firstTeamCapacity = Number(splitLimits.first_team || 25);
+    const youthTeamCapacity = Number(splitLimits.youth || 25);
 
     return json({
       authenticated: true,
@@ -141,10 +144,11 @@ export default async (request) => {
       canonical_source: { world_id: context.world_id, checksum: context.save_checksum, updated_at: context.updated_at, next_turn_at: context.next_turn_at },
       ...projection,
       squad_rules: {
-        first_team_capacity: world.squad_cycle.registration_limit || 25,
-        youth_team_capacity: 20,
-        launch_first_team_cap: world.squad_cycle.registration_limit || 25,
-        launch_youth_team_cap: 20,
+        first_team_capacity: firstTeamCapacity,
+        youth_team_capacity: youthTeamCapacity,
+        launch_first_team_cap: firstTeamCapacity,
+        launch_youth_team_cap: youthTeamCapacity,
+        overall_owned_cap: firstTeamCapacity + youthTeamCapacity,
         youth_age_rule: 'Aged 21 or younger on the first day of the season'
       },
       messages,
