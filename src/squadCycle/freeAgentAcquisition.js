@@ -32,6 +32,14 @@ function clonePlayer(player = {}) {
   };
 }
 
+function assertActiveCirculation(player) {
+  const lifecycleStatus = text(player?.lifecycle_status || player?.lifecycleStatus).toLowerCase();
+  const status = text(player?.status).toLowerCase();
+  if (player?.active_circulation === false || ['inactive', 'retired'].includes(lifecycleStatus) || status === 'retired') {
+    throw new Error(`${playerId(player) || 'Player'} is not in active circulation`);
+  }
+}
+
 function squadCohort(player) {
   return isYouthSquadPlayer(player) ? 'youth' : 'first_team';
 }
@@ -83,6 +91,7 @@ export function acquireFreeAgent(state, { player: sourcePlayer, toClubId, at, co
   const player = clonePlayer(sourcePlayer);
   if (state.players[player.tbg_player_id]) throw new Error(`${player.tbg_player_id} already exists in the world`);
   if (text(sourcePlayer?.club_id || sourcePlayer?.tbg_club_id)) throw new Error(`${player.tbg_player_id} is not a free agent`);
+  assertActiveCirculation(sourcePlayer);
   assertSquadCapacity(state, target, player);
 
   const contract = buildContract({
