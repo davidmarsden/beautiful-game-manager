@@ -248,7 +248,7 @@ async function initialiseAuth() {
 
     const hadPortalState = Boolean(state);
     const sameUser = Boolean(previousSession?.user?.id && previousSession.user.id === session.user?.id);
-    const harmlessSessionRefresh = sameUser && hadPortalState && ['INITIAL_SESSION', 'TOKEN_REFRESHED', 'USER_UPDATED'].includes(event);
+    const harmlessSessionRefresh = sameUser && hadPortalState && ['INITIAL_SESSION', 'SIGNED_IN', 'TOKEN_REFRESHED', 'USER_UPDATED'].includes(event);
     if (harmlessSessionRefresh) return;
 
     await loadPortal();
