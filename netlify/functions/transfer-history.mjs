@@ -29,6 +29,8 @@ async function supabase(path, { apiKey, bearer, ...options } = {}) {
   return body;
 }
 
+const historyTime = (row) => new Date(row?.terminal_at || row?.updated_at || row?.created_at || 0).getTime() || 0;
+
 export default async (request) => {
   try {
     if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
@@ -56,21 +58,31 @@ export default async (request) => {
     const appointment = appointments[0];
     if (!appointment) return json({ error: 'No active club appointment' }, 409);
 
-    const history = await supabase('/rest/v1/rpc/get_manager_transfer_history_for_user', {
+    const serviceAuth = {
       apiKey: SUPABASE_SERVICE_ROLE_KEY,
       ...(isJwt(SUPABASE_SERVICE_ROLE_KEY) ? { bearer: SUPABASE_SERVICE_ROLE_KEY } : {}),
-      method: 'POST',
-      body: JSON.stringify({
-        p_user_id: user.id,
-        p_world_id: appointment.world_id,
-        p_limit: 50
-      })
-    });
+      method: 'POST'
+    };
+    const [transferHistory, acquisitionHistory] = await Promise.all([
+      supabase('/rest/v1/rpc/get_manager_transfer_history_for_user', {
+        ...serviceAuth,
+        body: JSON.stringify({ p_user_id: user.id, p_world_id: appointment.world_id, p_limit: 50 })
+      }),
+      supabase('/rest/v1/rpc/get_manager_player_acquisition_history_for_user', {
+        ...serviceAuth,
+        body: JSON.stringify({ p_user_id: user.id, p_world_id: appointment.world_id, p_limit: 50 })
+      }).catch(() => [])
+    ]);
+
+    const history = [
+      ...(Array.isArray(transferHistory) ? transferHistory : []),
+      ...(Array.isArray(acquisitionHistory) ? acquisitionHistory : [])
+    ].sort((a, b) => historyTime(b) - historyTime(a)).slice(0, 50);
 
     return json({
       world_id: appointment.world_id,
       club_id: appointment.club_id,
-      history: Array.isArray(history) ? history : []
+      history
     });
   } catch (error) {
     const message = String(error?.message || 'Could not load transfer history');
