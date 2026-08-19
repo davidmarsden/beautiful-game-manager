@@ -2,6 +2,31 @@
 
 begin;
 
+create or replace function public.transfer_player_is_youth_for_capacity(p_player jsonb)
+returns boolean
+language plpgsql
+immutable
+set search_path = pg_catalog, public
+as $$
+declare
+  age_text text;
+begin
+  if p_player is null or jsonb_typeof(p_player) <> 'object' then return false; end if;
+
+  if jsonb_typeof(p_player -> 'youth_eligible_at_season_start') = 'boolean' then
+    return (p_player ->> 'youth_eligible_at_season_start')::boolean;
+  end if;
+
+  age_text := p_player ->> 'season_start_age';
+  if coalesce(age_text, '') ~ '^[0-9]+$' then return age_text::integer <= 21; end if;
+
+  age_text := p_player ->> 'age';
+  if coalesce(age_text, '') ~ '^[0-9]+$' then return age_text::integer <= 21; end if;
+
+  return false;
+end;
+$$;
+
 create or replace function public.guard_transfer_deal_split_squad_capacity()
 returns trigger
 language plpgsql
@@ -11,14 +36,13 @@ as $$
 declare
   player_id_value text;
   target_club_id text;
-  player_age integer := 99;
+  player_value jsonb;
   cohort_name text;
   target_cohort_count integer := 0;
   reserved_inbound_count integer := 0;
   cache_model jsonb;
   cache_checksum text;
   canonical_checksum text;
-  player_age_text text;
   capacity_lock_key bigint;
 begin
   if new.status <> 'agreed' or not (
@@ -57,9 +81,8 @@ begin
     raise exception 'World read model is refreshing; transfer agreement cannot be validated yet';
   end if;
 
-  player_age_text := cache_model #>> array['squad_cycle','players',player_id_value,'age'];
-  if coalesce(player_age_text, '') ~ '^[0-9]+$' then player_age := player_age_text::integer; end if;
-  cohort_name := case when player_age <= 21 then 'youth' else 'first_team' end;
+  player_value := cache_model #> array['squad_cycle','players',player_id_value];
+  cohort_name := case when public.transfer_player_is_youth_for_capacity(player_value) then 'youth' else 'first_team' end;
 
   -- Serialize agreements competing for the same club/cohort slot. This means a
   -- second concurrent agreement sees the first committed reservation instead of
@@ -73,10 +96,7 @@ begin
     into target_cohort_count
   from jsonb_each(coalesce(cache_model #> '{squad_cycle,players}', '{}'::jsonb)) player(key,value)
   where coalesce(player.value->>'club_id', '') = target_club_id
-    and case when cohort_name = 'youth'
-      then coalesce(player.value->>'age', '') ~ '^[0-9]+$' and (player.value->>'age')::integer <= 21
-      else not (coalesce(player.value->>'age', '') ~ '^[0-9]+$') or (player.value->>'age')::integer > 21
-    end;
+    and public.transfer_player_is_youth_for_capacity(player.value) = (cohort_name = 'youth');
 
   -- Agreed inbound transfers have reserved a place even though the canonical
   -- world/read model will not reflect their new ownership until settlement.
@@ -93,12 +113,9 @@ begin
     and other_deal.id <> new.id
     and other_deal.status = 'agreed'
     and other_leg.to_club_id = target_club_id
-    and case when cohort_name = 'youth'
-      then coalesce(cache_model #>> array['squad_cycle','players',other_leg.player_id,'age'], '') ~ '^[0-9]+$'
-        and (cache_model #>> array['squad_cycle','players',other_leg.player_id,'age'])::integer <= 21
-      else not (coalesce(cache_model #>> array['squad_cycle','players',other_leg.player_id,'age'], '') ~ '^[0-9]+$')
-        or (cache_model #>> array['squad_cycle','players',other_leg.player_id,'age'])::integer > 21
-    end;
+    and public.transfer_player_is_youth_for_capacity(
+      cache_model #> array['squad_cycle','players',other_leg.player_id]
+    ) = (cohort_name = 'youth');
 
   if target_cohort_count + reserved_inbound_count >= 25 then
     if cohort_name = 'youth' then
@@ -117,6 +134,7 @@ create trigger transfer_deal_split_squad_capacity_guard
 before update of status, current_revision_no on public.transfer_deals
 for each row execute function public.guard_transfer_deal_split_squad_capacity();
 
+revoke all on function public.transfer_player_is_youth_for_capacity(jsonb) from public, anon, authenticated;
 revoke all on function public.guard_transfer_deal_split_squad_capacity() from public, anon, authenticated;
 
 commit;
