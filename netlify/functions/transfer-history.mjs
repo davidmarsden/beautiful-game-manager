@@ -78,10 +78,12 @@ export default async (request) => {
       }).catch(() => [])
     ]);
 
+    const offerHistory = (Array.isArray(freeAgentOfferHistory) ? freeAgentOfferHistory : [])
+      .filter((row) => row.status !== 'accepted');
     const history = [
       ...(Array.isArray(transferHistory) ? transferHistory : []),
       ...(Array.isArray(acquisitionHistory) ? acquisitionHistory : []),
-      ...(Array.isArray(freeAgentOfferHistory) ? freeAgentOfferHistory : [])
+      ...offerHistory
     ].sort((a, b) => historyTime(b) - historyTime(a)).slice(0, 50);
 
     return json({
