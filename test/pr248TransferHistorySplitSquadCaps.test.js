@@ -25,6 +25,8 @@ function club(clubId, seniorCount, youthCount) {
 test('squad cycle classifies youth at 21 and enforces independent 25/25 ownership cohorts', () => {
   assert.equal(isYouthSquadPlayer({ age: 21 }), true);
   assert.equal(isYouthSquadPlayer({ age: 22 }), false);
+  assert.equal(isYouthSquadPlayer({ age: 22, season_start_age: 21 }), true);
+  assert.equal(isYouthSquadPlayer({ age: 22, youth_eligible_at_season_start: true }), true);
 
   const state = createSquadCycleState({
     clubs: [club('seller', 1, 0), club('buyer', 24, 25)],
@@ -92,18 +94,21 @@ test('world read model drops heavyweight runtime/player state but preserves hist
 });
 
 test('transfer history and recovery are first-class and agreement is guarded before binding', async () => {
-  const [historySql, guardSql, endpoint, ui, refresh] = await Promise.all([
+  const [historySql, guardSql, endpoint, ui, refresh, settlement] = await Promise.all([
     read('supabase/migrations/20260819c_transfer_history_split_squad_recovery.sql'),
     read('supabase/migrations/20260819d_transfer_split_squad_capacity_guard.sql'),
     read('netlify/functions/transfer-history.mjs'),
     read('public/transfer-history.js'),
-    read('netlify/functions/refresh-world-read-model.mjs')
+    read('netlify/functions/refresh-world-read-model.mjs'),
+    read('netlify/functions/_lib/transfer-settlement.mjs')
   ]);
   assert.match(historySql, /get_manager_transfer_history_for_user/);
   assert.match(historySql, /status not in \('negotiating', 'agreed'\)/);
   assert.match(historySql, /settlement_error ilike '%registration limit reached%'/);
   assert.match(historySql, /refresh_world_read_model_if_current/);
   assert.match(guardSql, /transfer_deal_split_squad_capacity_guard/);
+  assert.match(guardSql, /youth_eligible_at_season_start/);
+  assert.match(guardSql, /season_start_age/);
   assert.match(guardSql, /first-team squad limit reached \(25\)/);
   assert.match(guardSql, /youth squad limit reached \(25\)/);
   assert.match(endpoint, /get_manager_transfer_history_for_user/);
@@ -113,4 +118,6 @@ test('transfer history and recovery are first-class and agreement is guarded bef
   assert.match(refresh, /schedule: '\*\/15 \* \* \* \*'/);
   assert.match(refresh, /buildWorldReadModel/);
   assert.match(refresh, /refresh_world_read_model_if_current/);
+  assert.match(settlement, /first-team squad limit reached/);
+  assert.match(settlement, /youth squad limit reached/);
 });
