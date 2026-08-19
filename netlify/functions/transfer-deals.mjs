@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { settleDueTransfers } from './_lib/transfer-settlement.mjs';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
@@ -72,6 +73,16 @@ function attachPendingChanges(market, changes) {
   };
 }
 
+function attachLifecycle(market, lifecycle) {
+  const byDeal = new Map((Array.isArray(lifecycle) ? lifecycle : []).map((row) => [row.deal_id, row]));
+  const decorate = (offers) => (Array.isArray(offers) ? offers : []).map((offer) => ({ ...offer, lifecycle: byDeal.get(offer.deal_id) || null }));
+  return {
+    ...market,
+    incoming_offers: decorate(market?.incoming_offers),
+    outgoing_offers: decorate(market?.outgoing_offers)
+  };
+}
+
 export default async (request) => {
   try {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured' }, 503);
@@ -80,7 +91,8 @@ export default async (request) => {
     const current = await identity(token);
 
     if (request.method === 'GET') {
-      const [market, legacyOutgoing, agreedChanges] = await Promise.all([
+      await settleDueTransfers({ worldId: current.appointment.world_id, limit: 5 }).catch(() => null);
+      const [market, legacyOutgoing, agreedChanges, lifecycle] = await Promise.all([
         serverSupabase('/rest/v1/rpc/get_manager_transfer_market_for_user', {
           method: 'POST',
           body: JSON.stringify({ p_user_id: current.user.id, p_world_id: current.appointment.world_id })
@@ -92,15 +104,19 @@ export default async (request) => {
         serverSupabase('/rest/v1/rpc/get_manager_transfer_agreed_changes_for_user', {
           method: 'POST',
           body: JSON.stringify({ p_user_id: current.user.id, p_world_id: current.appointment.world_id })
+        }).catch(() => []),
+        serverSupabase('/rest/v1/rpc/get_manager_transfer_lifecycle_for_user', {
+          method: 'POST',
+          body: JSON.stringify({ p_user_id: current.user.id, p_world_id: current.appointment.world_id })
         }).catch(() => [])
       ]);
-      const decoratedMarket = attachPendingChanges(market || {
+      const decoratedMarket = attachLifecycle(attachPendingChanges(market || {
         world_id: current.appointment.world_id,
         club_id: current.appointment.club_id,
         listings: [],
         outgoing_offers: [],
         incoming_offers: []
-      }, agreedChanges);
+      }, agreedChanges), lifecycle);
       return json({
         ...decoratedMarket,
         legacy_outgoing_offers: Array.isArray(legacyOutgoing) ? legacyOutgoing : []
@@ -125,6 +141,28 @@ export default async (request) => {
         })
       });
       return json({ accepted: true, action, offer: result, message: 'Legacy transfer offer withdrawn immediately.' });
+    }
+
+    if (action === 'cancel_in_grace') {
+      const dealId = String(body.deal_id || body.dealId || '').trim();
+      if (!dealId) return json({ error: 'Deal is required' }, 400);
+      const key = requestKey({
+        user_id: current.user.id,
+        world_id: current.appointment.world_id,
+        action,
+        deal_id: dealId,
+        client_request_id: clientRequestId
+      });
+      const result = await serverSupabase('/rest/v1/rpc/cancel_manager_transfer_deal_in_grace_for_user', {
+        method: 'POST',
+        body: JSON.stringify({
+          p_user_id: current.user.id,
+          p_world_id: current.appointment.world_id,
+          p_deal_id: dealId,
+          p_request_key: key
+        })
+      });
+      return json({ accepted: true, action, deal: result, message: 'Transfer cancelled during the mistake-grace period.' });
     }
 
     if (['propose_agreed_amendment', 'propose_agreed_cancellation'].includes(action)) {
@@ -229,7 +267,7 @@ export default async (request) => {
         })
       });
       const message = responseAction === 'accept'
-        ? 'Transfer terms agreed. The deal is ready for the grace-period stage.'
+        ? 'Transfer terms agreed. A 15-minute mistake-grace period now applies before the deal becomes binding.'
         : responseAction === 'decline'
           ? 'Transfer offer declined.'
           : 'Counter-offer sent immediately.';
@@ -305,7 +343,7 @@ export default async (request) => {
   } catch (error) {
     const message = String(error?.message || 'Transfer market request failed');
     const status = /Session|Authentication/.test(message) ? 401
-      : /required|owned|listing action|response action|change response|agreed-deal change|active transfer listing|read model|canonical world|appointment|selling club|offer|deal|revision|participant|approved|pending change/i.test(message) ? 409
+      : /required|owned|listing action|response action|change response|agreed-deal change|mistake-grace|grace period|active transfer listing|read model|canonical world|appointment|selling club|offer|deal|revision|participant|approved|pending change/i.test(message) ? 409
         : 503;
     return json({ error: message }, status);
   }
