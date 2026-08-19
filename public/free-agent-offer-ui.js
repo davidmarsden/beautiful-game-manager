@@ -82,8 +82,8 @@ function renderOfferPanel(offers = []) {
 
 function restyleFreeAgentUi() {
   document.querySelectorAll('[data-sign-free-agent]').forEach((button) => {
-    button.textContent = 'Make offer';
-    button.setAttribute('aria-label', 'Make contract offer');
+    if (button.textContent !== 'Make offer') button.textContent = 'Make offer';
+    if (button.getAttribute('aria-label') !== 'Make contract offer') button.setAttribute('aria-label', 'Make contract offer');
   });
   const message = document.getElementById('openMarketMessage');
   if (message && /Signing is settled directly into the live world/i.test(message.textContent || '')) {
@@ -133,7 +133,7 @@ async function submitOffer(button) {
   } catch (error) {
     if (message) message.textContent = error.message;
     button.disabled = false;
-    button.textContent = 'Make offer';
+    if (button.textContent !== 'Make offer') button.textContent = 'Make offer';
   }
 }
 
