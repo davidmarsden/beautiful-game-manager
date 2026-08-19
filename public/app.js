@@ -106,7 +106,7 @@ function renderSquadSummary() {
   const youth = state.squad.filter((p) => isYouth(p) && !isLoanedOut(p)).length;
   const loaned = state.squad.filter(isLoanedOut).length;
   $("firstTeamSummary").textContent = `${firstTeam} / ${rules.first_team_capacity ?? 25}`;
-  $("youthTeamSummary").textContent = `${youth} / ${rules.youth_team_capacity ?? 20}`;
+  $("youthTeamSummary").textContent = `${youth} / ${rules.youth_team_capacity ?? 25}`;
   $("loanedOutSummary").textContent = loaned;
   $("totalOwnedSummary").textContent = state.squad.length;
 }
@@ -239,10 +239,19 @@ async function initialiseAuth() {
   setAuthView(Boolean(session));
   if (session) await loadPortal().catch((portalError) => { $("portal").innerHTML = `<div class="fatal-error">${portalError.message}</div>`; });
 
-  supabase.auth.onAuthStateChange(async (_event, nextSession) => {
+  supabase.auth.onAuthStateChange(async (event, nextSession) => {
+    const previousSession = session;
     session = nextSession;
     setAuthView(Boolean(session));
-    if (session) await loadPortal();
+
+    if (!session) return;
+
+    const hadPortalState = Boolean(state);
+    const sameUser = Boolean(previousSession?.user?.id && previousSession.user.id === session.user?.id);
+    const harmlessSessionRefresh = sameUser && hadPortalState && ['INITIAL_SESSION', 'TOKEN_REFRESHED', 'USER_UPDATED'].includes(event);
+    if (harmlessSessionRefresh) return;
+
+    await loadPortal();
   });
 }
 
