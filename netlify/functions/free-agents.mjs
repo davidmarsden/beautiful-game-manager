@@ -71,6 +71,11 @@ function isUnsignedActive(player) {
     && !['inactive', 'retired'].includes(lifecycle);
 }
 
+function normaliseNonNegativeInteger(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : fallback;
+}
+
 export default async (request) => {
   try {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return json({ error: 'Supabase is not configured' }, 503);
@@ -133,7 +138,7 @@ export default async (request) => {
       worldId: current.appointment.world_id,
       player,
       contractYears: Math.max(1, Math.min(5, Number(body.contract_years ?? body.contractYears ?? 3) || 3)),
-      wage: Math.max(0, Math.round(Number(body.wage ?? 1000) || 1000)),
+      wage: normaliseNonNegativeInteger(body.wage, 1000),
       clientRequestId: String(body.client_request_id || body.clientRequestId || '').trim() || `${Date.now()}-${player.tbg_player_id}`
     });
 
