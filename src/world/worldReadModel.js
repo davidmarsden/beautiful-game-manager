@@ -5,14 +5,7 @@ function compactRuntime(runtime = {}) {
     fixtures: clone(runtime.fixtures || []),
     table: clone(runtime.table || {}),
     archive_results: clone(runtime.archive_results || []),
-    results: clone(runtime.results || []),
-    state: {
-      players: clone(runtime.state?.players || {}),
-      availability: {
-        players: clone(runtime.state?.availability?.players || {})
-      },
-      applied_run_keys: clone(runtime.state?.applied_run_keys || [])
-    }
+    results: clone(runtime.results || [])
   };
 }
 
@@ -21,9 +14,9 @@ function compactRuntime(runtime = {}) {
  *
  * The canonical save is the authoritative write/checkpoint envelope and contains
  * substantially more operational state than History, Competition and archived
- * Match Centre navigation require. This projection is intentionally world-shaped
- * so existing read-only projection helpers can consume it without reopening the
- * full canonical envelope on every page request.
+ * Match Centre navigation require. Runtime player/availability state is deliberately
+ * omitted here: it duplicates the canonical squad/player universe and was making a
+ * post-settlement read-model refresh almost as large as the canonical save itself.
  */
 export function buildWorldReadModel(world = {}) {
   const runtimes = Object.fromEntries(Object.entries(world.matchday_cycle?.runtimes || {})
@@ -43,11 +36,12 @@ export function buildWorldReadModel(world = {}) {
     squad_cycle: {
       season_id: world.squad_cycle?.season_id || null,
       registration_limit: world.squad_cycle?.registration_limit ?? null,
+      squad_limits: clone(world.squad_cycle?.squad_limits || { first_team: 25, youth: 25 }),
       clubs: clone(world.squad_cycle?.clubs || {}),
       players: clone(world.squad_cycle?.players || {}),
       contracts: clone(world.squad_cycle?.contracts || {}),
       state: {
-        registrations: clone(world.squad_cycle?.state?.registrations || {})
+        registrations: clone(world.squad_cycle?.state?.registrations || world.squad_cycle?.registrations || {})
       }
     },
     matchday_cycle: {
