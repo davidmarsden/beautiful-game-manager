@@ -4,14 +4,16 @@ import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('free-agent signing uses the governed pool and CAS-safe canonical settlement', async () => {
+test('free-agent acquisition remains governed and CAS-safe behind the player-offer gate', async () => {
   const endpoint = await read('netlify/functions/free-agents.mjs');
+  const offers = await read('netlify/functions/_lib/free-agent-offers.mjs');
   const settlement = await read('netlify/functions/_lib/free-agent-settlement.mjs');
 
   assert.match(endpoint, /\['GET', 'POST'\]/);
-  assert.match(endpoint, /action !== 'sign'/);
+  assert.match(endpoint, /action !== 'offer'/);
   assert.match(endpoint, /isUnsignedActive\(candidate\)/);
-  assert.match(endpoint, /signFreeAgent\(/);
+  assert.match(endpoint, /submitFreeAgentOffer\(/);
+  assert.match(offers, /signFreeAgent\(/);
 
   assert.match(settlement, /acquireFreeAgent\(world\.squad_cycle/);
   assert.match(settlement, /p_expected_checksum: before\.save_checksum/);
