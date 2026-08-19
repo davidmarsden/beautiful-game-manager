@@ -48,6 +48,27 @@ test('free-agent acquisition rejects duplicate canonical identities before mutat
   assert.equal(JSON.stringify(state), before);
 });
 
+test('free-agent acquisition rejects candidates outside active circulation before mutation', () => {
+  const candidates = [
+    { active_circulation: false },
+    { lifecycle_status: 'inactive' },
+    { lifecycle_status: 'retired' },
+    { status: 'retired' }
+  ];
+  for (const [index, extra] of candidates.entries()) {
+    const state = world();
+    const playerId = `inactive-${index}`;
+    const before = JSON.stringify(state);
+    assert.throws(() => acquireFreeAgent(state, {
+      toClubId: 'a',
+      at: '2026-08-10T12:00:00.000Z',
+      player: { tbg_player_id: playerId, display_name: `Inactive ${index}`, age: 25, ...extra }
+    }), /not in active circulation/);
+    assert.equal(state.players[playerId], undefined);
+    assert.equal(JSON.stringify(state), before);
+  }
+});
+
 test('free-agent acquisition respects split squad capacity before identity creation', () => {
   const seniorPlayers = Array.from({ length: 25 }, (_, index) => ({
     tbg_player_id: `senior-${index}`,
