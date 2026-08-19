@@ -2,6 +2,7 @@ import './transfer-grace-pending-fix.js';
 import './transfer-history.js';
 import './open-market-review-fixes.js';
 import './open-market.js';
+import './free-agent-offer-ui.js';
 import { openTbgPlayerProfile } from './player-profile.js';
 
 let historyDirectory = null;

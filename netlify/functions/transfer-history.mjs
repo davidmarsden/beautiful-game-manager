@@ -63,7 +63,7 @@ export default async (request) => {
       ...(isJwt(SUPABASE_SERVICE_ROLE_KEY) ? { bearer: SUPABASE_SERVICE_ROLE_KEY } : {}),
       method: 'POST'
     };
-    const [transferHistory, acquisitionHistory] = await Promise.all([
+    const [transferHistory, acquisitionHistory, freeAgentOfferHistory] = await Promise.all([
       supabase('/rest/v1/rpc/get_manager_transfer_history_for_user', {
         ...serviceAuth,
         body: JSON.stringify({ p_user_id: user.id, p_world_id: appointment.world_id, p_limit: 50 })
@@ -71,12 +71,19 @@ export default async (request) => {
       supabase('/rest/v1/rpc/get_manager_player_acquisition_history_for_user', {
         ...serviceAuth,
         body: JSON.stringify({ p_user_id: user.id, p_world_id: appointment.world_id, p_limit: 50 })
+      }).catch(() => []),
+      supabase('/rest/v1/rpc/get_manager_free_agent_offer_history_for_user', {
+        ...serviceAuth,
+        body: JSON.stringify({ p_user_id: user.id, p_world_id: appointment.world_id, p_limit: 50 })
       }).catch(() => [])
     ]);
 
+    const offerHistory = (Array.isArray(freeAgentOfferHistory) ? freeAgentOfferHistory : [])
+      .filter((row) => row.status !== 'accepted');
     const history = [
       ...(Array.isArray(transferHistory) ? transferHistory : []),
-      ...(Array.isArray(acquisitionHistory) ? acquisitionHistory : [])
+      ...(Array.isArray(acquisitionHistory) ? acquisitionHistory : []),
+      ...offerHistory
     ].sort((a, b) => historyTime(b) - historyTime(a)).slice(0, 50);
 
     return json({
