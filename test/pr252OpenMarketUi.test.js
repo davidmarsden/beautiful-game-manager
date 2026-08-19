@@ -8,6 +8,7 @@ test('open market presents listed, free-agent and external discovery modes', asy
   const ui = await read('public/open-market.js');
   const loader = await read('public/internal-profile-links.js');
 
+  assert.match(loader, /import '\.\/open-market-review-fixes\.js'/);
   assert.match(loader, /import '\.\/open-market\.js'/);
   assert.match(ui, /data-open-market-tab="listed"/);
   assert.match(ui, /data-open-market-tab="free-agents"/);
@@ -42,4 +43,18 @@ test('successful open-market signing can force transfer history to refresh immed
   assert.match(history, /tbg:transfer-history-refresh/);
   assert.match(history, /lastLoadedAt = 0/);
   assert.match(history, /maybeMount\(true\)/);
+});
+
+test('review hardening keeps signing retries idempotent, filters owned players and refreshes the whole portal', async () => {
+  const fixes = await read('public/open-market-review-fixes.js');
+
+  assert.match(fixes, /SIGN_REQUEST_PREFIX/);
+  assert.match(fixes, /sessionStorage\.getItem\(key\)/);
+  assert.match(fixes, /client_request_id: clientRequestId/);
+  assert.match(fixes, /\/api\/history/);
+  assert.match(fixes, /owned\.playerIds\.has\(playerId\)/);
+  assert.match(fixes, /owned\.transfermarktIds\.has\(tmId\)/);
+  assert.match(fixes, /window\.location\.reload\(\)/);
+  assert.match(fixes, /RESTORE_TRANSFERS_KEY/);
+  assert.match(fixes, /\[data-view="transfers"\]/);
 });
