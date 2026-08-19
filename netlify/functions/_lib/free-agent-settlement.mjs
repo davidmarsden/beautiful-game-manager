@@ -67,6 +67,11 @@ function deterministicApplicationError(error) {
   return /Transfer window is closed|Unknown club|already exists in the world|already belongs to|not a free agent|not in active circulation|Transfermarkt ID .* already exists|registration limit reached|first-team squad limit reached|youth squad limit reached|Registration is closed|Contract end must be after|Cannot save invalid world/i.test(String(error?.message || error));
 }
 
+function normaliseNonNegativeInteger(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : fallback;
+}
+
 async function reconcile(acquisitionId, replacementChecksum) {
   const rows = await service(`/rest/v1/player_acquisitions?id=eq.${encodeURIComponent(acquisitionId)}&select=id,status,replacement_checksum&limit=1`);
   const row = rows[0];
@@ -92,7 +97,7 @@ export async function signFreeAgent({
   const playerId = String(player?.tbg_player_id || player?.player_id || '').trim();
   if (!playerId) throw new Error('Player is required');
   const safeYears = Math.max(1, Math.min(5, Number(contractYears) || 3));
-  const safeWage = Math.max(0, Math.round(Number(wage) || 1000));
+  const safeWage = normaliseNonNegativeInteger(wage, 1000);
   const key = requestKey({ userId, worldId, playerId, contractYears: safeYears, wage: safeWage, clientRequestId });
 
   const acquisition = await service('/rest/v1/rpc/create_free_agent_acquisition_for_user', {
