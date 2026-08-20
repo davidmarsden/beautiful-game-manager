@@ -84,7 +84,7 @@ function renderNameResults(data) {
   if (!host) return;
   const results = Array.isArray(data.results) ? data.results : [];
   if (!results.length) {
-    host.innerHTML = '<div class="open-market-external-note"><strong>No governed player found</strong><p>Try another spelling, or use a Transfermarkt ID to import a genuinely new player.</p></div>';
+    host.innerHTML = '<div class="open-market-external-note"><strong>No governed player found</strong><p>Try another spelling, nickname, or use a Transfermarkt ID to import a genuinely new player.</p></div>';
     const message = externalMessage();
     if (message) message.textContent = `No governed TBG/TPF player matched “${data.query || ''}”.`;
     setExternalStatus('No matches');
@@ -92,6 +92,8 @@ function renderNameResults(data) {
   }
   host.innerHTML = results.map((player) => {
     const nations = Array.isArray(player.nationality) ? player.nationality.join(', ') : player.nationality || '';
+    const aliases = Array.isArray(player.aliases) ? player.aliases.filter(Boolean).slice(0, 4) : [];
+    const aliasLine = aliases.length ? `<small>Also known as: ${externalEscape(aliases.join(', '))}</small>` : '';
     const status = player.in_world
       ? '<span class="open-market-status">Already in TBG world</span>'
       : !player.governed_rating_available
@@ -104,6 +106,7 @@ function renderNameResults(data) {
         <strong>${externalEscape(player.display_name || player.tbg_player_id)}</strong>
         <span>${externalEscape(player.position || 'Player')}${player.age != null ? ` · Age ${externalEscape(player.age)}` : ''}${player.tbg_rating != null ? ` · Rating ${externalEscape(player.tbg_rating)}` : ''}</span>
         <small>${externalEscape(nations)}${player.real_world_club ? ` · ${externalEscape(player.real_world_club)}` : ''}</small>
+        ${aliasLine}
         <small>TM ID ${externalEscape(player.transfermarkt_id)}${player.market_value_eur != null ? ` · TM value ${externalMoney(player.market_value_eur)}` : ''}</small>
       </div>
       <div class="open-market-actions">${status}</div>
@@ -217,13 +220,13 @@ function refreshExternalCopy() {
   if (!selected || !form || !message) return;
   const input = document.getElementById('externalTmId');
   const label = input?.closest('label');
-  if (label?.firstChild?.nodeType === Node.TEXT_NODE) label.firstChild.nodeValue = 'Player name or Transfermarkt ID';
+  if (label?.firstChild?.nodeType === Node.TEXT_NODE) label.firstChild.nodeValue = 'Player name, nickname or Transfermarkt ID';
   if (input) {
     input.inputMode = 'text';
-    input.placeholder = 'e.g. Victor Hugo or 1364573';
+    input.placeholder = 'e.g. Huguinho, Victor Hugo or 1364573';
   }
-  if (/next Slice D step|first checks|Transfermarkt player ID/i.test(message.textContent || '')) {
-    message.textContent = 'Search by player name or enter a Transfermarkt ID. Name search uses the governed TBG/TPF player database; a TM ID remains available for precise lookup and genuinely new-player import.';
+  if (/next Slice D step|first checks|Transfermarkt player ID|Search by player name/i.test(message.textContent || '')) {
+    message.textContent = 'Search by player name or nickname, or enter a Transfermarkt ID. Aliases come from governed player data and Transfermarkt profile identity; a TM ID remains available for precise lookup and genuinely new-player import.';
   }
 }
 
