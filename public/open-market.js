@@ -60,7 +60,10 @@ function openMarketHost() {
 
 function mountOpenMarket() {
   const workspace = openMarketHost();
-  if (!workspace) return false;
+  if (!workspace) {
+    openMarketMounted = false;
+    return false;
+  }
   if (document.getElementById('openMarketWorkspace')) {
     openMarketMounted = true;
     return true;
@@ -280,17 +283,18 @@ function handleOpenMarketSubmit(event) {
   }
 }
 
-window.addEventListener('tbg:portal-rendered', () => {
-  if (!mountOpenMarket()) setTimeout(mountOpenMarket, 0);
-});
+function scheduleOpenMarketMount({ refreshListed = false } = {}) {
+  setTimeout(() => {
+    const mounted = mountOpenMarket();
+    if (mounted && refreshListed && openMarketTab === 'listed') refreshListings().catch(showOpenMarketError);
+  }, 0);
+}
+
+window.addEventListener('tbg:portal-rendered', () => scheduleOpenMarketMount());
 
 document.addEventListener('tbg:view-changed', (event) => {
   if (event.detail?.view !== 'transfers') return;
-  if (mountOpenMarket() && openMarketTab === 'listed') refreshListings().catch(showOpenMarketError);
+  scheduleOpenMarketMount({ refreshListed: true });
 });
 
-const openMarketObserver = new MutationObserver(() => {
-  if (!openMarketMounted || !document.getElementById('openMarketWorkspace')) mountOpenMarket();
-});
-openMarketObserver.observe(document.documentElement, { childList: true, subtree: true });
 mountOpenMarket();
