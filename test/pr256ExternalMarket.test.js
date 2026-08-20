@@ -27,9 +27,13 @@ test('external world-membership lookup requires a fresh compact read model and p
   assert.match(readModel, /transfermarkt_id: player\.transfermarkt_id \|\| player\.transfermarktId \|\| player\.transfermarkt_player_id \|\| null/);
 });
 
-test('external name search uses the governed database and fresh world projection', async () => {
+test('external name search uses cached governed data and a fresh world projection', async () => {
   const endpoint = await read('netlify/functions/external-player-search.mjs');
   assert.match(endpoint, /PLAYER_DATABASE_URL/);
+  assert.match(endpoint, /PLAYER_DATABASE_CACHE_MS/);
+  assert.match(endpoint, /let playerDatabasePromise = null/);
+  assert.match(endpoint, /async function playerDatabase/);
+  assert.match(endpoint, /Date\.now\(\) - playerDatabaseLoadedAt < PLAYER_DATABASE_CACHE_MS/);
   assert.match(endpoint, /url\.searchParams\.get\('q'\)/);
   assert.match(endpoint, /scoreName/);
   assert.match(endpoint, /world_read_model_cache\?world_id=/);
@@ -37,9 +41,11 @@ test('external name search uses the governed database and fresh world projection
   assert.match(endpoint, /in_world: inWorld/);
   assert.match(endpoint, /governed_rating_available/);
   assert.match(endpoint, /transfermarkt_id: tmId/);
+  assert.match(endpoint, /lifecycle_status:/);
+  assert.match(endpoint, /active_circulation:/);
 });
 
-test('external name search UI lets managers choose a governed result while retaining TM-ID lookup', async () => {
+test('external name search UI lets managers choose eligible governed results while blocking inactive players', async () => {
   const ui = await read('public/external-market-ui.js');
   assert.match(ui, /Player name or Transfermarkt ID/);
   assert.match(ui, /\/api\/external-player-search\?q=/);
@@ -47,6 +53,10 @@ test('external name search UI lets managers choose a governed result while retai
   assert.match(ui, /Already in TBG world/);
   assert.match(ui, /Awaiting TBG rating/);
   assert.match(ui, /No governed player found/);
+  assert.match(ui, /function externalPlayerUnavailable/);
+  assert.match(ui, /player\.active_circulation === false/);
+  assert.match(ui, /\['inactive', 'retired'\]\.includes\(lifecycle\)/);
+  assert.match(ui, /externalPlayerUnavailable\(player\)/);
   assert.match(ui, /if \(\/\^\\d\+\$\/\.test\(query\)\) return lookupExternal\(query\)/);
 });
 
