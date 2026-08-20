@@ -1,6 +1,8 @@
 const offerEscape = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
 const offerMoney = (value) => `£${Math.max(0, Number(value) || 0).toLocaleString('en-GB')}`;
 let latestFreeAgentOffers = [];
+let outgoingObserver = null;
+let observedOutgoing = null;
 
 function accessToken() {
   for (let index = 0; index < localStorage.length; index += 1) {
@@ -73,12 +75,13 @@ function renderOfferPanel(offers = []) {
     else panel.append(host);
   }
   const recent = offers.slice(0, 8);
-  host.innerHTML = `<strong>Your free-agent offers</strong>${recent.length ? recent.map((offer) => `
+  const html = `<strong>Your free-agent offers</strong>${recent.length ? recent.map((offer) => `
     <div style="margin-top:.55rem">
       <strong>${offerEscape(offer.player_name || offer.player_id)}</strong>
       <small>${offerMoney(offer.wage)} / week · ${offerEscape(offer.contract_years)} season${Number(offer.contract_years) === 1 ? '' : 's'} · ${offerEscape(statusLabel(offer))}</small>
       ${offer.status !== 'pending' && offer.decision_reason ? `<small>${offerEscape(offerReason(offer))}</small>` : ''}
     </div>`).join('') : '<p class="open-market-empty">No free-agent offers submitted yet.</p>'}`;
+  if (host.innerHTML !== html) host.innerHTML = html;
 }
 
 function nativeOutgoingOfferCount(outgoing) {
@@ -141,6 +144,7 @@ function restyleFreeAgentUi() {
   if (message && /Signing is settled directly into the live world/i.test(message.textContent || '')) {
     message.textContent = 'Free agents can receive offers from several clubs. Submit contract terms and the player will choose after the six-hour offer window; unattractive offers can be rejected.';
   }
+  renderOfferPanel(latestFreeAgentOffers);
   renderPendingOffersInTransferSummary(latestFreeAgentOffers);
 }
 
@@ -150,8 +154,7 @@ async function refreshOffers() {
     const data = await api('/api/free-agents?q=__offer_status_only__&limit=1');
     const offers = Array.isArray(data.offers) ? data.offers : [];
     latestFreeAgentOffers = offers;
-    renderOfferPanel(offers);
-    renderPendingOffersInTransferSummary(offers);
+    restyleFreeAgentUi();
     const newlyAccepted = offers.find((offer) => offer.status === 'accepted' && !sessionStorage.getItem(`tbg-free-agent-accepted-seen:${offer.id}`));
     if (newlyAccepted) {
       sessionStorage.setItem(`tbg-free-agent-accepted-seen:${newlyAccepted.id}`, '1');
@@ -197,6 +200,25 @@ async function submitOffer(button) {
   }
 }
 
+function observeOutgoingTransferRenders() {
+  const outgoing = document.getElementById('outgoingTransferOffers');
+  if (outgoing === observedOutgoing) return;
+  outgoingObserver?.disconnect();
+  outgoingObserver = null;
+  observedOutgoing = outgoing;
+  if (!outgoing) return;
+  outgoingObserver = new MutationObserver(() => scheduleFreeAgentUi());
+  outgoingObserver.observe(outgoing, { childList: true });
+}
+
+function scheduleFreeAgentUi({ refresh = false, delay = 0 } = {}) {
+  setTimeout(() => {
+    observeOutgoingTransferRenders();
+    restyleFreeAgentUi();
+    if (refresh) refreshOffers();
+  }, delay);
+}
+
 document.addEventListener('click', (event) => {
   const button = event.target.closest('[data-sign-free-agent]');
   if (!button) return;
@@ -207,12 +229,15 @@ document.addEventListener('click', (event) => {
 
 document.addEventListener('click', (event) => {
   if (event.target.closest('[data-open-market-tab="free-agents"], [data-free-agent-browse], [data-free-agent-search-form] button')) {
-    setTimeout(() => { restyleFreeAgentUi(); refreshOffers(); }, 50);
+    scheduleFreeAgentUi({ refresh: true, delay: 50 });
   }
 });
 
-const observer = new MutationObserver(() => restyleFreeAgentUi());
-observer.observe(document.documentElement, { childList: true, subtree: true });
-window.addEventListener('tbg:portal-rendered', () => setTimeout(() => { restyleFreeAgentUi(); refreshOffers(); }, 0));
+document.addEventListener('tbg:view-changed', (event) => {
+  if (event.detail?.view === 'transfers') scheduleFreeAgentUi({ refresh: true });
+});
+
+window.addEventListener('tbg:portal-rendered', () => scheduleFreeAgentUi({ refresh: true }));
+observeOutgoingTransferRenders();
 restyleFreeAgentUi();
 refreshOffers();

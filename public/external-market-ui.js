@@ -233,14 +233,20 @@ function refreshExternalCopy() {
   if (!selected || !form || !message) return;
   const input = document.getElementById('externalTmId');
   const label = input?.closest('label');
-  if (label?.firstChild?.nodeType === Node.TEXT_NODE) label.firstChild.nodeValue = 'Player name, nickname or Transfermarkt ID';
+  if (label?.firstChild?.nodeType === Node.TEXT_NODE && label.firstChild.nodeValue !== 'Player name, nickname or Transfermarkt ID') {
+    label.firstChild.nodeValue = 'Player name, nickname or Transfermarkt ID';
+  }
   if (input) {
-    input.inputMode = 'text';
-    input.placeholder = 'e.g. Huguinho, Victor Hugo or 1364573';
+    if (input.inputMode !== 'text') input.inputMode = 'text';
+    if (input.placeholder !== 'e.g. Huguinho, Victor Hugo or 1364573') input.placeholder = 'e.g. Huguinho, Victor Hugo or 1364573';
   }
   if (/next Slice D step|first checks|Transfermarkt player ID|Search by player name/i.test(message.textContent || '')) {
     message.textContent = 'Search by player name or nickname, or enter a Transfermarkt ID. Aliases come from governed player data and Transfermarkt profile identity; a TM ID remains available for precise lookup and genuinely new-player import.';
   }
+}
+
+function scheduleExternalCopy(delay = 0) {
+  setTimeout(refreshExternalCopy, delay);
 }
 
 document.addEventListener('submit', (event) => {
@@ -299,7 +305,13 @@ document.addEventListener('click', (event) => {
   }
 }, true);
 
-const externalObserver = new MutationObserver(() => refreshExternalCopy());
-externalObserver.observe(document.documentElement, { childList: true, subtree: true });
-window.addEventListener('tbg:portal-rendered', () => setTimeout(refreshExternalCopy, 0));
+document.addEventListener('click', (event) => {
+  if (event.target.closest?.('[data-open-market-tab="external"]')) scheduleExternalCopy();
+});
+
+document.addEventListener('tbg:view-changed', (event) => {
+  if (event.detail?.view === 'transfers') scheduleExternalCopy();
+});
+
+window.addEventListener('tbg:portal-rendered', () => scheduleExternalCopy());
 refreshExternalCopy();
