@@ -124,9 +124,26 @@ async function resolveRated(tmId, { force = false } = {}) {
 }
 
 async function assertNotInWorld(worldId, player) {
-  const rows = await supabase(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&select=read_model&limit=1`, { service: true });
-  const players = rows[0]?.read_model?.squad_cycle?.players || {};
-  if (players[player.tbg_player_id]) throw new Error('Player is already registered to a club in this TBG world');
+  const encodedWorldId = encodeURIComponent(worldId);
+  const [cacheRows, canonicalRows] = await Promise.all([
+    supabase(`/rest/v1/world_read_model_cache?world_id=eq.${encodedWorldId}&select=read_model,source_checksum&limit=1`, { service: true }),
+    supabase(`/rest/v1/canonical_world_saves?world_id=eq.${encodedWorldId}&select=save_checksum&limit=1`, { service: true })
+  ]);
+  const cacheRow = cacheRows[0];
+  const canonicalRow = canonicalRows[0];
+  if (!cacheRow?.read_model || !canonicalRow?.save_checksum || cacheRow.source_checksum !== canonicalRow.save_checksum) {
+    throw new Error('World read model is refreshing; please retry shortly');
+  }
+  const players = cacheRow.read_model?.squad_cycle?.players;
+  if (!players || typeof players !== 'object' || Array.isArray(players)) {
+    throw new Error('World read model is refreshing; please retry shortly');
+  }
+  const canonicalPlayerId = String(player?.tbg_player_id || '').trim();
+  const transfermarktId = String(player?.transfermarkt_id || '').trim();
+  const duplicate = (canonicalPlayerId && players[canonicalPlayerId]) || Object.values(players).find((candidate) =>
+    transfermarktId && String(candidate?.transfermarkt_id || candidate?.transfermarktId || '').trim() === transfermarktId
+  );
+  if (duplicate) throw new Error('Player is already registered to a club in this TBG world');
 }
 
 async function importRow(tmId) {
@@ -348,7 +365,7 @@ export default async (request) => {
     const message = String(error?.message || 'External-market request failed');
     const status = /Session|Authentication/.test(message) ? 401
       : /already registered|retired|rating/i.test(message) ? 409
-        : /not configured|unavailable|Apify/i.test(message) ? 503 : 500;
+        : /refreshing|not configured|unavailable|Apify/i.test(message) ? 503 : 500;
     return json({ error: message }, status);
   }
 };
