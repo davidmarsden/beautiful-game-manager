@@ -74,6 +74,11 @@ function renderReadyExternal(data) {
   setExternalStatus('External player ready');
 }
 
+function externalPlayerUnavailable(player) {
+  const lifecycle = String(player.lifecycle_status || '').toLowerCase();
+  return player.active_circulation === false || ['inactive', 'retired'].includes(lifecycle) || /retired/i.test(String(player.status || ''));
+}
+
 function renderNameResults(data) {
   const host = externalResultHost();
   if (!host) return;
@@ -91,7 +96,7 @@ function renderNameResults(data) {
       ? '<span class="open-market-status">Already in TBG world</span>'
       : !player.governed_rating_available
         ? '<span class="open-market-status">Awaiting TBG rating</span>'
-        : /retired/i.test(String(player.status || ''))
+        : externalPlayerUnavailable(player)
           ? '<span class="open-market-status">Unavailable</span>'
           : `<button type="button" data-select-external-player data-tm-id="${externalEscape(player.transfermarkt_id)}">View player</button>`;
     return `<article class="open-market-card">
