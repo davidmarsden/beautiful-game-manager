@@ -104,19 +104,39 @@ function addAliasValues(target, value) {
 function profileAlias(row = {}) {
   const profileUrl = String(row.profile_url || row.transfermarkt_url || '').trim();
   if (!profileUrl) return '';
+  let slug = '';
   try {
     const pathname = new URL(profileUrl).pathname;
     const match = pathname.match(/^\/([^/]+)\/profil\/spieler\/\d+/i);
-    return match ? decodeURIComponent(match[1]).replace(/[-_]+/g, ' ').trim() : '';
+    slug = match?.[1] || '';
   } catch {
     const match = profileUrl.match(/transfermarkt\.[^/]+\/([^/]+)\/profil\/spieler\/\d+/i);
-    return match ? decodeURIComponent(match[1]).replace(/[-_]+/g, ' ').trim() : '';
+    slug = match?.[1] || '';
+  }
+  if (!slug) return '';
+  try {
+    return decodeURIComponent(slug).replace(/[-_]+/g, ' ').trim();
+  } catch {
+    return '';
   }
 }
 
 function aliasesOf(row = {}) {
   const values = [];
-  [row.aliases, row.nicknames, row.nickname, row.nick_name, row.known_as, row.knownAs, row.common_name, row.commonName, row.search_aliases].forEach((value) => addAliasValues(values, value));
+  [
+    row.display_name,
+    row.full_name,
+    row.short_name,
+    row.aliases,
+    row.nicknames,
+    row.nickname,
+    row.nick_name,
+    row.known_as,
+    row.knownAs,
+    row.common_name,
+    row.commonName,
+    row.search_aliases
+  ].forEach((value) => addAliasValues(values, value));
   addAliasValues(values, profileAlias(row));
   const canonical = normalise(rowName(row));
   const seen = new Set();
