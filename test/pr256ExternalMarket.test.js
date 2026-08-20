@@ -13,6 +13,16 @@ test('external market resolves governed TM identities before importing', async (
   assert.match(endpoint, /Player is already registered to a club in this TBG world/);
 });
 
+test('external world-membership lookup uses the dedicated compact read-model directory', async () => {
+  const endpoint = await read('netlify/functions/external-market.mjs');
+  const cacheMigration = await read('supabase/migrations/20260817_world_read_model_cache.sql');
+  assert.match(cacheMigration, /get_world_player_identity_directory/);
+  assert.match(endpoint, /rpc\/get_world_player_identity_directory/);
+  assert.match(endpoint, /p_world_id: worldId/);
+  assert.doesNotMatch(endpoint, /canonical_world_saves\?[^`]*select=read_model/);
+  assert.match(endpoint, /candidate\?\.transfermarkt_id/);
+});
+
 test('governed player database is revalidated after a scraped import awaits rating publication', async () => {
   const endpoint = await read('netlify/functions/external-market.mjs');
   assert.match(endpoint, /PLAYER_DATABASE_CACHE_MS/);
