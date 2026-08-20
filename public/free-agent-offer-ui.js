@@ -81,16 +81,34 @@ function renderOfferPanel(offers = []) {
     </div>`).join('') : '<p class="open-market-empty">No free-agent offers submitted yet.</p>'}`;
 }
 
+function nativeOutgoingOfferCount(outgoing) {
+  return outgoing
+    ? outgoing.querySelectorAll(':scope > article.incoming-transfer-offer').length
+    : 0;
+}
+
+function restoreOutgoingEmptyState(outgoing) {
+  if (!outgoing || nativeOutgoingOfferCount(outgoing)) return;
+  const hasEmptyState = Array.from(outgoing.children).some((child) => child.tagName === 'P' && (child.textContent || '').trim() === 'No active outgoing offers.');
+  if (!hasEmptyState) {
+    const empty = document.createElement('p');
+    empty.textContent = 'No active outgoing offers.';
+    outgoing.append(empty);
+  }
+}
+
 function renderPendingOffersInTransferSummary(offers = []) {
   const pending = offers.filter((offer) => offer.status === 'pending');
   const outgoing = document.getElementById('outgoingTransferOffers');
   if (outgoing) {
     let host = outgoing.querySelector('[data-free-agent-outgoing-summary]');
+    const emptyState = Array.from(outgoing.children).find((child) => child.tagName === 'P' && (child.textContent || '').trim() === 'No active outgoing offers.');
     if (!pending.length) {
       host?.remove();
+      restoreOutgoingEmptyState(outgoing);
     } else {
+      emptyState?.remove();
       if (!host) {
-        if ((outgoing.textContent || '').trim() === 'No active outgoing offers.') outgoing.innerHTML = '';
         host = document.createElement('div');
         host.dataset.freeAgentOutgoingSummary = 'true';
         outgoing.append(host);
@@ -108,12 +126,8 @@ function renderPendingOffersInTransferSummary(offers = []) {
   const status = document.getElementById('transferNegotiationStatus');
   const match = status?.textContent?.match(/^(\d+) incoming · (\d+) outgoing · (\d+) listed$/);
   if (status && match) {
-    const currentText = status.textContent;
-    const previousRendered = status.dataset.freeAgentRenderedStatus || '';
-    if (currentText !== previousRendered) status.dataset.freeAgentBaseOutgoing = match[2];
-    const baseOutgoing = Math.max(0, Number(status.dataset.freeAgentBaseOutgoing || match[2]) || 0);
-    const nextText = `${match[1]} incoming · ${baseOutgoing + pending.length} outgoing · ${match[3]} listed`;
-    status.dataset.freeAgentRenderedStatus = nextText;
+    const nativeOutgoing = outgoing ? nativeOutgoingOfferCount(outgoing) : Math.max(0, Number(match[2]) || 0);
+    const nextText = `${match[1]} incoming · ${nativeOutgoing + pending.length} outgoing · ${match[3]} listed`;
     if (status.textContent !== nextText) status.textContent = nextText;
   }
 }
