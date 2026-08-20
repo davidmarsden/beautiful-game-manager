@@ -1,6 +1,8 @@
 const offerEscape = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
 const offerMoney = (value) => `£${Math.max(0, Number(value) || 0).toLocaleString('en-GB')}`;
 let latestFreeAgentOffers = [];
+let outgoingObserver = null;
+let observedOutgoing = null;
 
 function accessToken() {
   for (let index = 0; index < localStorage.length; index += 1) {
@@ -198,8 +200,20 @@ async function submitOffer(button) {
   }
 }
 
+function observeOutgoingTransferRenders() {
+  const outgoing = document.getElementById('outgoingTransferOffers');
+  if (outgoing === observedOutgoing) return;
+  outgoingObserver?.disconnect();
+  outgoingObserver = null;
+  observedOutgoing = outgoing;
+  if (!outgoing) return;
+  outgoingObserver = new MutationObserver(() => scheduleFreeAgentUi());
+  outgoingObserver.observe(outgoing, { childList: true });
+}
+
 function scheduleFreeAgentUi({ refresh = false, delay = 0 } = {}) {
   setTimeout(() => {
+    observeOutgoingTransferRenders();
     restyleFreeAgentUi();
     if (refresh) refreshOffers();
   }, delay);
@@ -224,5 +238,6 @@ document.addEventListener('tbg:view-changed', (event) => {
 });
 
 window.addEventListener('tbg:portal-rendered', () => scheduleFreeAgentUi({ refresh: true }));
+observeOutgoingTransferRenders();
 restyleFreeAgentUi();
 refreshOffers();
