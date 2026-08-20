@@ -6,8 +6,10 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const APIFY_TOKEN = process.env.APIFY_TOKEN || '';
 const APIFY_ACTOR = process.env.TBG_TRANSFERMARKT_APIFY_ACTOR || 'jungle_synthesizer/transfermarkt-global-football-player-scraper';
 const PLAYER_DATABASE_URL = process.env.TBG_PLAYER_DATABASE_URL || 'https://raw.githubusercontent.com/davidmarsden/beautiful-game-data/main/derived/player-database/player-database.json';
+const PLAYER_DATABASE_CACHE_MS = Math.max(5000, Number(process.env.TBG_PLAYER_DATABASE_CACHE_MS) || 30000);
 const isJwt = (value) => String(value || '').split('.').length === 3;
 let playerDatabasePromise = null;
+let playerDatabaseLoadedAt = 0;
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -57,18 +59,22 @@ function canonicalId(tmId) {
   return `tbg-tm-${String(tmId).padStart(8, '0')}`;
 }
 
-async function playerDatabase() {
-  if (!playerDatabasePromise) {
-    playerDatabasePromise = fetch(PLAYER_DATABASE_URL, { headers: { accept: 'application/json' } })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`Player database unavailable (HTTP ${response.status})`);
-        const rows = await response.json();
-        return Array.isArray(rows) ? rows : [];
-      })
-      .catch((error) => {
-        playerDatabasePromise = null;
-        throw error;
-      });
+async function playerDatabase({ force = false } = {}) {
+  const fresh = playerDatabasePromise && Date.now() - playerDatabaseLoadedAt < PLAYER_DATABASE_CACHE_MS;
+  if (force || !fresh) {
+    playerDatabaseLoadedAt = Date.now();
+    playerDatabasePromise = fetch(PLAYER_DATABASE_URL, {
+      headers: { accept: 'application/json', 'cache-control': 'no-cache' },
+      cache: 'no-store'
+    }).then(async (response) => {
+      if (!response.ok) throw new Error(`Player database unavailable (HTTP ${response.status})`);
+      const rows = await response.json();
+      return Array.isArray(rows) ? rows : [];
+    }).catch((error) => {
+      playerDatabasePromise = null;
+      playerDatabaseLoadedAt = 0;
+      throw error;
+    });
   }
   return playerDatabasePromise;
 }
@@ -111,8 +117,8 @@ function ratedExternalPlayer(row, tmId) {
   };
 }
 
-async function resolveRated(tmId) {
-  const rows = await playerDatabase();
+async function resolveRated(tmId, { force = false } = {}) {
+  const rows = await playerDatabase({ force });
   const row = rows.find((candidate) => String(candidate.transfermarkt_id || candidate.transfermarkt_player_id || '') === String(tmId));
   return row ? ratedExternalPlayer(row, tmId) : null;
 }
@@ -155,6 +161,19 @@ async function startApifyImport(tmId) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok || !body?.data?.id) throw new Error(body?.error?.message || `Apify import could not start (HTTP ${response.status})`);
   return body.data;
+}
+
+async function restartImport(row, tmId, userId) {
+  const run = await startApifyImport(tmId);
+  return patchImport(row.id, {
+    status: 'scraping',
+    requested_by_user_id: userId,
+    apify_run_id: run.id,
+    apify_dataset_id: run.defaultDatasetId || null,
+    player_snapshot: null,
+    error: null,
+    completed_at: null
+  });
 }
 
 function scrapedSnapshot(item, tmId) {
@@ -205,18 +224,31 @@ async function refreshImport(row) {
   });
 }
 
-async function lookup(tmId, current) {
-  const rated = await resolveRated(tmId);
-  if (rated) {
-    if (/retired/i.test(String(rated.status))) return { status: 'unavailable', reason: 'retired', player: rated };
-    await assertNotInWorld(current.appointment.world_id, rated);
-    const existing = await importRow(tmId).catch(() => null);
-    if (existing && existing.status !== 'ready') await patchImport(existing.id, { status: 'ready', player_snapshot: rated, error: null, completed_at: new Date().toISOString() }).catch(() => {});
-    return { status: 'ready', player: rated, acquisition_fee_eur: rated.external_acquisition_fee_eur, expected_wage: freeAgentOfferExpectation(rated) };
+async function readyResult(tmId, current, rated) {
+  if (/retired/i.test(String(rated.status))) return { status: 'unavailable', reason: 'retired', player: rated };
+  await assertNotInWorld(current.appointment.world_id, rated);
+  const existing = await importRow(tmId).catch(() => null);
+  if (existing && existing.status !== 'ready') {
+    await patchImport(existing.id, { status: 'ready', player_snapshot: rated, error: null, completed_at: new Date().toISOString() }).catch(() => {});
   }
+  return { status: 'ready', player: rated, acquisition_fee_eur: rated.external_acquisition_fee_eur, expected_wage: freeAgentOfferExpectation(rated) };
+}
+
+async function lookup(tmId, current) {
+  let rated = await resolveRated(tmId);
+  if (rated) return readyResult(tmId, current, rated);
 
   let row = await importRow(tmId).catch(() => null);
   if (row) row = await refreshImport(row).catch(() => row);
+
+  // A scraped row means the data pipeline may have published a rating since this
+  // warm function last read the governed database. Force a no-cache revalidation
+  // so “Check rating status” can observe that publication immediately.
+  if (row?.status === 'scraped') {
+    rated = await resolveRated(tmId, { force: true });
+    if (rated) return readyResult(tmId, current, rated);
+  }
+
   return {
     status: row?.status || 'not_imported',
     import: row ? {
@@ -231,7 +263,9 @@ async function lookup(tmId, current) {
     rating_required: row?.status === 'scraped',
     message: row?.status === 'scraped'
       ? 'Transfermarkt data has been imported. Acquisition is waiting for the governed TBG rating pipeline to publish an Ability rating.'
-      : 'This TM ID is not yet in the governed TBG player database.'
+      : row?.status === 'failed'
+        ? 'The targeted import failed. You can retry the import.'
+        : 'This TM ID is not yet in the governed TBG player database.'
   };
 }
 
@@ -256,11 +290,15 @@ export default async (request) => {
 
     const action = String(body.action || '').trim().toLowerCase();
     if (action === 'request_import') {
-      const known = await resolveRated(tmId);
+      const known = await resolveRated(tmId, { force: true });
       if (known) return json({ transfermarkt_id: tmId, status: 'ready', player: known, already_known: true });
       let row = await importRow(tmId);
       if (row) {
         row = await refreshImport(row).catch(() => row);
+        if (row?.status === 'failed') {
+          row = await restartImport(row, tmId, current.user.id);
+          return json({ transfermarkt_id: tmId, status: 'scraping', import: row, retried: true, message: 'Targeted Transfermarkt import restarted.' }, 202);
+        }
         return json({ transfermarkt_id: tmId, status: row.status, import: row, idempotent: true });
       }
       const run = await startApifyImport(tmId);
@@ -279,7 +317,7 @@ export default async (request) => {
     }
 
     if (action === 'offer') {
-      const player = await resolveRated(tmId);
+      const player = await resolveRated(tmId, { force: true });
       if (!player) return json({ error: 'This external player does not yet have a governed TBG Ability rating', reason: 'rating_required' }, 409);
       if (/retired/i.test(String(player.status))) return json({ error: 'This player is retired and cannot be acquired' }, 409);
       await assertNotInWorld(current.appointment.world_id, player);
