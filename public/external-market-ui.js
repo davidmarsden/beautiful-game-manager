@@ -74,6 +74,41 @@ function renderReadyExternal(data) {
   setExternalStatus('External player ready');
 }
 
+function renderNameResults(data) {
+  const host = externalResultHost();
+  if (!host) return;
+  const results = Array.isArray(data.results) ? data.results : [];
+  if (!results.length) {
+    host.innerHTML = '<div class="open-market-external-note"><strong>No governed player found</strong><p>Try another spelling, or use a Transfermarkt ID to import a genuinely new player.</p></div>';
+    const message = externalMessage();
+    if (message) message.textContent = `No governed TBG/TPF player matched “${data.query || ''}”.`;
+    setExternalStatus('No matches');
+    return;
+  }
+  host.innerHTML = results.map((player) => {
+    const nations = Array.isArray(player.nationality) ? player.nationality.join(', ') : player.nationality || '';
+    const status = player.in_world
+      ? '<span class="open-market-status">Already in TBG world</span>'
+      : !player.governed_rating_available
+        ? '<span class="open-market-status">Awaiting TBG rating</span>'
+        : /retired/i.test(String(player.status || ''))
+          ? '<span class="open-market-status">Unavailable</span>'
+          : `<button type="button" data-select-external-player data-tm-id="${externalEscape(player.transfermarkt_id)}">View player</button>`;
+    return `<article class="open-market-card">
+      <div>
+        <strong>${externalEscape(player.display_name || player.tbg_player_id)}</strong>
+        <span>${externalEscape(player.position || 'Player')}${player.age != null ? ` · Age ${externalEscape(player.age)}` : ''}${player.tbg_rating != null ? ` · Rating ${externalEscape(player.tbg_rating)}` : ''}</span>
+        <small>${externalEscape(nations)}${player.real_world_club ? ` · ${externalEscape(player.real_world_club)}` : ''}</small>
+        <small>TM ID ${externalEscape(player.transfermarkt_id)}${player.market_value_eur != null ? ` · TM value ${externalMoney(player.market_value_eur)}` : ''}</small>
+      </div>
+      <div class="open-market-actions">${status}</div>
+    </article>`;
+  }).join('');
+  const message = externalMessage();
+  if (message) message.textContent = `${results.length} governed player${results.length === 1 ? '' : 's'} matched “${data.query || ''}”. Choose the correct player to continue.`;
+  setExternalStatus(`${results.length} match${results.length === 1 ? '' : 'es'}`);
+}
+
 function renderImportState(data) {
   const host = externalResultHost();
   if (!host) return;
@@ -105,6 +140,20 @@ async function lookupExternal(tmId) {
   const data = await externalRequest(`/api/external-market?tm_id=${encodeURIComponent(lastExternalTmId)}`);
   if (data.status === 'ready' && data.player) renderReadyExternal(data);
   else renderImportState(data);
+}
+
+async function searchExternalName(query) {
+  const value = String(query || '').trim();
+  if (value.length < 2) throw new Error('Enter at least two characters of the player name.');
+  setExternalStatus('Searching…');
+  const data = await externalRequest(`/api/external-player-search?q=${encodeURIComponent(value)}&limit=12`);
+  renderNameResults(data);
+}
+
+async function lookupExternalInput(value) {
+  const query = String(value || '').trim();
+  if (/^\d+$/.test(query)) return lookupExternal(query);
+  return searchExternalName(query);
 }
 
 async function requestExternalImport(tmId) {
@@ -161,8 +210,15 @@ function refreshExternalCopy() {
   const form = document.querySelector('[data-external-search-form]');
   const message = externalMessage();
   if (!selected || !form || !message) return;
-  if (/next Slice D step|first checks/i.test(message.textContent || '')) {
-    message.textContent = 'Enter a Transfermarkt player ID. TBG resolves existing identities first, can launch a targeted import for genuinely new players, and only enables acquisition once the governed Ability rating is available.';
+  const input = document.getElementById('externalTmId');
+  const label = input?.closest('label');
+  if (label?.firstChild?.nodeType === Node.TEXT_NODE) label.firstChild.nodeValue = 'Player name or Transfermarkt ID';
+  if (input) {
+    input.inputMode = 'text';
+    input.placeholder = 'e.g. Victor Hugo or 1364573';
+  }
+  if (/next Slice D step|first checks|Transfermarkt player ID/i.test(message.textContent || '')) {
+    message.textContent = 'Search by player name or enter a Transfermarkt ID. Name search uses the governed TBG/TPF player database; a TM ID remains available for precise lookup and genuinely new-player import.';
   }
 }
 
@@ -170,8 +226,8 @@ document.addEventListener('submit', (event) => {
   if (!event.target.matches?.('[data-external-search-form]')) return;
   event.preventDefault();
   event.stopImmediatePropagation();
-  const tmId = String(document.getElementById('externalTmId')?.value || '').trim();
-  lookupExternal(tmId).catch((error) => {
+  const query = String(document.getElementById('externalTmId')?.value || '').trim();
+  lookupExternalInput(query).catch((error) => {
     const message = externalMessage();
     if (message) message.textContent = error.message;
     setExternalStatus('Lookup failed');
@@ -179,6 +235,20 @@ document.addEventListener('submit', (event) => {
 }, true);
 
 document.addEventListener('click', (event) => {
+  const selectButton = event.target.closest?.('[data-select-external-player]');
+  if (selectButton) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const tmId = String(selectButton.dataset.tmId || '').trim();
+    const input = document.getElementById('externalTmId');
+    if (input) input.value = tmId;
+    lookupExternal(tmId).catch((error) => {
+      const message = externalMessage();
+      if (message) message.textContent = error.message;
+      setExternalStatus('Lookup failed');
+    });
+    return;
+  }
   const importButton = event.target.closest?.('[data-request-external-import]');
   if (importButton) {
     event.preventDefault();
