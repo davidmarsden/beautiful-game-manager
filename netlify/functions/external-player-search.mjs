@@ -92,13 +92,65 @@ function canonicalId(row = {}, tmId = '') {
   return String(row.tbg_player_id || `tbg-tm-${String(tmId).padStart(8, '0')}`);
 }
 
-function scoreName(name, query) {
-  const normalized = normalise(name);
+function addAliasValues(target, value) {
+  if (Array.isArray(value)) {
+    value.forEach((entry) => addAliasValues(target, entry));
+    return;
+  }
+  if (value == null) return;
+  String(value).split(/[;,|]/).map((entry) => entry.trim()).filter(Boolean).forEach((entry) => target.push(entry));
+}
+
+function profileAlias(row = {}) {
+  const profileUrl = String(row.profile_url || row.transfermarkt_url || '').trim();
+  if (!profileUrl) return '';
+  try {
+    const pathname = new URL(profileUrl).pathname;
+    const match = pathname.match(/^\/([^/]+)\/profil\/spieler\/\d+/i);
+    return match ? decodeURIComponent(match[1]).replace(/[-_]+/g, ' ').trim() : '';
+  } catch {
+    const match = profileUrl.match(/transfermarkt\.[^/]+\/([^/]+)\/profil\/spieler\/\d+/i);
+    return match ? decodeURIComponent(match[1]).replace(/[-_]+/g, ' ').trim() : '';
+  }
+}
+
+function aliasesOf(row = {}) {
+  const values = [];
+  [row.aliases, row.nicknames, row.nickname, row.nick_name, row.known_as, row.knownAs, row.common_name, row.commonName, row.search_aliases].forEach((value) => addAliasValues(values, value));
+  addAliasValues(values, profileAlias(row));
+  const canonical = normalise(rowName(row));
+  const seen = new Set();
+  return values.filter((value) => {
+    const normalized = normalise(value);
+    if (!normalized || normalized === canonical || seen.has(normalized)) return false;
+    seen.add(normalized);
+    return true;
+  });
+}
+
+function matchQuality(value, query) {
+  const normalized = normalise(value);
   if (!normalized) return 99;
   if (normalized === query) return 0;
   if (normalized.startsWith(query)) return 1;
   if (normalized.split(' ').some((token) => token.startsWith(query))) return 2;
   return normalized.includes(query) ? 3 : 99;
+}
+
+function scorePlayer(name, aliases, query) {
+  const canonicalQuality = matchQuality(name, query);
+  let aliasQuality = 99;
+  let matchedAlias = null;
+  aliases.forEach((alias) => {
+    const quality = matchQuality(alias, query);
+    if (quality < aliasQuality) {
+      aliasQuality = quality;
+      matchedAlias = alias;
+    }
+  });
+  if (canonicalQuality === 99 && aliasQuality === 99) return { score: 99, matchedAlias: null };
+  if (canonicalQuality <= aliasQuality) return { score: canonicalQuality * 2, matchedAlias: null };
+  return { score: aliasQuality * 2 + 1, matchedAlias };
 }
 
 async function freshWorldPlayers(worldId) {
@@ -146,14 +198,22 @@ export default async (request) => {
     ]);
 
     const matches = rows
-      .map((row) => ({ row, tmId: tmIdOf(row), name: rowName(row), score: scoreName(rowName(row), query) }))
+      .map((row) => {
+        const tmId = tmIdOf(row);
+        const name = rowName(row);
+        const aliases = aliasesOf(row);
+        const match = scorePlayer(name, aliases, query);
+        return { row, tmId, name, aliases, score: match.score, matchedAlias: match.matchedAlias };
+      })
       .filter(({ tmId, score }) => tmId && score < 99)
       .sort((a, b) => a.score - b.score || a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }))
       .slice(0, limit)
-      .map(({ row, tmId }) => ({
+      .map(({ row, tmId, aliases, matchedAlias }) => ({
         tbg_player_id: canonicalId(row, tmId),
         transfermarkt_id: tmId,
         display_name: rowName(row) || canonicalId(row, tmId),
+        aliases,
+        matched_alias: matchedAlias,
         age: row.age == null ? null : Number(row.age),
         nationality: Array.isArray(row.nationality) ? row.nationality : String(row.nationality || '').split(';').map((value) => value.trim()).filter(Boolean),
         position: row.position || row.primary_position || row.position_group || '',
