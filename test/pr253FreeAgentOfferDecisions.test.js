@@ -80,6 +80,13 @@ test('free-agent offer UI preserves request identity on network retry, avoids ob
   assert.match(ui, /window\.location\.reload\(\)/);
 });
 
+test('free-agent offer confirmation formats decision timestamp in the browser timezone', async () => {
+  const ui = await read('public/free-agent-offer-ui.js');
+  assert.match(ui, /formatDecision\(data\.decision_at\)/);
+  assert.match(ui, /date\.toLocaleString\('en-GB', \{ dateStyle: 'short', timeStyle: 'short' \}\)/);
+  assert.doesNotMatch(ui, /message\.textContent = data\.message \|\| 'Contract offer submitted\.'/);
+});
+
 test('rejected free-agent decisions are merged into manager transfer history', async () => {
   const history = await read('netlify/functions/transfer-history.mjs');
   assert.match(history, /get_manager_free_agent_offer_history_for_user/);

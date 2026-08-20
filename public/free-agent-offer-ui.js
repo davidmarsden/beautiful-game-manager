@@ -126,7 +126,12 @@ async function submitOffer(button) {
       client_request_id: request.value
     });
     sessionStorage.removeItem(request.key);
-    if (message) message.textContent = data.message || 'Contract offer submitted.';
+    if (message) {
+      const playerName = data.offer?.player_name || card?.querySelector('strong')?.textContent || playerId;
+      message.textContent = data.offer?.idempotent
+        ? `Your offer to ${playerName} is already awaiting the player's decision.`
+        : `Offer submitted to ${playerName}. The player can consider competing offers until ${formatDecision(data.decision_at)}.`;
+    }
     const status = document.getElementById('openMarketStatus');
     if (status) status.textContent = 'Offer submitted';
     await refreshOffers();
