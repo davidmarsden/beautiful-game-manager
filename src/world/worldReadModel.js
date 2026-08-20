@@ -35,6 +35,7 @@ function compactPlayer(player = {}, playerId = null) {
   return {
     tbg_player_id: player.tbg_player_id || player.player_id || player.id || playerId,
     player_id: player.player_id || player.tbg_player_id || player.id || playerId,
+    transfermarkt_id: player.transfermarkt_id || player.transfermarktId || player.transfermarkt_player_id || null,
     display_name: player.display_name || player.player_name || player.full_name || player.name || playerId,
     player_name: player.player_name || player.display_name || player.full_name || player.name || playerId,
     club_id: player.club_id || player.tbg_club_id || player.current_club_id || null,
