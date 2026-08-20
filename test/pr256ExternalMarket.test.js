@@ -36,6 +36,9 @@ test('external name search uses cached governed data, aliases and a fresh world 
   assert.match(endpoint, /Date\.now\(\) - playerDatabaseLoadedAt < PLAYER_DATABASE_CACHE_MS/);
   assert.match(endpoint, /url\.searchParams\.get\('q'\)/);
   assert.match(endpoint, /function aliasesOf/);
+  assert.match(endpoint, /row\.display_name/);
+  assert.match(endpoint, /row\.full_name/);
+  assert.match(endpoint, /row\.short_name/);
   assert.match(endpoint, /row\.nicknames/);
   assert.match(endpoint, /row\.nickname/);
   assert.match(endpoint, /row\.known_as/);
@@ -43,6 +46,8 @@ test('external name search uses cached governed data, aliases and a fresh world 
   assert.match(endpoint, /row\.search_aliases/);
   assert.match(endpoint, /function profileAlias/);
   assert.match(endpoint, /profil\\\/spieler/);
+  assert.match(endpoint, /decodeURIComponent\(slug\)/);
+  assert.match(endpoint, /catch \{\s*return '';\s*\}/);
   assert.match(endpoint, /function scorePlayer/);
   assert.match(endpoint, /matched_alias: matchedAlias/);
   assert.match(endpoint, /aliases,/);
@@ -55,12 +60,14 @@ test('external name search uses cached governed data, aliases and a fresh world 
   assert.match(endpoint, /active_circulation:/);
 });
 
-test('external name search UI shows aliases while retaining eligibility guards and TM-ID lookup', async () => {
+test('external name search UI shows matched alias while retaining eligibility guards and TM-ID lookup', async () => {
   const ui = await read('public/external-market-ui.js');
   assert.match(ui, /Player name, nickname or Transfermarkt ID/);
   assert.match(ui, /Huguinho, Victor Hugo or 1364573/);
   assert.match(ui, /\/api\/external-player-search\?q=/);
   assert.match(ui, /data-select-external-player/);
+  assert.match(ui, /function displayedExternalAliases/);
+  assert.match(ui, /player\.matched_alias/);
   assert.match(ui, /Also known as:/);
   assert.match(ui, /Already in TBG world/);
   assert.match(ui, /Awaiting TBG rating/);
