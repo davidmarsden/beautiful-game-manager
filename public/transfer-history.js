@@ -101,15 +101,23 @@ function maybeMount(force = false) {
   loadHistory({ force });
 }
 
+function scheduleHistoryMount(force = false) {
+  setTimeout(() => maybeMount(force), 0);
+}
+
 document.addEventListener('click', (event) => {
-  if (event.target.closest('[data-view="transfers"]')) setTimeout(() => maybeMount(true), 0);
+  if (event.target.closest('[data-view="transfers"]')) scheduleHistoryMount(true);
 });
+
+document.addEventListener('tbg:view-changed', (event) => {
+  if (event.detail?.view === 'transfers') scheduleHistoryMount(false);
+});
+
+window.addEventListener('tbg:portal-rendered', () => scheduleHistoryMount(false));
 
 document.addEventListener('tbg:transfer-history-refresh', () => {
   lastLoadedAt = 0;
-  maybeMount(true);
+  scheduleHistoryMount(true);
 });
 
-const observer = new MutationObserver(() => maybeMount(false));
-observer.observe(document.documentElement, { childList: true, subtree: true });
 maybeMount(false);
