@@ -94,8 +94,19 @@ test('pending free-agent offers stay visible in the main outgoing transfer dashb
   assert.match(ui, /data-free-agent-outgoing-summary/);
   assert.match(ui, /Awaiting player decision/);
   assert.match(ui, /document\.getElementById\('transferNegotiationStatus'\)/);
-  assert.match(ui, /baseOutgoing \+ pending\.length/);
+  assert.match(ui, /function nativeOutgoingOfferCount/);
+  assert.match(ui, /querySelectorAll\(':scope > article\.incoming-transfer-offer'\)/);
+  assert.match(ui, /nativeOutgoing \+ pending\.length/);
   assert.match(ui, /latestFreeAgentOffers = offers/);
+});
+
+test('free-agent outgoing projection restores the native empty state after the final pending bid ends', async () => {
+  const ui = await read('public/free-agent-offer-ui.js');
+  assert.match(ui, /function restoreOutgoingEmptyState/);
+  assert.match(ui, /No active outgoing offers\./);
+  assert.match(ui, /host\?\.remove\(\);[\s\S]*restoreOutgoingEmptyState\(outgoing\)/);
+  assert.doesNotMatch(ui, /freeAgentBaseOutgoing/);
+  assert.doesNotMatch(ui, /freeAgentRenderedStatus/);
 });
 
 test('rejected free-agent decisions are merged into manager transfer history', async () => {
