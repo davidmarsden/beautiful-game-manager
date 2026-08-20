@@ -1,5 +1,6 @@
 const offerEscape = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
 const offerMoney = (value) => `£${Math.max(0, Number(value) || 0).toLocaleString('en-GB')}`;
+let latestFreeAgentOffers = [];
 
 function accessToken() {
   for (let index = 0; index < localStorage.length; index += 1) {
@@ -80,6 +81,43 @@ function renderOfferPanel(offers = []) {
     </div>`).join('') : '<p class="open-market-empty">No free-agent offers submitted yet.</p>'}`;
 }
 
+function renderPendingOffersInTransferSummary(offers = []) {
+  const pending = offers.filter((offer) => offer.status === 'pending');
+  const outgoing = document.getElementById('outgoingTransferOffers');
+  if (outgoing) {
+    let host = outgoing.querySelector('[data-free-agent-outgoing-summary]');
+    if (!pending.length) {
+      host?.remove();
+    } else {
+      if (!host) {
+        if ((outgoing.textContent || '').trim() === 'No active outgoing offers.') outgoing.innerHTML = '';
+        host = document.createElement('div');
+        host.dataset.freeAgentOutgoingSummary = 'true';
+        outgoing.append(host);
+      }
+      const html = pending.map((offer) => `
+        <div class="transfer-free-agent-pending" style="margin-top:.55rem">
+          <strong>${offerEscape(offer.player_name || offer.player_id)}</strong>
+          <small>Free agent · ${offerMoney(offer.wage)} / week · ${offerEscape(offer.contract_years)} season${Number(offer.contract_years) === 1 ? '' : 's'}</small>
+          <small>Awaiting player decision · ${offerEscape(formatDecision(offer.decision_at))}</small>
+        </div>`).join('');
+      if (host.innerHTML !== html) host.innerHTML = html;
+    }
+  }
+
+  const status = document.getElementById('transferNegotiationStatus');
+  const match = status?.textContent?.match(/^(\d+) incoming · (\d+) outgoing · (\d+) listed$/);
+  if (status && match) {
+    const currentText = status.textContent;
+    const previousRendered = status.dataset.freeAgentRenderedStatus || '';
+    if (currentText !== previousRendered) status.dataset.freeAgentBaseOutgoing = match[2];
+    const baseOutgoing = Math.max(0, Number(status.dataset.freeAgentBaseOutgoing || match[2]) || 0);
+    const nextText = `${match[1]} incoming · ${baseOutgoing + pending.length} outgoing · ${match[3]} listed`;
+    status.dataset.freeAgentRenderedStatus = nextText;
+    if (status.textContent !== nextText) status.textContent = nextText;
+  }
+}
+
 function restyleFreeAgentUi() {
   document.querySelectorAll('[data-sign-free-agent]').forEach((button) => {
     if (button.textContent !== 'Make offer') button.textContent = 'Make offer';
@@ -89,6 +127,7 @@ function restyleFreeAgentUi() {
   if (message && /Signing is settled directly into the live world/i.test(message.textContent || '')) {
     message.textContent = 'Free agents can receive offers from several clubs. Submit contract terms and the player will choose after the six-hour offer window; unattractive offers can be rejected.';
   }
+  renderPendingOffersInTransferSummary(latestFreeAgentOffers);
 }
 
 async function refreshOffers() {
@@ -96,7 +135,9 @@ async function refreshOffers() {
   try {
     const data = await api('/api/free-agents?q=__offer_status_only__&limit=1');
     const offers = Array.isArray(data.offers) ? data.offers : [];
+    latestFreeAgentOffers = offers;
     renderOfferPanel(offers);
+    renderPendingOffersInTransferSummary(offers);
     const newlyAccepted = offers.find((offer) => offer.status === 'accepted' && !sessionStorage.getItem(`tbg-free-agent-accepted-seen:${offer.id}`));
     if (newlyAccepted) {
       sessionStorage.setItem(`tbg-free-agent-accepted-seen:${newlyAccepted.id}`, '1');
