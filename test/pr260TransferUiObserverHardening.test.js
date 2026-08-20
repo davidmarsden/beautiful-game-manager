@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('transfer market helpers use portal lifecycle events instead of document-wide mutation observers', async () => {
+test('transfer market helpers avoid document-wide mutation observers', async () => {
   const [openMarket, external, freeAgents, history] = await Promise.all([
     read('public/open-market.js'),
     read('public/external-market-ui.js'),
@@ -13,9 +13,12 @@ test('transfer market helpers use portal lifecycle events instead of document-wi
   ]);
 
   for (const source of [openMarket, external, freeAgents, history]) {
-    assert.doesNotMatch(source, /new MutationObserver/);
     assert.doesNotMatch(source, /observe\(document\.documentElement/);
   }
+
+  assert.doesNotMatch(openMarket, /new MutationObserver/);
+  assert.doesNotMatch(external, /new MutationObserver/);
+  assert.doesNotMatch(history, /new MutationObserver/);
 
   assert.match(openMarket, /tbg:portal-rendered/);
   assert.match(openMarket, /tbg:view-changed/);
@@ -29,6 +32,9 @@ test('transfer market helpers use portal lifecycle events instead of document-wi
   assert.match(freeAgents, /tbg:portal-rendered/);
   assert.match(freeAgents, /tbg:view-changed/);
   assert.match(freeAgents, /scheduleFreeAgentUi/);
+  assert.match(freeAgents, /function observeOutgoingTransferRenders/);
+  assert.match(freeAgents, /new MutationObserver\(\(\) => scheduleFreeAgentUi\(\)\)/);
+  assert.match(freeAgents, /outgoingObserver\.observe\(outgoing, \{ childList: true \}\)/);
 
   assert.match(history, /tbg:portal-rendered/);
   assert.match(history, /tbg:view-changed/);
