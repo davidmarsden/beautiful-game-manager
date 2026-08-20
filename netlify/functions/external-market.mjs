@@ -124,9 +124,18 @@ async function resolveRated(tmId, { force = false } = {}) {
 }
 
 async function assertNotInWorld(worldId, player) {
-  const rows = await supabase(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&select=read_model&limit=1`, { service: true });
-  const players = rows[0]?.read_model?.squad_cycle?.players || {};
-  if (players[player.tbg_player_id]) throw new Error('Player is already registered to a club in this TBG world');
+  const directory = await supabase('/rest/v1/rpc/get_world_player_identity_directory', {
+    service: true,
+    method: 'POST',
+    body: JSON.stringify({ p_world_id: worldId })
+  });
+  const players = directory && typeof directory === 'object' && !Array.isArray(directory) ? directory : {};
+  const canonicalPlayerId = String(player?.tbg_player_id || '').trim();
+  const transfermarktId = String(player?.transfermarkt_id || '').trim();
+  const duplicate = (canonicalPlayerId && players[canonicalPlayerId]) || Object.values(players).find((candidate) =>
+    transfermarktId && String(candidate?.transfermarkt_id || candidate?.transfermarktId || '').trim() === transfermarktId
+  );
+  if (duplicate) throw new Error('Player is already registered to a club in this TBG world');
 }
 
 async function importRow(tmId) {
