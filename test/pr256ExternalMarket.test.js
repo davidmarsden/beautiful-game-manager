@@ -27,6 +27,29 @@ test('external world-membership lookup requires a fresh compact read model and p
   assert.match(readModel, /transfermarkt_id: player\.transfermarkt_id \|\| player\.transfermarktId \|\| player\.transfermarkt_player_id \|\| null/);
 });
 
+test('external name search uses the governed database and fresh world projection', async () => {
+  const endpoint = await read('netlify/functions/external-player-search.mjs');
+  assert.match(endpoint, /PLAYER_DATABASE_URL/);
+  assert.match(endpoint, /url\.searchParams\.get\('q'\)/);
+  assert.match(endpoint, /scoreName/);
+  assert.match(endpoint, /world_read_model_cache\?world_id=/);
+  assert.match(endpoint, /cacheRow\.source_checksum !== canonicalRow\.save_checksum/);
+  assert.match(endpoint, /in_world: inWorld/);
+  assert.match(endpoint, /governed_rating_available/);
+  assert.match(endpoint, /transfermarkt_id: tmId/);
+});
+
+test('external name search UI lets managers choose a governed result while retaining TM-ID lookup', async () => {
+  const ui = await read('public/external-market-ui.js');
+  assert.match(ui, /Player name or Transfermarkt ID/);
+  assert.match(ui, /\/api\/external-player-search\?q=/);
+  assert.match(ui, /data-select-external-player/);
+  assert.match(ui, /Already in TBG world/);
+  assert.match(ui, /Awaiting TBG rating/);
+  assert.match(ui, /No governed player found/);
+  assert.match(ui, /if \(\/\^\\d\+\$\/\.test\(query\)\) return lookupExternal\(query\)/);
+});
+
 test('governed player database is revalidated after a scraped import awaits rating publication', async () => {
   const endpoint = await read('netlify/functions/external-market.mjs');
   assert.match(endpoint, /PLAYER_DATABASE_CACHE_MS/);
