@@ -79,6 +79,19 @@ function externalPlayerUnavailable(player) {
   return player.active_circulation === false || ['inactive', 'retired'].includes(lifecycle) || /retired/i.test(String(player.status || ''));
 }
 
+function displayedExternalAliases(player) {
+  const aliases = Array.isArray(player.aliases) ? player.aliases.filter(Boolean) : [];
+  const matched = String(player.matched_alias || '').trim();
+  const ordered = matched ? [matched, ...aliases] : aliases;
+  const seen = new Set();
+  return ordered.filter((alias) => {
+    const key = String(alias).trim().toLocaleLowerCase('en-GB');
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 4);
+}
+
 function renderNameResults(data) {
   const host = externalResultHost();
   if (!host) return;
@@ -92,7 +105,7 @@ function renderNameResults(data) {
   }
   host.innerHTML = results.map((player) => {
     const nations = Array.isArray(player.nationality) ? player.nationality.join(', ') : player.nationality || '';
-    const aliases = Array.isArray(player.aliases) ? player.aliases.filter(Boolean).slice(0, 4) : [];
+    const aliases = displayedExternalAliases(player);
     const aliasLine = aliases.length ? `<small>Also known as: ${externalEscape(aliases.join(', '))}</small>` : '';
     const status = player.in_world
       ? '<span class="open-market-status">Already in TBG world</span>'
