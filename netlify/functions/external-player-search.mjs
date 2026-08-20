@@ -2,7 +2,10 @@ const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const PLAYER_DATABASE_URL = process.env.TBG_PLAYER_DATABASE_URL || 'https://raw.githubusercontent.com/davidmarsden/beautiful-game-data/main/derived/player-database/player-database.json';
+const PLAYER_DATABASE_CACHE_MS = Math.max(5000, Number(process.env.TBG_PLAYER_DATABASE_CACHE_MS) || 30000);
 const isJwt = (value) => String(value || '').split('.').length === 3;
+let playerDatabasePromise = null;
+let playerDatabaseLoadedAt = 0;
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -41,6 +44,26 @@ async function identity(token) {
   const appointments = await supabase(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=world_id&limit=1`, { token });
   if (!appointments[0]) throw new Error('No active club appointment');
   return appointments[0];
+}
+
+async function playerDatabase() {
+  const fresh = playerDatabasePromise && Date.now() - playerDatabaseLoadedAt < PLAYER_DATABASE_CACHE_MS;
+  if (!fresh) {
+    playerDatabaseLoadedAt = Date.now();
+    playerDatabasePromise = fetch(PLAYER_DATABASE_URL, {
+      headers: { accept: 'application/json', 'cache-control': 'no-cache' },
+      cache: 'no-store'
+    }).then(async (response) => {
+      if (!response.ok) throw new Error(`Player database unavailable (HTTP ${response.status})`);
+      const rows = await response.json();
+      return Array.isArray(rows) ? rows : [];
+    }).catch((error) => {
+      playerDatabasePromise = null;
+      playerDatabaseLoadedAt = 0;
+      throw error;
+    });
+  }
+  return playerDatabasePromise;
 }
 
 function normalise(value) {
@@ -117,13 +140,10 @@ export default async (request) => {
     if (query.length < 2) return json({ error: 'Enter at least two characters of the player name' }, 400);
     const limit = Math.max(1, Math.min(20, Number(url.searchParams.get('limit')) || 12));
 
-    const [databaseResponse, worldPlayers] = await Promise.all([
-      fetch(PLAYER_DATABASE_URL, { headers: { accept: 'application/json', 'cache-control': 'no-cache' }, cache: 'no-store' }),
+    const [rows, worldPlayers] = await Promise.all([
+      playerDatabase(),
       freshWorldPlayers(appointment.world_id)
     ]);
-    if (!databaseResponse.ok) throw new Error(`Player database unavailable (HTTP ${databaseResponse.status})`);
-    const database = await databaseResponse.json();
-    const rows = Array.isArray(database) ? database : [];
 
     const matches = rows
       .map((row) => ({ row, tmId: tmIdOf(row), name: rowName(row), score: scoreName(rowName(row), query) }))
@@ -141,6 +161,8 @@ export default async (request) => {
         market_value_eur: Math.max(0, Number(row.market_value_eur) || 0),
         real_world_club: row.current_club || '',
         status: row.status || 'active',
+        lifecycle_status: row.lifecycle_status || row.lifecycleStatus || null,
+        active_circulation: row.active_circulation !== false,
         in_world: inWorld(worldPlayers, row, tmId),
         governed_rating_available: Boolean(ratingOf(row))
       }));
