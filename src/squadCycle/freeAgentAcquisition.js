@@ -120,11 +120,17 @@ export function acquireFreeAgent(state, { player: sourcePlayer, toClubId, at, co
     throw error;
   }
 
-  event(state, 'free_agent_signed', atIso, {
+  const external = sourcePlayer?.acquisition_type === 'external_transfermarkt';
+  event(state, external ? 'external_player_acquired' : 'free_agent_signed', atIso, {
     club_id: target.club_id,
     player_id: player.tbg_player_id,
     transfermarkt_id: player.transfermarkt_id,
-    contract_id: contract.contract_id
+    contract_id: contract.contract_id,
+    ...(external ? {
+      acquisition_type: 'external_transfermarkt',
+      acquisition_fee_eur: Math.max(0, number(sourcePlayer.external_acquisition_fee_eur, 0)),
+      real_world_club: text(sourcePlayer.real_world_club || sourcePlayer.current_club)
+    } : {})
   });
 
   return { player, contract, registration: state.registrations[player.tbg_player_id] };

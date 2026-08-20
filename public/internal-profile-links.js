@@ -3,6 +3,7 @@ import './transfer-history.js';
 import './open-market-review-fixes.js';
 import './open-market.js';
 import './free-agent-offer-ui.js';
+import './external-market-ui.js';
 import { openTbgPlayerProfile } from './player-profile.js';
 
 let historyDirectory = null;
