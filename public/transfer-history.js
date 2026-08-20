@@ -117,7 +117,7 @@ window.addEventListener('tbg:portal-rendered', () => scheduleHistoryMount(false)
 
 document.addEventListener('tbg:transfer-history-refresh', () => {
   lastLoadedAt = 0;
-  scheduleHistoryMount(true);
+  setTimeout(() => maybeMount(true), 0);
 });
 
 maybeMount(false);
