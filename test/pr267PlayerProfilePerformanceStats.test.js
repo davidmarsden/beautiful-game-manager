@@ -13,6 +13,14 @@ test('player profile loads persisted statistics lazily from the compact endpoint
   assert.match(source, /Loading season statistics/);
 });
 
+test('player profile ignores statistics responses after Statistics is no longer active', async () => {
+  const source = await read('public/player-profile.js');
+  assert.match(source, /function statisticsStillActive\(panel\)/);
+  assert.match(source, /statisticsTab\?\.getAttribute\('aria-selected'\) === 'true'/);
+  assert.match(source, /if \(!statisticsStillActive\(panel\)\) return;\s*panel\.innerHTML = statisticsPanel\(stats\)/s);
+  assert.match(source, /catch \(error\) \{\s*if \(!statisticsStillActive\(panel\)\) return;/s);
+});
+
 test('player profile statistics endpoint is authenticated and appointment-scoped through the RPC', async () => {
   const endpoint = await read('netlify/functions/player-profile-stats.mjs');
   assert.match(endpoint, /\/auth\/v1\/user/);
@@ -33,4 +41,17 @@ test('performance stats RPC aggregates current-season compact match archives onl
   assert.match(migration, /event_row ->> 'assist_player_id' = p_player_id/);
   assert.match(migration, /grant execute on function public\.get_player_profile_performance_stats_for_user\(uuid,text,text\)\s+to service_role/s);
   assert.match(migration, /revoke all on function public\.get_player_profile_performance_stats_for_user\(uuid,text,text\)\s+from public, anon, authenticated/s);
+});
+
+test('performance stats count unrated appearances but average only rated rows', async () => {
+  const migration = await read('supabase/migrations/20260822_player_profile_performance_stats.sql');
+  assert.match(migration, /appearances as \([\s\S]*rating_row ->> 'player_id' = p_player_id[\s\S]*\), rated as \(/);
+  assert.match(migration, /'appearances', \(select count\(\*\)::integer from appearances\)/);
+  assert.match(migration, /'average_match_rating', \(select round\(avg\(\(rating_row ->> 'rating'\)::numeric\), 2\) from rated\)/);
+  assert.match(migration, /from rated\s+order by played_at desc/);
+});
+
+test('performance stats do not credit own goals to the attacking player', async () => {
+  const migration = await read('supabase/migrations/20260822_player_profile_performance_stats.sql');
+  assert.match(migration, /event_row ->> 'player_id' = p_player_id\s+and coalesce\(event_row ->> 'own_goal', 'false'\) <> 'true'/s);
 });
