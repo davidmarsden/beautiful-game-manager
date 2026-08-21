@@ -4,6 +4,10 @@ let latestFreeAgentOffers = [];
 let outgoingObserver = null;
 let observedOutgoing = null;
 
+function transfersActive() {
+  return document.getElementById('transfersView')?.classList.contains('active') === true;
+}
+
 function accessToken() {
   for (let index = 0; index < localStorage.length; index += 1) {
     const key = localStorage.key(index);
@@ -136,6 +140,7 @@ function renderPendingOffersInTransferSummary(offers = []) {
 }
 
 function restyleFreeAgentUi() {
+  if (!transfersActive()) return;
   document.querySelectorAll('[data-sign-free-agent]').forEach((button) => {
     if (button.textContent !== 'Make offer') button.textContent = 'Make offer';
     if (button.getAttribute('aria-label') !== 'Make contract offer') button.setAttribute('aria-label', 'Make contract offer');
@@ -149,7 +154,7 @@ function restyleFreeAgentUi() {
 }
 
 async function refreshOffers() {
-  if (!document.getElementById('openMarketWorkspace')) return;
+  if (!transfersActive() || !document.getElementById('openMarketWorkspace')) return;
   try {
     const data = await api('/api/free-agents?q=__offer_status_only__&limit=1');
     const offers = Array.isArray(data.offers) ? data.offers : [];
@@ -201,6 +206,12 @@ async function submitOffer(button) {
 }
 
 function observeOutgoingTransferRenders() {
+  if (!transfersActive()) {
+    outgoingObserver?.disconnect();
+    outgoingObserver = null;
+    observedOutgoing = null;
+    return;
+  }
   const outgoing = document.getElementById('outgoingTransferOffers');
   if (outgoing === observedOutgoing) return;
   outgoingObserver?.disconnect();
@@ -213,6 +224,7 @@ function observeOutgoingTransferRenders() {
 
 function scheduleFreeAgentUi({ refresh = false, delay = 0 } = {}) {
   setTimeout(() => {
+    if (!transfersActive()) return;
     observeOutgoingTransferRenders();
     restyleFreeAgentUi();
     if (refresh) refreshOffers();
@@ -235,9 +247,15 @@ document.addEventListener('click', (event) => {
 
 document.addEventListener('tbg:view-changed', (event) => {
   if (event.detail?.view === 'transfers') scheduleFreeAgentUi({ refresh: true });
+  else observeOutgoingTransferRenders();
 });
 
-window.addEventListener('tbg:portal-rendered', () => scheduleFreeAgentUi({ refresh: true }));
-observeOutgoingTransferRenders();
-restyleFreeAgentUi();
-refreshOffers();
+window.addEventListener('tbg:portal-rendered', () => {
+  if (transfersActive()) scheduleFreeAgentUi({ refresh: true });
+});
+
+if (transfersActive()) {
+  observeOutgoingTransferRenders();
+  restyleFreeAgentUi();
+  refreshOffers();
+}
