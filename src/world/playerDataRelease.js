@@ -1,5 +1,5 @@
 const text = (value) => String(value ?? '').trim();
-const numericRating = (value) => Number.isFinite(Number(value)) ? Number(value) : null;
+const numericRating = (value) => (typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 1 && value <= 100 ? value : null);
 
 function tmId(player = {}) {
   return text(player.transfermarkt_id || player.transfermarktId || player.transfermarkt_player_id);
