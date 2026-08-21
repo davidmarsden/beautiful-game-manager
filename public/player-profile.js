@@ -5,6 +5,19 @@ const rating = (player) => player.underlying_ability_rating ?? player.tbg_rating
 const position = (player) => player.specific_position || player.position || player.primary_position || player.position_group || 'Unknown';
 const currentClub = (player, club) => club.club_name || club.canonical_name || player.club_name || 'Current club unavailable';
 
+function accessToken() {
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (!key?.startsWith('sb-') || !key.endsWith('-auth-token')) continue;
+    try {
+      const stored = JSON.parse(localStorage.getItem(key));
+      const token = stored?.access_token || stored?.currentSession?.access_token;
+      if (token) return token;
+    } catch {}
+  }
+  return '';
+}
+
 function formatDate(value) {
   if (!value) return 'Open-ended';
   const date = new Date(value);
@@ -49,6 +62,16 @@ function emptyState(title, body) {
   return `<div class="tbg-profile-empty"><strong>${escapeHtml(title)}</strong><p>${escapeHtml(body)}</p></div>`;
 }
 
+function statisticsPanel(stats = {}) {
+  const average = stats.average_match_rating == null ? '—' : Number(stats.average_match_rating).toFixed(2);
+  return `<div class="tbg-profile-grid">
+    ${metric('Appearances', stats.appearances ?? 0)}
+    ${metric('Goals', stats.goals ?? 0)}
+    ${metric('Assists', stats.assists ?? 0)}
+    ${metric('Average rating', average)}
+  </div>`;
+}
+
 function tabPanel(name, player) {
   if (name === 'selection') {
     const availability = availabilityState(player);
@@ -61,13 +84,27 @@ function tabPanel(name, player) {
     </div>`;
   }
   if (name === 'transfers') return emptyState('No transfer history yet', 'In-game moves, fees and contract events will appear here when recorded in the canonical transfer ledger.');
-  if (name === 'statistics') return `<div class="tbg-profile-grid">
-    ${metric('Appearances', player.appearances ?? player.games_played ?? 0)}
-    ${metric('Goals', player.goals ?? 0)}
-    ${metric('Assists', player.assists ?? 0)}
-    ${metric('Average rating', player.average_match_rating ?? '—')}
-  </div>`;
+  if (name === 'statistics') return '<div class="tbg-profile-empty"><strong>Loading season statistics…</strong><p>Reading persisted match-performance data from the live archive.</p></div>';
   return emptyState('Career history is building', 'Season-by-season clubs, honours and milestones will populate as the canonical world ledger develops.');
+}
+
+async function loadStatistics(panel, player) {
+  const token = accessToken();
+  if (!token) {
+    panel.innerHTML = emptyState('Statistics unavailable', 'Sign in again to load live match statistics.');
+    return;
+  }
+  try {
+    const response = await fetch(`/api/player-profile-stats?player_id=${encodeURIComponent(playerId(player))}`, {
+      headers: { authorization: `Bearer ${token}` },
+      cache: 'no-store'
+    });
+    const stats = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(stats.error || `Player statistics request failed (HTTP ${response.status})`);
+    panel.innerHTML = statisticsPanel(stats);
+  } catch (error) {
+    panel.innerHTML = emptyState('Statistics unavailable', error.message || 'Could not load persisted match statistics.');
+  }
 }
 
 function profileIdentity(player, club, pinkFinalLink) {
@@ -129,7 +166,12 @@ export function openTbgPlayerProfile(root, player, club = {}) {
       candidate.classList.toggle('active', selected);
       candidate.setAttribute('aria-selected', String(selected));
     });
-    host.querySelector('[data-player-tab-panel]').innerHTML = tabPanel(button.dataset.playerTab, player);
+    const panel = host.querySelector('[data-player-tab-panel]');
+    const tab = button.dataset.playerTab;
+    panel.innerHTML = tabPanel(tab, player);
+    if (tab === 'statistics') loadStatistics(panel, player);
   }));
   host.querySelector('.tbg-profile-close')?.focus();
 }
+
+export { statisticsPanel };
