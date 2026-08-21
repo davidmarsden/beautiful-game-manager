@@ -33,6 +33,7 @@ export function applyPublishedPlayerReleases(world, history = {}) {
   releases.sort((left, right) => String(left.published_at || left.slot || '').localeCompare(String(right.published_at || right.slot || '')) || text(left.release_id).localeCompare(text(right.release_id)));
 
   const summary = { releases_seen: releases.length, releases_applied: [], rating_events_applied: 0, rating_events_missing: [], ignored_events: 0 };
+  let latestAppliedAt = world.player_data_releases?.reconciled_at || null;
   for (const release of releases) {
     const releaseId = text(release?.release_id);
     if (!releaseId || applied.has(releaseId)) continue;
@@ -54,6 +55,7 @@ export function applyPublishedPlayerReleases(world, history = {}) {
     }
     applied.add(releaseId);
     summary.releases_applied.push(releaseId);
+    latestAppliedAt = release.published_at || release.slot || latestAppliedAt;
   }
 
   if (summary.releases_applied.length) {
@@ -61,7 +63,7 @@ export function applyPublishedPlayerReleases(world, history = {}) {
       version: 'tbg-player-data-release-state-v1',
       applied_release_ids: [...applied],
       latest_release_id: summary.releases_applied.at(-1),
-      reconciled_at: new Date().toISOString()
+      reconciled_at: latestAppliedAt
     };
   }
   return summary;
