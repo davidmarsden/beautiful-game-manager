@@ -157,6 +157,7 @@ async function refreshOffers() {
   if (!transfersActive() || !document.getElementById('openMarketWorkspace')) return;
   try {
     const data = await api('/api/free-agents?q=__offer_status_only__&limit=1');
+    if (!transfersActive()) return;
     const offers = Array.isArray(data.offers) ? data.offers : [];
     latestFreeAgentOffers = offers;
     restyleFreeAgentUi();
