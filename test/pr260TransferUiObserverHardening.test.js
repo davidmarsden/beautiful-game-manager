@@ -57,6 +57,7 @@ test('free-agent reconciliation stays off the portal boot path until Transfers i
 
   assert.match(freeAgents, /function transfersActive\(\)/);
   assert.match(freeAgents, /if \(!transfersActive\(\) \|\| !document\.getElementById\('openMarketWorkspace'\)\) return/);
+  assert.match(freeAgents, /const data = await api\('\/api\/free-agents\?q=__offer_status_only__&limit=1'\);\s*if \(!transfersActive\(\)\) return;/s);
   assert.match(freeAgents, /window\.addEventListener\('tbg:portal-rendered', \(\) => \{\s*if \(transfersActive\(\)\) scheduleFreeAgentUi\(\{ refresh: true \}\)/s);
   assert.match(freeAgents, /if \(transfersActive\(\)\) \{\s*observeOutgoingTransferRenders\(\);\s*restyleFreeAgentUi\(\);\s*refreshOffers\(\);/s);
 });
