@@ -40,7 +40,7 @@ begin
     from public.canonical_match_archives c
     where c.world_id = p_world_id
       and c.season_id = current_season_id
-  ), ratings as (
+  ), appearances as (
     select m.fixture_id, m.matchday, m.played_at, rating_row
     from matches m
     cross join lateral jsonb_array_elements(
@@ -48,12 +48,16 @@ begin
       || coalesce(m.result -> 'player_ratings' -> 'away', '[]'::jsonb)
     ) rating_row
     where rating_row ->> 'player_id' = p_player_id
-      and coalesce(rating_row ->> 'rating', '') ~ '^[0-9]+([.][0-9]+)?$'
+  ), rated as (
+    select fixture_id, matchday, played_at, rating_row
+    from appearances
+    where coalesce(rating_row ->> 'rating', '') ~ '^[0-9]+([.][0-9]+)?$'
   ), event_totals as (
     select
       count(*) filter (
         where event_row ->> 'type' = 'goal'
           and event_row ->> 'player_id' = p_player_id
+          and coalesce(event_row ->> 'own_goal', 'false') <> 'true'
           and coalesce((event_row ->> 'official')::boolean, true)
       )::integer as goals,
       count(*) filter (
@@ -66,7 +70,7 @@ begin
   ), recent as (
     select fixture_id, matchday, played_at, (rating_row ->> 'rating')::numeric as rating,
            nullif(rating_row ->> 'minutes_played', '')::integer as minutes_played
-    from ratings
+    from rated
     order by played_at desc, fixture_id desc
     limit 5
   )
@@ -74,10 +78,10 @@ begin
     'world_id', p_world_id,
     'season_id', current_season_id,
     'player_id', p_player_id,
-    'appearances', (select count(*)::integer from ratings),
+    'appearances', (select count(*)::integer from appearances),
     'goals', coalesce((select goals from event_totals), 0),
     'assists', coalesce((select assists from event_totals), 0),
-    'average_match_rating', (select round(avg((rating_row ->> 'rating')::numeric), 2) from ratings),
+    'average_match_rating', (select round(avg((rating_row ->> 'rating')::numeric), 2) from rated),
     'recent_ratings', coalesce((select jsonb_agg(jsonb_build_object(
       'fixture_id', fixture_id,
       'matchday', matchday,
