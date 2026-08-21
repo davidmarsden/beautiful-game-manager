@@ -51,3 +51,13 @@ test('transfer UI reconciliation avoids unnecessary DOM rewrites', async () => {
   assert.match(external, /input\.placeholder !== 'e\.g\. Huguinho, Victor Hugo or 1364573'/);
   assert.match(freeAgents, /if \(host\.innerHTML !== html\) host\.innerHTML = html/);
 });
+
+test('free-agent reconciliation stays off the portal boot path until Transfers is active', async () => {
+  const freeAgents = await read('public/free-agent-offer-ui.js');
+
+  assert.match(freeAgents, /function transfersActive\(\)/);
+  assert.match(freeAgents, /if \(!transfersActive\(\) \|\| !document\.getElementById\('openMarketWorkspace'\)\) return/);
+  assert.match(freeAgents, /const data = await api\('\/api\/free-agents\?q=__offer_status_only__&limit=1'\);\s*if \(!transfersActive\(\)\) return;/s);
+  assert.match(freeAgents, /window\.addEventListener\('tbg:portal-rendered', \(\) => \{\s*if \(transfersActive\(\)\) scheduleFreeAgentUi\(\{ refresh: true \}\)/s);
+  assert.match(freeAgents, /if \(transfersActive\(\)\) \{\s*observeOutgoingTransferRenders\(\);\s*restyleFreeAgentUi\(\);\s*refreshOffers\(\);/s);
+});
