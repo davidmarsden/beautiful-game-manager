@@ -51,6 +51,17 @@ test('rating release can resolve an existing world player by Transfermarkt id', 
   assert.equal(world.squad_cycle.players['tbg-tm-00342229'].underlying_ability_rating, 97);
 });
 
+test('invalid governed ratings fail before mutating or marking a release applied', () => {
+  for (const invalid of [null, '', false, 0, 101, '97', 97.5, Number.NaN]) {
+    const world = worldFixture();
+    const broken = structuredClone(history);
+    broken.releases[0].events[0].after = invalid;
+    assert.throws(() => applyPublishedPlayerReleases(world, broken), /invalid rating/);
+    assert.equal(world.squad_cycle.players['tbg-tm-00342229'].underlying_ability_rating, 99);
+    assert.equal(world.player_data_releases, undefined);
+  }
+});
+
 test('scheduled settlement uses full release history and checksum-protected atomic RPC', async () => {
   const [settlement, migration, config] = await Promise.all([
     read('netlify/functions/player-release-settlement.mjs'),
