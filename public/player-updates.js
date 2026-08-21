@@ -27,7 +27,7 @@ function installStyles() {
     .player-updates-shell{display:grid;gap:1rem}.player-updates-hero{display:flex;gap:1rem;justify-content:space-between;align-items:flex-start;padding:1rem;border:1px solid var(--border,#d9d9d9);border-radius:14px;background:var(--panel,#fff)}
     .player-updates-hero h2{margin:0 0 .35rem}.player-updates-hero p{margin:0;max-width:70ch}.player-updates-meta{display:flex;gap:.45rem;flex-wrap:wrap;justify-content:flex-end}.player-updates-pill{display:inline-flex;padding:.3rem .6rem;border-radius:999px;background:rgba(127,127,127,.12);font-size:.82rem;white-space:nowrap}
     .player-updates-section{border:1px solid var(--border,#d9d9d9);border-radius:14px;background:var(--panel,#fff);overflow:hidden}.player-updates-section>header{display:flex;gap:1rem;justify-content:space-between;align-items:end;padding:1rem;border-bottom:1px solid var(--border,#e2e2e2)}.player-updates-section h3{margin:0}.player-updates-section p{margin:.2rem 0 0}
-    .player-update-list{display:grid}.player-update-card{display:grid;grid-template-columns:minmax(180px,1fr) auto;gap:1rem;padding:1rem;border-top:1px solid var(--border,#ececec)}.player-update-card:first-child{border-top:0}.player-update-name{font-weight:750}.player-update-sub{font-size:.9rem;opacity:.78;margin-top:.15rem}.player-update-ratings{display:flex;gap:.5rem;align-items:center;justify-content:flex-end}.player-update-rating{font-size:1.15rem;font-weight:800;min-width:2.4rem;text-align:center}.player-update-arrow{opacity:.55}.player-update-delta{font-weight:800}.player-update-delta.up{color:#187a37}.player-update-delta.down{color:#a42b2b}.player-update-delta.flat{opacity:.65}.player-update-new{font-size:1.15rem;font-weight:800}.player-update-empty{padding:1rem;opacity:.75}
+    .player-update-list{display:grid}.player-update-card{display:grid;grid-template-columns:minmax(180px,1fr) auto;gap:1rem;padding:1rem;border-top:1px solid var(--border,#ececec)}.player-update-card:first-child{border-top:0}.player-update-name{font-weight:750}.player-update-name.player-link{appearance:none;border:0;background:none;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:2px}.player-update-sub{font-size:.9rem;opacity:.78;margin-top:.15rem}.player-update-ratings{display:flex;gap:.5rem;align-items:center;justify-content:flex-end}.player-update-rating{font-size:1.15rem;font-weight:800;min-width:2.4rem;text-align:center}.player-update-arrow{opacity:.55}.player-update-delta{font-weight:800}.player-update-delta.up{color:#187a37}.player-update-delta.down{color:#a42b2b}.player-update-delta.flat{opacity:.65}.player-update-new{font-size:1.15rem;font-weight:800}.player-update-empty{padding:1rem;opacity:.75}
     .player-update-provenance{grid-column:1/-1;margin-top:.15rem}.player-update-provenance summary{cursor:pointer;font-size:.84rem;opacity:.8}.player-update-provenance dl{display:grid;grid-template-columns:max-content 1fr;gap:.25rem .7rem;margin:.6rem 0 0;font-size:.82rem}.player-update-provenance dt{font-weight:700}.player-update-provenance dd{margin:0;overflow-wrap:anywhere}
     @media(max-width:720px){.player-updates-hero{flex-direction:column}.player-updates-meta{justify-content:flex-start}.player-update-card{grid-template-columns:1fr}.player-update-ratings{justify-content:flex-start}.player-updates-section>header{align-items:flex-start;flex-direction:column}}
   `;
@@ -54,6 +54,14 @@ function provenance(event) {
   return `<details class="player-update-provenance"><summary>Source & provenance</summary><dl>${rows.map(([label, value]) => `<dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd>`).join('')}</dl></details>`;
 }
 
+function linkedPlayerName(event, fallback = 'Player') {
+  const id = event?.player_id || '';
+  const name = event?.player_name || id || fallback;
+  return id
+    ? `<button type="button" class="player-update-name player-link" data-tbg-player-id="${escapeHtml(id)}">${escapeHtml(name)}</button>`
+    : `<div class="player-update-name">${escapeHtml(name)}</div>`;
+}
+
 function ratingCard(event) {
   const before = event.before ?? '—';
   const after = event.after ?? '—';
@@ -61,7 +69,7 @@ function ratingCard(event) {
   const deltaClass = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
   const deltaText = Number.isFinite(delta) ? `${delta > 0 ? '+' : ''}${delta}` : '—';
   return `<article class="player-update-card">
-    <div><div class="player-update-name">${escapeHtml(event.player_name || event.player_id || 'Player')}</div><div class="player-update-sub">TM ${escapeHtml(event.transfermarkt_id || '—')}</div></div>
+    <div>${linkedPlayerName(event)}<div class="player-update-sub">TM ${escapeHtml(event.transfermarkt_id || '—')}</div></div>
     <div class="player-update-ratings" aria-label="Rating changed from ${escapeHtml(before)} to ${escapeHtml(after)}"><span class="player-update-rating">${escapeHtml(before)}</span><span class="player-update-arrow">→</span><span class="player-update-rating">${escapeHtml(after)}</span><span class="player-update-delta ${deltaClass}">${escapeHtml(deltaText)}</span></div>
     ${provenance(event)}
   </article>`;
@@ -75,7 +83,7 @@ function newPlayerCard(event) {
     after.market_value_eur != null ? `TM value ${moneyEur(after.market_value_eur)}` : ''
   ].filter(Boolean).join(' · ');
   return `<article class="player-update-card">
-    <div><div class="player-update-name">${escapeHtml(event.player_name || event.player_id || 'New player')}</div><div class="player-update-sub">${escapeHtml(details || `TM ${event.transfermarkt_id || '—'}`)}</div></div>
+    <div>${linkedPlayerName(event, 'New player')}<div class="player-update-sub">${escapeHtml(details || `TM ${event.transfermarkt_id || '—'}`)}</div></div>
     <div class="player-update-new">NEW</div>
     ${provenance(event)}
   </article>`;
