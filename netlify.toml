@@ -13,6 +13,9 @@
 [functions."run-fixtures"]
   schedule = "*/5 * * * *"
 
+[functions."player-release-settlement"]
+  schedule = "7 * * * *"
+
 [functions."world-maintenance"]
   schedule = "17 * * * *"
 
