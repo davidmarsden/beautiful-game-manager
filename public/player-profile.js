@@ -88,10 +88,17 @@ function tabPanel(name, player) {
   return emptyState('Career history is building', 'Season-by-season clubs, honours and milestones will populate as the canonical world ledger develops.');
 }
 
+function statisticsStillActive(panel) {
+  if (!panel?.isConnected) return false;
+  const host = panel.closest('[data-tbg-player-profile-host]');
+  const statisticsTab = host?.querySelector('[data-player-tab="statistics"]');
+  return statisticsTab?.getAttribute('aria-selected') === 'true';
+}
+
 async function loadStatistics(panel, player) {
   const token = accessToken();
   if (!token) {
-    panel.innerHTML = emptyState('Statistics unavailable', 'Sign in again to load live match statistics.');
+    if (statisticsStillActive(panel)) panel.innerHTML = emptyState('Statistics unavailable', 'Sign in again to load live match statistics.');
     return;
   }
   try {
@@ -101,8 +108,10 @@ async function loadStatistics(panel, player) {
     });
     const stats = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(stats.error || `Player statistics request failed (HTTP ${response.status})`);
+    if (!statisticsStillActive(panel)) return;
     panel.innerHTML = statisticsPanel(stats);
   } catch (error) {
+    if (!statisticsStillActive(panel)) return;
     panel.innerHTML = emptyState('Statistics unavailable', error.message || 'Could not load persisted match statistics.');
   }
 }
