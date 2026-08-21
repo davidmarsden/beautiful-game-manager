@@ -1,6 +1,7 @@
 import './history.js';
 import './history-load-recovery.js';
 import './team-selection-eligibility-guard.js';
+import './player-updates.js';
 
 const VIEW_ALIASES = new Map([
   ['dashboard', 'dashboard'],
@@ -11,6 +12,10 @@ const VIEW_ALIASES = new Map([
   ['history', 'history'],
   ['competition', 'competitions'],
   ['competitions', 'competitions'],
+  ['updates', 'updates'],
+  ['player updates', 'updates'],
+  ['ratings updates', 'updates'],
+  ['new players', 'updates'],
   ['transfers', 'transfers'],
   ['transfer market', 'transfers'],
   ['world', 'world']
@@ -46,6 +51,30 @@ function installHistoryShell() {
   }
 }
 
+function installPlayerUpdatesShell() {
+  const workspace = document.querySelector('.workspace');
+  const tabs = workspace?.querySelector('.tabs');
+  if (tabs && !tabs.querySelector('[data-view="updates"]')) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.view = 'updates';
+    button.textContent = 'Player Updates';
+    const transfers = tabs.querySelector('[data-view="transfers"]');
+    const competition = tabs.querySelector('[data-view="competitions"]');
+    if (transfers) transfers.before(button);
+    else if (competition) competition.before(button);
+    else tabs.append(button);
+  }
+  if (workspace && !document.getElementById('updatesView')) {
+    const section = document.createElement('div');
+    section.id = 'updatesView';
+    section.className = 'view';
+    section.hidden = true;
+    section.innerHTML = '<div class="empty-state">Loading governed player updates…</div>';
+    workspace.append(section);
+  }
+}
+
 function installTransfersShell() {
   const workspace = document.querySelector('.workspace');
   const tabs = workspace?.querySelector('.tabs');
@@ -71,6 +100,7 @@ function installTransfersShell() {
 function installDynamicShells() {
   installHistoryShell();
   installTransfersShell();
+  installPlayerUpdatesShell();
 }
 
 function normaliseView(value) {
