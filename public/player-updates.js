@@ -1,8 +1,10 @@
-const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>'\"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '\"': '&quot;' }[char]));
 const moneyEur = (value) => value == null || value === '' ? '—' : `€${Math.max(0, Number(value) || 0).toLocaleString('en-GB')}`;
+const PLAYER_UPDATES_REVALIDATE_MS = 30000;
 
 let loaded = false;
 let loading = false;
+let loadedAt = 0;
 
 function authToken() {
   for (let index = 0; index < localStorage.length; index += 1) {
@@ -103,7 +105,8 @@ function render(payload) {
 }
 
 async function loadUpdates({ force = false } = {}) {
-  if (loading || (loaded && !force)) return;
+  const fresh = loaded && (Date.now() - loadedAt < PLAYER_UPDATES_REVALIDATE_MS);
+  if (loading || (fresh && !force)) return;
   const host = document.getElementById('updatesView');
   if (!host) return;
   const token = authToken();
@@ -118,8 +121,11 @@ async function loadUpdates({ force = false } = {}) {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || `Player updates request failed (HTTP ${response.status})`);
     loaded = true;
+    loadedAt = Date.now();
     render(payload);
   } catch (error) {
+    loaded = false;
+    loadedAt = 0;
     host.innerHTML = `<div class="empty-state">${escapeHtml(error.message || 'Unable to load player updates.')}</div>`;
   } finally {
     loading = false;
