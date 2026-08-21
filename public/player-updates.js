@@ -3,7 +3,6 @@ const moneyEur = (value) => value == null || value === '' ? '—' : `€${Math.m
 
 let loaded = false;
 let loading = false;
-let lastPayload = null;
 
 function authToken() {
   for (let index = 0; index < localStorage.length; index += 1) {
@@ -85,7 +84,7 @@ function section(title, description, events, renderer) {
 }
 
 function render(payload) {
-  const host = document.getElementById('playerUpdatesView');
+  const host = document.getElementById('updatesView');
   if (!host) return;
   installStyles();
   const release = payload?.release || null;
@@ -105,7 +104,7 @@ function render(payload) {
 
 async function loadUpdates({ force = false } = {}) {
   if (loading || (loaded && !force)) return;
-  const host = document.getElementById('playerUpdatesView');
+  const host = document.getElementById('updatesView');
   if (!host) return;
   const token = authToken();
   if (!token) {
@@ -118,7 +117,6 @@ async function loadUpdates({ force = false } = {}) {
     const response = await fetch('/api/player-updates', { headers: { authorization: `Bearer ${token}` }, cache: 'no-store' });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || `Player updates request failed (HTTP ${response.status})`);
-    lastPayload = payload;
     loaded = true;
     render(payload);
   } catch (error) {
@@ -135,7 +133,7 @@ function maybeLoad(event) {
 
 document.addEventListener('tbg:view-changed', maybeLoad);
 window.addEventListener('tbg:portal-rendered', () => {
-  if (document.getElementById('playerUpdatesView')?.classList.contains('active')) loadUpdates().catch(() => {});
+  if (document.getElementById('updatesView')?.classList.contains('active')) loadUpdates().catch(() => {});
 });
 document.addEventListener('tbg:player-updates-refresh', () => loadUpdates({ force: true }).catch(() => {}));
 
