@@ -24,6 +24,14 @@ test('Player Updates consumes governed release projection without recalculating 
   assert.doesNotMatch(ui, /MutationObserver/);
 });
 
+test('Player Updates revalidates after a bounded interval when revisited', () => {
+  assert.match(ui, /PLAYER_UPDATES_REVALIDATE_MS = 30000/);
+  assert.match(ui, /Date\.now\(\) - loadedAt < PLAYER_UPDATES_REVALIDATE_MS/);
+  assert.match(ui, /loadedAt = Date\.now\(\)/);
+  assert.match(ui, /loaded = false;\s*loadedAt = 0;/);
+  assert.match(ui, /if \(view === 'updates'\) loadUpdates\(\)/);
+});
+
 test('Player Updates API is authenticated and reads the pinned data-repo release', () => {
   assert.match(api, /TBG_PLAYER_RELEASE_URL/);
   assert.match(api, /player-release-latest\.json/);
