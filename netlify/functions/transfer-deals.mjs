@@ -83,9 +83,18 @@ function attachLifecycle(market, lifecycle) {
   };
 }
 
+function uniqueOffersByDeal(offers) {
+  const seen = new Set();
+  return (Array.isArray(offers) ? offers : []).filter((offer) => {
+    if (!offer?.deal_id || seen.has(offer.deal_id)) return false;
+    seen.add(offer.deal_id);
+    return true;
+  });
+}
+
 function attachExchangeLegs(market, exchangeRows) {
   const byDeal = new Map((Array.isArray(exchangeRows) ? exchangeRows : []).map((row) => [row.deal_id, row]));
-  const decorate = (offers) => (Array.isArray(offers) ? offers : []).map((offer) => {
+  const decorate = (offers) => uniqueOffersByDeal(offers).map((offer) => {
     const exchange = byDeal.get(offer.deal_id);
     return exchange ? { ...offer, legs: exchange.legs || [], revision_no: exchange.revision_no || offer.revision_no } : offer;
   });
@@ -128,17 +137,34 @@ function normalizeExchangeLegs(rawLegs, { ownClubId, counterpartClubId }) {
   return normalized;
 }
 
-async function currentDealLegs(current, dealId) {
-  const rows = await serverSupabase('/rest/v1/rpc/get_manager_transfer_exchange_legs_for_user', {
-    method: 'POST',
-    body: JSON.stringify({ p_user_id: current.user.id, p_world_id: current.appointment.world_id })
-  }).catch(() => []);
-  return (Array.isArray(rows) ? rows : []).find((row) => row.deal_id === dealId)?.legs || [];
+async function currentDealSafety(current, dealId) {
+  const dealRows = await serverSupabase(`/rest/v1/transfer_deals?id=eq.${encodeURIComponent(dealId)}&world_id=eq.${encodeURIComponent(current.appointment.world_id)}&select=id,current_revision_no&limit=1`);
+  const deal = Array.isArray(dealRows) ? dealRows[0] : null;
+  if (!deal) throw new Error('Transfer deal safety metadata is unavailable');
+
+  const [revisionRows, exchangeRows] = await Promise.all([
+    serverSupabase(`/rest/v1/transfer_deal_revisions?deal_id=eq.${encodeURIComponent(dealId)}&revision_no=eq.${encodeURIComponent(deal.current_revision_no)}&select=summary&limit=1`),
+    serverSupabase('/rest/v1/rpc/get_manager_transfer_exchange_legs_for_user', {
+      method: 'POST',
+      body: JSON.stringify({ p_user_id: current.user.id, p_world_id: current.appointment.world_id })
+    })
+  ]);
+
+  const revision = Array.isArray(revisionRows) ? revisionRows[0] : null;
+  if (!revision) throw new Error('Transfer deal revision safety metadata is unavailable');
+  const exchange = (Array.isArray(exchangeRows) ? exchangeRows : []).find((row) => row.deal_id === dealId);
+  if (!exchange) throw new Error('Transfer deal leg safety metadata is unavailable');
+
+  return {
+    revisionType: String(revision.summary?.type || ''),
+    legs: exchange.legs || []
+  };
 }
 
-function isComplexExchange(legs, ownClubId) {
+function isComplexExchange({ revisionType, legs } = {}) {
+  if (revisionType === 'two_club_exchange_offer') return true;
   const players = (Array.isArray(legs) ? legs : []).filter((leg) => leg.leg_type === 'permanent_transfer');
-  return players.length > 1 || players.some((leg) => leg.from_club_id === ownClubId);
+  return players.length > 1;
 }
 
 export default async (request) => {
@@ -304,11 +330,13 @@ export default async (request) => {
       if (!Number.isInteger(revisionNo) || revisionNo < 1) return json({ error: 'Exact deal revision is required' }, 400);
       const responseAction = action === 'accept_offer' ? 'accept' : action === 'decline_offer' ? 'decline' : 'counter';
 
-      const legs = await currentDealLegs(current, dealId);
-      if (isComplexExchange(legs, current.appointment.club_id) && responseAction !== 'decline') {
-        return json({
-          error: 'This multi-player exchange is recorded safely, but accepting or countering it is disabled until #272 atomic exchange settlement is deployed.'
-        }, 409);
+      if (responseAction !== 'decline') {
+        const safety = await currentDealSafety(current, dealId);
+        if (isComplexExchange(safety)) {
+          return json({
+            error: 'This exchange is recorded safely, but accepting or countering it is disabled until #272 atomic exchange settlement is deployed.'
+          }, 409);
+        }
       }
 
       const fee = Math.max(0, Number(body.fee ?? 0) || 0);
@@ -446,7 +474,7 @@ export default async (request) => {
   } catch (error) {
     const message = String(error?.message || 'Transfer market request failed');
     const status = /Session|Authentication/.test(message) ? 401
-      : /required|owned|listing action|response action|change response|agreed-deal change|mistake-grace|grace period|active transfer listing|read model|canonical world|appointment|selling club|counterpart club|exchange|offer|deal|revision|participant|approved|pending change/i.test(message) ? 409
+      : /required|owned|listing action|response action|change response|agreed-deal change|mistake-grace|grace period|active transfer listing|read model|canonical world|appointment|selling club|counterpart club|exchange|offer|deal|revision|participant|approved|pending change|safety metadata/i.test(message) ? 409
         : 503;
     return json({ error: message }, status);
   }
