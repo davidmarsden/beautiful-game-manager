@@ -53,8 +53,9 @@ function contractLabel(player) {
 
 function playerNameMarkup(player) {
   const name = escapeHtml(playerName(player));
-  if (!player.profile_url) return `<span class="player-link player-link-unavailable" title="Pink Final profile not published yet">${name}</span>`;
-  return `<a class="player-link" href="${escapeHtml(player.profile_url)}" target="_blank" rel="noopener">${name}</a>`;
+  const id = escapeHtml(player.tbg_player_id || player.player_id || '');
+  if (!player.profile_url) return `<span class="player-link player-link-unavailable" data-tbg-player-id="${id}" title="Pink Final profile not published yet">${name}</span>`;
+  return `<a class="player-link" data-tbg-player-id="${id}" href="${escapeHtml(player.profile_url)}" target="_blank" rel="noopener">${name}</a>`;
 }
 
 function playerRow(player) {
@@ -124,6 +125,7 @@ export function mountReadOnlySquadView(root, club) {
     rows.sort((a, b) => POSITION_ORDER.indexOf(canonicalPosition(a)) - POSITION_ORDER.indexOf(canonicalPosition(b)) || (playerRating(b) ?? -1) - (playerRating(a) ?? -1) || playerName(a).localeCompare(playerName(b)));
     root.querySelector('[data-squad-count]').textContent = `${rows.length} players`;
     root.querySelector('[data-squad-rows]').innerHTML = rows.length ? renderRows(rows) : '<tr><td colspan="10" class="empty-state">No players match this squad view and filter.</td></tr>';
+    window.dispatchEvent(new CustomEvent('tbg:read-only-squad-rendered', { detail: { root, players: rows } }));
   };
 
   root.querySelector('[data-squad-view]').addEventListener('change', render);
