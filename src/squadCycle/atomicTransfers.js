@@ -58,6 +58,7 @@ function normalizePlayerLegs(state, legs, atIso) {
     const fromClubId = text(raw?.from_club_id ?? raw?.fromClubId);
     const toClubId = text(raw?.to_club_id ?? raw?.toClubId);
     const contractYears = Math.max(1, Math.min(5, integer(raw?.contract_years ?? raw?.contractYears, 3)));
+    const fee = Math.max(0, integer(raw?.fee, 0));
     if (!playerId) throw new Error(`Atomic exchange player leg ${index + 1} requires a player`);
     if (seen.has(playerId)) throw new Error(`Atomic exchange contains duplicate player ${playerId}`);
     seen.add(playerId);
@@ -72,7 +73,7 @@ function normalizePlayerLegs(state, legs, atIso) {
     if (to.player_ids.includes(playerId)) throw new Error(`${playerId} already belongs to ${toClubId}`);
     const contractEndAt = addYears(atIso, contractYears);
     if (new Date(contractEndAt) <= new Date(atIso)) throw new Error('Contract end must be after contract start');
-    return { playerId, fromClubId, toClubId, contractYears, contractEndAt, player, from, to, cohort: cohort(player) };
+    return { playerId, fromClubId, toClubId, contractYears, contractEndAt, fee, player, from, to, cohort: cohort(player) };
   });
 }
 
@@ -170,9 +171,9 @@ export function transferPlayersAtomically(state, { legs, at } = {}) {
       player_id: leg.playerId,
       from_club_id: leg.fromClubId,
       to_club_id: leg.toClubId,
-      fee: 0,
+      fee: leg.fee,
       window_id: window.window_id,
-      atomic_exchange: true
+      atomic_exchange: normalized.length > 1
     });
   }
 
