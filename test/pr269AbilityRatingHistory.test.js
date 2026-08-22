@@ -22,15 +22,31 @@ test('player profile keeps governed Ability history distinct from match statisti
   assert.match(source, /Match-performance ratings remain in Statistics/);
   assert.match(source, /\/api\/player-rating-history\?player_id=/);
   assert.match(source, /if \(tab === 'ability'\) loadAbility\(panel, player\)/);
+  assert.match(source, /function abilityStillActive\(panel\)/);
+  assert.match(source, /if \(!abilityStillActive\(panel\)\) return/);
 });
 
-test('squad enhancer loads one indexed history and renders latest-change badges without broad observers', async () => {
+test('squad enhancer loads one indexed history and renders safe latest-change badges without broad observers', async () => {
   const source = await read('public/rating-history-enhancements.js');
   const links = await read('public/internal-profile-links.js');
   assert.match(source, /fetch\('\/api\/player-rating-history'/);
   assert.match(source, /latest_change/);
   assert.match(source, /ability-change/);
   assert.match(source, /dataset\.tbgPlayerId/);
+  assert.match(source, /document\.createElement\('span'\)/);
+  assert.match(source, /badge\.title =/);
+  assert.match(source, /badge\.textContent = marker/);
+  assert.doesNotMatch(source, /insertAdjacentHTML\([\s\S]*changeBadge/);
   assert.doesNotMatch(source, /MutationObserver/);
   assert.match(links, /import '\.\/rating-history-enhancements\.js'/);
+});
+
+test('read-only squad renders publish a lifecycle event so Ability badges decorate club inspection and History squads', async () => {
+  const squadView = await read('public/squad-view.js');
+  const enhancer = await read('public/rating-history-enhancements.js');
+  assert.match(squadView, /tbg:read-only-squad-rendered/);
+  assert.match(squadView, /detail: \{ root, players: rows \}/);
+  assert.match(squadView, /data-tbg-player-id=/);
+  assert.match(enhancer, /addEventListener\('tbg:read-only-squad-rendered'/);
+  assert.match(enhancer, /detail\.root instanceof Element/);
 });
