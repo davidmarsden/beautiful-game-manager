@@ -135,3 +135,14 @@ test('#272 exchange response gateway uses only the exchange revision responder a
   assert.match(source, /p_legs:\s*legs/);
   assert.doesNotMatch(source, /respond_manager_transfer_deal_for_user/);
 });
+
+test('#272 agreement-time capacity guard evaluates complete final net exchange state', async () => {
+  const sql = await readFile(new URL('../supabase/migrations/20260822d_exchange_split_squad_capacity_guard.sql', import.meta.url), 'utf8');
+  assert.match(sql, /canonical_count \+ other_net \+ this_net/);
+  assert.match(sql, /when leg\.to_club_id = affected\.club_id then 1/);
+  assert.match(sql, /when leg\.from_club_id = affected\.club_id then -1/);
+  assert.match(sql, /when other_leg\.to_club_id = affected\.club_id then 1/);
+  assert.match(sql, /when other_leg\.from_club_id = affected\.club_id then -1/);
+  assert.match(sql, /order by club_id, cohort_name/);
+  assert.doesNotMatch(sql, /order by leg\.sequence_no asc\s+limit 1/);
+});
