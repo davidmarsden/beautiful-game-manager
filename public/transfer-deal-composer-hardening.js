@@ -115,7 +115,7 @@ function renderReview() {
     const text = document.createElement('strong');
     text.textContent = receive.length === 0
       ? 'Warning: you receive nothing in this deal.'
-      : 'Warning: the other club gives nothing in this deal.';
+      : 'Warning: you give nothing in this deal.';
     warning.append(text);
 
     const label = document.createElement('label');
@@ -144,21 +144,39 @@ function guardSubmission(event) {
   panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
+function isComplexDealCard(card) {
+  const sides = card.querySelectorAll('.transfer-exchange-summary-side');
+  const playerRows = [...sides].flatMap((side) => [...side.querySelectorAll('small')])
+    .filter((node) => !/^£/.test(String(node.textContent || '').trim()) && String(node.textContent || '').trim() !== 'Nothing');
+  return playerRows.length > 1;
+}
+
 function suppressLegacyComplexAmendments() {
   for (const card of document.querySelectorAll('[data-first-class-deal]')) {
-    const sides = card.querySelectorAll('.transfer-exchange-summary-side');
-    const playerRows = [...sides].flatMap((side) => [...side.querySelectorAll('small')])
-      .filter((node) => !/^£/.test(String(node.textContent || '').trim()) && String(node.textContent || '').trim() !== 'Nothing');
-    if (playerRows.length <= 1) continue;
+    if (!isComplexDealCard(card)) continue;
     const controls = card.querySelector('.first-class-response-controls');
-    const amendment = controls?.querySelector('.transfer-counter-controls');
-    if (!amendment || amendment.dataset.complexDealSuppressed === 'true') continue;
-    amendment.dataset.complexDealSuppressed = 'true';
-    amendment.hidden = true;
-    const note = document.createElement('small');
-    note.className = 'transfer-complex-amendment-note';
-    note.textContent = 'This is a multi-player deal. The single-fee/contract amendment form does not represent all deal legs, so it is disabled. Use mistake-grace cancellation or mutual cancellation if the agreed terms need to be undone.';
-    amendment.before(note);
+    if (!controls) continue;
+
+    const amendment = controls.querySelector('.transfer-counter-controls');
+    if (amendment && amendment.dataset.complexDealSuppressed !== 'true') {
+      amendment.dataset.complexDealSuppressed = 'true';
+      amendment.hidden = true;
+      const note = document.createElement('small');
+      note.className = 'transfer-complex-amendment-note';
+      note.textContent = 'This is a multi-player deal. The single-fee/contract amendment form does not represent all deal legs, so it is disabled. Use mistake-grace cancellation or mutual cancellation if the agreed terms need to be undone.';
+      amendment.before(note);
+    }
+
+    const acceptPending = controls.querySelector('[data-agreed-change-action="accept_agreed_change"]');
+    if (acceptPending && acceptPending.dataset.complexDealSuppressed !== 'true') {
+      acceptPending.dataset.complexDealSuppressed = 'true';
+      acceptPending.disabled = true;
+      acceptPending.hidden = true;
+      const note = document.createElement('small');
+      note.className = 'transfer-complex-pending-amendment-note';
+      note.textContent = 'This pending amendment uses the legacy single-player format and cannot safely replace a multi-player deal. Reject it to keep the agreed deal unchanged.';
+      acceptPending.before(note);
+    }
   }
 }
 
