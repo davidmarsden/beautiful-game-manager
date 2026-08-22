@@ -55,6 +55,26 @@ test('transfer gateway accepts normalized exchange leg sets and keeps complex re
   assert.match(source, /responseAction !== 'decline'/);
 });
 
+test('complex-response safety is revision-intrinsic and fails closed when safety metadata is unavailable', async () => {
+  const source = await readFile(endpointUrl, 'utf8');
+  assert.match(source, /async function currentDealSafety/);
+  assert.match(source, /transfer_deal_revisions[\s\S]*select=summary/);
+  assert.match(source, /revisionType:\s*String\(revision\.summary\?\.type \|\| ''\)/);
+  assert.match(source, /revisionType === 'two_club_exchange_offer'/);
+  assert.doesNotMatch(source, /currentDealSafety[\s\S]*\.catch\(\(\) => \[\]\)/);
+  assert.match(source, /Transfer deal safety metadata is unavailable/);
+  assert.match(source, /Transfer deal revision safety metadata is unavailable/);
+  assert.match(source, /Transfer deal leg safety metadata is unavailable/);
+  assert.doesNotMatch(source, /leg\.from_club_id === ownClubId/);
+});
+
+test('exchange decoration collapses legacy one-row-per-leg projection to one card per deal', async () => {
+  const source = await readFile(endpointUrl, 'utf8');
+  assert.match(source, /function uniqueOffersByDeal/);
+  assert.match(source, /seen\.has\(offer\.deal_id\)/);
+  assert.match(source, /const decorate = \(offers\) => uniqueOffersByDeal\(offers\)\.map/);
+});
+
 test('Manager composer supports several players on both sides plus one-way cash adjustment', async () => {
   const source = await readFile(uiUrl, 'utf8');
   assert.match(source, /You receive/);
