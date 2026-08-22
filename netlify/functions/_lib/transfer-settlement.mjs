@@ -1,5 +1,5 @@
 import { loadPersistentWorld, savePersistentWorld } from '../../../src/world/persistentSeasonLoop.js';
-import { transferPlayer } from '../../../src/squadCycle/squadCycle.js';
+import { transferPlayersAtomically } from '../../../src/squadCycle/atomicTransfers.js';
 import { buildWorldReadModel } from '../../../src/world/worldReadModel.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
@@ -23,12 +23,6 @@ async function service(path, options = {}) {
   return body;
 }
 
-function addYears(value, years) {
-  const date = new Date(value);
-  date.setUTCFullYear(date.getUTCFullYear() + Number(years || 0));
-  return date.toISOString();
-}
-
 function updateOwnershipProjection(world, playerId, toClubId) {
   const updateRows = (rows) => {
     if (!Array.isArray(rows)) return;
@@ -44,8 +38,30 @@ function updateOwnershipProjection(world, playerId, toClubId) {
   }
 }
 
+function playerSettlementLegs(due) {
+  const legs = Array.isArray(due?.legs) ? due.legs : [];
+  const unsupported = legs.find((leg) => !['permanent_transfer', 'cash'].includes(String(leg?.leg_type || '')));
+  if (unsupported) throw new Error(`Unsupported transfer settlement leg type: ${unsupported.leg_type}`);
+  const players = legs.filter((leg) => leg?.leg_type === 'permanent_transfer');
+  if (!players.length) throw new Error('Transfer settlement revision does not contain a player leg');
+  const cash = legs.filter((leg) => leg?.leg_type === 'cash');
+
+  // Preserve existing straight-transfer event semantics. In a one-player deal the
+  // opposite-direction cash leg is unambiguously that player's fee. In a multi-player
+  // exchange cash is a deal-level adjustment and is deliberately not attributed to any
+  // individual player event; the immutable transfer-deal legs remain authoritative.
+  if (players.length === 1) {
+    const player = players[0];
+    const fee = cash
+      .filter((leg) => leg.from_club_id === player.to_club_id && leg.to_club_id === player.from_club_id)
+      .reduce((sum, leg) => sum + Math.max(0, Number(leg.amount || 0) || 0), 0);
+    return [{ ...player, fee }];
+  }
+  return players.map((player) => ({ ...player, fee: 0 }));
+}
+
 function deterministicSettlementError(error) {
-  return /Transfer window is closed|Unknown player|Unknown club|is not owned by|already belongs to|registration limit reached|first-team squad limit reached|youth squad limit reached|Registration is closed|Contract end must be after|Cannot save invalid world/i.test(String(error?.message || error));
+  return /Transfer window is closed|Unknown player|Unknown club|is not owned by|already belongs to|registration limit reached|first-team squad limit reached|youth squad limit reached|Registration is closed|Contract end must be after|Cannot save invalid world|Atomic exchange|Unsupported transfer settlement leg type|does not contain a player leg/i.test(String(error?.message || error));
 }
 
 async function reconcileSettlement(dealId, replacementChecksum) {
@@ -70,15 +86,12 @@ async function settleOne(due) {
   try {
     const world = loadPersistentWorld(JSON.stringify(before.save_envelope));
     const at = new Date(world.clock).toISOString();
-    transferPlayer(world.squad_cycle, {
-      playerId: due.player_id,
-      fromClubId: due.from_club_id,
-      toClubId: due.to_club_id,
-      at,
-      fee: Number(due.fee || 0),
-      contractEndAt: addYears(at, Number(due.contract_years || 3))
-    });
-    updateOwnershipProjection(world, due.player_id, due.to_club_id);
+    const playerLegs = playerSettlementLegs(due);
+
+    // The helper validates the complete final squad/registration state before making
+    // its first mutation, then removes every outbound slot before applying inbounds.
+    transferPlayersAtomically(world.squad_cycle, { legs: playerLegs, at });
+    for (const leg of playerLegs) updateOwnershipProjection(world, leg.player_id, leg.to_club_id);
 
     const envelope = JSON.parse(savePersistentWorld(world));
     const replacement = {
@@ -107,18 +120,35 @@ async function settleOne(due) {
       });
     } catch (error) {
       if (await reconcileSettlement(due.deal_id, envelope.checksum).catch(() => false)) {
-        return { deal_id: due.deal_id, status: 'completed', reconciled: true, replacement_checksum: envelope.checksum };
+        return {
+          deal_id: due.deal_id,
+          status: 'completed',
+          reconciled: true,
+          replacement_checksum: envelope.checksum,
+          player_legs: playerLegs.length
+        };
       }
       throw error;
     }
 
     if (!atomic?.accepted) {
       if (atomic?.reason === 'already_completed' && atomic?.replacement_checksum === envelope.checksum) {
-        return { deal_id: due.deal_id, status: 'completed', idempotent: true, replacement_checksum: envelope.checksum };
+        return {
+          deal_id: due.deal_id,
+          status: 'completed',
+          idempotent: true,
+          replacement_checksum: envelope.checksum,
+          player_legs: playerLegs.length
+        };
       }
       return { deal_id: due.deal_id, status: 'skipped', reason: atomic?.reason || 'checkpoint_changed_or_busy' };
     }
-    return { deal_id: due.deal_id, status: 'completed', replacement_checksum: envelope.checksum };
+    return {
+      deal_id: due.deal_id,
+      status: 'completed',
+      replacement_checksum: envelope.checksum,
+      player_legs: playerLegs.length
+    };
   } catch (error) {
     if (deterministicSettlementError(error)) {
       await failDeal(due.deal_id, error).catch(() => {});
