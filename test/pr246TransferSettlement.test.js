@@ -49,7 +49,8 @@ test('settlement runner applies governed transfer on the canonical world clock a
   assert.match(source, /const at = new Date\(world\.clock\)\.toISOString\(\)/);
   assert.doesNotMatch(source, /const at = new Date\(\)\.toISOString\(\)/);
   assert.match(source, /buildWorldReadModel\(world\)/);
-  assert.match(source, /transferPlayer\(world\.squad_cycle/);
+  assert.match(source, /transferPlayersAtomically\(world\.squad_cycle/);
+  assert.doesNotMatch(source, /transferPlayer\(world\.squad_cycle/);
   assert.match(source, /apply_transfer_deal_settlement/);
   assert.match(source, /reconcileSettlement/);
   assert.match(source, /settlement_replacement_checksum/);
