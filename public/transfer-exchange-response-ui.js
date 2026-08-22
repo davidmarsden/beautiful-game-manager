@@ -8,6 +8,8 @@ let scanTimer = null;
 let reloadPending = false;
 
 function storedAccessToken() {
+  const bridged = String(window.tbgPortalAuthorization || '').trim();
+  if (bridged) return bridged.toLowerCase().startsWith('bearer ') ? bridged.slice(7).trim() : bridged;
   for (let index = 0; index < localStorage.length; index += 1) {
     const key = localStorage.key(index);
     if (!key?.startsWith('sb-') || !key.endsWith('-auth-token')) continue;
@@ -83,7 +85,10 @@ function refreshStaleCard() {
 async function unlockVisibleExchangeCards() {
   const cards = candidateExchangeCards();
   if (!cards.length) return;
-  const snapshot = await loadExchangeState().catch(() => null);
+  const snapshot = await loadExchangeState().catch((error) => {
+    transferMessage(error.message);
+    return null;
+  });
   if (!snapshot) return;
 
   for (const card of cards) {
@@ -113,7 +118,7 @@ async function unlockVisibleExchangeCards() {
 
 function scheduleScan() {
   clearTimeout(scanTimer);
-  scanTimer = setTimeout(() => unlockVisibleExchangeCards().catch(() => {}), 60);
+  scanTimer = setTimeout(() => unlockVisibleExchangeCards().catch((error) => transferMessage(error.message)), 60);
 }
 
 function clearSelectedPlayers() {
