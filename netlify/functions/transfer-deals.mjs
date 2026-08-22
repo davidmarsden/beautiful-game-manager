@@ -83,6 +83,90 @@ function attachLifecycle(market, lifecycle) {
   };
 }
 
+function uniqueOffersByDeal(offers) {
+  const seen = new Set();
+  return (Array.isArray(offers) ? offers : []).filter((offer) => {
+    if (!offer?.deal_id || seen.has(offer.deal_id)) return false;
+    seen.add(offer.deal_id);
+    return true;
+  });
+}
+
+function attachExchangeLegs(market, exchangeRows) {
+  const byDeal = new Map((Array.isArray(exchangeRows) ? exchangeRows : []).map((row) => [row.deal_id, row]));
+  const decorate = (offers) => uniqueOffersByDeal(offers).map((offer) => {
+    const exchange = byDeal.get(offer.deal_id);
+    return exchange ? { ...offer, legs: exchange.legs || [], revision_no: exchange.revision_no || offer.revision_no } : offer;
+  });
+  return {
+    ...market,
+    incoming_offers: decorate(market?.incoming_offers),
+    outgoing_offers: decorate(market?.outgoing_offers)
+  };
+}
+
+function normalizeExchangeLegs(rawLegs, { ownClubId, counterpartClubId }) {
+  const pair = new Set([ownClubId, counterpartClubId]);
+  if (!Array.isArray(rawLegs) || !rawLegs.length) throw new Error('Exchange legs are required');
+  const seenPlayers = new Set();
+  const normalized = rawLegs.map((raw) => {
+    const legType = String(raw?.leg_type || raw?.legType || '').trim().toLowerCase();
+    const fromClubId = String(raw?.from_club_id || raw?.fromClubId || '').trim();
+    const toClubId = String(raw?.to_club_id || raw?.toClubId || '').trim();
+    if (!['permanent_transfer', 'cash'].includes(legType)) throw new Error('Exchange offers support permanent player and cash legs only');
+    if (!pair.has(fromClubId) || !pair.has(toClubId) || fromClubId === toClubId) throw new Error('Every exchange leg must move between the two participating clubs');
+    if (legType === 'cash') {
+      const amount = Math.max(0, Number(raw?.amount ?? 0) || 0);
+      if (!(amount > 0)) throw new Error('Cash legs must be greater than zero');
+      return { leg_type: 'cash', from_club_id: fromClubId, to_club_id: toClubId, amount };
+    }
+    const playerId = String(raw?.player_id || raw?.playerId || '').trim();
+    if (!playerId) throw new Error('Every player leg requires a player');
+    if (seenPlayers.has(playerId)) throw new Error('The same player cannot appear twice in one exchange');
+    seenPlayers.add(playerId);
+    const contractYears = Math.max(1, Math.min(5, Number(raw?.contract_years ?? raw?.contractYears ?? 3) || 3));
+    return {
+      leg_type: 'permanent_transfer',
+      from_club_id: fromClubId,
+      to_club_id: toClubId,
+      player_id: playerId,
+      contract_years: contractYears
+    };
+  });
+  if (!normalized.some((leg) => leg.leg_type === 'permanent_transfer')) throw new Error('An exchange offer must include at least one player');
+  return normalized;
+}
+
+async function currentDealSafety(current, dealId) {
+  const dealRows = await serverSupabase(`/rest/v1/transfer_deals?id=eq.${encodeURIComponent(dealId)}&world_id=eq.${encodeURIComponent(current.appointment.world_id)}&select=id,current_revision_no&limit=1`);
+  const deal = Array.isArray(dealRows) ? dealRows[0] : null;
+  if (!deal) throw new Error('Transfer deal safety metadata is unavailable');
+
+  const [revisionRows, exchangeRows] = await Promise.all([
+    serverSupabase(`/rest/v1/transfer_deal_revisions?deal_id=eq.${encodeURIComponent(dealId)}&revision_no=eq.${encodeURIComponent(deal.current_revision_no)}&select=summary&limit=1`),
+    serverSupabase('/rest/v1/rpc/get_manager_transfer_exchange_legs_for_user', {
+      method: 'POST',
+      body: JSON.stringify({ p_user_id: current.user.id, p_world_id: current.appointment.world_id })
+    })
+  ]);
+
+  const revision = Array.isArray(revisionRows) ? revisionRows[0] : null;
+  if (!revision) throw new Error('Transfer deal revision safety metadata is unavailable');
+  const exchange = (Array.isArray(exchangeRows) ? exchangeRows : []).find((row) => row.deal_id === dealId);
+  if (!exchange) throw new Error('Transfer deal leg safety metadata is unavailable');
+
+  return {
+    revisionType: String(revision.summary?.type || ''),
+    legs: exchange.legs || []
+  };
+}
+
+function isComplexExchange({ revisionType, legs } = {}) {
+  if (revisionType === 'two_club_exchange_offer') return true;
+  const players = (Array.isArray(legs) ? legs : []).filter((leg) => leg.leg_type === 'permanent_transfer');
+  return players.length > 1;
+}
+
 export default async (request) => {
   try {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured' }, 503);
@@ -92,7 +176,7 @@ export default async (request) => {
 
     if (request.method === 'GET') {
       await settleDueTransfers({ worldId: current.appointment.world_id, limit: 5 }).catch(() => null);
-      const [market, legacyOutgoing, agreedChanges, lifecycle] = await Promise.all([
+      const [market, legacyOutgoing, agreedChanges, lifecycle, exchangeRows] = await Promise.all([
         serverSupabase('/rest/v1/rpc/get_manager_transfer_market_for_user', {
           method: 'POST',
           body: JSON.stringify({ p_user_id: current.user.id, p_world_id: current.appointment.world_id })
@@ -108,15 +192,19 @@ export default async (request) => {
         serverSupabase('/rest/v1/rpc/get_manager_transfer_lifecycle_for_user', {
           method: 'POST',
           body: JSON.stringify({ p_user_id: current.user.id, p_world_id: current.appointment.world_id })
+        }).catch(() => []),
+        serverSupabase('/rest/v1/rpc/get_manager_transfer_exchange_legs_for_user', {
+          method: 'POST',
+          body: JSON.stringify({ p_user_id: current.user.id, p_world_id: current.appointment.world_id })
         }).catch(() => [])
       ]);
-      const decoratedMarket = attachLifecycle(attachPendingChanges(market || {
+      const decoratedMarket = attachExchangeLegs(attachLifecycle(attachPendingChanges(market || {
         world_id: current.appointment.world_id,
         club_id: current.appointment.club_id,
         listings: [],
         outgoing_offers: [],
         incoming_offers: []
-      }, agreedChanges), lifecycle);
+      }, agreedChanges), lifecycle), exchangeRows);
       return json({
         ...decoratedMarket,
         legacy_outgoing_offers: Array.isArray(legacyOutgoing) ? legacyOutgoing : []
@@ -241,6 +329,16 @@ export default async (request) => {
       if (!dealId) return json({ error: 'Deal is required' }, 400);
       if (!Number.isInteger(revisionNo) || revisionNo < 1) return json({ error: 'Exact deal revision is required' }, 400);
       const responseAction = action === 'accept_offer' ? 'accept' : action === 'decline_offer' ? 'decline' : 'counter';
+
+      if (responseAction !== 'decline') {
+        const safety = await currentDealSafety(current, dealId);
+        if (isComplexExchange(safety)) {
+          return json({
+            error: 'This exchange is recorded safely, but accepting or countering it is disabled until #272 atomic exchange settlement is deployed.'
+          }, 409);
+        }
+      }
+
       const fee = Math.max(0, Number(body.fee ?? 0) || 0);
       const contractYears = Math.max(1, Math.min(5, Number(body.contract_years ?? body.contractYears ?? 3) || 3));
       const key = requestKey({
@@ -302,6 +400,39 @@ export default async (request) => {
         message: action === 'withdraw' ? 'Transfer listing withdrawn immediately.' : 'Player listed for transfer immediately.' });
     }
 
+    if (action === 'exchange_offer') {
+      const counterpartClubId = String(body.counterpart_club_id || body.counterpartClubId || '').trim();
+      if (!counterpartClubId) return json({ error: 'Counterpart club is required' }, 400);
+      const legs = normalizeExchangeLegs(body.legs, {
+        ownClubId: current.appointment.club_id,
+        counterpartClubId
+      });
+      const key = requestKey({
+        user_id: current.user.id,
+        world_id: current.appointment.world_id,
+        action,
+        counterpart_club_id: counterpartClubId,
+        legs,
+        client_request_id: clientRequestId
+      });
+      const result = await serverSupabase('/rest/v1/rpc/set_manager_transfer_exchange_offer_for_user', {
+        method: 'POST',
+        body: JSON.stringify({
+          p_user_id: current.user.id,
+          p_world_id: current.appointment.world_id,
+          p_counterpart_club_id: counterpartClubId,
+          p_legs: legs,
+          p_request_key: key
+        })
+      });
+      return json({
+        accepted: true,
+        action,
+        deal: result,
+        message: 'Multi-player exchange offer recorded immediately. Acceptance remains locked until the atomic settlement slice is deployed.'
+      });
+    }
+
     if (['offer', 'withdraw_offer'].includes(action)) {
       const playerId = String(body.player_id || body.playerId || '').trim();
       const sellerClubId = String(body.seller_club_id || body.sellerClubId || '').trim();
@@ -343,7 +474,7 @@ export default async (request) => {
   } catch (error) {
     const message = String(error?.message || 'Transfer market request failed');
     const status = /Session|Authentication/.test(message) ? 401
-      : /required|owned|listing action|response action|change response|agreed-deal change|mistake-grace|grace period|active transfer listing|read model|canonical world|appointment|selling club|offer|deal|revision|participant|approved|pending change/i.test(message) ? 409
+      : /required|owned|listing action|response action|change response|agreed-deal change|mistake-grace|grace period|active transfer listing|read model|canonical world|appointment|selling club|counterpart club|exchange|offer|deal|revision|participant|approved|pending change|safety metadata/i.test(message) ? 409
         : 503;
     return json({ error: message }, status);
   }

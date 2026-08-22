@@ -14,6 +14,7 @@ let mounted = false;
 let lastRefreshAt = 0;
 let refreshPromise = null;
 let refreshGeneration = 0;
+let exchangeDraft = { receive: [], offer: [] };
 const TRANSFER_REFRESH_TTL_MS = 60_000;
 const nativeFetch = window.fetch.bind(window);
 window.fetch = async (...args) => {
@@ -89,6 +90,10 @@ function handleAgreedChangeClick(event) {
   return true;
 }
 
+function contractOptions(selected = 3) {
+  return [1, 2, 3, 4, 5].map((years) => `<option value="${years}"${Number(selected) === years ? ' selected' : ''}>${years} season${years === 1 ? '' : 's'}</option>`).join('');
+}
+
 function mount() {
   if (mounted) return;
   const view = ensureTransfersView();
@@ -100,15 +105,39 @@ function mount() {
   oldWorkspace?.remove();
   view.innerHTML = `
     <section id="transferNegotiationWorkspace" class="world-control-card transfer-negotiation-workspace">
-      <div class="world-control-heading"><div><h2>Transfers</h2><p>Listings and negotiations are live immediately. Every counter or mutually agreed amendment creates a new immutable deal revision.</p></div><span id="transferNegotiationStatus" class="world-control-status">Loading…</span></div>
+      <div class="world-control-heading"><div><h2>Transfers</h2><p>Listings and negotiations are live immediately. Offers can include several players and cash in either direction; every changed term becomes a new immutable deal revision.</p></div><span id="transferNegotiationStatus" class="world-control-status">Loading…</span></div>
       <div class="transfer-negotiation-grid">
         <article class="transfer-negotiation-compose">
           <h3>New proposal</h3>
           <label>Action<select id="negotiationAction"><option value="offer">Make an offer</option><option value="listing">List an owned player</option></select></label>
-          <label id="negotiationClubLabel">Selling club<select id="negotiationClub"></select></label>
-          <label>Player<select id="negotiationPlayer"></select></label>
-          <label>Fee<input id="negotiationFee" data-money-input type="text" inputmode="numeric" value="£0"></label>
-          <label id="negotiationContractLabel">Proposed contract<select id="negotiationContractYears"><option value="1">1 season</option><option value="2">2 seasons</option><option value="3" selected>3 seasons</option><option value="4">4 seasons</option><option value="5">5 seasons</option></select></label>
+          <label id="negotiationClubLabel">Other club<select id="negotiationClub"></select></label>
+
+          <div id="exchangeOfferFields">
+            <div class="transfer-exchange-side" data-exchange-side="receive">
+              <h4>You receive</h4>
+              <label>Player<select id="receivePlayer"></select></label>
+              <label>Contract at your club<select id="receiveContractYears">${contractOptions(3)}</select></label>
+              <button id="addReceivePlayer" type="button">Add player</button>
+              <div id="receivePlayersSelected" class="transfer-exchange-selected"></div>
+              <label>Cash from other club<input id="receiveCash" data-money-input type="text" inputmode="numeric" value="£0"></label>
+            </div>
+
+            <div class="transfer-exchange-side" data-exchange-side="offer">
+              <h4>You offer</h4>
+              <label>Player<select id="offerPlayer"></select></label>
+              <label>Proposed contract at other club<select id="offerContractYears">${contractOptions(3)}</select></label>
+              <button id="addOfferPlayer" type="button">Add player</button>
+              <div id="offerPlayersSelected" class="transfer-exchange-selected"></div>
+              <label>Cash from your club<input id="offerCash" data-money-input type="text" inputmode="numeric" value="£0"></label>
+            </div>
+
+            <p class="transfer-exchange-note"><small>You can add several players on either side. Cash is a net adjustment, so only one club should contribute cash in a revision.</small></p>
+          </div>
+
+          <div id="listingFields" hidden>
+            <label>Player<select id="negotiationPlayer"></select></label>
+            <label>Asking fee<input id="negotiationFee" data-money-input type="text" inputmode="numeric" value="£0"></label>
+          </div>
           <button id="submitNegotiation" class="primary-action" type="button">Send offer now</button>
         </article>
         <article><h3>Incoming offers</h3><div id="incomingTransferOffers"></div></article>
@@ -118,8 +147,28 @@ function mount() {
       <p id="transferNegotiationMessage" class="world-control-message" aria-live="polite"></p>
       <aside class="transfer-legacy-note"><strong>Legacy request history</strong><p>Offers submitted before the first-class deal system remain in World request history. Outstanding legacy incoming offers can still be accepted or declined here; outstanding legacy outgoing offers can be withdrawn until the other club responds.</p></aside>
     </section>`;
+
   $('negotiationAction').addEventListener('change', renderComposer);
-  $('negotiationClub').addEventListener('change', renderPlayerOptions);
+  $('negotiationClub').addEventListener('change', () => {
+    exchangeDraft.receive = [];
+    renderExchangeComposer();
+  });
+  $('addReceivePlayer').addEventListener('click', () => addDraftPlayer('receive'));
+  $('addOfferPlayer').addEventListener('click', () => addDraftPlayer('offer'));
+  $('exchangeOfferFields').addEventListener('click', (event) => {
+    const remove = event.target.closest('[data-remove-exchange-player]');
+    if (!remove) return;
+    const side = remove.dataset.side;
+    exchangeDraft[side] = exchangeDraft[side].filter((item) => item.player_id !== remove.dataset.removeExchangePlayer);
+    renderExchangeComposer();
+  });
+  $('exchangeOfferFields').addEventListener('change', (event) => {
+    const select = event.target.closest('[data-exchange-contract-player]');
+    if (!select) return;
+    const side = select.dataset.side;
+    const item = exchangeDraft[side]?.find((entry) => entry.player_id === select.dataset.exchangeContractPlayer);
+    if (item) item.contract_years = Number(select.value) || 3;
+  });
   $('submitNegotiation').addEventListener('click', submitProposal);
   $('incomingTransferOffers').addEventListener('click', (event) => {
     if (handleFirstClassResponseClick(event)) return;
@@ -157,31 +206,117 @@ function clubName(clubId) {
   return clubs().find((club) => club.club_id === clubId)?.club_name || clubId;
 }
 
+function playerLabel(player) {
+  return [player.player_name, player.position, player.rating, player.age ? `Age ${player.age}` : ''].filter(Boolean).join(' · ');
+}
+
+function playerById(playerId) {
+  return players().find((player) => player.player_id === playerId);
+}
+
 function renderComposer() {
   if (!$('negotiationAction')) return;
   const action = $('negotiationAction').value;
   const ownClub = state?.club_id;
-  $('negotiationClubLabel').hidden = action === 'listing';
-  $('negotiationContractLabel').hidden = action === 'listing';
+  const isListing = action === 'listing';
+  $('negotiationClubLabel').hidden = isListing;
+  $('exchangeOfferFields').hidden = isListing;
+  $('listingFields').hidden = !isListing;
   const managedCounterparts = clubs().filter((club) => club.club_id !== ownClub && club.managed);
   $('negotiationClub').innerHTML = managedCounterparts.map((club) => `<option value="${escapeHtml(club.club_id)}">${escapeHtml(club.club_name)}</option>`).join('');
-  $('submitNegotiation').textContent = action === 'listing' ? 'List player now' : 'Send offer now';
-  if (action === 'offer' && !managedCounterparts.length) {
-    $('negotiationPlayer').innerHTML = '<option value="">No other human-managed clubs available</option>';
+  $('submitNegotiation').textContent = isListing ? 'List player now' : 'Send offer now';
+  if (isListing) {
+    renderListingPlayerOptions();
+    return;
+  }
+  if (!managedCounterparts.length) {
+    $('receivePlayer').innerHTML = '<option value="">No other human-managed clubs available</option>';
+    $('offerPlayer').innerHTML = '<option value="">No other human-managed clubs available</option>';
     $('submitNegotiation').disabled = true;
     return;
   }
-  renderPlayerOptions();
+  renderExchangeComposer();
 }
 
-function renderPlayerOptions() {
-  if (!$('negotiationAction')) return;
-  const action = $('negotiationAction').value;
-  const clubId = action === 'listing' ? state?.club_id : $('negotiationClub').value;
-  const options = players().filter((player) => player.club_id === clubId)
-    .map((player) => `<option value="${escapeHtml(player.player_id)}">${escapeHtml(player.player_name)} · ${escapeHtml(player.position)}${player.rating ? ` · ${escapeHtml(player.rating)}` : ''}</option>`).join('');
+function renderListingPlayerOptions() {
+  const options = players().filter((player) => player.club_id === state?.club_id)
+    .map((player) => `<option value="${escapeHtml(player.player_id)}">${escapeHtml(playerLabel(player))}</option>`).join('');
   $('negotiationPlayer').innerHTML = options || '<option value="">No players available</option>';
   $('submitNegotiation').disabled = !options;
+}
+
+function renderSelectedPlayers(side) {
+  const target = side === 'receive' ? $('receivePlayersSelected') : $('offerPlayersSelected');
+  const items = exchangeDraft[side];
+  if (!items.length) {
+    target.innerHTML = '<small>No players added.</small>';
+    return;
+  }
+  target.innerHTML = items.map((item) => {
+    const player = playerById(item.player_id) || { player_name: item.player_id };
+    return `<div class="incoming-transfer-offer transfer-exchange-selected-player">
+      <div><strong>${escapeHtml(player.player_name || item.player_id)}</strong><small>${escapeHtml([player.position, player.rating, player.age ? `Age ${player.age}` : ''].filter(Boolean).join(' · '))}</small></div>
+      <label>Contract<select data-exchange-contract-player="${escapeHtml(item.player_id)}" data-side="${side}">${contractOptions(item.contract_years)}</select></label>
+      <button type="button" data-remove-exchange-player="${escapeHtml(item.player_id)}" data-side="${side}">Remove</button>
+    </div>`;
+  }).join('');
+}
+
+function renderExchangeComposer() {
+  if (!$('negotiationClub')) return;
+  const ownClubId = state?.club_id;
+  const counterpartClubId = $('negotiationClub').value;
+  exchangeDraft.receive = exchangeDraft.receive.filter((item) => playerById(item.player_id)?.club_id === counterpartClubId);
+  exchangeDraft.offer = exchangeDraft.offer.filter((item) => playerById(item.player_id)?.club_id === ownClubId);
+
+  const receiveIds = new Set(exchangeDraft.receive.map((item) => item.player_id));
+  const offerIds = new Set(exchangeDraft.offer.map((item) => item.player_id));
+  const receiveOptions = players().filter((player) => player.club_id === counterpartClubId && !receiveIds.has(player.player_id));
+  const offerOptions = players().filter((player) => player.club_id === ownClubId && !offerIds.has(player.player_id));
+  $('receivePlayer').innerHTML = receiveOptions.length
+    ? receiveOptions.map((player) => `<option value="${escapeHtml(player.player_id)}">${escapeHtml(playerLabel(player))}</option>`).join('')
+    : '<option value="">No more players available</option>';
+  $('offerPlayer').innerHTML = offerOptions.length
+    ? offerOptions.map((player) => `<option value="${escapeHtml(player.player_id)}">${escapeHtml(playerLabel(player))}</option>`).join('')
+    : '<option value="">No more players available</option>';
+  renderSelectedPlayers('receive');
+  renderSelectedPlayers('offer');
+  $('submitNegotiation').disabled = !counterpartClubId || !(exchangeDraft.receive.length || exchangeDraft.offer.length);
+}
+
+function addDraftPlayer(side) {
+  const playerSelect = side === 'receive' ? $('receivePlayer') : $('offerPlayer');
+  const contractSelect = side === 'receive' ? $('receiveContractYears') : $('offerContractYears');
+  const playerId = playerSelect.value;
+  if (!playerId || exchangeDraft[side].some((item) => item.player_id === playerId)) return;
+  exchangeDraft[side].push({ player_id: playerId, contract_years: Number(contractSelect.value) || 3 });
+  renderExchangeComposer();
+}
+
+function buildExchangeLegs() {
+  const ownClubId = state?.club_id;
+  const counterpartClubId = $('negotiationClub').value;
+  const legs = [];
+  exchangeDraft.receive.forEach((item) => legs.push({
+    leg_type: 'permanent_transfer',
+    from_club_id: counterpartClubId,
+    to_club_id: ownClubId,
+    player_id: item.player_id,
+    contract_years: item.contract_years
+  }));
+  exchangeDraft.offer.forEach((item) => legs.push({
+    leg_type: 'permanent_transfer',
+    from_club_id: ownClubId,
+    to_club_id: counterpartClubId,
+    player_id: item.player_id,
+    contract_years: item.contract_years
+  }));
+  const receiveCash = parseMoney($('receiveCash').value);
+  const offerCash = parseMoney($('offerCash').value);
+  if (receiveCash > 0 && offerCash > 0) throw new Error('Cash must move in one direction only. Enter the net cash adjustment on the appropriate side.');
+  if (receiveCash > 0) legs.push({ leg_type: 'cash', from_club_id: counterpartClubId, to_club_id: ownClubId, amount: receiveCash });
+  if (offerCash > 0) legs.push({ leg_type: 'cash', from_club_id: ownClubId, to_club_id: counterpartClubId, amount: offerCash });
+  return legs;
 }
 
 function revisionHistory(offer) {
@@ -189,6 +324,11 @@ function revisionHistory(offer) {
   if (revisions.length < 2) return '';
   return `<details class="transfer-revision-history"><summary>${revisions.length} deal revisions</summary>${revisions.map((revision) => {
     const summary = revision.summary || {};
+    if (Array.isArray(summary.legs)) {
+      const playersCount = summary.legs.filter((leg) => leg.leg_type === 'permanent_transfer').length;
+      const cashLegs = summary.legs.filter((leg) => leg.leg_type === 'cash');
+      return `<div><strong>Revision ${escapeHtml(revision.revision_no)}</strong> · ${playersCount} player leg${playersCount === 1 ? '' : 's'}${cashLegs.length ? ` · ${cashLegs.map((leg) => formatMoney(leg.amount || 0)).join(' / ')}` : ''}</div>`;
+    }
     return `<div><strong>Revision ${escapeHtml(revision.revision_no)}</strong> · ${formatMoney(summary.fee || 0)} · ${escapeHtml(summary.contract_years || 3)} seasons</div>`;
   }).join('')}</details>`;
 }
@@ -214,6 +354,28 @@ function lifecyclePresentation(offer) {
     detail: lifecycle.settle_at ? `Transfer completes at ${formatDeadline(lifecycle.settle_at)}` : '',
     canCancelInGrace: false
   };
+}
+
+function isComplexExchangeOffer(offer) {
+  const playerLegs = (offer.legs || []).filter((leg) => leg.leg_type === 'permanent_transfer');
+  return playerLegs.length > 1 || playerLegs.some((leg) => leg.from_club_id === offer.buyer_club_id);
+}
+
+function legText(leg) {
+  if (leg.leg_type === 'cash') return formatMoney(leg.amount || 0);
+  const details = [leg.player_name || leg.player_id, leg.position, leg.rating, leg.age ? `Age ${leg.age}` : ''].filter(Boolean).join(' · ');
+  return `${details}${leg.contract_years ? ` · ${leg.contract_years}-season contract` : ''}`;
+}
+
+function dealLegSummary(offer) {
+  const legs = offer.legs || [];
+  if (!legs.length) return `<strong>${escapeHtml(offer.player_name || offer.player_id)}</strong><span>${formatMoney(offer.fee || 0)}</span>`;
+  const clubIds = [offer.buyer_club_id, offer.seller_club_id].filter(Boolean);
+  return clubIds.map((clubId) => {
+    const gives = legs.filter((leg) => leg.from_club_id === clubId);
+    if (!gives.length) return '';
+    return `<div class="transfer-exchange-summary-side"><strong>${escapeHtml(clubName(clubId))} gives</strong>${gives.map((leg) => `<small>${escapeHtml(legText(leg))}</small>`).join('')}</div>`;
+  }).join('');
 }
 
 function agreedDealControls(offer) {
@@ -245,7 +407,7 @@ function agreedDealControls(offer) {
     ${graceButton}
     <div class="transfer-counter-controls">
       <label>Amended fee<input data-amendment-fee data-money-input type="text" inputmode="numeric" value="${escapeHtml(formatMoney(offer.fee || 0))}"></label>
-      <label>Contract<select data-amendment-contract>${[1,2,3,4,5].map((years) => `<option value="${years}"${Number(offer.contract_years || 3) === years ? ' selected' : ''}>${years} season${years === 1 ? '' : 's'}</option>`).join('')}</select></label>
+      <label>Contract<select data-amendment-contract>${contractOptions(offer.contract_years || 3)}</select></label>
       <button type="button" data-agreed-change-action="propose_agreed_amendment" data-deal-id="${escapeHtml(offer.deal_id)}" data-revision-no="${escapeHtml(offer.revision_no)}">Propose amendment</button>
     </div>
     <button type="button" data-agreed-change-action="propose_agreed_cancellation" data-deal-id="${escapeHtml(offer.deal_id)}" data-revision-no="${escapeHtml(offer.revision_no)}">Propose cancellation</button>
@@ -254,6 +416,14 @@ function agreedDealControls(offer) {
 
 function responseControls(offer) {
   if (offer.status === 'agreed') return agreedDealControls(offer);
+  if (isComplexExchangeOffer(offer)) {
+    if (!offer.requires_action) return '<span class="world-control-status">Awaiting other club · atomic exchange response pending</span>';
+    return `<div class="first-class-response-controls">
+      <span class="world-control-status">Multi-player exchange · response locked until atomic settlement is deployed</span>
+      <small>You can safely decline this revision now. Accept/counter will be enabled by the next #272 slice.</small>
+      <button type="button" data-deal-response="decline_offer" data-deal-id="${escapeHtml(offer.deal_id)}" data-revision-no="${escapeHtml(offer.revision_no)}">Decline</button>
+    </div>`;
+  }
   if (!offer.requires_action) return '<span class="world-control-status">Awaiting other club</span>';
   return `<div class="first-class-response-controls">
     <div class="world-control-actions">
@@ -262,7 +432,7 @@ function responseControls(offer) {
     </div>
     <div class="transfer-counter-controls">
       <label>Counter fee<input data-counter-fee data-money-input type="text" inputmode="numeric" value="${escapeHtml(formatMoney(offer.fee || 0))}"></label>
-      <label>Contract<select data-counter-contract>${[1,2,3,4,5].map((years) => `<option value="${years}"${Number(offer.contract_years || 3) === years ? ' selected' : ''}>${years} season${years === 1 ? '' : 's'}</option>`).join('')}</select></label>
+      <label>Contract<select data-counter-contract>${contractOptions(offer.contract_years || 3)}</select></label>
       <button type="button" data-deal-response="counter_offer" data-deal-id="${escapeHtml(offer.deal_id)}" data-revision-no="${escapeHtml(offer.revision_no)}">Counter</button>
     </div>
   </div>`;
@@ -279,7 +449,7 @@ function offerCard(offer, { outgoing = false } = {}) {
       ? `<button type="button" data-withdraw-offer data-deal-id="${escapeHtml(offer.deal_id)}">Withdraw offer</button>`
       : responseControls(offer);
   return `<article class="incoming-transfer-offer" data-first-class-deal="${escapeHtml(offer.deal_id)}">
-    <div><strong>${escapeHtml(offer.player_name || offer.player_id)}</strong><span>${escapeHtml(label)} · ${formatMoney(offer.fee || 0)}</span><small>Revision ${escapeHtml(offer.revision_no || 1)} · ${escapeHtml(offer.contract_years || 3)}-season contract · ${escapeHtml(new Date(offer.updated_at || offer.created_at).toLocaleString('en-GB'))}</small>${revisionHistory(offer)}</div>
+    <div><strong>${escapeHtml(label)}</strong>${dealLegSummary(offer)}<small>Revision ${escapeHtml(offer.revision_no || 1)} · ${escapeHtml(new Date(offer.updated_at || offer.created_at).toLocaleString('en-GB'))}</small>${revisionHistory(offer)}</div>
     <div class="world-control-actions">${controls}</div>
   </article>`;
 }
@@ -359,30 +529,52 @@ function clientRequestId() {
 async function submitProposal() {
   const message = $('transferNegotiationMessage');
   const action = $('negotiationAction').value;
-  const playerId = $('negotiationPlayer').value;
-  if (!playerId) return;
   message.textContent = action === 'listing' ? 'Publishing transfer listing…' : 'Sending transfer offer…';
   $('submitNegotiation').disabled = true;
   try {
     if (action === 'listing') {
+      const playerId = $('negotiationPlayer').value;
+      if (!playerId) throw new Error('Choose a player to list');
       await request('/api/transfer-deals', { action: 'list', player_id: playerId, asking_fee: parseMoney($('negotiationFee').value), client_request_id: clientRequestId() });
       message.textContent = 'Player listed immediately. The listing is live now.';
     } else {
-      await request('/api/transfer-deals', {
-        action: 'offer',
-        player_id: playerId,
-        seller_club_id: $('negotiationClub').value,
-        fee: parseMoney($('negotiationFee').value),
-        contract_years: Number($('negotiationContractYears').value) || 3,
-        client_request_id: clientRequestId()
-      });
-      message.textContent = 'Offer sent immediately. You can withdraw it from Outgoing offers while it remains negotiable.';
+      const counterpartClubId = $('negotiationClub').value;
+      const legs = buildExchangeLegs();
+      const playerLegs = legs.filter((leg) => leg.leg_type === 'permanent_transfer');
+      if (!playerLegs.length) throw new Error('Add at least one player to the offer');
+      const incomingPlayers = playerLegs.filter((leg) => leg.from_club_id === counterpartClubId && leg.to_club_id === state?.club_id);
+      const outgoingPlayers = playerLegs.filter((leg) => leg.from_club_id === state?.club_id);
+      const cashFromOther = legs.find((leg) => leg.leg_type === 'cash' && leg.from_club_id === counterpartClubId);
+      const cashFromYou = legs.find((leg) => leg.leg_type === 'cash' && leg.from_club_id === state?.club_id);
+      const isStraightTransfer = incomingPlayers.length === 1 && outgoingPlayers.length === 0 && !cashFromOther;
+      if (isStraightTransfer) {
+        await request('/api/transfer-deals', {
+          action: 'offer',
+          player_id: incomingPlayers[0].player_id,
+          seller_club_id: counterpartClubId,
+          fee: cashFromYou?.amount || 0,
+          contract_years: incomingPlayers[0].contract_years || 3,
+          client_request_id: clientRequestId()
+        });
+        message.textContent = 'Offer sent immediately. You can withdraw it from Outgoing offers while it remains negotiable.';
+      } else {
+        const result = await request('/api/transfer-deals', {
+          action: 'exchange_offer',
+          counterpart_club_id: counterpartClubId,
+          legs,
+          client_request_id: clientRequestId()
+        });
+        message.textContent = result.message || 'Multi-player exchange offer recorded.';
+      }
+      exchangeDraft = { receive: [], offer: [] };
+      $('receiveCash').value = '£0';
+      $('offerCash').value = '£0';
     }
     await refresh({ force: true });
   } catch (error) {
     message.textContent = error.message;
   } finally {
-    renderPlayerOptions();
+    renderComposer();
   }
 }
 
