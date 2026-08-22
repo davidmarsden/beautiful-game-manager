@@ -266,8 +266,22 @@ function counterLegsFromComposer() {
   return legs;
 }
 
+function assertOneSidedCounterConfirmed() {
+  const panel = document.getElementById('transferDealReview');
+  if (panel?.dataset.oneSided !== 'true') return;
+  if (document.getElementById('confirmOneSidedDeal')?.checked) return;
+  panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  throw new Error('This counter-offer is one-sided. Review the summary and confirm that you intend to send it.');
+}
+
 async function sendCounter() {
   const submit = document.getElementById('submitNegotiation');
+  try {
+    assertOneSidedCounterConfirmed();
+  } catch (error) {
+    transferMessage(error.message);
+    throw error;
+  }
   if (submit) submit.disabled = true;
   transferMessage('Sending complete counter-offer revision…');
   try {
