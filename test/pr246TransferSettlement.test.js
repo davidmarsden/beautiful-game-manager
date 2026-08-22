@@ -80,7 +80,7 @@ test('manager UI explains grace and binding deadlines and preserves unilateral g
   assert.match(source, /Unilateral cancellation available until/);
   assert.match(source, /Deal binding · awaiting completion/);
   assert.match(source, /cancellation now requires mutual consent/);
-  assert.match(source, /data-agreed-change-action=\"cancel_in_grace\"/);
+  assert.match(source, /data-agreed-change-action="cancel_in_grace"/);
   assert.match(source, /Cancelling during mistake grace/);
   assert.match(pendingFix, /Deal agreed · mistake grace/);
   assert.match(pendingFix, /data-agreed-change-action|agreedChangeAction/);
