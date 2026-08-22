@@ -95,6 +95,7 @@ function renderReview() {
   ensurePickerHelp($('receivePlayer'));
   ensurePickerHelp($('offerPlayer'));
 
+  const confirmedBefore = Boolean($('confirmOneSidedDeal')?.checked);
   const { receive, offer } = currentDealSides();
   panel.replaceChildren();
 
@@ -121,6 +122,7 @@ function renderReview() {
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.id = 'confirmOneSidedDeal';
+    checkbox.checked = confirmedBefore;
     label.append(checkbox, document.createTextNode(' I understand this is a one-sided deal and still want to send it.'));
     warning.append(label);
     panel.append(warning);
@@ -146,7 +148,7 @@ function suppressLegacyComplexAmendments() {
   for (const card of document.querySelectorAll('[data-first-class-deal]')) {
     const sides = card.querySelectorAll('.transfer-exchange-summary-side');
     const playerRows = [...sides].flatMap((side) => [...side.querySelectorAll('small')])
-      .filter((node) => !/^£/.test(String(node.textContent || '').trim()));
+      .filter((node) => !/^£/.test(String(node.textContent || '').trim()) && String(node.textContent || '').trim() !== 'Nothing');
     if (playerRows.length <= 1) continue;
     const controls = card.querySelector('.first-class-response-controls');
     const amendment = controls?.querySelector('.transfer-counter-controls');
@@ -170,12 +172,17 @@ function scheduleRefresh() {
   reviewTimer = setTimeout(refreshHardening, 0);
 }
 
+function mutationComesFromReview(mutation) {
+  const panel = $('transferDealReview');
+  return Boolean(panel && (mutation.target === panel || panel.contains(mutation.target)));
+}
+
 document.addEventListener('click', guardSubmission, true);
 document.addEventListener('click', (event) => {
   if (event.target.closest('#addReceivePlayer, #addOfferPlayer, [data-remove-exchange-player]')) setTimeout(scheduleRefresh, 0);
 });
 document.addEventListener('change', (event) => {
-  if (event.target.closest('#negotiationAction, #negotiationClub, #receiveCash, #offerCash, [data-exchange-contract-player]')) scheduleRefresh();
+  if (event.target.closest('#negotiationAction, #negotiationClub, #receiveCash, #offerCash, [data-exchange-contract-player], #confirmOneSidedDeal')) scheduleRefresh();
 });
 document.addEventListener('input', (event) => {
   if (event.target.closest('#receiveCash, #offerCash')) scheduleRefresh();
@@ -185,6 +192,6 @@ document.addEventListener('tbg:view-changed', (event) => {
   if (event.detail?.view === 'transfers') scheduleRefresh();
 });
 new MutationObserver((mutations) => {
-  if (mutations.some((mutation) => mutation.addedNodes?.length || mutation.removedNodes?.length)) scheduleRefresh();
+  if (mutations.some((mutation) => !mutationComesFromReview(mutation) && (mutation.addedNodes?.length || mutation.removedNodes?.length))) scheduleRefresh();
 }).observe(document.documentElement, { childList: true, subtree: true });
 scheduleRefresh();
