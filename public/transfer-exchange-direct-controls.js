@@ -1,5 +1,6 @@
 let directScanTimer = null;
 let counterReadyObserver = null;
+let activeCounterButton = null;
 
 function displayedRevision(card) {
   for (const node of card.querySelectorAll('small')) {
@@ -18,6 +19,18 @@ function counterpartName(card) {
   return label.replace(/^Offer\s+(?:from|to)\s+/i, '').trim();
 }
 
+function appendEmptyDealSide(summaryHost, name) {
+  const side = document.createElement('div');
+  side.className = 'transfer-exchange-summary-side';
+  side.dataset.emptyDealSide = 'true';
+  const heading = document.createElement('strong');
+  heading.textContent = `${name} gives`;
+  const nothing = document.createElement('small');
+  nothing.textContent = 'Nothing';
+  side.append(heading, nothing);
+  summaryHost.append(side);
+}
+
 function ensureBothDealSides(card) {
   const summaries = [...card.querySelectorAll('.transfer-exchange-summary-side')];
   if (!summaries.length) return;
@@ -28,11 +41,7 @@ function ensureBothDealSides(card) {
   if (!summaryHost) return;
   for (const name of [own, other]) {
     if (!name || names.has(name)) continue;
-    const side = document.createElement('div');
-    side.className = 'transfer-exchange-summary-side';
-    side.dataset.emptyDealSide = 'true';
-    side.innerHTML = `<strong>${name} gives</strong><small>Nothing</small>`;
-    summaryHost.append(side);
+    appendEmptyDealSide(summaryHost, name);
     names.add(name);
   }
 }
@@ -61,8 +70,66 @@ function unlockLockedExchangeCards() {
   }
 }
 
+function resetCounterLoading(button) {
+  if (!button) return;
+  button.textContent = button.dataset.originalText || 'Counter';
+  button.removeAttribute('aria-busy');
+}
+
+function counterEditorReady({ revisionNo, expectedCounterpart }) {
+  const submit = document.getElementById('submitNegotiation');
+  const message = String(document.getElementById('transferNegotiationMessage')?.textContent || '').trim();
+  const club = document.getElementById('negotiationClub');
+  const selectedCounterpart = String(club?.selectedOptions?.[0]?.textContent || '').trim();
+  return submit?.textContent?.trim() === 'Send counter-offer'
+    && message.startsWith(`Editing counter-offer to revision ${revisionNo}.`)
+    && (!expectedCounterpart || selectedCounterpart === expectedCounterpart);
+}
+
+function finalizeCounterEditor(button, revisionNo, expectedCounterpart) {
+  if (!counterEditorReady({ revisionNo, expectedCounterpart })) return false;
+  counterReadyObserver?.disconnect();
+  counterReadyObserver = null;
+  activeCounterButton = null;
+  resetCounterLoading(button);
+  const composer = document.querySelector('.transfer-negotiation-compose');
+  const heading = composer?.querySelector('h3');
+  const club = document.getElementById('negotiationClub');
+  const other = String(club?.selectedOptions?.[0]?.textContent || '').trim();
+  if (heading) heading.textContent = other ? `Counter-offer to ${other}` : 'Counter-offer';
+  let banner = document.getElementById('exchangeCounterEditorBanner');
+  if (!banner && composer && heading) {
+    banner = document.createElement('p');
+    banner.id = 'exchangeCounterEditorBanner';
+    banner.className = 'world-control-status';
+    banner.tabIndex = -1;
+    heading.after(banner);
+  }
+  if (banner) banner.textContent = `Editing Revision ${revisionNo} · change any players, contracts or cash below`;
+  composer?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  banner?.focus?.({ preventScroll: true });
+  return true;
+}
+
+function watchForCounterEditor(button, revisionNo, expectedCounterpart) {
+  counterReadyObserver?.disconnect();
+  counterReadyObserver = new MutationObserver(() => finalizeCounterEditor(button, revisionNo, expectedCounterpart));
+  counterReadyObserver.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  setTimeout(() => {
+    if (activeCounterButton !== button) return;
+    counterReadyObserver?.disconnect();
+    counterReadyObserver = null;
+    activeCounterButton = null;
+    resetCounterLoading(button);
+  }, 10_000);
+}
+
 function showCounterLoading(button) {
   const revisionNo = Number(button.dataset.revisionNo || 0);
+  const card = button.closest('[data-first-class-deal]');
+  const expectedCounterpart = counterpartName(card);
+  if (activeCounterButton && activeCounterButton !== button) resetCounterLoading(activeCounterButton);
+  activeCounterButton = button;
   button.dataset.originalText = button.dataset.originalText || button.textContent;
   button.textContent = 'Loading counter…';
   button.setAttribute('aria-busy', 'true');
@@ -71,47 +138,7 @@ function showCounterLoading(button) {
     ? `Loading Revision ${revisionNo} into the counter-offer editor…`
     : 'Loading counter-offer editor…';
   document.querySelector('.transfer-negotiation-compose')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  watchForCounterEditor(button, revisionNo);
-}
-
-function watchForCounterEditor(button, revisionNo) {
-  counterReadyObserver?.disconnect();
-  const finish = () => {
-    const submit = document.getElementById('submitNegotiation');
-    if (submit?.textContent?.trim() !== 'Send counter-offer') return false;
-    counterReadyObserver?.disconnect();
-    counterReadyObserver = null;
-    button.textContent = button.dataset.originalText || 'Counter';
-    button.removeAttribute('aria-busy');
-    const composer = document.querySelector('.transfer-negotiation-compose');
-    const heading = composer?.querySelector('h3');
-    const club = document.getElementById('negotiationClub');
-    const other = String(club?.selectedOptions?.[0]?.textContent || '').trim();
-    if (heading) heading.textContent = other ? `Counter-offer to ${other}` : 'Counter-offer';
-    let banner = document.getElementById('exchangeCounterEditorBanner');
-    if (!banner && composer && heading) {
-      banner = document.createElement('p');
-      banner.id = 'exchangeCounterEditorBanner';
-      banner.className = 'world-control-status';
-      heading.after(banner);
-    }
-    if (banner) banner.textContent = revisionNo
-      ? `Editing Revision ${revisionNo} · change any players, contracts or cash below`
-      : 'Editing counter-offer · change any players, contracts or cash below';
-    composer?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    banner?.focus?.({ preventScroll: true });
-    return true;
-  };
-  if (finish()) return;
-  counterReadyObserver = new MutationObserver(() => finish());
-  counterReadyObserver.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
-  setTimeout(() => {
-    if (!counterReadyObserver) return;
-    counterReadyObserver.disconnect();
-    counterReadyObserver = null;
-    button.textContent = button.dataset.originalText || 'Counter';
-    button.removeAttribute('aria-busy');
-  }, 10_000);
+  watchForCounterEditor(button, revisionNo, expectedCounterpart);
 }
 
 function scheduleDirectScan() {
@@ -119,7 +146,7 @@ function scheduleDirectScan() {
   directScanTimer = setTimeout(unlockLockedExchangeCards, 0);
 }
 
-document.addEventListener('pointerdown', (event) => {
+document.addEventListener('click', (event) => {
   const button = event.target.closest('[data-exchange-response="counter"]');
   if (button) showCounterLoading(button);
 }, true);
