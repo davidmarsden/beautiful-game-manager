@@ -1,10 +1,11 @@
 const parseMoney = (value) => Math.max(0, Number(String(value ?? '').replace(/[^0-9.-]/g, '')) || 0);
 const formatMoney = (value) => `£${parseMoney(value).toLocaleString('en-GB')}`;
 
-let marketCache = null;
-let marketPromise = null;
+let exchangeCache = null;
+let exchangePromise = null;
 let counterMode = null;
 let scanTimer = null;
+let reloadPending = false;
 
 function storedAccessToken() {
   for (let index = 0; index < localStorage.length; index += 1) {
@@ -36,21 +37,20 @@ async function api(path, body = null) {
   return data;
 }
 
-async function loadMarket({ force = false } = {}) {
-  if (!force && marketCache) return marketCache;
-  if (!force && marketPromise) return marketPromise;
-  marketPromise = api('/api/transfer-deals')
+async function loadExchangeState({ force = false } = {}) {
+  if (!force && exchangeCache) return exchangeCache;
+  if (!force && exchangePromise) return exchangePromise;
+  exchangePromise = api('/api/transfer-exchange-response')
     .then((result) => {
-      marketCache = result;
+      exchangeCache = result;
       return result;
     })
-    .finally(() => { marketPromise = null; });
-  return marketPromise;
+    .finally(() => { exchangePromise = null; });
+  return exchangePromise;
 }
 
-function offerForDeal(market, dealId) {
-  return [...(market?.incoming_offers || []), ...(market?.outgoing_offers || [])]
-    .find((offer) => String(offer.deal_id) === String(dealId));
+function exchangeForDeal(snapshot, dealId) {
+  return (snapshot?.exchanges || []).find((offer) => String(offer.deal_id) === String(dealId));
 }
 
 function transferMessage(text) {
@@ -58,28 +58,50 @@ function transferMessage(text) {
   if (node) node.textContent = text;
 }
 
-function lockedExchangeCards() {
+function candidateExchangeCards() {
   return [...document.querySelectorAll('[data-first-class-deal]')].filter((card) =>
     !card.dataset.exchangeResponseUnlocked
-    && /response locked until atomic settlement is deployed/i.test(card.textContent || '')
+    && Boolean(card.querySelector('[data-deal-response]'))
   );
 }
 
+function displayedRevision(card) {
+  for (const node of card.querySelectorAll('small')) {
+    const match = String(node.textContent || '').trim().match(/^Revision\s+(\d+)\b/i);
+    if (match) return Number(match[1]);
+  }
+  return null;
+}
+
+function refreshStaleCard() {
+  if (reloadPending) return;
+  reloadPending = true;
+  transferMessage('This transfer changed since it was displayed. Refreshing the latest revision before you can respond…');
+  setTimeout(() => window.location.reload(), 80);
+}
+
 async function unlockVisibleExchangeCards() {
-  const cards = lockedExchangeCards();
+  const cards = candidateExchangeCards();
   if (!cards.length) return;
-  const market = await loadMarket().catch(() => null);
-  if (!market) return;
+  const snapshot = await loadExchangeState().catch(() => null);
+  if (!snapshot) return;
 
   for (const card of cards) {
     const dealId = card.dataset.firstClassDeal;
-    const offer = offerForDeal(market, dealId);
-    if (!offer?.requires_action) continue;
+    const offer = exchangeForDeal(snapshot, dealId);
+    if (!offer) continue;
+
+    const revisionNo = Number(offer.revision_no || 0);
+    const cardRevisionNo = displayedRevision(card);
+    if (!revisionNo || cardRevisionNo !== revisionNo) {
+      refreshStaleCard();
+      return;
+    }
+
     const controls = card.querySelector('.first-class-response-controls');
     if (!controls) continue;
-    const revisionNo = Number(offer.revision_no || 1);
     controls.innerHTML = `
-      <small><strong>Multi-player exchange</strong> · respond to exact revision ${revisionNo}</small>
+      <small><strong>Exchange</strong> · respond to exact revision ${revisionNo}</small>
       <div class="world-control-actions transfer-exchange-response-actions">
         <button type="button" class="primary-action" data-exchange-response="accept" data-deal-id="${dealId}" data-revision-no="${revisionNo}">Accept</button>
         <button type="button" data-exchange-response="counter" data-deal-id="${dealId}" data-revision-no="${revisionNo}">Counter</button>
@@ -136,10 +158,14 @@ function ensureCancelCounterButton() {
 }
 
 async function beginCounter(dealId, revisionNo) {
-  const market = await loadMarket({ force: true });
-  const offer = offerForDeal(market, dealId);
+  const snapshot = await loadExchangeState({ force: true });
+  const offer = exchangeForDeal(snapshot, dealId);
   if (!offer) throw new Error('This exchange revision is no longer available');
-  const ownClubId = String(market.club_id || '');
+  if (Number(offer.revision_no) !== Number(revisionNo)) {
+    refreshStaleCard();
+    throw new Error('This exchange changed before the counter editor opened. Refreshing the latest revision.');
+  }
+  const ownClubId = String(snapshot.club_id || '');
   const counterpartClubId = counterpartFromLegs(offer, ownClubId);
   if (!ownClubId || !counterpartClubId) throw new Error('Could not resolve the two clubs in this exchange');
 
@@ -223,7 +249,7 @@ async function sendCounter() {
       client_request_id: clientRequestId()
     });
     transferMessage(result.message || 'Exchange counter-offer sent.');
-    marketCache = null;
+    exchangeCache = null;
     setTimeout(() => window.location.reload(), 250);
   } catch (error) {
     transferMessage(error.message);
@@ -240,7 +266,18 @@ async function respond(button) {
     return;
   }
 
+  const latest = await loadExchangeState({ force: true });
+  const offer = exchangeForDeal(latest, dealId);
+  if (!offer || Number(offer.revision_no) !== revisionNo) {
+    refreshStaleCard();
+    throw new Error('This exchange changed before your response was submitted. Refreshing the latest revision.');
+  }
+
   const card = button.closest('[data-first-class-deal]');
+  if (displayedRevision(card) !== revisionNo) {
+    refreshStaleCard();
+    throw new Error('The displayed transfer terms are stale. Refreshing the latest revision.');
+  }
   card?.querySelectorAll('[data-exchange-response]').forEach((control) => { control.disabled = true; });
   transferMessage(action === 'accept' ? 'Accepting exact exchange revision…' : 'Declining exchange offer…');
   try {
@@ -251,7 +288,7 @@ async function respond(button) {
       client_request_id: clientRequestId()
     });
     transferMessage(result.message || 'Exchange negotiation updated.');
-    marketCache = null;
+    exchangeCache = null;
     setTimeout(() => window.location.reload(), 250);
   } catch (error) {
     transferMessage(error.message);
@@ -279,7 +316,7 @@ document.addEventListener('click', (event) => {
 window.addEventListener('tbg:portal-rendered', scheduleScan);
 document.addEventListener('tbg:view-changed', (event) => {
   if (event.detail?.view === 'transfers') {
-    marketCache = null;
+    exchangeCache = null;
     scheduleScan();
   }
 });
