@@ -28,7 +28,8 @@ test('#272 exchange offers preserve per-player contract terms and allow many pla
   assert.match(sql, /from_club_id_value not in \(club_id_value, p_counterpart_club_id\)/i);
   assert.match(sql, /to_club_id_value not in \(club_id_value, p_counterpart_club_id\)/i);
   assert.doesNotMatch(sql, /player_leg_count\s*>\s*2/i);
-  assert.doesNotMatch(sql, /limit\s+1[\s\S]*permanent_transfer/i);
+  assert.match(sql, /player_leg_count := player_leg_count \+ 1/i);
+  assert.match(sql, /for leg_value in select value from jsonb_array_elements\(normalized_legs\)[\s\S]*insert into public\.transfer_deal_legs/i);
 });
 
 test('#272 exposes additive current-revision leg projection without replacing the straight-transfer read model', async () => {
