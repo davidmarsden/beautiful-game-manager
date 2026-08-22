@@ -1,6 +1,10 @@
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
-const PLAYER_RATING_HISTORY_URL = process.env.TBG_PLAYER_RATING_HISTORY_URL || 'https://raw.githubusercontent.com/davidmarsden/beautiful-game-data/main/derived/player-changes/player-rating-history.json';
+const PLAYER_RATING_HISTORY_URLS = [
+  process.env.TBG_PLAYER_RATING_HISTORY_URL,
+  'https://raw.githubusercontent.com/davidmarsden/beautiful-game-data/main/derived/player-changes/player-rating-history.json',
+  'https://davidmarsden.github.io/beautiful-game-data/derived/player-changes/player-rating-history.json'
+].filter(Boolean);
 const CACHE_MS = Math.max(5000, Number(process.env.TBG_PLAYER_RATING_HISTORY_CACHE_MS) || 30000);
 
 let historyPromise = null;
@@ -23,15 +27,28 @@ async function requireManager(token) {
   if (!profiles[0]) throw new Error('Manager profile has not been created yet');
 }
 
+async function fetchRatingHistory() {
+  let lastError = null;
+  for (const url of PLAYER_RATING_HISTORY_URLS) {
+    try {
+      const response = await fetch(url, { headers: { accept: 'application/json', 'cache-control': 'no-cache' }, cache: 'no-store' });
+      if (response.status === 404) continue;
+      if (!response.ok) throw new Error(`Player rating history unavailable from ${url} (HTTP ${response.status})`);
+      const payload = await response.json();
+      if (!payload || typeof payload !== 'object' || typeof payload.players !== 'object') throw new Error(`Player rating history from ${url} is malformed`);
+      return payload;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (lastError) throw lastError;
+  throw new Error('Player rating history unavailable from all configured sources');
+}
+
 async function ratingHistory() {
   if (!historyPromise || Date.now() - historyLoadedAt >= CACHE_MS) {
     historyLoadedAt = Date.now();
-    historyPromise = fetch(PLAYER_RATING_HISTORY_URL, { headers: { accept: 'application/json', 'cache-control': 'no-cache' }, cache: 'no-store' })
-      .then(async (response) => {
-        if (response.status === 404) return { version: 'tbg-player-rating-history-v1', player_count: 0, players: {} };
-        if (!response.ok) throw new Error(`Player rating history unavailable (HTTP ${response.status})`);
-        return response.json();
-      })
+    historyPromise = fetchRatingHistory()
       .catch((error) => { historyPromise = null; historyLoadedAt = 0; throw error; });
   }
   return historyPromise;
