@@ -50,6 +50,22 @@ test('#272 response rechecks the authoritative revision immediately before accep
   assert.match(source, /data-exchange-response=\"decline\"/);
 });
 
+test('#272 exchange overlay reuses the portal-wide bearer token bridge before storage fallback', async () => {
+  const source = await read('public/transfer-exchange-response-ui.js');
+  const bridge = await read('public/portal-auth-bridge.js');
+  assert.match(bridge, /window\.tbgPortalAuthorization/);
+  assert.match(source, /window\.tbgPortalAuthorization/);
+  assert.match(source, /startsWith\('bearer '\)/i);
+  assert.match(source, /localStorage/);
+});
+
+test('#272 exchange overlay surfaces bootstrap/auth failures instead of silently leaving stale locked controls', async () => {
+  const source = await read('public/transfer-exchange-response-ui.js');
+  assert.match(source, /loadExchangeState\(\)\.catch\(\(error\) => \{/);
+  assert.match(source, /transferMessage\(error\.message\)/);
+  assert.match(source, /unlockVisibleExchangeCards\(\)\.catch\(\(error\) => transferMessage\(error\.message\)\)/);
+});
+
 test('#272 Manager loader includes the exchange response UI module', async () => {
   const loader = await read('public/internal-profile-links.js');
   assert.match(loader, /transfer-exchange-response-ui\.js/);
