@@ -6,6 +6,7 @@ import './free-agent-offer-ui.js';
 import './external-market-ui.js';
 import './rating-history-enhancements.js';
 import './transfer-exchange-response-ui.js';
+import './transfer-exchange-direct-controls.js';
 import { openTbgPlayerProfile } from './player-profile.js';
 
 let historyDirectory = null;

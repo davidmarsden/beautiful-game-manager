@@ -69,7 +69,18 @@ test('#272 exchange bootstrap failures are visible but retry with bounded backof
   assert.match(source, /clearBootstrapRetry\(\)/);
 });
 
-test('#272 Manager loader includes the exchange response UI module', async () => {
+test('#272 locked multi-player cards get direct visible controls before any exchange bootstrap succeeds', async () => {
+  const source = await read('public/transfer-exchange-direct-controls.js');
+  assert.match(source, /response locked until atomic settlement is deployed/i);
+  assert.match(source, /displayedRevision\(card\)/);
+  assert.match(source, /data-exchange-response=\"accept\"/);
+  assert.match(source, /data-exchange-response=\"counter\"/);
+  assert.match(source, /data-exchange-response=\"decline\"/);
+  assert.doesNotMatch(source, /\/api\/transfer-exchange-response/);
+});
+
+test('#272 Manager loader includes both exchange response and direct-control modules', async () => {
   const loader = await read('public/internal-profile-links.js');
   assert.match(loader, /transfer-exchange-response-ui\.js/);
+  assert.match(loader, /transfer-exchange-direct-controls\.js/);
 });
