@@ -103,6 +103,27 @@ tbody tr:hover {
   background-color: rgba(245, 215, 221, .72);
 }
 
+/* Player Updates follows the same Football Pink surface hierarchy as World. */
+#updatesView .player-updates-hero,
+#updatesView .player-updates-section {
+  color: var(--tbg-colour-ink);
+  background: var(--tbg-surface-card);
+  border-color: var(--portal-border);
+}
+
+#updatesView .player-updates-section > header,
+#updatesView .player-update-card {
+  border-color: var(--portal-border);
+}
+
+#updatesView .player-updates-pill {
+  background: var(--tbg-colour-workspace-raised);
+}
+
+#updatesView .player-update-card:nth-child(even) {
+  background: rgba(231, 168, 182, .14);
+}
+
 @media (max-width: 600px) {
   td:first-child,
   .tbg-table td:first-child {
