@@ -1,3 +1,5 @@
+import './transfer-deal-composer-hardening.js';
+
 let directScanTimer = null;
 let counterReadyObserver = null;
 let activeCounterButton = null;
