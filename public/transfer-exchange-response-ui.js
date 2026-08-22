@@ -5,7 +5,10 @@ let exchangeCache = null;
 let exchangePromise = null;
 let counterMode = null;
 let scanTimer = null;
+let retryTimer = null;
+let bootstrapFailures = 0;
 let reloadPending = false;
+const BOOTSTRAP_RETRY_DELAYS_MS = [1_000, 5_000, 15_000];
 
 function storedAccessToken() {
   const bridged = String(window.tbgPortalAuthorization || '').trim();
@@ -57,7 +60,7 @@ function exchangeForDeal(snapshot, dealId) {
 
 function transferMessage(text) {
   const node = document.getElementById('transferNegotiationMessage');
-  if (node) node.textContent = text;
+  if (node && node.textContent !== text) node.textContent = text;
 }
 
 function candidateExchangeCards() {
@@ -82,14 +85,36 @@ function refreshStaleCard() {
   setTimeout(() => window.location.reload(), 80);
 }
 
+function clearBootstrapRetry() {
+  clearTimeout(retryTimer);
+  retryTimer = null;
+  bootstrapFailures = 0;
+}
+
+function scheduleBootstrapRetry() {
+  clearTimeout(retryTimer);
+  retryTimer = null;
+  if (bootstrapFailures >= BOOTSTRAP_RETRY_DELAYS_MS.length) return;
+  const delay = BOOTSTRAP_RETRY_DELAYS_MS[bootstrapFailures];
+  bootstrapFailures += 1;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    scheduleScan();
+  }, delay);
+}
+
 async function unlockVisibleExchangeCards() {
   const cards = candidateExchangeCards();
   if (!cards.length) return;
-  const snapshot = await loadExchangeState().catch((error) => {
+  let snapshot;
+  try {
+    snapshot = await loadExchangeState();
+    clearBootstrapRetry();
+  } catch (error) {
     transferMessage(error.message);
-    return null;
-  });
-  if (!snapshot) return;
+    scheduleBootstrapRetry();
+    return;
+  }
 
   for (const card of cards) {
     const dealId = card.dataset.firstClassDeal;
@@ -322,9 +347,14 @@ window.addEventListener('tbg:portal-rendered', scheduleScan);
 document.addEventListener('tbg:view-changed', (event) => {
   if (event.detail?.view === 'transfers') {
     exchangeCache = null;
+    clearBootstrapRetry();
     scheduleScan();
   }
 });
 
-new MutationObserver(scheduleScan).observe(document.documentElement, { childList: true, subtree: true });
+new MutationObserver((mutations) => {
+  const status = document.getElementById('transferNegotiationMessage');
+  const relevant = mutations.some((mutation) => status ? !status.contains(mutation.target) && mutation.target !== status : true);
+  if (relevant) scheduleScan();
+}).observe(document.documentElement, { childList: true, subtree: true });
 scheduleScan();
