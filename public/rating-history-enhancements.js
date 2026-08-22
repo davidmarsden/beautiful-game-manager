@@ -49,17 +49,21 @@ function playerIdFromLink(link, squadByName) {
 }
 
 function changeBadge(change) {
-  if (!change) return '';
+  if (!change) return null;
   const delta = Number(change.delta);
   const marker = delta > 0 ? `↑${Math.abs(delta)}` : delta < 0 ? `↓${Math.abs(delta)}` : '→0';
   const date = new Date(change.published_at || change.slot);
-  const when = Number.isNaN(date.getTime()) ? (change.slot || '') : date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-  return `<span class="ability-change ${delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat'}" title="${change.before} → ${change.after} · ${when}">${marker}</span>`;
+  const when = Number.isNaN(date.getTime()) ? String(change.slot || '') : date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  const badge = document.createElement('span');
+  badge.className = `ability-change ${delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat'}`;
+  badge.title = `${String(change.before ?? '—')} → ${String(change.after ?? '—')} · ${when}`;
+  badge.textContent = marker;
+  return badge;
 }
 
-function decorateSquadRows(squad = []) {
+function decorateSquadRows(squad = [], scope = document) {
   const squadByName = new Map(squad.map((player) => [String(player.display_name || player.player_name || player.canonical_name || '').trim().toLowerCase(), player.tbg_player_id || player.player_id || '']));
-  document.querySelectorAll('#squadRows tr, [data-squad-rows] tr').forEach((row) => {
+  scope.querySelectorAll('#squadRows tr, [data-squad-rows] tr').forEach((row) => {
     if (row.classList.contains('position-separator')) return;
     const link = row.querySelector('.player-link');
     const cells = row.querySelectorAll('td');
@@ -68,21 +72,35 @@ function decorateSquadRows(squad = []) {
     if (playerId) link.dataset.tbgPlayerId = playerId;
     const change = historyByPlayer[playerId]?.latest_change;
     cells[4].querySelector('.ability-change')?.remove();
-    if (change) cells[4].insertAdjacentHTML('beforeend', ` ${changeBadge(change)}`);
+    const badge = changeBadge(change);
+    if (badge) {
+      cells[4].append(document.createTextNode(' '));
+      cells[4].append(badge);
+    }
   });
 }
 
 async function refresh(detail = {}) {
   await loadHistory();
-  requestAnimationFrame(() => decorateSquadRows(detail.squad || detail.players || []));
+  const scope = detail.root instanceof Element ? detail.root : document;
+  requestAnimationFrame(() => decorateSquadRows(detail.squad || detail.players || [], scope));
 }
 
 window.addEventListener('tbg:portal-rendered', (event) => refresh(event.detail || {}));
+window.addEventListener('tbg:read-only-squad-rendered', (event) => refresh(event.detail || {}));
+
 ['registrationFilter', 'squadSearch', 'positionFilter', 'availabilityFilter'].forEach((id) => {
   document.getElementById(id)?.addEventListener(id === 'squadSearch' ? 'input' : 'change', () => requestAnimationFrame(() => decorateSquadRows()));
 });
 document.getElementById('squadTable')?.addEventListener('click', (event) => {
   if (event.target.closest('th[data-sort]')) requestAnimationFrame(() => decorateSquadRows());
+});
+
+document.addEventListener('input', (event) => {
+  if (event.target.matches('[data-squad-search]')) requestAnimationFrame(() => decorateSquadRows());
+});
+document.addEventListener('change', (event) => {
+  if (event.target.matches('[data-squad-view], [data-position-filter], [data-availability-filter]')) requestAnimationFrame(() => decorateSquadRows());
 });
 
 if (!document.getElementById('portal')?.hidden) refresh();
