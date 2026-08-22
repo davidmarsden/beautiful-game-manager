@@ -89,13 +89,49 @@ function normalizeCounterLegs(rawLegs) {
   });
 }
 
+async function exchangeSnapshot(current) {
+  const exchangeRows = await serverSupabase('/rest/v1/rpc/get_manager_transfer_exchange_legs_for_user', {
+    method: 'POST',
+    body: JSON.stringify({ p_user_id: current.user.id, p_world_id: current.appointment.world_id })
+  });
+  const rows = Array.isArray(exchangeRows) ? exchangeRows : [];
+  if (!rows.length) {
+    return { world_id: current.appointment.world_id, club_id: current.appointment.club_id, exchanges: [] };
+  }
+
+  const dealIds = [...new Set(rows.map((row) => String(row?.deal_id || '')).filter(Boolean))];
+  if (!dealIds.length) {
+    return { world_id: current.appointment.world_id, club_id: current.appointment.club_id, exchanges: [] };
+  }
+  const revisions = await serverSupabase(
+    `/rest/v1/transfer_deal_revisions?deal_id=in.(${dealIds.join(',')})&select=deal_id,revision_no,summary`
+  );
+  const byRevision = new Map((Array.isArray(revisions) ? revisions : []).map((revision) => [
+    `${revision.deal_id}:${revision.revision_no}`,
+    String(revision.summary?.type || '')
+  ]));
+  const exchanges = rows.map((row) => {
+    const revisionType = byRevision.get(`${row.deal_id}:${row.revision_no}`) || '';
+    return { ...row, revision_type: revisionType };
+  }).filter((row) => ['two_club_exchange_offer', 'two_club_exchange_counter'].includes(row.revision_type));
+
+  return {
+    world_id: current.appointment.world_id,
+    club_id: current.appointment.club_id,
+    exchanges
+  };
+}
+
 export default async (request) => {
   try {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured' }, 503);
-    if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
     const token = bearerToken(request);
     if (!token) return json({ error: 'Authentication required' }, 401);
     const current = await identity(token);
+
+    if (request.method === 'GET') return json(await exchangeSnapshot(current));
+    if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+
     const body = await request.json().catch(() => ({}));
     const action = String(body.action || '').trim().toLowerCase();
     if (!['accept', 'decline', 'counter'].includes(action)) return json({ error: 'Response action must be accept, decline or counter' }, 400);
