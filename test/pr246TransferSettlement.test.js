@@ -49,7 +49,8 @@ test('settlement runner applies governed transfer on the canonical world clock a
   assert.match(source, /const at = new Date\(world\.clock\)\.toISOString\(\)/);
   assert.doesNotMatch(source, /const at = new Date\(\)\.toISOString\(\)/);
   assert.match(source, /buildWorldReadModel\(world\)/);
-  assert.match(source, /transferPlayer\(world\.squad_cycle/);
+  assert.match(source, /transferPlayersAtomically\(world\.squad_cycle/);
+  assert.doesNotMatch(source, /transferPlayer\(world\.squad_cycle/);
   assert.match(source, /apply_transfer_deal_settlement/);
   assert.match(source, /reconcileSettlement/);
   assert.match(source, /settlement_replacement_checksum/);
@@ -79,7 +80,7 @@ test('manager UI explains grace and binding deadlines and preserves unilateral g
   assert.match(source, /Unilateral cancellation available until/);
   assert.match(source, /Deal binding · awaiting completion/);
   assert.match(source, /cancellation now requires mutual consent/);
-  assert.match(source, /data-agreed-change-action="cancel_in_grace"/);
+  assert.match(source, /data-agreed-change-action=\"cancel_in_grace\"/);
   assert.match(source, /Cancelling during mistake grace/);
   assert.match(pendingFix, /Deal agreed · mistake grace/);
   assert.match(pendingFix, /data-agreed-change-action|agreedChangeAction/);
