@@ -150,7 +150,9 @@ export function transferPlayersAtomically(state, { legs, at } = {}) {
     };
     leg.to.player_ids.push(leg.playerId);
     leg.player.club_id = leg.toClubId;
-    if (oldContract) oldContract.status = 'renewed';
+    if (oldContract) {
+      state.contracts[oldContract.contract_id] = Object.freeze({ ...oldContract, status: 'renewed' });
+    }
     state.contracts[nextContract.contract_id] = nextContract;
     leg.player.contract_id = nextContract.contract_id;
     pushEvent(state, 'contract_renewed', atIso, {
