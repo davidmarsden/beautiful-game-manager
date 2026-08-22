@@ -25,9 +25,26 @@ test('#272 counter reuses the existing several-player composer and sends a compl
   assert.match(source, /Send counter-offer/);
 });
 
-test('#272 unlock is scoped to cards deliberately locked by the earlier atomic-settlement fence', async () => {
+test('#272 unlock is driven by authoritative exchange revision metadata, not legacy lock text', async () => {
   const source = await read('public/transfer-exchange-response-ui.js');
-  assert.match(source, /response locked until atomic settlement is deployed/i);
+  const endpoint = await read('netlify/functions/transfer-exchange-response.mjs');
+  assert.match(source, /loadExchangeState/);
+  assert.match(source, /exchangeForDeal/);
+  assert.match(source, /displayedRevision/);
+  assert.match(source, /cardRevisionNo !== revisionNo/);
+  assert.match(source, /window\.location\.reload\(\)/);
+  assert.doesNotMatch(source, /response locked until atomic settlement is deployed/i);
+  assert.match(endpoint, /request\.method === 'GET'/);
+  assert.match(endpoint, /two_club_exchange_offer/);
+  assert.match(endpoint, /two_club_exchange_counter/);
+  assert.match(endpoint, /revision_type/);
+});
+
+test('#272 response rechecks the authoritative revision immediately before accept or decline', async () => {
+  const source = await read('public/transfer-exchange-response-ui.js');
+  assert.match(source, /loadExchangeState\(\{ force: true \}\)/);
+  assert.match(source, /Number\(offer\.revision_no\) !== revisionNo/);
+  assert.match(source, /displayedRevision\(card\) !== revisionNo/);
   assert.match(source, /data-exchange-response=\"accept\"/);
   assert.match(source, /data-exchange-response=\"counter\"/);
   assert.match(source, /data-exchange-response=\"decline\"/);
