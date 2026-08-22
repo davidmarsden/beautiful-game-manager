@@ -57,14 +57,18 @@ test('transfer gateway accepts normalized exchange leg sets and keeps complex re
 
 test('complex-response safety is revision-intrinsic and fails closed when safety metadata is unavailable', async () => {
   const source = await readFile(endpointUrl, 'utf8');
-  assert.match(source, /async function currentDealSafety/);
-  assert.match(source, /transfer_deal_revisions[\s\S]*select=summary/);
-  assert.match(source, /revisionType:\s*String\(revision\.summary\?\.type \|\| ''\)/);
+  const helperMatch = source.match(/async function currentDealSafety\(current, dealId\) \{([\s\S]*?)\n\}\n\nfunction isComplexExchange/);
+  assert.ok(helperMatch, 'currentDealSafety helper should remain a distinct fail-closed boundary');
+  const helper = helperMatch[1];
+
+  assert.match(helper, /transfer_deal_revisions[\s\S]*select=summary/);
+  assert.match(helper, /revisionType:\s*String\(revision\.summary\?\.type \|\| ''\)/);
+  assert.doesNotMatch(helper, /\.catch\s*\(/);
+  assert.match(helper, /Transfer deal safety metadata is unavailable/);
+  assert.match(helper, /Transfer deal revision safety metadata is unavailable/);
+  assert.match(helper, /Transfer deal leg safety metadata is unavailable/);
+
   assert.match(source, /revisionType === 'two_club_exchange_offer'/);
-  assert.doesNotMatch(source, /currentDealSafety[\s\S]*\.catch\(\(\) => \[\]\)/);
-  assert.match(source, /Transfer deal safety metadata is unavailable/);
-  assert.match(source, /Transfer deal revision safety metadata is unavailable/);
-  assert.match(source, /Transfer deal leg safety metadata is unavailable/);
   assert.doesNotMatch(source, /leg\.from_club_id === ownClubId/);
 });
 
