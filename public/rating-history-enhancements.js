@@ -1,3 +1,10 @@
+if (!document.querySelector('link[href="./rating-history.css"]')) {
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = './rating-history.css';
+  document.head.append(link);
+}
+
 let historyPromise = null;
 let historyByPlayer = {};
 
