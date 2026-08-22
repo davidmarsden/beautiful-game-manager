@@ -14,6 +14,14 @@ test('Ability history endpoint consumes the governed player-indexed projection',
   assert.match(source, /cache-control': 'no-store/);
 });
 
+test('Ability history endpoint falls back to the published Pink Final projection when raw main has not committed it yet', async () => {
+  const source = await read('netlify/functions/player-rating-history.mjs');
+  assert.match(source, /raw\.githubusercontent\.com\/davidmarsden\/beautiful-game-data\/main\/derived\/player-changes\/player-rating-history\.json/);
+  assert.match(source, /davidmarsden\.github\.io\/beautiful-game-data\/derived\/player-changes\/player-rating-history\.json/);
+  assert.match(source, /if \(response\.status === 404\) continue/);
+  assert.doesNotMatch(source, /response\.status === 404\) return \{ version: 'tbg-player-rating-history-v1'/);
+});
+
 test('player profile keeps governed Ability history distinct from match statistics', async () => {
   const source = await read('public/player-profile.js');
   assert.match(source, /data-player-tab="statistics"/);
