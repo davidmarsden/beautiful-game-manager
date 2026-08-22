@@ -126,3 +126,12 @@ test('#272 exchange response SQL creates a complete replacement revision and exa
   assert.match(sql, /insert into public\.transfer_deal_approvals/);
   assert.match(sql, /approvals_count = participant_count/);
 });
+
+test('#272 exchange response gateway uses only the exchange revision responder and complete counter legs', async () => {
+  const source = await readFile(new URL('../netlify/functions/transfer-exchange-response.mjs', import.meta.url), 'utf8');
+  assert.match(source, /respond_manager_transfer_exchange_deal_for_user/);
+  assert.match(source, /normalizeCounterLegs/);
+  assert.match(source, /p_revision_no:\s*revisionNo/);
+  assert.match(source, /p_legs:\s*legs/);
+  assert.doesNotMatch(source, /respond_manager_transfer_deal_for_user/);
+});
