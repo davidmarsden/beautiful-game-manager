@@ -1,4 +1,4 @@
-.transfer-negotiation-workspace{margin-top:0;background:var(--tbg-colour-workspace,rgba(239,188,199,.94))}
+.world-control-card.transfer-negotiation-workspace{margin-top:0;background:var(--tbg-colour-workspace-raised,#f6d4db);border-color:var(--portal-border,rgba(33,19,19,.24))}
 .transfer-negotiation-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;align-items:start}
 .transfer-negotiation-grid>article{border:1px solid var(--tbg-colour-rule,#d7a9b5);background:var(--tbg-surface-card,#f5d7dd);padding:1rem;min-width:0}
 .transfer-negotiation-grid h3,.transfer-negotiation-grid h4{margin:0 0 .75rem;font-family:var(--tbg-font-ui,inherit);text-transform:uppercase;letter-spacing:.05em}
