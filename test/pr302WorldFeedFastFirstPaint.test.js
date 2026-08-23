@@ -21,10 +21,21 @@ test('World Feed keeps rendered content visible while stale data refreshes silen
   assert.ok(feed.includes("if (current && !current.querySelector('.world-feed-shell'))"));
 });
 
-test('system projection sync is throttled and only triggers a second read when it inserted stories', () => {
+test('system projection sync is throttled and follows up only when system-feed rows actually changed', () => {
   assert.ok(feed.includes('const FEED_SYNC_TTL = 60_000'));
   assert.ok(feed.includes("sendFeedAction({ action: 'sync' })"));
-  assert.ok(feed.includes("if ((Number(result?.inserted) || 0) <= 0) return"));
-  assert.ok(feed.includes('const data = await fetchFeedData(token)'));
+  assert.ok(feed.includes('if (!result?.changed) return'));
+  assert.ok(endpoint.includes('async function systemFeedSignature(worldId)'));
+  assert.ok(endpoint.includes('const before = await systemFeedSignature(appointment.world_id)'));
+  assert.ok(endpoint.includes('const after = await systemFeedSignature(appointment.world_id)'));
+  assert.ok(endpoint.includes('return json({ changed: before !== after })'));
   assert.ok(feed.includes('void refreshSystemProjection()'));
+});
+
+test('background and stale refreshes never replace a focused or non-empty feed draft', () => {
+  assert.ok(feed.includes('function hasActiveFeedDraft()'));
+  assert.ok(feed.includes("field === document.activeElement || field.value.trim() !== ''"));
+  assert.ok(feed.includes('if (hasActiveFeedDraft()) {'));
+  assert.ok(feed.includes('if (alreadyRendered && hasActiveFeedDraft()) {'));
+  assert.ok(feed.includes('feedLoadedAt = 0'));
 });
