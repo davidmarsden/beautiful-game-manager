@@ -1,6 +1,7 @@
 let feedLoadedAt = 0;
 let feedLoading = null;
 let feedCanModerate = false;
+let feedManagerId = '';
 const FEED_TTL = 15_000;
 
 function feedToken() {
@@ -36,7 +37,8 @@ function typeLabel(type) {
     manager_appointment: 'Appointment',
     transfer_completed: 'Transfer',
     matchday_upcoming: 'Matchday',
-    matchday_completed: 'Results'
+    matchday_completed: 'Results',
+    matchday_press_conference: 'Press conference'
   })[type] || 'World';
 }
 
@@ -99,6 +101,16 @@ function prependFeedItem(item) {
   return true;
 }
 
+function removeFeedItem(itemId) {
+  const list = host()?.querySelector('.world-feed-list');
+  const card = list?.querySelector(`[data-feed-item-id="${CSS.escape(String(itemId))}"]`);
+  if (!card) return false;
+  card.remove();
+  if (!list.querySelector('.world-feed-item')) list.append(el('div', 'empty-state', 'No world activity yet. Make the first post.'));
+  feedLoadedAt = Date.now();
+  return true;
+}
+
 function itemNode(item) {
   const card = el('article', `world-feed-item world-feed-${item.item_type || 'world'}${item.pinned_at ? ' world-feed-pinned' : ''}`);
   card.dataset.feedItemId = item.id || '';
@@ -126,6 +138,26 @@ function itemNode(item) {
     });
     topActions.append(pin);
   }
+
+  const ownsManagerPost = item.item_type === 'manager_post'
+    && String(item.actor_manager_id || '') === String(feedManagerId || '');
+  if (feedCanModerate || ownsManagerPost) {
+    const hide = el('button', 'world-feed-pin-action', 'Hide');
+    hide.type = 'button';
+    hide.addEventListener('click', async () => {
+      if (!window.confirm('Hide this post from the World Feed?')) return;
+      hide.disabled = true;
+      try {
+        await sendFeedAction({ action: 'hide', feed_item_id: item.id });
+        if (!removeFeedItem(item.id)) await loadWorldFeed({ force: true });
+      } catch (error) {
+        hide.textContent = error.message;
+        hide.disabled = false;
+      }
+    });
+    topActions.append(hide);
+  }
+
   topActions.append(el('time', '', timeLabel(item.created_at)));
   top.append(badges, topActions);
 
@@ -184,6 +216,7 @@ function renderFeed(data) {
   if (!root) return;
   root.replaceChildren();
   feedCanModerate = Boolean(data?.can_moderate);
+  feedManagerId = String(data?.manager_id || '');
 
   const shell = el('section', 'world-feed-shell');
   const heading = el('div', 'world-feed-heading');
