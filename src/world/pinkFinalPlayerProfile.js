@@ -1,4 +1,4 @@
-const DEFAULT_PINK_FINAL_BASE_URL = 'https://thebeautifulgame.online/pink-final/players/';
+const DEFAULT_PINK_FINAL_BASE_URL = 'https://thepinkfinal.online/players/';
 
 const text = (value) => String(value ?? '').trim();
 const truthy = (value) => value === true || ['true', 'yes', 'published', 'public', 'live', 'eligible'].includes(text(value).toLowerCase());
