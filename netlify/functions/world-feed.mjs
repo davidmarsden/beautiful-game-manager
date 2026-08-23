@@ -163,7 +163,7 @@ export default async (request) => {
     const message = String(error?.message || 'Could not load World Feed');
     const status = /Session|Authentication/.test(message) ? 401
       : /appointment|profile/i.test(message) ? 409
-      : /Administrator/.test(message) ? 403
+      : /Administrator|only hide your own/i.test(message) ? 403
       : /between 1|unavailable|not found/i.test(message) ? 400
       : 503;
     return json({ error: message }, status);
