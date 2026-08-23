@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const migration = fs.readFileSync(new URL('../supabase/migrations/20260823d_world_feed_v0.sql', import.meta.url), 'utf8');
 const postFix = fs.readFileSync(new URL('../supabase/migrations/20260823e_world_feed_v0_post_fix.sql', import.meta.url), 'utf8');
+const matchdayFix = fs.readFileSync(new URL('../supabase/migrations/20260823f_world_feed_matchday_history.sql', import.meta.url), 'utf8');
 const endpoint = fs.readFileSync(new URL('../netlify/functions/world-feed.mjs', import.meta.url), 'utf8');
 const ui = fs.readFileSync(new URL('../public/world-feed.js', import.meta.url), 'utf8');
 const navigation = fs.readFileSync(new URL('../public/portal-navigation.js', import.meta.url), 'utf8');
@@ -13,16 +14,27 @@ test('World Feed is deliberately outside the canonical checkpoint', () => {
   assert.ok(migration.includes('create table if not exists public.world_feed_comments'));
   assert.equal(migration.includes('update public.canonical_world_saves'), false);
   assert.equal(migration.includes('insert into public.canonical_world_saves'), false);
+  assert.equal(matchdayFix.includes('update public.canonical_world_saves'), false);
+  assert.equal(matchdayFix.includes('insert into public.canonical_world_saves'), false);
 });
 
 test('system items are idempotent and derive from authoritative application state', () => {
   assert.ok(migration.includes('world_feed_items_world_source_key_unique'));
-  assert.ok(migration.includes("'transfer:' || deal.id::text"));
-  assert.ok(migration.includes("'matchday_upcoming:' || canonical_row.matchday::text"));
-  assert.ok(migration.includes("'matchday_completed:' || previous_matchday::text"));
-  assert.ok(migration.includes('on conflict (world_id, source_key)'));
-  assert.ok(migration.includes("deal.status = 'completed'"));
-  assert.ok(migration.includes('transfer_deal_legs'));
+  assert.ok(matchdayFix.includes("'transfer:' || deal.id::text"));
+  assert.ok(matchdayFix.includes("'matchday_upcoming:' || current_season_id || ':' || canonical_row.matchday::text"));
+  assert.ok(matchdayFix.includes("'matchday_completed:' || completed.season_id || ':' || completed.matchday::text"));
+  assert.ok(matchdayFix.includes('on conflict (world_id, source_key)'));
+  assert.ok(matchdayFix.includes("deal.status = 'completed'"));
+  assert.ok(matchdayFix.includes('transfer_deal_legs'));
+});
+
+test('completed matchday sync is season-safe and backfills every archived matchday', () => {
+  assert.ok(matchdayFix.includes('current_season_id'));
+  assert.ok(matchdayFix.includes("nullif(result.value #>> '{fixture,season_id}', '')"));
+  assert.ok(matchdayFix.includes('with completed_matchdays as'));
+  assert.ok(matchdayFix.includes("runtime.value->'archive_results'"));
+  assert.ok(matchdayFix.includes('select distinct'));
+  assert.equal(matchdayFix.includes('previous_matchday'), false);
 });
 
 test('manager identity for posts and comments is derived from authenticated user', () => {
