@@ -28,6 +28,7 @@ test('legacy club navigation is retired while workspace tabs remain authoritativ
   assert.ok(navigation.includes('function retireLegacyClubNav()'));
   assert.ok(navigation.includes('nav.hidden = true'));
   assert.ok(navigation.includes("nav.setAttribute('aria-hidden', 'true')"));
+  assert.ok(navigation.includes("nav.style.setProperty('display', 'none', 'important')"));
   assert.ok(navigation.includes('installWorldFeedShell();'));
   assert.ok(navigation.includes("workspace?.querySelector('.tabs')"));
 });
