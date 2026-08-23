@@ -65,14 +65,14 @@ export default async (request) => {
     const token = bearerToken(request);
     if (!token) return json({ error: 'Authentication required' }, 401);
     const current = await identity(token);
-    const market = await serverSupabase('/rest/v1/rpc/get_manager_transfer_market_for_user', {
+    const projection = await serverSupabase('/rest/v1/rpc/get_manager_transfer_listings_for_user', {
       method: 'POST',
       body: JSON.stringify({ p_user_id: current.user.id, p_world_id: current.appointment.world_id })
     });
     return json({
-      world_id: current.appointment.world_id,
-      club_id: current.appointment.club_id,
-      listings: Array.isArray(market?.listings) ? market.listings : []
+      world_id: projection?.world_id || current.appointment.world_id,
+      club_id: projection?.club_id || current.appointment.club_id,
+      listings: Array.isArray(projection?.listings) ? projection.listings : []
     });
   } catch (error) {
     return json({ error: error.message || 'Could not load transfer listings' }, 500);
