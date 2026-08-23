@@ -48,6 +48,26 @@ test('#287 existing squad-cycle state bootstraps canonical club finances with us
   assert.equal(summary.wage_headroom, 1000);
 });
 
+test('#287 an empty club bootstraps enough budget for one default-wage signing', () => {
+  const cycle = createSquadCycleState({
+    seasonId: 'S1-empty',
+    seasonStart: '2026-08-01T00:00:00.000Z',
+    seasonEnd: '2027-06-30T23:59:59.000Z',
+    clubs: [{ club_id: 'EMPTY', club_name: 'Empty', players: [] }]
+  });
+  const summary = clubFinanceReadModel(cycle).EMPTY;
+  assert.equal(summary.wage_bill, 0);
+  assert.equal(summary.wage_budget, 1000);
+  assert.equal(summary.wage_headroom, 1000);
+  const result = acquireFreeAgent(cycle, {
+    player: { ...player('FA-EMPTY'), registered: false },
+    toClubId: 'EMPTY',
+    at,
+    contractEndAt: '2029-06-30T23:59:59.000Z'
+  });
+  assert.equal(result.contract.wage, 1000);
+});
+
 test('#287 configured wage budgets remain fixed even when the current bill is already higher', () => {
   const cycle = state();
   cycle.finances = {
