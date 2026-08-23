@@ -4,26 +4,29 @@ The Beautiful Game (TBG) is the private, live fantasy world. The Pink Final (TPF
 
 ## Product routes
 
-The branded public origin is `https://thebeautifulgame.online`.
+TBG and TPF have separate branded public origins:
 
-TBG remains the authenticated application at the root origin. TPF is independently published from `beautiful-game-data`, but is exposed to users through the branded `/pink-final/` namespace. The Netlify application may reverse-proxy that namespace to the independent TPF static origin; the upstream hosting URL is an implementation detail and must not be used as the canonical public route.
+- TBG: `https://thebeautifulgame.online`
+- TPF: `https://thepinkfinal.online`
+
+TBG remains the authenticated application at the TBG root origin. TPF remains independently published from `beautiful-game-data` and is canonical at its dedicated domain. The former `https://thebeautifulgame.online/pink-final/` namespace is a compatibility route only and should permanently redirect to the equivalent path on `https://thepinkfinal.online/`.
 
 TPF front page:
 
 ```text
-https://thebeautifulgame.online/pink-final/
+https://thepinkfinal.online/
 ```
 
 TPF player profile route:
 
 ```text
-https://thebeautifulgame.online/pink-final/players/?id=<tbg_player_id>
+https://thepinkfinal.online/players/?id=<tbg_player_id>
 ```
 
 TPF club profile route:
 
 ```text
-https://thebeautifulgame.online/pink-final/clubs/?id=<club_id>
+https://thepinkfinal.online/clubs/?id=<club_id>
 ```
 
 TBG authenticated entry route:
@@ -32,7 +35,7 @@ TBG authenticated entry route:
 https://thebeautifulgame.online/?club=<club_id>
 ```
 
-Keeping TPF's publication pipeline independent is deliberate. A future dedicated Pink Final domain or subdomain may replace the `/pink-final/` public namespace without changing the durable identity contract below.
+Keeping TPF's publication pipeline independent is deliberate. The dedicated domain changes only the public origin; durable player and club route keys remain unchanged.
 
 ## Identity
 
