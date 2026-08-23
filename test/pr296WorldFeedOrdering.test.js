@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 
 const migration = fs.readFileSync(new URL('../supabase/migrations/20260823g_world_feed_activity_order.sql', import.meta.url), 'utf8');
+const legacyRepair = fs.readFileSync(new URL('../supabase/migrations/20260823h_world_feed_legacy_matchday_repair.sql', import.meta.url), 'utf8');
 const ui = fs.readFileSync(new URL('../public/world-feed.js', import.meta.url), 'utf8');
 const endpoint = fs.readFileSync(new URL('../netlify/functions/world-feed.mjs', import.meta.url), 'utf8');
 
@@ -11,7 +12,13 @@ test('completed matchdays collapse division runtime suffixes into one global fee
   assert.ok(migration.includes('_world_feed_matchday_merge'));
   assert.ok(migration.includes('set feed_item_id = merge_row.winner_id'));
   assert.ok(migration.includes("'matchday_completed:' || completed.season_id || ':' || completed.matchday::text"));
-  assert.ok(migration.includes("result.value #>> '{commit,committed_at}'"));
+});
+
+test('legacy seasonless matchday rows merge into the known season rather than season-unknown', () => {
+  assert.ok(legacyRepair.includes('known_seasons'));
+  assert.ok(legacyRepair.includes("= 'season-unknown'"));
+  assert.ok(legacyRepair.includes('known.season_id'));
+  assert.ok(legacyRepair.includes('set feed_item_id = repair.winner_id'));
 });
 
 test('World Feed sorts pinned items first and otherwise by latest comment activity', () => {
@@ -19,6 +26,14 @@ test('World Feed sorts pinned items first and otherwise by latest comment activi
   assert.ok(migration.includes('order by is_pinned desc'));
   assert.ok(migration.includes("'activity_at'"));
   assert.ok(migration.includes("'pinned_at'"));
+});
+
+test('historical matchdays with tied backfill timestamps sort newest matchday first without inventing dates', () => {
+  assert.ok(endpoint.includes('function compareFeedItems'));
+  assert.ok(endpoint.includes("left?.item_type === 'matchday_completed'"));
+  assert.ok(endpoint.includes('metadata?.matchday'));
+  assert.ok(endpoint.includes('feed.items.sort(compareFeedItems)'));
+  assert.ok(!legacyRepair.includes('commit,committed_at'));
 });
 
 test('comment mutations bump the affected non-pinned card without reloading the feed', () => {
