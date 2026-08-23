@@ -23,5 +23,5 @@ test('Netlify reverse-proxies the Pink Final namespace to its independent static
   const config = await read('../netlify.toml');
   assert.match(config, /from = "\/pink-final\/\*"/);
   assert.match(config, /to = "https:\/\/davidmarsden\.github\.io\/beautiful-game-data\/:splat"/);
-  assert.match(config, /Cache-Control = "public, max-age=300, stale-while-revalidate=3600"/);
+  assert.doesNotMatch(config, /for = "\/pink-final\/\*"[\s\S]*Cache-Control/);
 });
