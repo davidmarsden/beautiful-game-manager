@@ -1,20 +1,25 @@
 const text = (value) => String(value ?? '').trim();
-const money = (value, fallback = 0) => Number.isFinite(Number(value)) ? Math.max(0, Math.trunc(Number(value))) : fallback;
+const wholeMoney = (value, fallback = 0) => Number.isFinite(Number(value)) ? Math.max(0, Math.trunc(Number(value))) : fallback;
+const cashMoney = (value, fallback = 0) => Number.isFinite(Number(value)) ? Math.max(0, Math.round(Number(value) * 100) / 100) : fallback;
+const hasValue = (value) => value !== null && value !== undefined && Number.isFinite(Number(value));
 
 export const CLUB_FINANCE_VERSION = 'tbg-club-finance-v0.1';
 export const DEFAULT_OPENING_CASH_BALANCE = 100_000_000;
 export const DEFAULT_WAGE_HEADROOM_RATIO = 1.20;
 
-function activeContractWages(state, clubId) {
-  return Object.values(state?.contracts || {}).reduce((total, contract) => {
-    if (contract?.status !== 'active' || text(contract?.club_id) !== text(clubId)) return total;
-    return total + money(contract?.wage, 0);
-  }, 0);
+function activeContractStats(state, clubId) {
+  return Object.values(state?.contracts || {}).reduce((stats, contract) => {
+    if (contract?.status !== 'active' || text(contract?.club_id) !== text(clubId)) return stats;
+    const wage = wholeMoney(contract?.wage, 0);
+    stats.total += wage;
+    stats.highest = Math.max(stats.highest, wage);
+    return stats;
+  }, { total: 0, highest: 0 });
 }
 
 function bootstrapCash(state, clubId, configuredDefault) {
   const club = state?.clubs?.[clubId] || {};
-  return money(
+  return cashMoney(
     club?.finance?.cash_balance
       ?? club?.cash_balance
       ?? club?.finances?.cash_balance,
@@ -22,16 +27,21 @@ function bootstrapCash(state, clubId, configuredDefault) {
   );
 }
 
-function bootstrapWageBudget(state, clubId, wageBill) {
+function configuredWageBudget(state, clubId, existing) {
+  if (hasValue(existing?.wage_budget)) return wholeMoney(existing.wage_budget, 0);
   const club = state?.clubs?.[clubId] || {};
-  const explicit = money(
-    club?.finance?.wage_budget
-      ?? club?.wage_budget
-      ?? club?.finances?.wage_budget,
-    0
+  const legacy = club?.finance?.wage_budget ?? club?.wage_budget ?? club?.finances?.wage_budget;
+  return hasValue(legacy) ? wholeMoney(legacy, 0) : null;
+}
+
+function bootstrapWageBudget(wageBill, highestWage) {
+  // Alpha bootstrap only: retain 20% proportional headroom, but guarantee enough room for
+  // one ordinary incumbent-level incoming player so legacy straight transfers remain usable.
+  return Math.max(
+    wageBill,
+    Math.ceil(wageBill * DEFAULT_WAGE_HEADROOM_RATIO),
+    wageBill + highestWage
   );
-  if (explicit > 0) return explicit;
-  return Math.max(wageBill, Math.ceil(wageBill * DEFAULT_WAGE_HEADROOM_RATIO));
 }
 
 function projectedFinanceState(state, {
@@ -43,16 +53,18 @@ function projectedFinanceState(state, {
   const clubs = Object.create(null);
 
   for (const clubId of Object.keys(state.clubs || {}).sort()) {
-    const wageBill = activeContractWages(state, clubId);
+    const wages = activeContractStats(state, clubId);
     const existing = currentClubs[clubId] || {};
+    const configuredBudget = configuredWageBudget(state, clubId, existing);
     clubs[clubId] = {
       club_id: clubId,
       currency: text(existing.currency) || 'GBP',
-      cash_balance: money(existing.cash_balance, bootstrapCash(state, clubId, openingCashBalance)),
-      wage_budget: Math.max(
-        wageBill,
-        money(existing.wage_budget, bootstrapWageBudget(state, clubId, wageBill))
-      )
+      cash_balance: cashMoney(existing.cash_balance, bootstrapCash(state, clubId, openingCashBalance)),
+      // An explicit budget is a fixed constraint, even when a legacy/imported club is already
+      // over it. Only a missing budget is bootstrapped from the current contract book.
+      wage_budget: configuredBudget === null
+        ? bootstrapWageBudget(wages.total, wages.highest)
+        : configuredBudget
     };
   }
   return { version: CLUB_FINANCE_VERSION, clubs };
@@ -70,6 +82,12 @@ function financeEvent(state, type, at, payload = {}) {
   return row;
 }
 
+function iso(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Error(`Invalid date: ${value}`);
+  return date.toISOString();
+}
+
 /**
  * Backward-compatible alpha bootstrap for canonical worlds created before finances existed.
  * The bootstrap values are deliberately simple and separately calibratable: this module is
@@ -85,14 +103,14 @@ export function clubFinanceSummary(state, clubId) {
   const finances = projectedFinanceState(state);
   const finance = finances.clubs[id];
   if (!finance) throw new Error(`Unknown club: ${clubId}`);
-  const wageBill = activeContractWages(state, id);
+  const wageBill = activeContractStats(state, id).total;
   return Object.freeze({
     club_id: id,
     currency: finance.currency,
-    cash_balance: money(finance.cash_balance, 0),
+    cash_balance: cashMoney(finance.cash_balance, 0),
     wage_bill: wageBill,
-    wage_budget: money(finance.wage_budget, wageBill),
-    wage_headroom: Math.max(0, money(finance.wage_budget, wageBill) - wageBill)
+    wage_budget: wholeMoney(finance.wage_budget, 0),
+    wage_headroom: Math.max(0, wholeMoney(finance.wage_budget, 0) - wageBill)
   });
 }
 
@@ -122,7 +140,11 @@ function normaliseCashLegs(state, legs = []) {
       if (!toClubId || !state.clubs?.[toClubId]) throw new Error(`Cash leg ${index + 1} has unknown receiving club`);
       if (fromClubId === toClubId) throw new Error('Cash transfer requires two different clubs');
       if (!Number.isFinite(rawAmount) || rawAmount < 0) throw new Error(`Cash leg ${index + 1} requires a non-negative amount`);
-      return { fromClubId, toClubId, amount: Math.trunc(rawAmount) };
+      const pennies = Math.round(rawAmount * 100);
+      if (Math.abs(rawAmount * 100 - pennies) > 1e-7) {
+        throw new Error(`Cash leg ${index + 1} supports at most two decimal places`);
+      }
+      return { fromClubId, toClubId, amountPennies: pennies, amount: pennies / 100 };
     });
 }
 
@@ -135,29 +157,29 @@ function normaliseCashLegs(state, legs = []) {
 export function applyCashLegsAtomically(state, { legs = [], at } = {}) {
   const normalized = normaliseCashLegs(state, legs);
   if (!normalized.length) return [];
-  const atIso = new Date(at).toISOString();
-  if (atIso === 'Invalid Date') throw new Error(`Invalid date: ${at}`);
+  const atIso = iso(at);
 
   const projected = projectedFinanceState(state);
-  const net = Object.create(null);
-  for (const clubId of Object.keys(state.clubs || {})) net[clubId] = 0;
+  const netPennies = Object.create(null);
+  for (const clubId of Object.keys(state.clubs || {})) netPennies[clubId] = 0;
   for (const leg of normalized) {
-    net[leg.fromClubId] -= leg.amount;
-    net[leg.toClubId] += leg.amount;
+    netPennies[leg.fromClubId] -= leg.amountPennies;
+    netPennies[leg.toClubId] += leg.amountPennies;
   }
 
-  for (const [clubId, delta] of Object.entries(net)) {
-    if (!delta) continue;
-    const opening = money(projected.clubs[clubId]?.cash_balance, 0);
-    const closing = opening + delta;
-    if (closing < 0) {
-      throw new Error(`${clubId} has insufficient cash for deal (${opening} available, ${Math.abs(delta)} net required)`);
+  for (const [clubId, deltaPennies] of Object.entries(netPennies)) {
+    if (!deltaPennies) continue;
+    const openingPennies = Math.round(cashMoney(projected.clubs[clubId]?.cash_balance, 0) * 100);
+    const closingPennies = openingPennies + deltaPennies;
+    if (closingPennies < 0) {
+      throw new Error(`${clubId} has insufficient cash for deal (${openingPennies / 100} available, ${Math.abs(deltaPennies) / 100} net required)`);
     }
   }
 
-  for (const [clubId, delta] of Object.entries(net)) {
-    if (!delta) continue;
-    projected.clubs[clubId].cash_balance = money(projected.clubs[clubId].cash_balance, 0) + delta;
+  for (const [clubId, deltaPennies] of Object.entries(netPennies)) {
+    if (!deltaPennies) continue;
+    const openingPennies = Math.round(cashMoney(projected.clubs[clubId].cash_balance, 0) * 100);
+    projected.clubs[clubId].cash_balance = (openingPennies + deltaPennies) / 100;
   }
   state.finances = projected;
 
