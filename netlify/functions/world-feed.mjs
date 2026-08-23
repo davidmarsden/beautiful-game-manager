@@ -58,6 +58,11 @@ async function rpc(name, body) {
   });
 }
 
+async function systemFeedSignature(worldId) {
+  const rows = await serviceSupabase(`/rest/v1/world_feed_items?world_id=eq.${encodeURIComponent(worldId)}&source_key=not.is.null&select=id,source_key,item_type,title,body,metadata,hidden_at,pinned_at&order=id.asc`);
+  return JSON.stringify(rows);
+}
+
 const timestamp = (value) => {
   const parsed = Date.parse(value || '');
   return Number.isFinite(parsed) ? parsed : 0;
@@ -113,7 +118,8 @@ export default async (request) => {
     const appointment = await activeAppointment(user.id);
 
     if (request.method === 'GET') {
-      await rpc('sync_world_feed_system_items', { p_world_id: appointment.world_id });
+      // Reads must stay fast: system projection reconciliation is an explicit,
+      // throttled background action from the client rather than a prerequisite.
       return json(await currentFeed(user.id, appointment.world_id));
     }
 
@@ -121,6 +127,12 @@ export default async (request) => {
     const payload = await request.json().catch(() => ({}));
     const action = String(payload.action || '').trim().toLowerCase();
 
+    if (action === 'sync') {
+      const before = await systemFeedSignature(appointment.world_id);
+      await rpc('sync_world_feed_system_items', { p_world_id: appointment.world_id });
+      const after = await systemFeedSignature(appointment.world_id);
+      return json({ changed: before !== after });
+    }
     if (action === 'post') {
       const result = await rpc('create_manager_world_feed_post_for_user', {
         p_user_id: user.id,

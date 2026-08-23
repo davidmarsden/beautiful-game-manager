@@ -2,7 +2,10 @@ let feedLoadedAt = 0;
 let feedLoading = null;
 let feedCanModerate = false;
 let feedManagerId = '';
+let feedSyncAt = 0;
+let feedSyncing = null;
 const FEED_TTL = 15_000;
+const FEED_SYNC_TTL = 60_000;
 
 function feedToken() {
   for (let index = 0; index < localStorage.length; index += 1) {
@@ -53,6 +56,20 @@ async function sendFeedAction(payload) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || 'World Feed action failed');
   return data;
+}
+
+async function fetchFeedData(token) {
+  const response = await fetch('/api/world-feed', { headers: { authorization: `Bearer ${token}` } });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || 'Could not load World Feed');
+  return data;
+}
+
+function hasActiveFeedDraft() {
+  const root = host();
+  if (!root) return false;
+  return [...root.querySelectorAll('.world-feed-composer textarea, .world-feed-comment-form textarea')]
+    .some((field) => field === document.activeElement || field.value.trim() !== '');
 }
 
 function commentNode(comment) {
@@ -266,10 +283,37 @@ function renderFeed(data) {
   root.append(shell);
 }
 
+async function refreshSystemProjection() {
+  if (Date.now() - feedSyncAt < FEED_SYNC_TTL) return;
+  if (feedSyncing) return feedSyncing;
+  feedSyncing = (async () => {
+    const token = feedToken();
+    if (!token) return;
+    const result = await sendFeedAction({ action: 'sync' });
+    feedSyncAt = Date.now();
+    if (!result?.changed) return;
+    const data = await fetchFeedData(token);
+    if (hasActiveFeedDraft()) {
+      feedLoadedAt = 0;
+      return;
+    }
+    renderFeed(data);
+    feedLoadedAt = Date.now();
+  })().catch(() => {
+    // Projection reconciliation is deliberately best-effort: never replace a
+    // usable feed with an error just because the background sync failed.
+  }).finally(() => { feedSyncing = null; });
+  return feedSyncing;
+}
+
 async function loadWorldFeed({ force = false } = {}) {
   const root = host();
   if (!root) return;
-  if (!force && Date.now() - feedLoadedAt < FEED_TTL) return;
+  const alreadyRendered = Boolean(root.querySelector('.world-feed-shell'));
+  if (!force && Date.now() - feedLoadedAt < FEED_TTL) {
+    void refreshSystemProjection();
+    return;
+  }
   if (feedLoading) return feedLoading;
   feedLoading = (async () => {
     const token = feedToken();
@@ -277,15 +321,20 @@ async function loadWorldFeed({ force = false } = {}) {
       root.innerHTML = '<div class="empty-state">Sign in to view the World Feed.</div>';
       return;
     }
-    root.innerHTML = '<div class="empty-state">Loading World Feed…</div>';
-    const response = await fetch('/api/world-feed', { headers: { authorization: `Bearer ${token}` } });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || 'Could not load World Feed');
+    if (!alreadyRendered) root.innerHTML = '<div class="empty-state">Loading World Feed…</div>';
+    const data = await fetchFeedData(token);
+    if (alreadyRendered && hasActiveFeedDraft()) {
+      feedLoadedAt = 0;
+      return;
+    }
     renderFeed(data);
     feedLoadedAt = Date.now();
+    void refreshSystemProjection();
   })().catch((error) => {
     const current = host();
-    if (current) current.replaceChildren(el('div', 'empty-state', error.message));
+    if (current && !current.querySelector('.world-feed-shell')) {
+      current.replaceChildren(el('div', 'empty-state', error.message));
+    }
   }).finally(() => { feedLoading = null; });
   return feedLoading;
 }
