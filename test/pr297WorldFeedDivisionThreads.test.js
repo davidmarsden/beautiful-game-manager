@@ -31,8 +31,9 @@ test('current matchday gets one press-conference thread per division with real f
 test('legacy generic matchday cards retire without throwing away comments', () => {
   assert.ok(migration.includes('set feed_item_id = moves.target_id'));
   assert.ok(migration.includes("coalesce(target.metadata->'club_ids', '[]'::jsonb) ? comment.club_id"));
-  assert.ok(migration.includes("coalesce(metadata->>'thread_scope', '') <> 'division'"));
-  assert.ok(migration.includes("where item_type = 'matchday_upcoming'"));
+  assert.ok(migration.includes("coalesce(item.metadata->>'thread_scope', '') <> 'division'"));
+  assert.ok(migration.includes("where item.item_type = 'matchday_upcoming'"));
+  assert.ok(migration.includes('not exists (\n    select 1 from public.world_feed_comments comment where comment.feed_item_id = item.id'));
 });
 
 test('division fixture/result lines are normalised after club membership aggregation', () => {
