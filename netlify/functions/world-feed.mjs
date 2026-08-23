@@ -113,7 +113,8 @@ export default async (request) => {
     const appointment = await activeAppointment(user.id);
 
     if (request.method === 'GET') {
-      await rpc('sync_world_feed_system_items', { p_world_id: appointment.world_id });
+      // Reads must stay fast: system projection reconciliation is an explicit,
+      // throttled background action from the client rather than a prerequisite.
       return json(await currentFeed(user.id, appointment.world_id));
     }
 
@@ -121,6 +122,10 @@ export default async (request) => {
     const payload = await request.json().catch(() => ({}));
     const action = String(payload.action || '').trim().toLowerCase();
 
+    if (action === 'sync') {
+      const inserted = await rpc('sync_world_feed_system_items', { p_world_id: appointment.world_id });
+      return json({ inserted: Number(inserted) || 0 });
+    }
     if (action === 'post') {
       const result = await rpc('create_manager_world_feed_post_for_user', {
         p_user_id: user.id,
