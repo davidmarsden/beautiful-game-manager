@@ -1,4 +1,4 @@
-const DEFAULT_PINK_FINAL_CLUB_BASE_URL = 'https://davidmarsden.github.io/beautiful-game-data/clubs/';
+const DEFAULT_PINK_FINAL_CLUB_BASE_URL = 'https://thebeautifulgame.online/pink-final/clubs/';
 
 const text = (value) => String(value ?? '').trim();
 const truthy = (value) => value === true || ['true', 'yes', 'published', 'public', 'live', 'eligible'].includes(text(value).toLowerCase());
