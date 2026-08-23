@@ -2,21 +2,41 @@
 
 The Beautiful Game (TBG) is the private, live fantasy world. The Pink Final (TPF) is the public real-world database. A club may exist in both products, but its players, division, manager and current state are not shared.
 
-## Identity
+## Product routes
 
-`club_id` is the durable canonical identity. It must not be derived from the club's display name, current division, league position or manager appointment. Promotion, relegation and display-label changes therefore do not change either route.
+The branded public origin is `https://thebeautifulgame.online`.
 
-TPF public profile route:
+TBG remains the authenticated application at the root origin. TPF is independently published from `beautiful-game-data`, but is exposed to users through the branded `/pink-final/` namespace. The Netlify application may reverse-proxy that namespace to the independent TPF static origin; the upstream hosting URL is an implementation detail and must not be used as the canonical public route.
+
+TPF front page:
 
 ```text
-https://davidmarsden.github.io/beautiful-game-data/clubs/?id=<club_id>
+https://thebeautifulgame.online/pink-final/
+```
+
+TPF player profile route:
+
+```text
+https://thebeautifulgame.online/pink-final/players/?id=<tbg_player_id>
+```
+
+TPF club profile route:
+
+```text
+https://thebeautifulgame.online/pink-final/clubs/?id=<club_id>
 ```
 
 TBG authenticated entry route:
 
 ```text
-/?club=<club_id>
+https://thebeautifulgame.online/?club=<club_id>
 ```
+
+Keeping TPF's publication pipeline independent is deliberate. A future dedicated Pink Final domain or subdomain may replace the `/pink-final/` public namespace without changing the durable identity contract below.
+
+## Identity
+
+`club_id` is the durable canonical identity. It must not be derived from the club's display name, current division, league position or manager appointment. Promotion, relegation and display-label changes therefore do not change either route.
 
 A governed `pink_final_club_route_key` may override the public lookup key when a data migration requires it. A governed `pink_final_club_profile_url` may override the whole TPF URL. Generic club website or provider URLs are never treated as Pink Final routes.
 
