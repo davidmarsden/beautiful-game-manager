@@ -10,7 +10,8 @@ test('World Feed mutations patch only the affected DOM instead of reloading the 
   assert.ok(ui.includes('replaceFeedItem(result.item)'));
   assert.ok(ui.includes('prependFeedItem(result.item)'));
   assert.ok(ui.includes('data-feed-item-id') || ui.includes('dataset.feedItemId'));
-  assert.ok(endpoint.includes('const item = (feed?.items || []).find'));
+  assert.ok(endpoint.includes('async function bestEffortFeedItem'));
+  assert.ok(endpoint.includes('return null;'));
 });
 
 test('World Feed uses layered Football Pink surfaces instead of white cards', () => {
