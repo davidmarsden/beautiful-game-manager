@@ -25,7 +25,8 @@
 # The Pink Final remains independently published from beautiful-game-data.
 # Netlify proxies it under the public TBG product domain so users never need
 # to see the GitHub Pages origin. Relative TPF assets and routes continue to
-# work because the browser stays rooted at /pink-final/.
+# work because the browser stays rooted at /pink-final/. Cache behaviour for
+# these proxied responses is intentionally left to the upstream Pages origin.
 [[redirects]]
   from = "/pink-final"
   to = "/pink-final/"
@@ -41,12 +42,6 @@
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
-
-# TPF is public static reference data, so allow normal browser/CDN caching.
-[[headers]]
-  for = "/pink-final/*"
-  [headers.values]
-    Cache-Control = "public, max-age=300, stale-while-revalidate=3600"
 
 [[headers]]
   for = "/*"
