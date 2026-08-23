@@ -3,9 +3,14 @@ import './history-load-recovery.js';
 import './team-selection-eligibility-guard.js';
 import './player-updates.js';
 import './finance.js';
+import './world-feed.js';
 
 const VIEW_ALIASES = new Map([
   ['dashboard', 'dashboard'],
+  ['feed', 'feed'],
+  ['news', 'feed'],
+  ['newsfeed', 'feed'],
+  ['world feed', 'feed'],
   ['squad', 'squad'],
   ['tactics', 'tactics'],
   ['tactics & team', 'tactics'],
@@ -30,6 +35,29 @@ function installStylesheet(href) {
   link.rel = 'stylesheet';
   link.href = href;
   document.head.append(link);
+}
+
+function installWorldFeedShell() {
+  installStylesheet('./world-feed.css');
+  const workspace = document.querySelector('.workspace');
+  const tabs = workspace?.querySelector('.tabs');
+  if (tabs && !tabs.querySelector('[data-view="feed"]')) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.view = 'feed';
+    button.textContent = 'World Feed';
+    const first = tabs.querySelector('[data-view="dashboard"]')?.nextSibling;
+    if (first) tabs.insertBefore(button, first);
+    else tabs.prepend(button);
+  }
+  if (workspace && !document.getElementById('feedView')) {
+    const section = document.createElement('div');
+    section.id = 'feedView';
+    section.className = 'view';
+    section.hidden = true;
+    section.innerHTML = '<div class="empty-state">Loading World Feed…</div>';
+    workspace.append(section);
+  }
 }
 
 function installHistoryShell() {
@@ -126,6 +154,7 @@ function installTransfersShell() {
 }
 
 function installDynamicShells() {
+  installWorldFeedShell();
   installHistoryShell();
   installFinanceShell();
   installTransfersShell();
