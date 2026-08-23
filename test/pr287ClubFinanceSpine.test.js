@@ -1,7 +1,9 @@
+import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSquadCycleState, renewContract } from '../src/squadCycle/squadCycle.js';
 import { transferPlayersAtomically } from '../src/squadCycle/atomicTransfers.js';
+import { acquireFreeAgent } from '../src/squadCycle/freeAgentAcquisition.js';
 import {
   applyCashLegsAtomically,
   clubFinanceReadModel,
@@ -97,6 +99,13 @@ test('#287 cash settlement preserves penny precision from immutable deal terms',
   assert.equal(event.amount, 10.75);
 });
 
+test('#287 sub-penny cash terms are rejected at the immutable deal-leg persistence boundary', () => {
+  const migration = fs.readFileSync(new URL('../supabase/migrations/20260823b_cash_leg_penny_precision.sql', import.meta.url), 'utf8');
+  assert.match(migration, /transfer_deal_legs_cash_penny_precision/);
+  assert.match(migration, /amount = round\(amount, 2\)/);
+  assert.match(migration, /not valid/i);
+});
+
 test('#287 insufficient cash rejects a legacy state without even lazy finance mutation', () => {
   const cycle = state();
   cycle.clubs.A.cash_balance = 25;
@@ -154,6 +163,22 @@ test('#287 standalone renewal cannot bypass the club wage budget', () => {
   }), /A wage budget exceeded/);
   assert.equal(JSON.stringify(cycle), before);
   assert.equal(cycle.finances, undefined);
+});
+
+test('#287 free-agent acquisition cannot bypass the club wage budget', () => {
+  const cycle = state();
+  ensureClubFinanceState(cycle);
+  cycle.finances.clubs.A.wage_budget = 2000;
+  const before = JSON.stringify(cycle);
+  assert.throws(() => acquireFreeAgent(cycle, {
+    player: { ...player('FA-1'), registered: false },
+    toClubId: 'A',
+    at,
+    contractEndAt: '2029-06-30T23:59:59.000Z',
+    wage: 999999
+  }), /A wage budget exceeded/);
+  assert.equal(JSON.stringify(cycle), before);
+  assert.equal(cycle.players['FA-1'], undefined);
 });
 
 test('#287 manager read model exposes finance without mutating a legacy source world', () => {
