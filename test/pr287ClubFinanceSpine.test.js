@@ -33,7 +33,7 @@ function state() {
   });
 }
 
-test('#287 existing squad-cycle state bootstraps canonical club finances safely', () => {
+test('#287 existing squad-cycle state bootstraps canonical club finances with usable headroom', () => {
   const cycle = state();
   assert.equal(cycle.finances, undefined);
   ensureClubFinanceState(cycle);
@@ -42,8 +42,25 @@ test('#287 existing squad-cycle state bootstraps canonical club finances safely'
   assert.equal(cycle.finances.clubs.B.cash_balance, 100000000);
   const summary = clubFinanceReadModel(cycle).A;
   assert.equal(summary.wage_bill, 2000);
-  assert.equal(summary.wage_budget, 2400);
-  assert.equal(summary.wage_headroom, 400);
+  assert.equal(summary.wage_budget, 3000);
+  assert.equal(summary.wage_headroom, 1000);
+});
+
+test('#287 configured wage budgets remain fixed even when the current bill is already higher', () => {
+  const cycle = state();
+  cycle.finances = {
+    version: 'tbg-club-finance-v0.1',
+    clubs: {
+      A: { club_id: 'A', currency: 'GBP', cash_balance: 100, wage_budget: 1500 },
+      B: { club_id: 'B', currency: 'GBP', cash_balance: 100, wage_budget: 3000 }
+    }
+  };
+  const summary = clubFinanceReadModel(cycle).A;
+  assert.equal(summary.wage_bill, 2000);
+  assert.equal(summary.wage_budget, 1500);
+  assert.equal(summary.wage_headroom, 0);
+  ensureClubFinanceState(cycle);
+  assert.equal(cycle.finances.clubs.A.wage_budget, 1500);
 });
 
 test('#287 cash legs settle by final net position, not arbitrary leg order', () => {
@@ -63,6 +80,21 @@ test('#287 cash legs settle by final net position, not arbitrary leg order', () 
   assert.equal(cycle.finances.clubs.A.cash_balance, 30);
   assert.equal(cycle.finances.clubs.B.cash_balance, 70);
   assert.equal(cycle.events.filter((row) => row.type === 'cash_transferred').length, 2);
+});
+
+test('#287 cash settlement preserves penny precision from immutable deal terms', () => {
+  const cycle = state();
+  ensureClubFinanceState(cycle);
+  cycle.finances.clubs.A.cash_balance = 20;
+  cycle.finances.clubs.B.cash_balance = 0;
+  applyCashLegsAtomically(cycle, {
+    at,
+    legs: [{ leg_type: 'cash', from_club_id: 'A', to_club_id: 'B', amount: 10.75 }]
+  });
+  assert.equal(cycle.finances.clubs.A.cash_balance, 9.25);
+  assert.equal(cycle.finances.clubs.B.cash_balance, 10.75);
+  const event = cycle.events.find((row) => row.type === 'cash_transferred');
+  assert.equal(event.amount, 10.75);
 });
 
 test('#287 insufficient cash rejects a legacy state without even lazy finance mutation', () => {
