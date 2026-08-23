@@ -1,8 +1,64 @@
--- #287/#272 production follow-up: expose authoritative terminal-deal legs to transfer history.
+-- #287/#272 production follow-up: expose canonical club finance and authoritative
+-- terminal-deal legs without widening the manager portal's bounded read path.
 -- Buyer/seller role labels are compatibility metadata for two-club negotiation; revision legs
 -- are authoritative for multi-player/exchange direction and deal-level cash presentation.
 
 begin;
+
+create or replace function public.get_manager_club_finance_for_user(
+  p_user_id uuid,
+  p_world_id text
+) returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  club_id_value text;
+  cache_row public.world_read_model_cache;
+  canonical_checksum text;
+  finance_value jsonb;
+begin
+  select appointment.club_id
+    into club_id_value
+  from public.manager_profiles profile
+  join public.manager_appointments appointment
+    on appointment.manager_id = profile.id
+   and appointment.world_id = p_world_id
+   and appointment.status = 'active'
+  where profile.user_id = p_user_id
+  limit 1;
+  if club_id_value is null then raise exception 'No active manager appointment for this user and world'; end if;
+
+  select save_checksum into canonical_checksum
+  from public.canonical_world_saves
+  where world_id = p_world_id
+  limit 1;
+
+  select * into cache_row
+  from public.world_read_model_cache
+  where world_id = p_world_id
+  limit 1;
+
+  if cache_row.read_model is null
+     or canonical_checksum is null
+     or cache_row.source_checksum <> canonical_checksum then
+    raise exception 'World read model is refreshing; please retry shortly';
+  end if;
+
+  finance_value := cache_row.read_model #> array['squad_cycle','finances',club_id_value];
+  if finance_value is null then raise exception 'Canonical club finance is unavailable'; end if;
+
+  return jsonb_build_object(
+    'world_id', p_world_id,
+    'club_id', club_id_value,
+    'source_checksum', cache_row.source_checksum,
+    'updated_at', cache_row.refreshed_at,
+    'finance', finance_value
+  );
+end;
+$$;
 
 create or replace function public.get_manager_transfer_history_for_user(
   p_user_id uuid,
@@ -39,6 +95,8 @@ begin
     raise exception 'World read model is refreshing; please retry shortly';
   end if;
 
+  -- Select and limit terminal deals once. Package legs are aggregated afterwards, so a
+  -- four-player exchange consumes one history slot rather than four (or more) joined rows.
   with terminal_deals as (
     select
       deal.id,
@@ -51,20 +109,32 @@ begin
       deal.settlement_error,
       buyer.club_id as buyer_club_id,
       seller.club_id as seller_club_id,
-      player_leg.player_id,
-      coalesce(cash_leg.amount, 0) as fee,
-      case when coalesce(player_leg.terms->>'contract_years', '') ~ '^[0-9]+$'
-        then greatest(1, least((player_leg.terms->>'contract_years')::integer, 5)) else 3 end as contract_years,
-      revision.id as revision_id
+      revision.id as revision_id,
+      (
+        select leg.player_id
+        from public.transfer_deal_legs leg
+        where leg.revision_id = revision.id and leg.leg_type = 'permanent_transfer'
+        order by leg.sequence_no
+        limit 1
+      ) as player_id,
+      coalesce((
+        select sum(leg.amount)
+        from public.transfer_deal_legs leg
+        where leg.revision_id = revision.id and leg.leg_type = 'cash'
+      ), 0) as fee,
+      coalesce((
+        select case when coalesce(leg.terms->>'contract_years', '') ~ '^[0-9]+$'
+          then greatest(1, least((leg.terms->>'contract_years')::integer, 5)) else 3 end
+        from public.transfer_deal_legs leg
+        where leg.revision_id = revision.id and leg.leg_type = 'permanent_transfer'
+        order by leg.sequence_no
+        limit 1
+      ), 3) as contract_years
     from public.transfer_deals deal
     join public.transfer_deal_participants buyer on buyer.deal_id = deal.id and buyer.role = 'buyer'
     join public.transfer_deal_participants seller on seller.deal_id = deal.id and seller.role = 'seller'
     join public.transfer_deal_revisions revision
       on revision.deal_id = deal.id and revision.revision_no = deal.current_revision_no
-    join public.transfer_deal_legs player_leg
-      on player_leg.revision_id = revision.id and player_leg.leg_type = 'permanent_transfer'
-    left join public.transfer_deal_legs cash_leg
-      on cash_leg.revision_id = revision.id and cash_leg.leg_type = 'cash'
     where deal.world_id = p_world_id
       and deal.status not in ('negotiating', 'agreed')
       and (buyer.club_id = club_id_value or seller.club_id = club_id_value)
@@ -125,6 +195,8 @@ begin
 end;
 $$;
 
+revoke all on function public.get_manager_club_finance_for_user(uuid,text) from public, anon, authenticated;
+grant execute on function public.get_manager_club_finance_for_user(uuid,text) to service_role;
 revoke all on function public.get_manager_transfer_history_for_user(uuid,text,integer) from public, anon, authenticated;
 grant execute on function public.get_manager_transfer_history_for_user(uuid,text,integer) to service_role;
 
