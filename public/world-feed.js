@@ -61,8 +61,30 @@ function commentNode(comment) {
   return row;
 }
 
+function replaceFeedItem(item) {
+  if (!item?.id) return false;
+  const list = host()?.querySelector('.world-feed-list');
+  if (!list) return false;
+  const existing = list.querySelector(`[data-feed-item-id="${CSS.escape(String(item.id))}"]`);
+  if (!existing) return false;
+  existing.replaceWith(itemNode(item));
+  feedLoadedAt = Date.now();
+  return true;
+}
+
+function prependFeedItem(item) {
+  if (!item?.id) return false;
+  const list = host()?.querySelector('.world-feed-list');
+  if (!list) return false;
+  list.querySelector('.empty-state')?.remove();
+  list.prepend(itemNode(item));
+  feedLoadedAt = Date.now();
+  return true;
+}
+
 function itemNode(item) {
   const card = el('article', `world-feed-item world-feed-${item.item_type || 'world'}`);
+  card.dataset.feedItemId = item.id || '';
   const top = el('div', 'world-feed-item-top');
   const badge = el('span', 'world-feed-type', typeLabel(item.item_type));
   const when = el('time', '', timeLabel(item.created_at));
@@ -103,10 +125,10 @@ function itemNode(item) {
     button.disabled = true;
     status.textContent = 'Posting…';
     try {
-      await sendFeedAction({ action: 'comment', feed_item_id: item.id, body: message });
+      const result = await sendFeedAction({ action: 'comment', feed_item_id: item.id, body: message });
       input.value = '';
       status.textContent = '';
-      await loadWorldFeed({ force: true });
+      if (!replaceFeedItem(result.item)) await loadWorldFeed({ force: true });
     } catch (error) {
       status.textContent = error.message;
     } finally {
@@ -151,10 +173,10 @@ function renderFeed(data) {
     submit.disabled = true;
     status.textContent = 'Publishing…';
     try {
-      await sendFeedAction({ action: 'post', body: message });
+      const result = await sendFeedAction({ action: 'post', body: message });
       textarea.value = '';
       status.textContent = '';
-      await loadWorldFeed({ force: true });
+      if (!prependFeedItem(result.item)) await loadWorldFeed({ force: true });
     } catch (error) {
       status.textContent = error.message;
     } finally {
@@ -190,9 +212,7 @@ async function loadWorldFeed({ force = false } = {}) {
     feedLoadedAt = Date.now();
   })().catch((error) => {
     const current = host();
-    if (current) {
-      current.replaceChildren(el('div', 'empty-state', error.message));
-    }
+    if (current) current.replaceChildren(el('div', 'empty-state', error.message));
   }).finally(() => { feedLoading = null; });
   return feedLoading;
 }
