@@ -21,20 +21,24 @@ declare
 begin
   changed_count := public.sync_world_feed_system_items_division_raw(p_world_id);
 
-  update public.world_feed_items item
-  set body = cleaned.lines || E'\n\n' || cleaned.prompt
-  from lateral (
+  with cleaned as (
     select
+      item.id,
       coalesce((
         select string_agg(distinct line, E'\n' order by line)
         from regexp_split_to_table(split_part(item.body, E'\n\n', 1), E'\n') line
         where trim(line) <> ''
       ), '') as lines,
       split_part(item.body, E'\n\n', 2) as prompt
-  ) cleaned
-  where item.world_id = p_world_id
-    and item.metadata->>'thread_scope' = 'division'
-    and item.item_type in ('matchday_completed', 'matchday_press_conference')
+    from public.world_feed_items item
+    where item.world_id = p_world_id
+      and item.metadata->>'thread_scope' = 'division'
+      and item.item_type in ('matchday_completed', 'matchday_press_conference')
+  )
+  update public.world_feed_items item
+  set body = cleaned.lines || E'\n\n' || cleaned.prompt
+  from cleaned
+  where item.id = cleaned.id
     and cleaned.lines <> ''
     and cleaned.prompt <> ''
     and item.body is distinct from cleaned.lines || E'\n\n' || cleaned.prompt;
