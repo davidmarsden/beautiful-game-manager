@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSquadCycleState } from '../src/squadCycle/squadCycle.js';
+import { createSquadCycleState, renewContract } from '../src/squadCycle/squadCycle.js';
 import { transferPlayersAtomically } from '../src/squadCycle/atomicTransfers.js';
 import {
   applyCashLegsAtomically,
@@ -65,25 +65,34 @@ test('#287 cash legs settle by final net position, not arbitrary leg order', () 
   assert.equal(cycle.events.filter((row) => row.type === 'cash_transferred').length, 2);
 });
 
-test('#287 insufficient cash rejects complete deal before any finance mutation', () => {
+test('#287 insufficient cash rejects a legacy state without even lazy finance mutation', () => {
   const cycle = state();
-  ensureClubFinanceState(cycle);
-  cycle.finances.clubs.A.cash_balance = 25;
-  cycle.finances.clubs.B.cash_balance = 10;
-  const before = JSON.stringify(cycle.finances);
+  cycle.clubs.A.cash_balance = 25;
+  cycle.clubs.B.cash_balance = 10;
+  const before = JSON.stringify(cycle);
 
   assert.throws(() => applyCashLegsAtomically(cycle, {
     at,
     legs: [{ leg_type: 'cash', from_club_id: 'A', to_club_id: 'B', amount: 30 }]
   }), /A has insufficient cash/);
 
-  assert.equal(JSON.stringify(cycle.finances), before);
+  assert.equal(JSON.stringify(cycle), before);
+  assert.equal(cycle.finances, undefined);
   assert.equal(cycle.events.filter((row) => row.type === 'cash_transferred').length, 0);
 });
 
-test('#287 incoming transfer wage is rejected before player mutation when budget is exceeded', () => {
+test('#287 negative cash legs are rejected before mutation', () => {
   const cycle = state();
-  ensureClubFinanceState(cycle);
+  const before = JSON.stringify(cycle);
+  assert.throws(() => applyCashLegsAtomically(cycle, {
+    at,
+    legs: [{ leg_type: 'cash', from_club_id: 'A', to_club_id: 'B', amount: -1 }]
+  }), /requires a non-negative amount/);
+  assert.equal(JSON.stringify(cycle), before);
+});
+
+test('#287 incoming transfer wage is rejected before player or finance mutation when budget is exceeded', () => {
+  const cycle = state();
   const before = JSON.stringify(cycle);
 
   assert.throws(() => transferPlayersAtomically(cycle, {
@@ -98,11 +107,26 @@ test('#287 incoming transfer wage is rejected before player mutation when budget
   }), /B wage budget exceeded/);
 
   assert.equal(JSON.stringify(cycle), before);
+  assert.equal(cycle.finances, undefined);
 });
 
-test('#287 manager read model exposes compact finance summary and contract wages', () => {
+test('#287 standalone renewal cannot bypass the club wage budget', () => {
   const cycle = state();
-  ensureClubFinanceState(cycle);
+  const before = JSON.stringify(cycle);
+  assert.throws(() => renewContract(cycle, {
+    playerId: 'A-1',
+    clubId: 'A',
+    at,
+    endAt: '2029-06-30T23:59:59.000Z',
+    wage: 5000
+  }), /A wage budget exceeded/);
+  assert.equal(JSON.stringify(cycle), before);
+  assert.equal(cycle.finances, undefined);
+});
+
+test('#287 manager read model exposes finance without mutating a legacy source world', () => {
+  const cycle = state();
+  const before = JSON.stringify(cycle);
   const model = buildWorldReadModel({
     world_id: 'world-1',
     season_number: 1,
@@ -113,4 +137,6 @@ test('#287 manager read model exposes compact finance summary and contract wages
   assert.equal(model.squad_cycle.finances.A.wage_bill, 2000);
   const contract = Object.values(model.squad_cycle.contracts).find((row) => row.club_id === 'A');
   assert.equal(contract.wage, 1000);
+  assert.equal(JSON.stringify(cycle), before);
+  assert.equal(cycle.finances, undefined);
 });
