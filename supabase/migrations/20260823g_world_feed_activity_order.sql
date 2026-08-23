@@ -94,7 +94,7 @@ with result_times as (
     || coalesce(runtime.value->'archive_results', '[]'::jsonb)
   ) result
   where coalesce(result.value #>> '{fixture,matchday}', '') ~ '^[0-9]+$'
-  group by cache.world_id, season_id, matchday
+  group by 1, 2, 3
 )
 update public.world_feed_items item
 set created_at = result_time.event_at
