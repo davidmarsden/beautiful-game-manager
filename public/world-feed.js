@@ -65,6 +65,13 @@ async function fetchFeedData(token) {
   return data;
 }
 
+function hasActiveFeedDraft() {
+  const root = host();
+  if (!root) return false;
+  return [...root.querySelectorAll('.world-feed-composer textarea, .world-feed-comment-form textarea')]
+    .some((field) => field === document.activeElement || field.value.trim() !== '');
+}
+
 function commentNode(comment) {
   const row = el('article', 'world-feed-comment');
   const meta = el('div', 'world-feed-comment-meta');
@@ -284,8 +291,12 @@ async function refreshSystemProjection() {
     if (!token) return;
     const result = await sendFeedAction({ action: 'sync' });
     feedSyncAt = Date.now();
-    if ((Number(result?.inserted) || 0) <= 0) return;
+    if (!result?.changed) return;
     const data = await fetchFeedData(token);
+    if (hasActiveFeedDraft()) {
+      feedLoadedAt = 0;
+      return;
+    }
     renderFeed(data);
     feedLoadedAt = Date.now();
   })().catch(() => {
@@ -312,6 +323,10 @@ async function loadWorldFeed({ force = false } = {}) {
     }
     if (!alreadyRendered) root.innerHTML = '<div class="empty-state">Loading World Feed…</div>';
     const data = await fetchFeedData(token);
+    if (alreadyRendered && hasActiveFeedDraft()) {
+      feedLoadedAt = 0;
+      return;
+    }
     renderFeed(data);
     feedLoadedAt = Date.now();
     void refreshSystemProjection();
