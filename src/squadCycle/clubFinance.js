@@ -34,6 +34,30 @@ function bootstrapWageBudget(state, clubId, wageBill) {
   return Math.max(wageBill, Math.ceil(wageBill * DEFAULT_WAGE_HEADROOM_RATIO));
 }
 
+function projectedFinanceState(state, {
+  openingCashBalance = DEFAULT_OPENING_CASH_BALANCE
+} = {}) {
+  if (!state || typeof state !== 'object') throw new Error('Squad-cycle state is required for club finances');
+  const current = state.finances && typeof state.finances === 'object' ? state.finances : {};
+  const currentClubs = current.clubs && typeof current.clubs === 'object' ? current.clubs : {};
+  const clubs = Object.create(null);
+
+  for (const clubId of Object.keys(state.clubs || {}).sort()) {
+    const wageBill = activeContractWages(state, clubId);
+    const existing = currentClubs[clubId] || {};
+    clubs[clubId] = {
+      club_id: clubId,
+      currency: text(existing.currency) || 'GBP',
+      cash_balance: money(existing.cash_balance, bootstrapCash(state, clubId, openingCashBalance)),
+      wage_budget: Math.max(
+        wageBill,
+        money(existing.wage_budget, bootstrapWageBudget(state, clubId, wageBill))
+      )
+    };
+  }
+  return { version: CLUB_FINANCE_VERSION, clubs };
+}
+
 function financeEvent(state, type, at, payload = {}) {
   if (!Array.isArray(state.events)) state.events = [];
   const row = Object.freeze({
@@ -51,36 +75,15 @@ function financeEvent(state, type, at, payload = {}) {
  * The bootstrap values are deliberately simple and separately calibratable: this module is
  * a transaction-safety spine, not the full Scouting & Finance Constitution economy.
  */
-export function ensureClubFinanceState(state, {
-  openingCashBalance = DEFAULT_OPENING_CASH_BALANCE
-} = {}) {
-  if (!state || typeof state !== 'object') throw new Error('Squad-cycle state is required for club finances');
-  if (!state.finances || typeof state.finances !== 'object') {
-    state.finances = { version: CLUB_FINANCE_VERSION, clubs: Object.create(null) };
-  }
-  state.finances.version = CLUB_FINANCE_VERSION;
-  if (!state.finances.clubs || typeof state.finances.clubs !== 'object') state.finances.clubs = Object.create(null);
-
-  for (const clubId of Object.keys(state.clubs || {}).sort()) {
-    const wageBill = activeContractWages(state, clubId);
-    const existing = state.finances.clubs[clubId] || {};
-    state.finances.clubs[clubId] = {
-      club_id: clubId,
-      currency: text(existing.currency) || 'GBP',
-      cash_balance: money(existing.cash_balance, bootstrapCash(state, clubId, openingCashBalance)),
-      wage_budget: Math.max(
-        wageBill,
-        money(existing.wage_budget, bootstrapWageBudget(state, clubId, wageBill))
-      )
-    };
-  }
+export function ensureClubFinanceState(state, options = {}) {
+  state.finances = projectedFinanceState(state, options);
   return state.finances;
 }
 
 export function clubFinanceSummary(state, clubId) {
-  ensureClubFinanceState(state);
   const id = text(clubId);
-  const finance = state.finances.clubs[id];
+  const finances = projectedFinanceState(state);
+  const finance = finances.clubs[id];
   if (!finance) throw new Error(`Unknown club: ${clubId}`);
   const wageBill = activeContractWages(state, id);
   return Object.freeze({
@@ -94,12 +97,10 @@ export function clubFinanceSummary(state, clubId) {
 }
 
 export function clubFinanceReadModel(state) {
-  ensureClubFinanceState(state);
-  return Object.fromEntries(Object.keys(state.clubs || {}).sort().map((clubId) => [clubId, clubFinanceSummary(state, clubId)]));
+  return Object.fromEntries(Object.keys(state?.clubs || {}).sort().map((clubId) => [clubId, clubFinanceSummary(state, clubId)]));
 }
 
 export function assertFinalWageBudgets(state, wageDeltasByClub = {}) {
-  ensureClubFinanceState(state);
   for (const [clubId, delta] of Object.entries(wageDeltasByClub || {})) {
     const summary = clubFinanceSummary(state, clubId);
     const finalBill = summary.wage_bill + Number(delta || 0);
@@ -111,30 +112,33 @@ export function assertFinalWageBudgets(state, wageDeltasByClub = {}) {
 }
 
 function normaliseCashLegs(state, legs = []) {
-  ensureClubFinanceState(state);
   return (Array.isArray(legs) ? legs : [])
     .filter((leg) => String(leg?.leg_type || '') === 'cash' || leg?.amount != null)
     .map((leg, index) => {
       const fromClubId = text(leg?.from_club_id ?? leg?.fromClubId);
       const toClubId = text(leg?.to_club_id ?? leg?.toClubId);
-      const amount = money(leg?.amount, -1);
+      const rawAmount = Number(leg?.amount);
       if (!fromClubId || !state.clubs?.[fromClubId]) throw new Error(`Cash leg ${index + 1} has unknown paying club`);
       if (!toClubId || !state.clubs?.[toClubId]) throw new Error(`Cash leg ${index + 1} has unknown receiving club`);
       if (fromClubId === toClubId) throw new Error('Cash transfer requires two different clubs');
-      if (amount < 0) throw new Error(`Cash leg ${index + 1} requires a non-negative amount`);
-      return { fromClubId, toClubId, amount };
+      if (!Number.isFinite(rawAmount) || rawAmount < 0) throw new Error(`Cash leg ${index + 1} requires a non-negative amount`);
+      return { fromClubId, toClubId, amount: Math.trunc(rawAmount) };
     });
 }
 
 /**
  * Validate every cash leg against the final net deal position before mutating a balance.
  * Incoming cash in the same atomic deal can fund outgoing cash; arbitrary leg order cannot
- * create a transient insufficient-funds failure.
+ * create a transient insufficient-funds failure. Rejected deals do not even lazily attach a
+ * finance object to legacy states: all projections and validation are side-effect free.
  */
 export function applyCashLegsAtomically(state, { legs = [], at } = {}) {
   const normalized = normaliseCashLegs(state, legs);
   if (!normalized.length) return [];
+  const atIso = new Date(at).toISOString();
+  if (atIso === 'Invalid Date') throw new Error(`Invalid date: ${at}`);
 
+  const projected = projectedFinanceState(state);
   const net = Object.create(null);
   for (const clubId of Object.keys(state.clubs || {})) net[clubId] = 0;
   for (const leg of normalized) {
@@ -144,7 +148,7 @@ export function applyCashLegsAtomically(state, { legs = [], at } = {}) {
 
   for (const [clubId, delta] of Object.entries(net)) {
     if (!delta) continue;
-    const opening = money(state.finances.clubs[clubId]?.cash_balance, 0);
+    const opening = money(projected.clubs[clubId]?.cash_balance, 0);
     const closing = opening + delta;
     if (closing < 0) {
       throw new Error(`${clubId} has insufficient cash for deal (${opening} available, ${Math.abs(delta)} net required)`);
@@ -153,10 +157,10 @@ export function applyCashLegsAtomically(state, { legs = [], at } = {}) {
 
   for (const [clubId, delta] of Object.entries(net)) {
     if (!delta) continue;
-    state.finances.clubs[clubId].cash_balance = money(state.finances.clubs[clubId].cash_balance, 0) + delta;
+    projected.clubs[clubId].cash_balance = money(projected.clubs[clubId].cash_balance, 0) + delta;
   }
+  state.finances = projected;
 
-  const atIso = new Date(at).toISOString();
   for (const leg of normalized) {
     financeEvent(state, 'cash_transferred', atIso, {
       from_club_id: leg.fromClubId,
