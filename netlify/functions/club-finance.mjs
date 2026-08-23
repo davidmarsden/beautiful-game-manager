@@ -1,5 +1,3 @@
-import { clubFinanceSummary } from '../../src/squadCycle/clubFinance.js';
-
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -55,30 +53,18 @@ export default async (request) => {
     const user = await userResponse.json();
 
     const profiles = await userSupabase(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id&limit=1`, token);
-    const manager = profiles[0];
-    if (!manager) return json({ error: 'Manager profile has not been created yet' }, 409);
+    if (!profiles[0]) return json({ error: 'Manager profile has not been created yet' }, 409);
 
-    const appointments = await userSupabase(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=world_id,club_id&limit=1`, token);
-    const appointment = appointments[0];
-    if (!appointment) return json({ error: 'No active club appointment' }, 409);
-
-    const context = await serverSupabase('/rest/v1/rpc/get_manager_portal_world_fragment', {
+    const finance = await serverSupabase('/rest/v1/rpc/get_manager_club_finance_for_user', {
       method: 'POST',
-      body: JSON.stringify({ p_world_id: appointment.world_id, p_club_id: appointment.club_id })
+      body: JSON.stringify({ p_user_id: user.id, p_world_id: null })
     });
-    if (!context?.world?.squad_cycle) return json({ error: 'Canonical club finance is unavailable' }, 409);
+    if (!finance?.finance) return json({ error: 'Canonical club finance is unavailable' }, 409);
 
-    const finance = clubFinanceSummary(context.world.squad_cycle, appointment.club_id);
-    return json({
-      world_id: appointment.world_id,
-      club_id: appointment.club_id,
-      source_checksum: context.save_checksum,
-      updated_at: context.updated_at,
-      finance
-    });
+    return json(finance);
   } catch (error) {
     const message = String(error?.message || 'Could not load club finances');
-    const status = /Session|Authentication/.test(message) ? 401 : /appointment|canonical|world/i.test(message) ? 409 : 503;
+    const status = /Session|Authentication/.test(message) ? 401 : /appointment|canonical|world|read model/i.test(message) ? 409 : 503;
     return json({ error: message }, status);
   }
 };
