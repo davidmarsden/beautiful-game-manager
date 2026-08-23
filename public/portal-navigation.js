@@ -2,6 +2,7 @@ import './history.js';
 import './history-load-recovery.js';
 import './team-selection-eligibility-guard.js';
 import './player-updates.js';
+import './finance.js';
 
 const VIEW_ALIASES = new Map([
   ['dashboard', 'dashboard'],
@@ -9,6 +10,8 @@ const VIEW_ALIASES = new Map([
   ['tactics', 'tactics'],
   ['tactics & team', 'tactics'],
   ['schedule', 'schedule'],
+  ['finance', 'finance'],
+  ['finances', 'finance'],
   ['history', 'history'],
   ['competition', 'competitions'],
   ['competitions', 'competitions'],
@@ -47,6 +50,31 @@ function installHistoryShell() {
     section.className = 'view';
     section.hidden = true;
     section.innerHTML = '<div class="empty-state">Loading canonical world history…</div>';
+    workspace.append(section);
+  }
+}
+
+function installFinanceShell() {
+  installStylesheet('./finance.css');
+  const workspace = document.querySelector('.workspace');
+  const tabs = workspace?.querySelector('.tabs');
+  if (tabs && !tabs.querySelector('[data-view="finance"]')) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.view = 'finance';
+    button.textContent = 'Finances';
+    const competition = tabs.querySelector('[data-view="competitions"]');
+    const history = tabs.querySelector('[data-view="history"]');
+    if (history) history.before(button);
+    else if (competition) competition.before(button);
+    else tabs.append(button);
+  }
+  if (workspace && !document.getElementById('financeView')) {
+    const section = document.createElement('div');
+    section.id = 'financeView';
+    section.className = 'view';
+    section.hidden = true;
+    section.innerHTML = '<div class="empty-state">Loading canonical club finances…</div>';
     workspace.append(section);
   }
 }
@@ -99,6 +127,7 @@ function installTransfersShell() {
 
 function installDynamicShells() {
   installHistoryShell();
+  installFinanceShell();
   installTransfersShell();
   installPlayerUpdatesShell();
 }
