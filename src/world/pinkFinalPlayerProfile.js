@@ -1,4 +1,4 @@
-const DEFAULT_PINK_FINAL_BASE_URL = 'https://davidmarsden.github.io/beautiful-game-data/players/';
+const DEFAULT_PINK_FINAL_BASE_URL = 'https://thebeautifulgame.online/pink-final/players/';
 
 const text = (value) => String(value ?? '').trim();
 const truthy = (value) => value === true || ['true', 'yes', 'published', 'public', 'live', 'eligible'].includes(text(value).toLowerCase());
