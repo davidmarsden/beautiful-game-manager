@@ -42,6 +42,7 @@ function retireLegacyClubNav() {
   if (!nav) return;
   nav.hidden = true;
   nav.setAttribute('aria-hidden', 'true');
+  nav.style.setProperty('display', 'none', 'important');
 }
 
 function installWorldFeedShell() {
