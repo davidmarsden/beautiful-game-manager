@@ -1,5 +1,6 @@
 import { loadPersistentWorld, savePersistentWorld } from '../../../src/world/persistentSeasonLoop.js';
 import { transferPlayersAtomically } from '../../../src/squadCycle/atomicTransfers.js';
+import { applyCashLegsAtomically } from '../../../src/squadCycle/clubFinance.js';
 import { buildWorldReadModel } from '../../../src/world/worldReadModel.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
@@ -38,7 +39,7 @@ function updateOwnershipProjection(world, playerId, toClubId) {
   }
 }
 
-function playerSettlementLegs(due) {
+function settlementLegs(due) {
   const legs = Array.isArray(due?.legs) ? due.legs : [];
   const unsupported = legs.find((leg) => !['permanent_transfer', 'cash'].includes(String(leg?.leg_type || '')));
   if (unsupported) throw new Error(`Unsupported transfer settlement leg type: ${unsupported.leg_type}`);
@@ -50,18 +51,20 @@ function playerSettlementLegs(due) {
   // opposite-direction cash leg is unambiguously that player's fee. In a multi-player
   // exchange cash is a deal-level adjustment and is deliberately not attributed to any
   // individual player event; the immutable transfer-deal legs remain authoritative.
-  if (players.length === 1) {
-    const player = players[0];
-    const fee = cash
-      .filter((leg) => leg.from_club_id === player.to_club_id && leg.to_club_id === player.from_club_id)
-      .reduce((sum, leg) => sum + Math.max(0, Number(leg.amount || 0) || 0), 0);
-    return [{ ...player, fee }];
-  }
-  return players.map((player) => ({ ...player, fee: 0 }));
+  const playerLegs = players.length === 1
+    ? [{
+        ...players[0],
+        fee: cash
+          .filter((leg) => leg.from_club_id === players[0].to_club_id && leg.to_club_id === players[0].from_club_id)
+          .reduce((sum, leg) => sum + Math.max(0, Number(leg.amount || 0) || 0), 0)
+      }]
+    : players.map((player) => ({ ...player, fee: 0 }));
+
+  return { playerLegs, cashLegs: cash };
 }
 
 function deterministicSettlementError(error) {
-  return /Transfer window is closed|Unknown player|Unknown club|is not owned by|already belongs to|registration limit reached|first-team squad limit reached|youth squad limit reached|Registration is closed|Contract end must be after|Cannot save invalid world|Atomic exchange|Unsupported transfer settlement leg type|does not contain a player leg/i.test(String(error?.message || error));
+  return /Transfer window is closed|Unknown player|Unknown club|is not owned by|already belongs to|registration limit reached|first-team squad limit reached|youth squad limit reached|Registration is closed|Contract end must be after|Cannot save invalid world|Atomic exchange|Unsupported transfer settlement leg type|does not contain a player leg|insufficient cash|wage budget exceeded|Cash leg|Cash transfer requires/i.test(String(error?.message || error));
 }
 
 async function reconcileSettlement(dealId, replacementChecksum) {
@@ -86,10 +89,12 @@ async function settleOne(due) {
   try {
     const world = loadPersistentWorld(JSON.stringify(before.save_envelope));
     const at = new Date(world.clock).toISOString();
-    const playerLegs = playerSettlementLegs(due);
+    const { playerLegs, cashLegs } = settlementLegs(due);
 
-    // The helper validates the complete final squad/registration state before making
-    // its first mutation, then removes every outbound slot before applying inbounds.
+    // Both helpers validate their complete final deal state before mutation. All mutations
+    // remain in this in-memory world until savePersistentWorld + CAS replacement succeeds,
+    // so any later validation failure still produces zero canonical partial mutation.
+    applyCashLegsAtomically(world.squad_cycle, { legs: cashLegs, at });
     transferPlayersAtomically(world.squad_cycle, { legs: playerLegs, at });
     for (const leg of playerLegs) updateOwnershipProjection(world, leg.player_id, leg.to_club_id);
 
@@ -125,7 +130,8 @@ async function settleOne(due) {
           status: 'completed',
           reconciled: true,
           replacement_checksum: envelope.checksum,
-          player_legs: playerLegs.length
+          player_legs: playerLegs.length,
+          cash_legs: cashLegs.length
         };
       }
       throw error;
@@ -138,7 +144,8 @@ async function settleOne(due) {
           status: 'completed',
           idempotent: true,
           replacement_checksum: envelope.checksum,
-          player_legs: playerLegs.length
+          player_legs: playerLegs.length,
+          cash_legs: cashLegs.length
         };
       }
       return { deal_id: due.deal_id, status: 'skipped', reason: atomic?.reason || 'checkpoint_changed_or_busy' };
@@ -147,7 +154,8 @@ async function settleOne(due) {
       deal_id: due.deal_id,
       status: 'completed',
       replacement_checksum: envelope.checksum,
-      player_legs: playerLegs.length
+      player_legs: playerLegs.length,
+      cash_legs: cashLegs.length
     };
   } catch (error) {
     if (deterministicSettlementError(error)) {
