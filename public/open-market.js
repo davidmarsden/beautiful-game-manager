@@ -159,7 +159,7 @@ function renderOpenMarket() {
 
 async function refreshListings() {
   setOpenMarketStatus('Loading listings…');
-  const data = await openMarketRequest('/api/transfer-deals');
+  const data = await openMarketRequest('/api/transfer-listings');
   openMarketListings = Array.isArray(data.listings) ? data.listings : [];
   setOpenMarketStatus(`${openMarketListings.length} listed`);
   if (openMarketTab === 'listed') renderOpenMarket();

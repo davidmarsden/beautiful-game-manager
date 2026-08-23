@@ -13,7 +13,8 @@ test('open market presents listed, free-agent and external discovery modes', asy
   assert.match(ui, /data-open-market-tab="listed"/);
   assert.match(ui, /data-open-market-tab="free-agents"/);
   assert.match(ui, /data-open-market-tab="external"/);
-  assert.match(ui, /\/api\/transfer-deals/);
+  assert.match(ui, /\/api\/transfer-listings/);
+  assert.doesNotMatch(ui, /refreshListings[\s\S]{0,300}\/api\/transfer-deals/);
   assert.match(ui, /\/api\/free-agents/);
 });
 
