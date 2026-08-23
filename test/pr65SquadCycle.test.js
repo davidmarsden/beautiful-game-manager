@@ -10,16 +10,22 @@ import {
   squadCycleSnapshot,
   transferPlayer
 } from '../src/squadCycle/squadCycle.js';
+import { ensureClubFinanceState } from '../src/squadCycle/clubFinance.js';
 import { syntheticSeasonClubs } from '../src/matchEngine/seasonSimulation.js';
 
 function foundationState(options = {}) {
-  return createSquadCycleState({
+  const state = createSquadCycleState({
     clubs: syntheticSeasonClubs({ clubCount: 4, baseRating: 86 }),
     seasonId: 'pr65-season',
     seasonStart: '2026-08-01T00:00:00.000Z',
     seasonEnd: '2027-06-30T23:59:59.000Z',
     ...options
   });
+  // #65 predates club finances and intentionally exercises £25k/£30k contracts.
+  // Keep that lifecycle test intent explicit instead of weakening the real finance guard.
+  ensureClubFinanceState(state);
+  for (const clubId of Object.keys(state.clubs)) state.finances.clubs[clubId].wage_budget = 50000;
+  return state;
 }
 
 function serialisableState(state) {
