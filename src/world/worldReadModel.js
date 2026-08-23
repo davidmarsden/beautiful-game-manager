@@ -1,3 +1,5 @@
+import { clubFinanceReadModel } from '../squadCycle/clubFinance.js';
+
 const clone = (value) => JSON.parse(JSON.stringify(value ?? null));
 
 function compactRuntimePlayerState(player = {}) {
@@ -83,6 +85,7 @@ function compactContract(contract = {}, contractId = null) {
     player_id: contract.player_id || null,
     club_id: contract.club_id || null,
     end_at: contract.end_at || null,
+    wage: contract.wage ?? null,
     status: contract.status || null,
     squad_registration: contract.squad_registration || null
   };
@@ -106,6 +109,7 @@ export function buildWorldReadModel(world = {}) {
     .map(([divisionId, runtime]) => [divisionId, compactRuntime(runtime)]));
   const players = compactObjectMap(world.squad_cycle?.players || {}, compactPlayer);
   const contracts = compactObjectMap(world.squad_cycle?.contracts || {}, compactContract);
+  const finances = world.squad_cycle ? clubFinanceReadModel(world.squad_cycle) : {};
 
   return {
     world_id: world.world_id || null,
@@ -125,6 +129,7 @@ export function buildWorldReadModel(world = {}) {
       clubs: clone(world.squad_cycle?.clubs || {}),
       players,
       contracts,
+      finances,
       state: {
         registrations: clone(world.squad_cycle?.state?.registrations || world.squad_cycle?.registrations || {})
       }
