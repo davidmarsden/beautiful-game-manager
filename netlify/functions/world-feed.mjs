@@ -58,6 +58,23 @@ async function rpc(name, body) {
   });
 }
 
+async function currentFeed(userId, worldId) {
+  return rpc('get_manager_world_feed_for_user', {
+    p_user_id: userId,
+    p_world_id: worldId,
+    p_limit: 60
+  });
+}
+
+async function bestEffortFeedItem(userId, worldId, itemId) {
+  try {
+    const feed = await currentFeed(userId, worldId);
+    return (feed?.items || []).find((candidate) => String(candidate.id) === String(itemId)) || null;
+  } catch {
+    return null;
+  }
+}
+
 export default async (request) => {
   try {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured' }, 503);
@@ -68,12 +85,7 @@ export default async (request) => {
 
     if (request.method === 'GET') {
       await rpc('sync_world_feed_system_items', { p_world_id: appointment.world_id });
-      const feed = await rpc('get_manager_world_feed_for_user', {
-        p_user_id: user.id,
-        p_world_id: appointment.world_id,
-        p_limit: 60
-      });
-      return json(feed);
+      return json(await currentFeed(user.id, appointment.world_id));
     }
 
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -86,7 +98,8 @@ export default async (request) => {
         p_world_id: appointment.world_id,
         p_body: payload.body
       });
-      return json(result, 201);
+      const item = await bestEffortFeedItem(user.id, appointment.world_id, result?.id);
+      return json({ ...result, item }, 201);
     }
     if (action === 'comment') {
       const result = await rpc('create_manager_world_feed_comment_for_user', {
@@ -95,7 +108,8 @@ export default async (request) => {
         p_feed_item_id: payload.feed_item_id,
         p_body: payload.body
       });
-      return json(result, 201);
+      const item = await bestEffortFeedItem(user.id, appointment.world_id, payload.feed_item_id);
+      return json({ ...result, item }, 201);
     }
     if (action === 'hide') {
       const result = await rpc('hide_world_feed_item_for_user', {
