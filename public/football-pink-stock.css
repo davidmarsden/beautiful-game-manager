@@ -103,6 +103,24 @@ tbody tr:hover {
   background-color: rgba(245, 215, 221, .72);
 }
 
+/* Transfers open market has its own runtime stylesheet, so theme it explicitly. */
+#transfersView .open-market-shell {
+  color: var(--tbg-colour-ink);
+  background: var(--tbg-surface-card);
+  border-color: var(--portal-border);
+}
+
+#transfersView .open-market-card,
+#transfersView .open-market-external-note {
+  background: var(--tbg-colour-workspace-raised);
+  border-color: var(--portal-border);
+}
+
+#transfersView .open-market-status,
+#transfersView .open-market-badge {
+  background: var(--tbg-colour-paper-light);
+}
+
 /* Player Updates follows the same Football Pink surface hierarchy as World. */
 #updatesView .player-updates-hero,
 #updatesView .player-updates-section {
