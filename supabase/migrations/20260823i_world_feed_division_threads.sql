@@ -306,8 +306,8 @@ end;
 $$;
 
 -- Preserve existing discussion by moving comments to the thread for the
--- commenter's club. If no club match is possible, retain it on the first
--- division thread for that matchday rather than throwing conversation away.
+-- commenter's club. Migration is season-aware: seasonless or otherwise
+-- unmatched legacy discussion is deliberately left on the source card.
 with moves as (
   select
     comment.id as comment_id,
@@ -321,6 +321,7 @@ with moves as (
       and target.item_type = 'matchday_completed'
       and target.metadata->>'thread_scope' = 'division'
       and target.metadata->>'matchday' = old_item.metadata->>'matchday'
+      and target.metadata->>'season_id' = public.world_feed_normalize_season_id(old_item.metadata->>'season_id')
       and coalesce(target.metadata->'club_ids', '[]'::jsonb) ? comment.club_id
     order by (target.metadata->>'division_number')::integer nulls last, target.id
     limit 1
@@ -332,11 +333,13 @@ with moves as (
       and target.item_type = 'matchday_completed'
       and target.metadata->>'thread_scope' = 'division'
       and target.metadata->>'matchday' = old_item.metadata->>'matchday'
+      and target.metadata->>'season_id' = public.world_feed_normalize_season_id(old_item.metadata->>'season_id')
     order by (target.metadata->>'division_number')::integer nulls last, target.id
     limit 1
   ) fallback on true
   where old_item.item_type = 'matchday_completed'
     and coalesce(old_item.metadata->>'thread_scope', '') <> 'division'
+    and nullif(old_item.metadata->>'season_id', '') is not null
 )
 update public.world_feed_comments comment
 set feed_item_id = moves.target_id
@@ -357,6 +360,7 @@ with moves as (
       and target.item_type = 'matchday_press_conference'
       and target.metadata->>'thread_scope' = 'division'
       and target.metadata->>'matchday' = old_item.metadata->>'matchday'
+      and target.metadata->>'season_id' = public.world_feed_normalize_season_id(old_item.metadata->>'season_id')
       and coalesce(target.metadata->'club_ids', '[]'::jsonb) ? comment.club_id
     order by (target.metadata->>'division_number')::integer nulls last, target.id
     limit 1
@@ -368,10 +372,12 @@ with moves as (
       and target.item_type = 'matchday_press_conference'
       and target.metadata->>'thread_scope' = 'division'
       and target.metadata->>'matchday' = old_item.metadata->>'matchday'
+      and target.metadata->>'season_id' = public.world_feed_normalize_season_id(old_item.metadata->>'season_id')
     order by (target.metadata->>'division_number')::integer nulls last, target.id
     limit 1
   ) fallback on true
   where old_item.item_type = 'matchday_upcoming'
+    and nullif(old_item.metadata->>'season_id', '') is not null
 )
 update public.world_feed_comments comment
 set feed_item_id = moves.target_id
@@ -379,13 +385,21 @@ from moves
 where comment.id = moves.comment_id
   and moves.target_id is not null;
 
-update public.world_feed_items
-set hidden_at = coalesce(hidden_at, now())
-where item_type = 'matchday_completed'
-  and coalesce(metadata->>'thread_scope', '') <> 'division';
+-- Retire a generic card only after all of its discussion has somewhere to go.
+-- Unmatched historical/seasonless discussions remain visible rather than being lost.
+update public.world_feed_items item
+set hidden_at = coalesce(item.hidden_at, now())
+where item.item_type = 'matchday_completed'
+  and coalesce(item.metadata->>'thread_scope', '') <> 'division'
+  and not exists (
+    select 1 from public.world_feed_comments comment where comment.feed_item_id = item.id
+  );
 
-update public.world_feed_items
-set hidden_at = coalesce(hidden_at, now())
-where item_type = 'matchday_upcoming';
+update public.world_feed_items item
+set hidden_at = coalesce(item.hidden_at, now())
+where item.item_type = 'matchday_upcoming'
+  and not exists (
+    select 1 from public.world_feed_comments comment where comment.feed_item_id = item.id
+  );
 
 commit;
