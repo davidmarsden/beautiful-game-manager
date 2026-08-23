@@ -1,3 +1,5 @@
+import { assertFinalWageBudgets, ensureClubFinanceState } from './clubFinance.js';
+
 const text = (value) => String(value ?? '').trim();
 const integer = (value, fallback = 0) => Number.isInteger(Number(value)) ? Number(value) : fallback;
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -289,6 +291,9 @@ export function renewContract(state, { playerId: idValue, clubId, at, endAt, wag
   if (player.club_id !== text(clubId)) throw new Error(`${player.tbg_player_id} is not owned by ${clubId}`);
   const oldContract = state.contracts[player.contract_id];
   const contract = buildReplacementContract({ player, clubId, atIso, endAt, wage, oldContract });
+  const oldWage = oldContract?.status === 'active' ? Math.max(0, integer(oldContract.wage, 0)) : 0;
+  assertFinalWageBudgets(state, { [text(clubId)]: contract.wage - oldWage });
+  ensureClubFinanceState(state);
 
   if (oldContract) oldContract.status = 'renewed';
   state.contracts[contract.contract_id] = contract;
@@ -319,6 +324,12 @@ export function transferPlayer(state, { playerId: idValue, fromClubId, toClubId,
     oldContract
   });
   assertRegistrationPossible(state, to, atIso, player.tbg_player_id);
+  const oldWage = oldContract?.status === 'active' ? Math.max(0, integer(oldContract.wage, 0)) : 0;
+  assertFinalWageBudgets(state, {
+    [from.club_id]: -oldWage,
+    [to.club_id]: nextContract.wage
+  });
+  ensureClubFinanceState(state);
 
   unregisterPlayer(state, { clubId: from.club_id, playerId: player.tbg_player_id, at: atIso, reason: 'transferred' });
   from.player_ids = from.player_ids.filter((id) => id !== player.tbg_player_id);

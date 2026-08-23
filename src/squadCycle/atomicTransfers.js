@@ -5,6 +5,7 @@ import {
   DEFAULT_FIRST_TEAM_SQUAD_LIMIT,
   DEFAULT_YOUTH_SQUAD_LIMIT
 } from './squadCycle.js';
+import { assertFinalWageBudgets, ensureClubFinanceState } from './clubFinance.js';
 
 const text = (value) => String(value ?? '').trim();
 const integer = (value, fallback = 0) => Number.isInteger(Number(value)) ? Number(value) : fallback;
@@ -73,7 +74,9 @@ function normalizePlayerLegs(state, legs, atIso) {
     if (to.player_ids.includes(playerId)) throw new Error(`${playerId} already belongs to ${toClubId}`);
     const contractEndAt = addYears(atIso, contractYears);
     if (new Date(contractEndAt) <= new Date(atIso)) throw new Error('Contract end must be after contract start');
-    return { playerId, fromClubId, toClubId, contractYears, contractEndAt, fee, player, from, to, cohort: cohort(player) };
+    const oldContract = state.contracts?.[player.contract_id];
+    const wage = Math.max(0, integer(raw?.wage, oldContract?.wage ?? 1000));
+    return { playerId, fromClubId, toClubId, contractYears, contractEndAt, fee, wage, oldWage: Math.max(0, integer(oldContract?.wage, 0)), player, from, to, cohort: cohort(player) };
   });
 }
 
@@ -105,11 +108,21 @@ function assertFinalCapacity(state, normalized) {
   }
 }
 
+function assertFinalWages(state, normalized) {
+  const deltas = Object.create(null);
+  for (const leg of normalized) {
+    deltas[leg.fromClubId] = Number(deltas[leg.fromClubId] || 0) - leg.oldWage;
+    deltas[leg.toClubId] = Number(deltas[leg.toClubId] || 0) + leg.wage;
+  }
+  assertFinalWageBudgets(state, deltas);
+}
+
 /**
  * Apply every permanent-player leg against one squad-cycle state as a simultaneous exchange.
- * All ownership, transfer-window, registration-window and final split-squad capacities are
- * validated before the first mutation. This deliberately models the final post-deal state,
- * so a 25-player club can swap one player out and one player in without a transient 26th player.
+ * All ownership, transfer-window, registration-window, final split-squad capacities and final
+ * wage budgets are validated before the first mutation. This deliberately models the final
+ * post-deal state, so a 25-player club can swap one player out and one player in without a
+ * transient 26th player or transient wage-budget failure.
  */
 export function transferPlayersAtomically(state, { legs, at } = {}) {
   const atIso = iso(at);
@@ -119,6 +132,9 @@ export function transferPlayersAtomically(state, { legs, at } = {}) {
 
   const normalized = normalizePlayerLegs(state, legs, atIso);
   assertFinalCapacity(state, normalized);
+  assertFinalWages(state, normalized);
+  // Finance bootstrap is a successful-transaction mutation, never a validation side effect.
+  ensureClubFinanceState(state);
 
   // Phase 1: remove every outbound registration/roster slot. Because all validation above
   // used the final state, no receiving club is penalised by arbitrary leg ordering.
@@ -145,7 +161,7 @@ export function transferPlayersAtomically(state, { legs, at } = {}) {
       club_id: leg.toClubId,
       start_at: atIso,
       end_at: leg.contractEndAt,
-      wage: Math.max(0, integer(oldContract?.wage, 1000)),
+      wage: leg.wage,
       status: 'active'
     };
     leg.to.player_ids.push(leg.playerId);

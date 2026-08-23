@@ -9,6 +9,7 @@ import {
   squadCycleSnapshot,
   transferPlayer
 } from '../src/squadCycle/squadCycle.js';
+import { ensureClubFinanceState } from '../src/squadCycle/clubFinance.js';
 
 const outputDirectory = path.resolve('calibration/generated');
 fs.mkdirSync(outputDirectory, { recursive: true });
@@ -19,6 +20,13 @@ const state = createSquadCycleState({
   seasonStart: '2026-08-01T00:00:00.000Z',
   seasonEnd: '2027-06-30T23:59:59.000Z'
 });
+
+// This foundation fixture deliberately exercises unusually large replacement wages. Give the
+// affected synthetic clubs an explicit fixture budget rather than weakening production finance
+// bootstrap rules to accommodate a lifecycle test that predates club-economy constraints.
+ensureClubFinanceState(state);
+state.finances.clubs['club-2'].wage_budget = 50000;
+state.finances.clubs['club-3'].wage_budget = 50000;
 
 const expiryTime = new Date(state.calendar.contract_expiry_at).getTime();
 const expiringByClub = Object.fromEntries(Object.keys(state.clubs).map((clubId) => [

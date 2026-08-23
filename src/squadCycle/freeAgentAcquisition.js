@@ -1,4 +1,5 @@
 import { activeTransferWindow, isYouthSquadPlayer, registerPlayer } from './squadCycle.js';
+import { assertFinalWageBudgets } from './clubFinance.js';
 
 const text = (value) => String(value ?? '').trim();
 const integer = (value, fallback = 0) => Number.isInteger(Number(value)) ? Number(value) : fallback;
@@ -101,6 +102,9 @@ export function acquireFreeAgent(state, { player: sourcePlayer, toClubId, at, co
     endAt: contractEndAt || addDays(state.calendar.season_end, 365 * 3),
     wage
   });
+  // A free agent adds the full new wage to the receiving club's active bill. Validate
+  // against the same fixed club budget used by transfers and renewals before mutating state.
+  assertFinalWageBudgets(state, { [target.club_id]: contract.wage });
 
   // Mutate only after all pure validation above has passed. registerPlayer remains
   // the canonical registration-cap/deadline guard and will roll through the same
