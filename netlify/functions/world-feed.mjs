@@ -1,0 +1,118 @@
+const SUPABASE_URL = process.env.SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+const json = (body, status = 200) => new Response(JSON.stringify(body), {
+  status,
+  headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
+});
+const bearerToken = (request) => {
+  const header = request.headers.get('authorization') || '';
+  return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
+};
+const isJwt = (value) => String(value || '').split('.').length === 3;
+
+async function requestSupabase(path, { apiKey, bearer, ...options } = {}) {
+  const response = await fetch(`${SUPABASE_URL}${path}`, {
+    ...options,
+    headers: {
+      apikey: apiKey,
+      ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
+      accept: 'application/json',
+      'content-type': 'application/json',
+      ...(options.headers || {})
+    }
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.message || body.error || `Supabase returned ${response.status}`);
+  return body;
+}
+
+const serviceSupabase = (path, options = {}) => requestSupabase(path, {
+  ...options,
+  apiKey: SUPABASE_SERVICE_ROLE_KEY,
+  ...(isJwt(SUPABASE_SERVICE_ROLE_KEY) ? { bearer: SUPABASE_SERVICE_ROLE_KEY } : {})
+});
+
+async function identity(token) {
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { apikey: SUPABASE_ANON_KEY, authorization: `Bearer ${token}` }
+  });
+  if (!response.ok) throw new Error('Session is invalid or expired');
+  return response.json();
+}
+
+async function activeAppointment(userId) {
+  const profiles = await serviceSupabase(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(userId)}&select=id&limit=1`);
+  const manager = profiles[0];
+  if (!manager) throw new Error('Manager profile has not been created yet');
+  const appointments = await serviceSupabase(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=world_id,club_id&limit=1`);
+  if (!appointments[0]) throw new Error('No active club appointment');
+  return appointments[0];
+}
+
+async function rpc(name, body) {
+  return serviceSupabase(`/rest/v1/rpc/${name}`, {
+    method: 'POST',
+    body: JSON.stringify(body)
+  });
+}
+
+export default async (request) => {
+  try {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured' }, 503);
+    const token = bearerToken(request);
+    if (!token) return json({ error: 'Authentication required' }, 401);
+    const user = await identity(token);
+    const appointment = await activeAppointment(user.id);
+
+    if (request.method === 'GET') {
+      await rpc('sync_world_feed_system_items', { p_world_id: appointment.world_id });
+      const feed = await rpc('get_manager_world_feed_for_user', {
+        p_user_id: user.id,
+        p_world_id: appointment.world_id,
+        p_limit: 60
+      });
+      return json(feed);
+    }
+
+    if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+    const payload = await request.json().catch(() => ({}));
+    const action = String(payload.action || '').trim().toLowerCase();
+
+    if (action === 'post') {
+      const result = await rpc('create_manager_world_feed_post_for_user', {
+        p_user_id: user.id,
+        p_world_id: appointment.world_id,
+        p_body: payload.body
+      });
+      return json(result, 201);
+    }
+    if (action === 'comment') {
+      const result = await rpc('create_manager_world_feed_comment_for_user', {
+        p_user_id: user.id,
+        p_world_id: appointment.world_id,
+        p_feed_item_id: payload.feed_item_id,
+        p_body: payload.body
+      });
+      return json(result, 201);
+    }
+    if (action === 'hide') {
+      const result = await rpc('hide_world_feed_item_for_user', {
+        p_user_id: user.id,
+        p_world_id: appointment.world_id,
+        p_feed_item_id: payload.feed_item_id
+      });
+      return json(result);
+    }
+    return json({ error: 'Unknown World Feed action' }, 400);
+  } catch (error) {
+    const message = String(error?.message || 'Could not load World Feed');
+    const status = /Session|Authentication/.test(message) ? 401
+      : /appointment|profile/i.test(message) ? 409
+      : /Administrator/.test(message) ? 403
+      : /between 1|unavailable|not found/i.test(message) ? 400
+      : 503;
+    return json({ error: message }, status);
+  }
+};
