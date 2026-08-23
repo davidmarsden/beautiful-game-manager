@@ -6,6 +6,7 @@ const hasValue = (value) => value !== null && value !== undefined && Number.isFi
 export const CLUB_FINANCE_VERSION = 'tbg-club-finance-v0.1';
 export const DEFAULT_OPENING_CASH_BALANCE = 100_000_000;
 export const DEFAULT_WAGE_HEADROOM_RATIO = 1.20;
+export const DEFAULT_MINIMUM_WAGE_BUDGET = 1_000;
 
 function activeContractStats(state, clubId) {
   return Object.values(state?.contracts || {}).reduce((stats, contract) => {
@@ -35,9 +36,11 @@ function configuredWageBudget(state, clubId, existing) {
 }
 
 function bootstrapWageBudget(wageBill, highestWage) {
-  // Alpha bootstrap only: retain 20% proportional headroom, but guarantee enough room for
-  // one ordinary incumbent-level incoming player so legacy straight transfers remain usable.
+  // Alpha bootstrap only: retain 20% proportional headroom, guarantee enough room for
+  // one ordinary incumbent-level incoming player, and give an otherwise empty club enough
+  // budget for one default-wage signing rather than bootstrapping permanently to zero.
   return Math.max(
+    DEFAULT_MINIMUM_WAGE_BUDGET,
     wageBill,
     Math.ceil(wageBill * DEFAULT_WAGE_HEADROOM_RATIO),
     wageBill + highestWage
