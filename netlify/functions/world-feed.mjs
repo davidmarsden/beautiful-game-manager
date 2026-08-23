@@ -111,6 +111,16 @@ export default async (request) => {
       const item = await bestEffortFeedItem(user.id, appointment.world_id, payload.feed_item_id);
       return json({ ...result, item }, 201);
     }
+    if (action === 'pin') {
+      const result = await rpc('set_world_feed_item_pinned_for_user', {
+        p_user_id: user.id,
+        p_world_id: appointment.world_id,
+        p_feed_item_id: payload.feed_item_id,
+        p_pinned: Boolean(payload.pinned)
+      });
+      const item = await bestEffortFeedItem(user.id, appointment.world_id, payload.feed_item_id);
+      return json({ ...result, item });
+    }
     if (action === 'hide') {
       const result = await rpc('hide_world_feed_item_for_user', {
         p_user_id: user.id,
