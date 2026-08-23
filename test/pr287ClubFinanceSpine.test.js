@@ -53,7 +53,10 @@ test('#287 an empty club bootstraps enough budget for one default-wage signing',
     seasonId: 'S1-empty',
     seasonStart: '2026-08-01T00:00:00.000Z',
     seasonEnd: '2027-06-30T23:59:59.000Z',
-    clubs: [{ club_id: 'EMPTY', club_name: 'Empty', players: [] }]
+    clubs: [
+      { club_id: 'EMPTY', club_name: 'Empty', players: [] },
+      { club_id: 'OTHER', club_name: 'Other', players: [] }
+    ]
   });
   const summary = clubFinanceReadModel(cycle).EMPTY;
   assert.equal(summary.wage_bill, 0);
