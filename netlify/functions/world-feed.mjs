@@ -66,6 +66,15 @@ async function currentFeed(userId, worldId) {
   });
 }
 
+async function bestEffortFeedItem(userId, worldId, itemId) {
+  try {
+    const feed = await currentFeed(userId, worldId);
+    return (feed?.items || []).find((candidate) => String(candidate.id) === String(itemId)) || null;
+  } catch {
+    return null;
+  }
+}
+
 export default async (request) => {
   try {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured' }, 503);
@@ -89,8 +98,7 @@ export default async (request) => {
         p_world_id: appointment.world_id,
         p_body: payload.body
       });
-      const feed = await currentFeed(user.id, appointment.world_id);
-      const item = (feed?.items || []).find((candidate) => String(candidate.id) === String(result?.id)) || null;
+      const item = await bestEffortFeedItem(user.id, appointment.world_id, result?.id);
       return json({ ...result, item }, 201);
     }
     if (action === 'comment') {
@@ -100,8 +108,7 @@ export default async (request) => {
         p_feed_item_id: payload.feed_item_id,
         p_body: payload.body
       });
-      const feed = await currentFeed(user.id, appointment.world_id);
-      const item = (feed?.items || []).find((candidate) => String(candidate.id) === String(payload.feed_item_id)) || null;
+      const item = await bestEffortFeedItem(user.id, appointment.world_id, payload.feed_item_id);
       return json({ ...result, item }, 201);
     }
     if (action === 'hide') {
