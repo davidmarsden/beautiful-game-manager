@@ -53,11 +53,16 @@ export default async (request) => {
     const user = await userResponse.json();
 
     const profiles = await userSupabase(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=id&limit=1`, token);
-    if (!profiles[0]) return json({ error: 'Manager profile has not been created yet' }, 409);
+    const manager = profiles[0];
+    if (!manager) return json({ error: 'Manager profile has not been created yet' }, 409);
+
+    const appointments = await userSupabase(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=world_id&limit=1`, token);
+    const appointment = appointments[0];
+    if (!appointment) return json({ error: 'No active club appointment' }, 409);
 
     const finance = await serverSupabase('/rest/v1/rpc/get_manager_club_finance_for_user', {
       method: 'POST',
-      body: JSON.stringify({ p_user_id: user.id, p_world_id: null })
+      body: JSON.stringify({ p_user_id: user.id, p_world_id: appointment.world_id })
     });
     if (!finance?.finance) return json({ error: 'Canonical club finance is unavailable' }, 409);
 
