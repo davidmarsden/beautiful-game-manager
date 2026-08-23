@@ -58,12 +58,41 @@ async function rpc(name, body) {
   });
 }
 
+const timestamp = (value) => {
+  const parsed = Date.parse(value || '');
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+function compareFeedItems(left, right) {
+  const leftPinned = Boolean(left?.pinned_at);
+  const rightPinned = Boolean(right?.pinned_at);
+  if (leftPinned !== rightPinned) return leftPinned ? -1 : 1;
+  if (leftPinned && rightPinned) {
+    const pinDelta = timestamp(right.pinned_at) - timestamp(left.pinned_at);
+    if (pinDelta) return pinDelta;
+  }
+
+  const activityDelta = timestamp(right?.activity_at || right?.created_at) - timestamp(left?.activity_at || left?.created_at);
+  if (activityDelta) return activityDelta;
+
+  if (left?.item_type === 'matchday_completed' && right?.item_type === 'matchday_completed') {
+    const matchdayDelta = Number(right?.metadata?.matchday || 0) - Number(left?.metadata?.matchday || 0);
+    if (matchdayDelta) return matchdayDelta;
+  }
+
+  const createdDelta = timestamp(right?.created_at) - timestamp(left?.created_at);
+  if (createdDelta) return createdDelta;
+  return String(right?.id || '').localeCompare(String(left?.id || ''));
+}
+
 async function currentFeed(userId, worldId) {
-  return rpc('get_manager_world_feed_for_user', {
+  const feed = await rpc('get_manager_world_feed_for_user', {
     p_user_id: userId,
     p_world_id: worldId,
     p_limit: 60
   });
+  if (Array.isArray(feed?.items)) feed.items.sort(compareFeedItems);
+  return feed;
 }
 
 async function bestEffortFeedItem(userId, worldId, itemId) {
@@ -110,6 +139,16 @@ export default async (request) => {
       });
       const item = await bestEffortFeedItem(user.id, appointment.world_id, payload.feed_item_id);
       return json({ ...result, item }, 201);
+    }
+    if (action === 'pin') {
+      const result = await rpc('set_world_feed_item_pinned_for_user', {
+        p_user_id: user.id,
+        p_world_id: appointment.world_id,
+        p_feed_item_id: payload.feed_item_id,
+        p_pinned: Boolean(payload.pinned)
+      });
+      const item = await bestEffortFeedItem(user.id, appointment.world_id, payload.feed_item_id);
+      return json({ ...result, item });
     }
     if (action === 'hide') {
       const result = await rpc('hide_world_feed_item_for_user', {

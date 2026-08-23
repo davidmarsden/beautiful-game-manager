@@ -1,5 +1,6 @@
 let feedLoadedAt = 0;
 let feedLoading = null;
+let feedCanModerate = false;
 const FEED_TTL = 15_000;
 
 function feedToken() {
@@ -61,13 +62,26 @@ function commentNode(comment) {
   return row;
 }
 
+function firstUnpinnedCard(list) {
+  return [...list.querySelectorAll('.world-feed-item')].find((card) => card.dataset.pinned !== 'true') || null;
+}
+
 function replaceFeedItem(item) {
   if (!item?.id) return false;
   const list = host()?.querySelector('.world-feed-list');
   if (!list) return false;
   const existing = list.querySelector(`[data-feed-item-id="${CSS.escape(String(item.id))}"]`);
   if (!existing) return false;
-  existing.replaceWith(itemNode(item));
+
+  const node = itemNode(item);
+  if (item.pinned_at) {
+    existing.replaceWith(node);
+  } else {
+    existing.remove();
+    const firstUnpinned = firstUnpinnedCard(list);
+    if (firstUnpinned) list.insertBefore(node, firstUnpinned);
+    else list.append(node);
+  }
   feedLoadedAt = Date.now();
   return true;
 }
@@ -77,18 +91,43 @@ function prependFeedItem(item) {
   const list = host()?.querySelector('.world-feed-list');
   if (!list) return false;
   list.querySelector('.empty-state')?.remove();
-  list.prepend(itemNode(item));
+  const node = itemNode(item);
+  const firstUnpinned = firstUnpinnedCard(list);
+  if (item.pinned_at || !firstUnpinned) list.prepend(node);
+  else list.insertBefore(node, firstUnpinned);
   feedLoadedAt = Date.now();
   return true;
 }
 
 function itemNode(item) {
-  const card = el('article', `world-feed-item world-feed-${item.item_type || 'world'}`);
+  const card = el('article', `world-feed-item world-feed-${item.item_type || 'world'}${item.pinned_at ? ' world-feed-pinned' : ''}`);
   card.dataset.feedItemId = item.id || '';
+  card.dataset.pinned = item.pinned_at ? 'true' : 'false';
+
   const top = el('div', 'world-feed-item-top');
-  const badge = el('span', 'world-feed-type', typeLabel(item.item_type));
-  const when = el('time', '', timeLabel(item.created_at));
-  top.append(badge, when);
+  const badges = el('div', 'world-feed-badges');
+  badges.append(el('span', 'world-feed-type', typeLabel(item.item_type)));
+  if (item.pinned_at) badges.append(el('span', 'world-feed-pin-badge', 'Pinned'));
+
+  const topActions = el('div', 'world-feed-top-actions');
+  if (feedCanModerate) {
+    const pin = el('button', 'world-feed-pin-action', item.pinned_at ? 'Unpin' : 'Pin');
+    pin.type = 'button';
+    pin.addEventListener('click', async () => {
+      pin.disabled = true;
+      try {
+        await sendFeedAction({ action: 'pin', feed_item_id: item.id, pinned: !item.pinned_at });
+        await loadWorldFeed({ force: true });
+      } catch (error) {
+        pin.textContent = error.message;
+      } finally {
+        pin.disabled = false;
+      }
+    });
+    topActions.append(pin);
+  }
+  topActions.append(el('time', '', timeLabel(item.created_at)));
+  top.append(badges, topActions);
 
   const title = el('h3', '', item.title || 'World update');
   const identity = item.actor_manager_name
@@ -144,6 +183,7 @@ function renderFeed(data) {
   const root = host();
   if (!root) return;
   root.replaceChildren();
+  feedCanModerate = Boolean(data?.can_moderate);
 
   const shell = el('section', 'world-feed-shell');
   const heading = el('div', 'world-feed-heading');
