@@ -6,22 +6,22 @@ import { DEFAULT_PINK_FINAL_CLUB_BASE_URL, pinkFinalClubProfileUrl } from '../sr
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 
-test('Pink Final defaults use the branded thebeautifulgame.online namespace', () => {
-  assert.equal(DEFAULT_PINK_FINAL_BASE_URL, 'https://thebeautifulgame.online/pink-final/players/');
-  assert.equal(DEFAULT_PINK_FINAL_CLUB_BASE_URL, 'https://thebeautifulgame.online/pink-final/clubs/');
+test('Pink Final defaults use the dedicated thepinkfinal.online origin', () => {
+  assert.equal(DEFAULT_PINK_FINAL_BASE_URL, 'https://thepinkfinal.online/players/');
+  assert.equal(DEFAULT_PINK_FINAL_CLUB_BASE_URL, 'https://thepinkfinal.online/clubs/');
   assert.equal(
     pinkFinalProfileUrl({ tbg_player_id: 'tbg-player-001' }),
-    'https://thebeautifulgame.online/pink-final/players/?id=tbg-player-001'
+    'https://thepinkfinal.online/players/?id=tbg-player-001'
   );
   assert.equal(
     pinkFinalClubProfileUrl({ club_id: 'club-001' }),
-    'https://thebeautifulgame.online/pink-final/clubs/?id=club-001'
+    'https://thepinkfinal.online/clubs/?id=club-001'
   );
 });
 
-test('Netlify reverse-proxies the Pink Final namespace to its independent static origin', async () => {
+test('legacy TBG Pink Final routes permanently redirect to the dedicated domain', async () => {
   const config = await read('../netlify.toml');
-  assert.match(config, /from = "\/pink-final\/\*"/);
-  assert.match(config, /to = "https:\/\/davidmarsden\.github\.io\/beautiful-game-data\/:splat"/);
-  assert.doesNotMatch(config, /for = "\/pink-final\/\*"[\s\S]*Cache-Control/);
+  assert.match(config, /from = "\/pink-final"[\s\S]*to = "https:\/\/thepinkfinal\.online\/"[\s\S]*status = 301/);
+  assert.match(config, /from = "\/pink-final\/\*"[\s\S]*to = "https:\/\/thepinkfinal\.online\/:splat"[\s\S]*status = 301/);
+  assert.doesNotMatch(config, /davidmarsden\.github\.io\/beautiful-game-data\/:splat/);
 });
