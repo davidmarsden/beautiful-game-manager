@@ -109,7 +109,6 @@ function assertFinalCapacity(state, normalized) {
 }
 
 function assertFinalWages(state, normalized) {
-  ensureClubFinanceState(state);
   const deltas = Object.create(null);
   for (const leg of normalized) {
     deltas[leg.fromClubId] = Number(deltas[leg.fromClubId] || 0) - leg.oldWage;
@@ -134,6 +133,8 @@ export function transferPlayersAtomically(state, { legs, at } = {}) {
   const normalized = normalizePlayerLegs(state, legs, atIso);
   assertFinalCapacity(state, normalized);
   assertFinalWages(state, normalized);
+  // Finance bootstrap is a successful-transaction mutation, never a validation side effect.
+  ensureClubFinanceState(state);
 
   // Phase 1: remove every outbound registration/roster slot. Because all validation above
   // used the final state, no receiving club is penalised by arbitrary leg ordering.
