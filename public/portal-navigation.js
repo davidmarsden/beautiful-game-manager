@@ -37,6 +37,13 @@ function installStylesheet(href) {
   document.head.append(link);
 }
 
+function retireLegacyClubNav() {
+  const nav = document.getElementById('clubNav');
+  if (!nav) return;
+  nav.hidden = true;
+  nav.setAttribute('aria-hidden', 'true');
+}
+
 function installWorldFeedShell() {
   installStylesheet('./world-feed.css');
   const workspace = document.querySelector('.workspace');
@@ -154,6 +161,7 @@ function installTransfersShell() {
 }
 
 function installDynamicShells() {
+  retireLegacyClubNav();
   installWorldFeedShell();
   installHistoryShell();
   installFinanceShell();
