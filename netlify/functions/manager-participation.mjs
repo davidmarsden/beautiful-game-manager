@@ -42,12 +42,25 @@ async function identity(token) {
   return response.json();
 }
 
-async function activeWorld(userId) {
+async function activeContext(userId) {
   const profiles = await serviceSupabase(`/rest/v1/manager_profiles?user_id=eq.${encodeURIComponent(userId)}&select=id&limit=1`);
   if (!profiles[0]) throw new Error('Manager profile has not been created yet');
   const appointments = await serviceSupabase(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(profiles[0].id)}&status=eq.active&select=world_id&limit=1`);
   if (!appointments[0]) throw new Error('No active club appointment');
-  return appointments[0].world_id;
+  return { managerId: profiles[0].id, worldId: appointments[0].world_id };
+}
+
+async function managerDirectory(worldId, selfId) {
+  const appointments = await serviceSupabase(`/rest/v1/manager_appointments?world_id=eq.${encodeURIComponent(worldId)}&status=eq.active&select=manager_id,club_id&order=club_id.asc`);
+  const ids = [...new Set(appointments.map((row) => row.manager_id).filter(Boolean))];
+  if (!ids.length) return [];
+  const idFilter = ids.map((id) => `"${String(id).replaceAll('"', '')}"`).join(',');
+  const profiles = await serviceSupabase(`/rest/v1/manager_profiles?id=in.(${encodeURIComponent(idFilter)})&select=id,display_name`);
+  const names = new Map(profiles.map((profile) => [String(profile.id), profile.display_name]));
+  return appointments
+    .filter((row) => String(row.manager_id) !== String(selfId))
+    .map((row) => ({ manager_id: row.manager_id, manager_name: names.get(String(row.manager_id)) || 'Manager', club_id: row.club_id }))
+    .sort((a, b) => String(a.manager_name).localeCompare(String(b.manager_name)));
 }
 
 export default async (request) => {
@@ -57,7 +70,7 @@ export default async (request) => {
     const token = bearerToken(request);
     if (!token) return json({ error: 'Authentication required' }, 401);
     const user = await identity(token);
-    const worldId = await activeWorld(user.id);
+    const context = await activeContext(user.id);
     const url = new URL(request.url);
     const target = String(url.searchParams.get('manager_id') || '').trim() || null;
 
@@ -65,10 +78,12 @@ export default async (request) => {
       method: 'POST',
       body: JSON.stringify({
         p_user_id: user.id,
-        p_world_id: worldId,
+        p_world_id: context.worldId,
         p_target_manager_id: target
       })
     });
+
+    if (!target) result.directory = await managerDirectory(context.worldId, context.managerId);
     return json(result);
   } catch (error) {
     const message = String(error?.message || 'Could not load manager participation');
