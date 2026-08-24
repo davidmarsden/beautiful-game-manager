@@ -1,0 +1,33 @@
+/* TBG identity layer: retain the Football Pink layout/print language, move the game itself back onto football green. */
+:root{
+  --tbg-colour-paper:#8fae78;
+  --tbg-colour-paper-strong:#6f925a;
+  --tbg-colour-paper-light:#dbe8cf;
+  --tbg-colour-cream:#f4f1df;
+  --tbg-colour-workspace:#bdd0aa;
+  --tbg-colour-workspace-raised:#e5edda;
+  --tbg-surface-panel:rgba(226,237,215,.96);
+  --tbg-surface-card:#e8efdf;
+  --tbg-surface-table:#e4ecd9;
+  --portal-panel:var(--tbg-surface-card);
+  --portal-border:rgba(25,43,24,.28);
+  --tbg-green-deep:#183a28;
+  --tbg-green-mid:#52784c;
+  --tbg-green-pale:#d9e8cf;
+}
+body{background:radial-gradient(circle at 15% 8%,rgba(255,255,255,.18),transparent 30%),repeating-linear-gradient(0deg,rgba(0,0,0,.018),rgba(0,0,0,.018) 1px,transparent 1px,transparent 5px),var(--tbg-colour-paper)}
+.workspace{background:rgba(189,208,170,.95)}
+.auth-card,.unassigned-state,.club-strip,.panel,.inbox-message,.empty-state,.tbg-profile-empty,.current-submission,.submission-summary{background:var(--tbg-surface-card);border-color:var(--portal-border)}
+.table-wrap,table,.tbg-table{background:var(--tbg-surface-table)}
+tbody tr:nth-child(even){background:rgba(111,146,90,.10)}tbody tr:hover{background:rgba(244,241,223,.82)}
+input,select,textarea{background:var(--tbg-colour-cream)}
+.tabs{background:#17251b}.tabs button.active{background:var(--tbg-colour-paper-light);color:#17251b}.tabs button:hover{background:#25412e}
+.world-pill{background:var(--tbg-colour-paper-light)!important;color:#17251b!important;border-color:#f4f1df!important}
+#updatesView .player-updates-hero,#updatesView .player-updates-section,#transfersView .open-market-shell{background:var(--tbg-surface-card)!important;border-color:var(--portal-border)!important;color:#1d281f!important}
+#updatesView .player-updates-pill,#transfersView .open-market-status,#transfersView .open-market-badge{background:var(--tbg-colour-workspace-raised)!important}
+#updatesView .player-update-card:nth-child(even){background:rgba(111,146,90,.08)!important}
+.world-feed-composer,.world-feed-item,.world-feed-social-activity{background:var(--tbg-surface-card)!important;border-color:var(--portal-border)!important;color:#1d281f!important}
+.world-feed-item:nth-child(3n+1),.world-feed-item:nth-child(3n+2),.world-feed-item:nth-child(3n){background:var(--tbg-surface-card)!important}
+.world-feed-live,.world-feed-activity-metric{background:var(--tbg-colour-workspace-raised)!important;border-color:var(--portal-border)!important}
+.world-feed-composer textarea,.world-feed-comment-form textarea{background:var(--tbg-colour-cream)!important;border-color:#8ba27a!important;color:#1d281f!important}
+.manager-participation-card{background:#e9f0e1!important;border-color:#879d78!important;color:#1d281f!important}.manager-participation-close,.manager-pin,.manager-directory-row,.manager-participation-metric{background:#f3f6ed!important;border-color:#a9b99d!important;color:#1d281f!important}.manager-participation-principle,.manager-participation-status{background:#d5e4ca!important;border-color:#729267!important;color:#27442d!important}.manager-participation-head small{color:#52734f!important}.manager-participation-head p,.manager-pin small,.manager-recent-item small,.manager-participation-note,.manager-participation-empty{color:#59685a!important}.manager-recent-item{border-color:#c0cfb7!important}.manager-directory-row:hover,.manager-directory-row:focus{background:#dce9d3!important;outline-color:#63875b!important}
