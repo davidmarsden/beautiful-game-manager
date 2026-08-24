@@ -47,12 +47,38 @@ function vacantOptions(exceptClubId = null) {
     .join('');
 }
 
+function inviteDeliveryLabel(invite) {
+  if (invite.email_last_error) return `email failed: ${invite.email_last_error}`;
+  if (invite.email_sent_at) return `email sent ${new Date(invite.email_sent_at).toLocaleString()}`;
+  return 'email not sent';
+}
+
 function renderInvites() {
   const rows = context.invites || [];
   $('inviteList').innerHTML = rows.length ? rows.map((invite) => {
     const allowed = invite.allowed_club_ids?.length ? `${invite.allowed_club_ids.length} specified club${invite.allowed_club_ids.length === 1 ? '' : 's'}` : 'Any vacant club';
-    return `<article class="alpha-row"><strong>${text(invite.email)}</strong><small>${text(invite.status)} · ${text(allowed)}${invite.claimed_club_id ? ` · claimed ${text(invite.claimed_club_id)}` : ''}</small></article>`;
+    return `<article class="alpha-row" data-invite="${text(invite.id)}">
+      <strong>${text(invite.email)}</strong>
+      <small>${text(invite.status)} · ${text(allowed)}${invite.claimed_club_id ? ` · claimed ${text(invite.claimed_club_id)}` : ''} · ${text(inviteDeliveryLabel(invite))}</small>
+      <div class="alpha-actions"><button type="button" class="resend-invite-button">Resend invitation</button></div>
+    </article>`;
   }).join('') : '<p class="muted">No alpha invitations yet.</p>';
+
+  document.querySelectorAll('.resend-invite-button').forEach((button) => button.addEventListener('click', async () => {
+    const row = button.closest('[data-invite]');
+    button.disabled = true;
+    $('adminStatus').textContent = 'Sending invitation…';
+    try {
+      const result = await api({ method: 'POST', body: JSON.stringify({ action: 'resend_invite', invite_id: row.dataset.invite }) });
+      context = await api();
+      render();
+      $('adminStatus').textContent = result.email_sent ? 'Invitation email sent.' : `Invitation remains saved, but email failed: ${result.email_error}`;
+    } catch (error) {
+      $('adminStatus').textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  }));
 }
 
 function renderAppointments() {
@@ -112,14 +138,14 @@ async function mutate(payload) {
 $('inviteForm').addEventListener('submit', async (event) => {
   event.preventDefault();
   const selected = [...$('inviteClubs').selectedOptions].map((option) => option.value);
-  $('inviteStatus').textContent = 'Saving invitation…';
+  $('inviteStatus').textContent = 'Saving invitation and sending email…';
   try {
-    await api({ method: 'POST', body: JSON.stringify({ action: 'invite', email: $('inviteEmail').value, allowed_club_ids: selected }) });
+    const result = await api({ method: 'POST', body: JSON.stringify({ action: 'invite', email: $('inviteEmail').value, allowed_club_ids: selected }) });
     $('inviteEmail').value = '';
     [...$('inviteClubs').options].forEach((option) => { option.selected = false; });
     context = await api();
     render();
-    $('inviteStatus').textContent = 'Invitation saved.';
+    $('inviteStatus').textContent = result.email_sent ? 'Invitation saved and email sent.' : `Invitation saved, but email delivery failed: ${result.email_error}`;
   } catch (error) {
     $('inviteStatus').textContent = error.message;
   }
