@@ -69,13 +69,23 @@ async function sendAlphaInvite({ request, email }) {
 }
 
 async function sendAndTrackInvite({ request, userId, inviteId, email }) {
+  let messageId;
   try {
-    const messageId = await sendAlphaInvite({ request, email });
-    await recordEmailResult(userId, inviteId, messageId, null);
-    return { email_sent: true, email_message_id: messageId };
+    messageId = await sendAlphaInvite({ request, email });
   } catch (error) {
     await recordEmailResult(userId, inviteId, null, error.message).catch(() => {});
     return { email_sent: false, email_error: error.message };
+  }
+
+  try {
+    await recordEmailResult(userId, inviteId, messageId, null);
+    return { email_sent: true, email_message_id: messageId };
+  } catch (error) {
+    return {
+      email_sent: true,
+      email_message_id: messageId,
+      email_tracking_error: error.message
+    };
   }
 }
 
@@ -119,6 +129,9 @@ export default async (request) => {
       if (!context?.ok) return json({ error: context?.code || 'Admin access required', ...context }, 403);
       const invite = (context.invites || []).find((item) => item.id === inviteId);
       if (!invite) return json({ error: 'invite_not_found', code: 'invite_not_found' }, 404);
+      if (invite.status !== 'invited') {
+        return json({ error: 'invite_not_active', code: 'invite_not_active', status: invite.status }, 409);
+      }
       return json({ ok: true, invite_id: inviteId, ...(await sendAndTrackInvite({ request, userId: user.id, inviteId, email: invite.email })) });
     }
 
