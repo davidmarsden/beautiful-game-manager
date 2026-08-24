@@ -18,7 +18,6 @@ test('#321 agreement boundary centrally enforces the unordered club-pair season 
   assert.match(sql, /pair_reserved_count >= 3/);
   assert.match(sql, /Seasonal transfer limit reached/);
 
-  // One deal row is one package: the cap does not count transfer_deal_legs.
   const capSection = sql.slice(sql.indexOf('select count(*) into pair_reserved_count'), sql.indexOf("if pair_reserved_count >= 3"));
   assert.doesNotMatch(capSection, /transfer_deal_legs/);
 });
@@ -36,7 +35,7 @@ test('#321 cancelled or failed deals release the pair slot by construction', asy
 test('#321 stewardship assessment uses canonical ratings and narrow public thresholds', async () => {
   const sql = await read(migrationPath);
 
-  assert.match(sql, /cache\.source_checksum <> canonical_checksum/);
+  assert.match(sql, /cache_row\.source_checksum <> canonical_checksum/);
   assert.match(sql, /squad_cycle,players/);
   assert.match(sql, /underlying_ability_rating/);
   assert.match(sql, /club_rank <= 5/);
@@ -48,7 +47,6 @@ test('#321 stewardship assessment uses canonical ratings and narrow public thres
   assert.match(sql, /outgoing_a >= 4 and incoming_a = 0/);
   assert.match(sql, /integrity_cooling_minutes := case when warning_value then 1440 else 15 end/);
 
-  // #321 deliberately does not invent a market-value/fair-price oracle.
   assert.doesNotMatch(sql, /market_value/);
   assert.doesNotMatch(sql, /fair_value/);
 });
@@ -64,6 +62,7 @@ test('#321 warning cooling remains binding-safe and normal deals retain the exis
 
 test('#321 official deal principle and assessment are manager-visible through lifecycle state', async () => {
   const sql = await read(migrationPath);
+  const ui = await read('public/transfer-negotiations.js');
 
   assert.match(sql, /binding_authority text not null default 'tbg_transfer_mechanism_only'/);
   assert.match(sql, /binding_authority = 'tbg_transfer_mechanism_only'/);
@@ -72,6 +71,27 @@ test('#321 official deal principle and assessment are manager-visible through li
   assert.match(sql, /'integrity_reasons', deal\.integrity_reasons/);
   assert.match(sql, /'integrity_assessment', deal\.integrity_assessment/);
   assert.match(sql, /'external_agreements_binding', false/);
+  assert.match(ui, /integrity_level/);
+  assert.match(ui, /integrity_reasons/);
+  assert.match(ui, /Official TBG deal principle/);
+});
+
+test('#321 acceptance responses do not hard-code the normal grace duration', async () => {
+  const straight = await read('netlify/functions/transfer-deals.mjs');
+  const exchange = await read('netlify/functions/transfer-exchange-response.mjs');
+
+  assert.doesNotMatch(straight, /A 15-minute mistake-grace period now applies/);
+  assert.doesNotMatch(exchange, /normal mistake-grace period now applies/);
+  assert.match(straight, /mistake-grace period now applies before the deal becomes binding/);
+  assert.match(exchange, /mistake-grace period now applies before atomic settlement/);
+});
+
+test('#321 deterministic integrity refusals are validation conflicts, not service outages', async () => {
+  const straight = await read('netlify/functions/transfer-deals.mjs');
+  const exchange = await read('netlify/functions/transfer-exchange-response.mjs');
+
+  assert.match(straight, /Seasonal transfer limit\|Board refusal/);
+  assert.match(exchange, /Seasonal transfer limit\|Board refusal/);
 });
 
 test('#321 integrity guard runs before the existing lifecycle scheduler', async () => {
