@@ -7,6 +7,8 @@ let transferObserver = null;
 let messageObserver = null;
 let observedMessage = null;
 let activeFeedbackTarget = null;
+let listingActionInFlight = false;
+let listingAwaitingRefresh = false;
 
 function ensureStyles() {
   if (document.getElementById(STYLE_ID)) return;
@@ -108,6 +110,18 @@ function ensureLocalFeedback(host) {
   return local;
 }
 
+function setListingControlsDisabled(disabled) {
+  transferWorkspace()?.querySelectorAll('[data-withdraw-listing]').forEach((button) => {
+    button.disabled = disabled;
+  });
+}
+
+function releaseListingActionLock() {
+  listingActionInFlight = false;
+  listingAwaitingRefresh = false;
+  setListingControlsDisabled(false);
+}
+
 function mirrorFeedbackLocally() {
   const message = transferMessage();
   const text = String(message?.textContent || '').trim();
@@ -120,12 +134,29 @@ function mirrorFeedbackLocally() {
   return true;
 }
 
+function handleMessageChange() {
+  mirrorFeedbackLocally();
+  if (!listingActionInFlight || activeFeedbackTarget?.type !== 'listing') return;
+  const text = String(transferMessage()?.textContent || '').trim();
+  if (!text || text === 'Withdrawing transfer listing…') return;
+  if (text === 'Transfer listing withdrawn immediately.') {
+    // Keep every listing control disabled until the successful refresh mutates
+    // the listings DOM. Otherwise another withdrawal can start while the first
+    // request is still finishing and steal the singleton action-local target.
+    listingAwaitingRefresh = true;
+    return;
+  }
+  // Errors do not refresh the listing DOM, so release immediately once the
+  // request has produced its terminal error message.
+  releaseListingActionLock();
+}
+
 function bindMessageObserver() {
   const message = transferMessage();
   if (!message || observedMessage === message) return;
   messageObserver?.disconnect();
   observedMessage = message;
-  messageObserver = new MutationObserver(() => mirrorFeedbackLocally());
+  messageObserver = new MutationObserver(handleMessageChange);
   messageObserver.observe(message, { childList: true, characterData: true, subtree: true });
 }
 
@@ -163,6 +194,17 @@ function captureFeedbackTarget(event) {
     '[data-legacy-transfer-response]'
   ].join(','));
   if (!control) return;
+
+  if (control.matches('[data-withdraw-listing]')) {
+    if (listingActionInFlight) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+    listingActionInFlight = true;
+    listingAwaitingRefresh = false;
+    setListingControlsDisabled(true);
+  }
 
   const card = control.closest('[data-first-class-deal]');
   if (card?.dataset.firstClassDeal) {
@@ -207,6 +249,9 @@ function armTransferObserver() {
   if (!root || transferObserver) return;
   transferObserver = new MutationObserver(() => {
     if (activeFeedbackTarget) queueMicrotask(() => mirrorFeedbackLocally());
+    if (listingActionInFlight && listingAwaitingRefresh) {
+      queueMicrotask(() => releaseListingActionLock());
+    }
   });
   // Deliberately scoped to Transfers: offer/listing refreshes can replace the
   // local feedback node, but match replay/world-feed DOM churn must not wake it.
