@@ -1,33 +1,194 @@
-/* TBG identity layer: retain the Football Pink layout/print language, move the game itself back onto football green. */
+/* TBG identity layer: a Brazil-derived football palette over the preserved Football Pink layout language.
+ * Canonical source colours:
+ *   Brazil yellow     #FFDC02
+ *   Brazil green      #19AE47
+ *   Brazil dark blue  #193375
+ *   Brazil light blue #0C87D1
+ *   white             #FFFFFF
+ *
+ * The bright kit colours are used as accents; softer derived surfaces keep the portal readable.
+ */
 :root{
-  --tbg-colour-paper:#8fae78;
-  --tbg-colour-paper-strong:#6f925a;
-  --tbg-colour-paper-light:#dbe8cf;
-  --tbg-colour-cream:#f4f1df;
-  --tbg-colour-workspace:#bdd0aa;
-  --tbg-colour-workspace-raised:#e5edda;
-  --tbg-surface-panel:rgba(226,237,215,.96);
-  --tbg-surface-card:#e8efdf;
-  --tbg-surface-table:#e4ecd9;
+  --tbg-brazil-yellow:#FFDC02;
+  --tbg-brazil-green:#19AE47;
+  --tbg-brazil-blue:#193375;
+  --tbg-brazil-sky:#0C87D1;
+  --tbg-brazil-white:#FFFFFF;
+
+  --tbg-colour-paper:#b8d69f;
+  --tbg-colour-paper-strong:#8fbd74;
+  --tbg-colour-paper-light:#e5f1da;
+  --tbg-colour-cream:#f8f7e8;
+  --tbg-colour-workspace:#c9dfb7;
+  --tbg-colour-workspace-raised:#eef6e8;
+  --tbg-surface-panel:rgba(239,247,232,.97);
+  --tbg-surface-card:#f5f9ef;
+  --tbg-surface-card-alt:#eaf4e2;
+  --tbg-surface-table:#edf5e6;
+  --tbg-colour-ink:#17221a;
+  --tbg-colour-muted:#58685c;
+  --tbg-colour-rule:#6f8e6f;
+  --tbg-colour-focus:var(--tbg-brazil-sky);
+  --tbg-colour-success:var(--tbg-brazil-green);
   --portal-panel:var(--tbg-surface-card);
-  --portal-border:rgba(25,43,24,.28);
+  --portal-border:rgba(25,51,117,.22);
   --tbg-green-deep:#183a28;
   --tbg-green-mid:#52784c;
   --tbg-green-pale:#d9e8cf;
 }
-body{background:radial-gradient(circle at 15% 8%,rgba(255,255,255,.18),transparent 30%),repeating-linear-gradient(0deg,rgba(0,0,0,.018),rgba(0,0,0,.018) 1px,transparent 1px,transparent 5px),var(--tbg-colour-paper)}
-.workspace{background:rgba(189,208,170,.95)}
+
+body{
+  color:var(--tbg-colour-ink);
+  background:
+    radial-gradient(circle at 15% 8%,rgba(255,255,255,.22),transparent 30%),
+    repeating-linear-gradient(0deg,rgba(25,51,117,.018),rgba(25,51,117,.018) 1px,transparent 1px,transparent 5px),
+    var(--tbg-colour-paper);
+}
+.workspace{background:rgba(201,223,183,.96)}
 .auth-card,.unassigned-state,.club-strip,.panel,.inbox-message,.empty-state,.tbg-profile-empty,.current-submission,.submission-summary{background:var(--tbg-surface-card);border-color:var(--portal-border)}
 .table-wrap,table,.tbg-table{background:var(--tbg-surface-table)}
-tbody tr:nth-child(even){background:rgba(111,146,90,.10)}tbody tr:hover{background:rgba(244,241,223,.82)}
-input,select,textarea{background:var(--tbg-colour-cream)}
-.tabs{background:#17251b}.tabs button.active{background:var(--tbg-colour-paper-light);color:#17251b}.tabs button:hover{background:#25412e}
-.world-pill{background:var(--tbg-colour-paper-light)!important;color:#17251b!important;border-color:#f4f1df!important}
-#updatesView .player-updates-hero,#updatesView .player-updates-section,#transfersView .open-market-shell{background:var(--tbg-surface-card)!important;border-color:var(--portal-border)!important;color:#1d281f!important}
+tbody tr:nth-child(even){background:rgba(25,174,71,.06)}
+tbody tr:hover{background:rgba(255,220,2,.13)}
+input,select,textarea{background:var(--tbg-colour-cream);border-color:rgba(25,51,117,.28)}
+
+/* Structural chrome: classic football-game navy with Brazil accents. */
+.topbar,.tabs{background:var(--tbg-brazil-blue)!important;color:#fff}
+.tabs button{color:#fff!important}
+.tabs button:hover,.tabs button:focus-visible{background:#24458e!important;color:#fff!important}
+.tabs button.active{background:var(--tbg-brazil-yellow)!important;color:#17221a!important}
+.world-pill{background:var(--tbg-brazil-yellow)!important;color:#17221a!important;border-color:#fff!important}
+.logout-button,.manager-chip{border-color:rgba(255,255,255,.24)!important}
+
+/* Buttons and links: navy authority, green positive actions, sky-blue links. */
+a{color:var(--tbg-brazil-sky)}
+.submit,.primary-action,.tbg-community-link{background:var(--tbg-brazil-blue)!important;color:#fff!important}
+.submit:hover,.submit:focus-visible,.primary-action:hover,.primary-action:focus-visible,.tbg-community-link:hover,.tbg-community-link:focus-visible{background:#24458e!important}
+.mark-all-read,.mark-message-read{background:var(--tbg-brazil-sky)!important;color:#fff!important}
+
+/* Updates / transfers / feed. */
+#updatesView .player-updates-hero,#updatesView .player-updates-section,#transfersView .open-market-shell{background:var(--tbg-surface-card)!important;border-color:var(--portal-border)!important;color:var(--tbg-colour-ink)!important}
 #updatesView .player-updates-pill,#transfersView .open-market-status,#transfersView .open-market-badge{background:var(--tbg-colour-workspace-raised)!important}
-#updatesView .player-update-card:nth-child(even){background:rgba(111,146,90,.08)!important}
-.world-feed-composer,.world-feed-item,.world-feed-social-activity{background:var(--tbg-surface-card)!important;border-color:var(--portal-border)!important;color:#1d281f!important}
+#updatesView .player-update-card:nth-child(even){background:rgba(25,174,71,.045)!important}
+.world-feed-composer,.world-feed-item,.world-feed-social-activity{background:var(--tbg-surface-card)!important;border-color:var(--portal-border)!important;color:var(--tbg-colour-ink)!important}
 .world-feed-item:nth-child(3n+1),.world-feed-item:nth-child(3n+2),.world-feed-item:nth-child(3n){background:var(--tbg-surface-card)!important}
 .world-feed-live,.world-feed-activity-metric{background:var(--tbg-colour-workspace-raised)!important;border-color:var(--portal-border)!important}
-.world-feed-composer textarea,.world-feed-comment-form textarea{background:var(--tbg-colour-cream)!important;border-color:#8ba27a!important;color:#1d281f!important}
-.manager-participation-card{background:#e9f0e1!important;border-color:#879d78!important;color:#1d281f!important}.manager-participation-close,.manager-pin,.manager-directory-row,.manager-participation-metric{background:#f3f6ed!important;border-color:#a9b99d!important;color:#1d281f!important}.manager-participation-principle,.manager-participation-status{background:#d5e4ca!important;border-color:#729267!important;color:#27442d!important}.manager-participation-head small{color:#52734f!important}.manager-participation-head p,.manager-pin small,.manager-recent-item small,.manager-participation-note,.manager-participation-empty{color:#59685a!important}.manager-recent-item{border-color:#c0cfb7!important}.manager-directory-row:hover,.manager-directory-row:focus{background:#dce9d3!important;outline-color:#63875b!important}
+.world-feed-live{color:var(--tbg-brazil-blue)!important}
+.world-feed-composer textarea,.world-feed-comment-form textarea{background:var(--tbg-colour-cream)!important;border-color:rgba(25,51,117,.34)!important;color:var(--tbg-colour-ink)!important}
+
+/* Community card. */
+.tbg-community-card{background:var(--tbg-surface-card)!important;border-color:var(--portal-border)!important}
+.tbg-community-qr-wrap{background:#fff!important;border-color:rgba(25,51,117,.16)!important}
+
+/* Manager participation modal. */
+.manager-participation-card{background:var(--tbg-surface-card)!important;border-color:rgba(25,51,117,.28)!important;color:var(--tbg-colour-ink)!important}
+.manager-participation-close,.manager-pin,.manager-directory-row,.manager-participation-metric{background:#fff!important;border-color:rgba(25,51,117,.22)!important;color:var(--tbg-colour-ink)!important}
+.manager-participation-principle{background:var(--tbg-colour-paper-light)!important;border-color:var(--tbg-brazil-green)!important;color:#24402b!important}
+.manager-participation-status{background:rgba(255,220,2,.22)!important;border-color:#c9a900!important;color:#493d00!important}
+.manager-participation-head small{color:var(--tbg-brazil-blue)!important}
+.manager-participation-head p,.manager-pin small,.manager-recent-item small,.manager-participation-note,.manager-participation-empty{color:var(--tbg-colour-muted)!important}
+.manager-recent-item{border-color:rgba(25,51,117,.16)!important}
+.manager-directory-row:hover,.manager-directory-row:focus{background:var(--tbg-colour-paper-light)!important;outline-color:var(--tbg-brazil-sky)!important}
+
+/* Dashboard: remove the last inherited Football Pink inbox stock. */
+#dashboardView .inbox-message,
+#dashboardView .inbox-message.read{
+  background:var(--tbg-surface-card-alt)!important;
+  border-color:rgba(25,51,117,.18)!important;
+}
+#dashboardView .inbox-message.unread{
+  background:#fff!important;
+  border-left-color:var(--tbg-brazil-yellow)!important;
+}
+#dashboardView .inbox-message.unread:hover,
+#dashboardView .inbox-message.unread:focus{
+  background:rgba(255,220,2,.10)!important;
+  outline-color:var(--tbg-brazil-sky)!important;
+}
+
+/* Tactics: keep the pitch green, but remove pink tray and bench stock. */
+#tacticsView .pitch-panel,
+#tacticsView .squad-tray-panel,
+#tacticsView .team-sheet-panel,
+#tacticsView .team-preset-panel,
+#tacticsView .current-submission{
+  background:var(--tbg-surface-card)!important;
+  border-color:var(--portal-border)!important;
+}
+#tacticsView .tray-player,
+#tacticsView .bench-slot{
+  background:#fff!important;
+  border-color:rgba(25,51,117,.22)!important;
+}
+#tacticsView .tray-player:hover,
+#tacticsView .tray-player:focus-visible,
+#tacticsView .bench-slot:hover,
+#tacticsView .bench-slot:focus-visible{
+  background:var(--tbg-colour-paper-light)!important;
+  border-color:var(--tbg-brazil-sky)!important;
+}
+#tacticsView .board-actions button{background:var(--tbg-brazil-blue)!important;color:#fff!important}
+#tacticsView .board-actions button:hover,#tacticsView .board-actions button:focus-visible{background:var(--tbg-brazil-yellow)!important;color:#17221a!important}
+#tacticsView .formation-slot .rating-badge{background:var(--tbg-brazil-yellow)!important;color:#17221a!important}
+
+/* Competitions: green/white paper, yellow for the managed fixture highlight. */
+#competitionsView .competition-card,
+#competitionsView .division-round-card,
+#competitionsView .competition-round-header,
+#competitionsView .round-navigation,
+#competitionsView .division-round-list,
+#competitionsView .season-archive-summary{
+  background:var(--tbg-surface-card)!important;
+  border-color:var(--portal-border)!important;
+}
+#competitionsView .division-round-fixture{background:#fff!important;border-bottom-color:rgba(25,51,117,.15)!important}
+#competitionsView .division-round-fixture:nth-child(even){background:var(--tbg-surface-card-alt)!important}
+#competitionsView .division-round-fixture.managed-fixture{background:rgba(255,220,2,.24)!important}
+#competitionsView .competition-round-tabs button.active,
+#competitionsView .round-navigation button:hover,
+#competitionsView .round-navigation button:focus-visible,
+#competitionsView .round-score:hover,
+#competitionsView .round-score:focus-visible,
+#competitionsView .round-count{background:var(--tbg-brazil-blue)!important;color:#fff!important}
+
+/* World/admin: explicitly beat the old targeted pink literals. */
+#worldView .world-control-summary article,
+#worldView .world-control-card,
+#worldView .world-transfer-card,
+#worldView .request-history,
+#worldView .world-history-block{
+  background:var(--tbg-surface-card)!important;
+  border-color:var(--portal-border)!important;
+  color:var(--tbg-colour-ink)!important;
+  box-shadow:0 8px 20px rgba(25,51,117,.08)!important;
+}
+#worldView .world-control-status{background:rgba(25,174,71,.12)!important;color:#0b6429!important}
+#worldView .world-control-card input,
+#worldView .world-control-card select,
+#worldView .world-transfer-card input,
+#worldView .world-transfer-card select{background:var(--tbg-colour-cream)!important;border-color:rgba(25,51,117,.28)!important}
+#worldView .world-control-card button,
+#worldView .file-action{background:var(--tbg-colour-paper-light)!important;color:var(--tbg-brazil-blue)!important;border-color:rgba(25,51,117,.25)!important}
+#worldView .world-control-card .primary-action,
+#worldView .world-control-card button:hover,
+#worldView .world-control-card button:focus-visible,
+#worldView .file-action:hover,
+#worldView .file-action:focus-visible{background:var(--tbg-brazil-blue)!important;color:#fff!important}
+#worldView .bulk-registration-player{background:#fff!important;border-color:rgba(25,51,117,.18)!important}
+#worldView .bulk-registration-player:hover,#worldView .bulk-registration-player:focus-within{background:var(--tbg-colour-paper-light)!important;border-color:var(--tbg-brazil-sky)!important}
+
+/* Finance/history/schedule and late-loaded operational cards. */
+#financeView .finance-card,
+#financeView .portal-card,
+#scheduleView .portal-card,
+#historyView .portal-card,
+#historyView .history-club-panel,
+#historyView .season-archive{
+  background:var(--tbg-surface-card)!important;
+  border-color:var(--portal-border)!important;
+}
+
+@media(max-width:600px){
+  #competitionsView .division-round-fixture{background:#fff!important}
+  #competitionsView .division-round-fixture:nth-child(even){background:var(--tbg-surface-card-alt)!important}
+  #competitionsView .division-round-fixture.managed-fixture{background:rgba(255,220,2,.24)!important}
+}
