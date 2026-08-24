@@ -23,11 +23,19 @@ test('#310 feedback is submitted in-game and stored outside canonical world stat
 test('#310 feedback capture excludes secrets and has bounded input/rate limits', () => {
   const migration = read('supabase/migrations/20260825a_alpha_feedback_reports.sql');
   const client = read('public/alpha-feedback.js');
+  const endpoint = read('netlify/functions/alpha-feedback.mjs');
 
   assert.match(migration, /interval '1 hour'/);
   assert.match(migration, />= 20/);
   assert.match(migration, /feedback_too_long/);
   assert.match(client, /don't include passwords, magic links or other secrets/i);
+  assert.match(endpoint, /CLIENT_CONTEXT_LIMIT\s*=\s*8192/);
+  for (const key of ['path', 'page_area', 'user_agent', 'viewport', 'language', 'local_time']) {
+    assert.match(endpoint, new RegExp(`${key}:\\s*\\d+`));
+  }
+  assert.match(endpoint, /JSON\.stringify\(value\)/);
+  assert.match(endpoint, /Client context is too large/);
+  assert.match(endpoint, /boundedClientContext\(payload\.client_context\)/);
 });
 
 test('#310 provides admin-only feedback triage and optional GitHub promotion', () => {
@@ -41,6 +49,10 @@ test('#310 provides admin-only feedback triage and optional GitHub promotion', (
   assert.match(migration, /github_issue_url/);
   assert.match(adminPage, /Alpha feedback triage/);
   assert.match(adminClient, /GitHub issue URL \(optional\)/);
+  assert.match(adminClient, /Anything else/);
+  assert.match(adminClient, /Captured diagnostics/);
+  assert.match(adminClient, /client_context/);
+  assert.match(adminClient, /Browser \/ device/);
   assert.match(adminEndpoint, /admin_update_alpha_feedback_report/);
 });
 
