@@ -17,5 +17,15 @@ test('transfer action feedback is loaded and moved above the tall transfer grid'
   assert.match(source, /heading\.after\(message\)/);
   assert.match(source, /transfer-feedback-banner/);
   assert.match(source, /aria-live/);
-  assert.match(source, /MutationObserver/);
+});
+
+test('transfer feedback observer is temporary and scoped away from the whole document', async () => {
+  const source = await read('public/transfer-feedback-placement.js');
+
+  assert.match(source, /new MutationObserver/);
+  assert.match(source, /document\.getElementById\('transfersView'\) \|\| document\.body/);
+  assert.match(source, /placementObserver\.observe\(root/);
+  assert.match(source, /placementObserver\?\.disconnect\(\)/);
+  assert.match(source, /if \(placeTransferFeedback\(\)\) stopPlacementObserver\(\)/);
+  assert.doesNotMatch(source, /observe\(document\.documentElement/);
 });
