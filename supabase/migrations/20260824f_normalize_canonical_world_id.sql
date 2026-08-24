@@ -56,7 +56,10 @@ SET world_id = 'tbg-world-1'
 WHERE world_id = 'tbg-world-001';
 
 -- If an alpha invitation exists in both ids, retain the canonical row and fold
--- any claim made while the alpha functions pointed at the alias into it.
+-- any claim made while the alpha functions pointed at the alias into it. Email
+-- delivery metadata is a single attempt-state tuple: whichever row has the
+-- latest delivery attempt contributes all four fields together so message/error
+-- state cannot be mismatched or lost when the duplicate is deleted.
 UPDATE public.alpha_tester_invites canonical
 SET status = CASE WHEN legacy.status = 'claimed' THEN 'claimed' ELSE canonical.status END,
     allowed_club_ids = CASE
@@ -66,6 +69,22 @@ SET status = CASE WHEN legacy.status = 'claimed' THEN 'claimed' ELSE canonical.s
     claimed_manager_id = CASE WHEN legacy.status = 'claimed' THEN legacy.claimed_manager_id ELSE canonical.claimed_manager_id END,
     claimed_club_id = CASE WHEN legacy.status = 'claimed' THEN legacy.claimed_club_id ELSE canonical.claimed_club_id END,
     claimed_at = CASE WHEN legacy.status = 'claimed' THEN legacy.claimed_at ELSE canonical.claimed_at END,
+    email_last_attempt_at = CASE
+      WHEN legacy.email_last_attempt_at IS NOT NULL
+       AND (canonical.email_last_attempt_at IS NULL OR legacy.email_last_attempt_at > canonical.email_last_attempt_at)
+      THEN legacy.email_last_attempt_at ELSE canonical.email_last_attempt_at END,
+    email_sent_at = CASE
+      WHEN legacy.email_last_attempt_at IS NOT NULL
+       AND (canonical.email_last_attempt_at IS NULL OR legacy.email_last_attempt_at > canonical.email_last_attempt_at)
+      THEN legacy.email_sent_at ELSE canonical.email_sent_at END,
+    email_message_id = CASE
+      WHEN legacy.email_last_attempt_at IS NOT NULL
+       AND (canonical.email_last_attempt_at IS NULL OR legacy.email_last_attempt_at > canonical.email_last_attempt_at)
+      THEN legacy.email_message_id ELSE canonical.email_message_id END,
+    email_last_error = CASE
+      WHEN legacy.email_last_attempt_at IS NOT NULL
+       AND (canonical.email_last_attempt_at IS NULL OR legacy.email_last_attempt_at > canonical.email_last_attempt_at)
+      THEN legacy.email_last_error ELSE canonical.email_last_error END,
     updated_at = now()
 FROM public.alpha_tester_invites legacy
 WHERE canonical.world_id = 'tbg-world-1'
