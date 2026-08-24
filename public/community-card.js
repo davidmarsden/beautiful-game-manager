@@ -9,6 +9,7 @@ function loadStylesheet(href) {
   document.head.append(link);
 }
 loadStylesheet('community-card.css');
+loadStylesheet('manager-contact.css');
 loadStylesheet('tbg-green-stock.css');
 
 function communityCard() {
@@ -30,9 +31,26 @@ function mountCommunityCard() {
   else shell.prepend(card);
 }
 
+function simplifyUpdatesCopy(root = document) {
+  const copy = root.querySelector?.('#updatesView .player-updates-hero p');
+  if (!copy) return;
+  copy.textContent = copy.textContent.replace(' Manager does not recalculate these ratings.', '');
+}
+
+const updatesObserver = new MutationObserver((mutations) => {
+  if (mutations.some((mutation) => mutation.target.closest?.('#updatesView') || [...mutation.addedNodes].some((node) => node instanceof HTMLElement && (node.id === 'updatesView' || node.querySelector?.('#updatesView'))))) {
+    simplifyUpdatesCopy(document);
+  }
+});
+updatesObserver.observe(document.documentElement, { childList: true, subtree: true });
+
 document.addEventListener('tbg:view-changed', (event) => {
   if (event.detail?.view === 'feed') mountCommunityCard();
+  if (event.detail?.view === 'updates') simplifyUpdatesCopy(document);
 });
-window.addEventListener('tbg:portal-rendered', mountCommunityCard);
+window.addEventListener('tbg:portal-rendered', () => {
+  mountCommunityCard();
+  simplifyUpdatesCopy(document);
+});
 
-export { COMMUNITY_URL, COMMUNITY_QR, communityCard, mountCommunityCard };
+export { COMMUNITY_URL, COMMUNITY_QR, communityCard, mountCommunityCard, simplifyUpdatesCopy };
