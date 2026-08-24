@@ -128,7 +128,7 @@ a{color:var(--tbg-brazil-sky)}
 }
 #tacticsView .board-actions button{background:var(--tbg-brazil-blue)!important;color:#fff!important}
 #tacticsView .board-actions button:hover,#tacticsView .board-actions button:focus-visible{background:var(--tbg-brazil-yellow)!important;color:#17221a!important}
-#tacticsView .formation-slot .rating-badge{background:var(--tbg-brazil-yellow)!important;color:#17221a!important}
+#tacticsView .formation-slot .player-rating{background:var(--tbg-brazil-yellow)!important;color:#17221a!important}
 
 /* Competitions: green/white paper, yellow for the managed fixture highlight. */
 #competitionsView .competition-card,
