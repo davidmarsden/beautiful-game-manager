@@ -1,1 +1,133 @@
-.auth-gate[hidden],#portal[hidden]{display:none!important}
+#authGate.auth-gate[hidden],#portal[hidden]{display:none!important}
+
+/* The unauthenticated front door must use the TBG palette before any module JS runs.
+ * These selectors intentionally beat the later legacy Football Pink auth rules. */
+#authGate.auth-gate:not([hidden]){
+  min-height:100vh!important;
+  display:grid!important;
+  place-items:center!important;
+  padding:clamp(20px,5vw,64px)!important;
+  color:#17221a!important;
+  background:
+    radial-gradient(circle at 16% 10%,rgba(255,255,255,.20),transparent 30%),
+    repeating-linear-gradient(0deg,rgba(25,51,117,.018),rgba(25,51,117,.018) 1px,transparent 1px,transparent 5px),
+    #9fc785!important;
+}
+#authGate .auth-card{
+  width:100%!important;
+  max-width:none!important;
+  padding:clamp(26px,4vw,42px)!important;
+  background:#f3f8ec!important;
+  border:1px solid rgba(25,51,117,.28)!important;
+  box-shadow:0 20px 55px rgba(25,51,117,.20)!important;
+  color:#17221a!important;
+}
+#authGate .auth-card h1{color:#17221a!important}
+#authGate .auth-card p{color:#405146!important}
+#authGate .auth-kicker{
+  background:#193375!important;
+  color:#fff!important;
+}
+#authGate input{
+  background:#f8f7e8!important;
+  border-color:rgba(25,51,117,.34)!important;
+  color:#17221a!important;
+}
+#authGate .submit{
+  background:#193375!important;
+  color:#fff!important;
+  border:2px solid #79ab5f!important;
+}
+#authGate .submit:hover,#authGate .submit:focus-visible{
+  background:#24458e!important;
+  border-color:#FFDC02!important;
+}
+
+.tbg-landing{
+  width:min(1180px,100%);
+  display:grid;
+  grid-template-columns:minmax(0,1.18fr) minmax(360px,.82fr);
+  overflow:hidden;
+  border:1px solid rgba(25,51,117,.28);
+  box-shadow:0 28px 75px rgba(25,51,117,.22);
+}
+.tbg-landing-story{
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  min-height:520px;
+  padding:clamp(38px,6vw,72px);
+  color:#fff;
+  background:linear-gradient(145deg,#193375 0%,#193375 54%,#0f6f34 100%);
+}
+.tbg-landing-story::after{
+  content:"";
+  position:absolute;
+  inset:auto -70px -95px auto;
+  width:250px;
+  height:250px;
+  border:20px solid rgba(255,220,2,.16);
+  border-radius:50%;
+}
+.tbg-landing-eyebrow{
+  width:max-content;
+  margin:0 0 22px;
+  padding:7px 10px;
+  background:#FFDC02;
+  color:#17221a;
+  font-size:12px;
+  font-weight:900;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+}
+.tbg-landing-story h1{
+  max-width:700px;
+  margin:0;
+  font-size:clamp(44px,6vw,76px);
+  line-height:.96;
+  letter-spacing:-.035em;
+}
+.tbg-landing-lede{
+  max-width:650px;
+  margin:24px 0 0;
+  color:#edf3ff;
+  font-size:clamp(18px,2vw,22px);
+  line-height:1.5;
+}
+.tbg-landing-points{
+  display:flex;
+  flex-wrap:wrap;
+  gap:9px;
+  margin:30px 0 0;
+  padding:0;
+  list-style:none;
+}
+.tbg-landing-points li{
+  padding:7px 10px;
+  border:1px solid rgba(255,255,255,.27);
+  background:rgba(255,255,255,.08);
+  font-size:13px;
+  font-weight:800;
+}
+.tbg-landing-alpha{
+  margin:30px 0 0;
+  color:#d5e1fa;
+  font-size:13px;
+  line-height:1.45;
+}
+.tbg-landing-signin{
+  display:flex;
+  align-items:center;
+  padding:clamp(24px,4vw,44px);
+  background:#f3f8ec;
+}
+.tbg-landing-signin .auth-card{box-shadow:none!important;border:0!important;padding:0!important;background:transparent!important}
+
+@media(max-width:820px){
+  #authGate.auth-gate:not([hidden]){align-items:start!important;padding:0!important}
+  .tbg-landing{grid-template-columns:1fr;border:0;box-shadow:none}
+  .tbg-landing-story{min-height:auto;padding:42px 28px}
+  .tbg-landing-story h1{font-size:clamp(42px,13vw,64px)}
+  .tbg-landing-signin{padding:32px 28px 44px}
+}

@@ -4,6 +4,42 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const PENDING_CLUB_KEY = "tbg_pending_club_id";
 const SAFE_CLUB_ID = /^[A-Za-z0-9._:-]{1,160}$/;
 
+function enhanceLandingPage() {
+  const gate = document.getElementById('authGate');
+  const card = gate?.querySelector('.auth-card');
+  if (!gate || !card || gate.querySelector('.tbg-landing')) return;
+
+  const landing = document.createElement('div');
+  landing.className = 'tbg-landing';
+
+  const story = document.createElement('section');
+  story.className = 'tbg-landing-story';
+  story.setAttribute('aria-labelledby', 'tbgLandingTitle');
+  story.innerHTML = `
+    <p class="tbg-landing-eyebrow">The Beautiful Game</p>
+    <h1 id="tbgLandingTitle">One world. Real players. Human managers.</h1>
+    <p class="tbg-landing-lede">The Beautiful Game is a persistent online football management world. Build your squad, set your team and tactics, trade with other managers and live with the consequences as the shared world moves from matchday to matchday.</p>
+    <ul class="tbg-landing-points" aria-label="Game features">
+      <li>Persistent shared world</li>
+      <li>Real-player data</li>
+      <li>Transfers & contracts</li>
+      <li>Tactics & matchdays</li>
+      <li>Manager community</li>
+    </ul>
+    <p class="tbg-landing-alpha">Currently in controlled alpha. Access is limited to invited managers and testers while the world, match engine and management systems are being developed in public.</p>
+  `;
+
+  const signin = document.createElement('section');
+  signin.className = 'tbg-landing-signin';
+  signin.setAttribute('aria-label', 'Manager sign in');
+
+  card.before(landing);
+  signin.append(card);
+  landing.append(story, signin);
+}
+
+enhanceLandingPage();
+
 async function loadConfig() {
   const response = await fetch("/api/auth-config", { cache: "no-store" });
   const config = await response.json();
