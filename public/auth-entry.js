@@ -113,3 +113,4 @@ try {
 }
 
 await import("./app.js");
+await import("./club-claiming.js");
