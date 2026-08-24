@@ -116,6 +116,15 @@
   font-size:13px;
   line-height:1.45;
 }
+.tbg-landing-story a{
+  color:#fff2a8;
+  text-decoration-color:#FFDC02;
+  text-decoration-thickness:2px;
+  text-underline-offset:3px;
+  font-weight:800;
+}
+.tbg-landing-story a:visited{color:#f7e6ff}
+.tbg-landing-story a:hover,.tbg-landing-story a:focus-visible{color:#fff;background:rgba(255,255,255,.10);outline:2px solid #FFDC02;outline-offset:3px}
 .tbg-landing-signin{
   display:flex;
   align-items:center;
