@@ -118,8 +118,8 @@ export default async (request) => {
     const appointment = await activeAppointment(user.id);
 
     if (request.method === 'GET') {
-      // Reads must stay fast: system projection reconciliation is an explicit,
-      // throttled background action from the client rather than a prerequisite.
+      // Reads must stay fast: system projection reconciliation and social metrics
+      // are explicit background actions rather than prerequisites for first paint.
       return json(await currentFeed(user.id, appointment.world_id));
     }
 
@@ -132,6 +132,13 @@ export default async (request) => {
       await rpc('sync_world_feed_system_items', { p_world_id: appointment.world_id });
       const after = await systemFeedSignature(appointment.world_id);
       return json({ changed: before !== after });
+    }
+    if (action === 'activity') {
+      return json(await rpc('get_world_feed_social_activity_for_user', {
+        p_user_id: user.id,
+        p_world_id: appointment.world_id,
+        p_days: 30
+      }));
     }
     if (action === 'post') {
       const result = await rpc('create_manager_world_feed_post_for_user', {
