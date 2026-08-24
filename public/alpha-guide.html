@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>The Beautiful Game — Controlled Alpha Guide</title>
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./football-pink-stock.css">
+  <link rel="stylesheet" href="./alpha-guide.css">
+</head>
+<body class="alpha-guide-page">
+  <header class="alpha-guide-topbar">
+    <a class="alpha-guide-brand" href="./">THE BEAUTIFUL GAME</a>
+    <span class="alpha-guide-pill">CONTROLLED ALPHA</span>
+  </header>
+
+  <main class="alpha-guide-shell">
+    <section class="alpha-guide-hero">
+      <p class="alpha-guide-kicker">Before you take a club</p>
+      <h1>Welcome to The Beautiful Game</h1>
+      <p class="alpha-guide-lead">TBG is an experimental, persistent multiplayer football world built around real players, transparent rules and decisions that are meant to matter over time.</p>
+      <div class="alpha-guide-actions">
+        <a class="alpha-guide-primary" href="./">Open the Manager Portal</a>
+        <a class="alpha-guide-secondary" href="https://github.com/davidmarsden/beautiful-game-manager/issues/new?template=controlled-alpha-bug.yml">Report an alpha bug</a>
+      </div>
+    </section>
+
+    <section class="alpha-guide-grid">
+      <article class="alpha-guide-card">
+        <span class="alpha-guide-number">01</span>
+        <h2>What are TBG and TPF?</h2>
+        <p><strong>The Beautiful Game (TBG)</strong> is the shared game world: one continuing universe where managers run clubs, submit teams and tactics, negotiate transfers and live with the consequences.</p>
+        <p><strong>The Pink Final (TPF)</strong> is the public player/profile/rating layer that feeds TBG. It is part of the same project philosophy: real-world evidence in, transparent and reproducible football judgements out.</p>
+        <p>The ambition is a deep, governed multiplayer football game where football judgement matters more than grinding, spending or hidden admin intervention. It may grow well beyond this alpha; it may also remain a smaller community experiment. There is no promise that it becomes a commercial Football Manager-scale product.</p>
+      </article>
+
+      <article class="alpha-guide-card">
+        <span class="alpha-guide-number">02</span>
+        <h2>Your job as a tester</h2>
+        <p>Play it like a manager <strong>and try to break it like a tester</strong>.</p>
+        <ul>
+          <li>Use the portal normally and submit real decisions.</li>
+          <li>Try transfers, contracts, team selection and other market actions.</li>
+          <li>Tell us whenever something is confusing, surprising or broken.</li>
+          <li>Send screenshots when presentation or state looks wrong.</li>
+          <li>Include the page, action and approximate time where possible.</li>
+        </ul>
+        <p>Real life comes first. Testing is not measured by how often you log in.</p>
+      </article>
+
+      <article class="alpha-guide-card">
+        <span class="alpha-guide-number">03</span>
+        <h2>What to expect</h2>
+        <p>This is an alpha, not a finished game. Rough edges, missing features and visible repairs are expected.</p>
+        <p>For the first cohort, some things are intentionally absent or incomplete, including cups, a richer economy, loans and three-club deals. More systems will be added only when the shared world proves it needs them.</p>
+        <p>The long-term goal is a persistent historical world, but during alpha we may have to repair state. In an extreme failure, a reset may still be necessary.</p>
+      </article>
+
+      <article class="alpha-guide-card">
+        <span class="alpha-guide-number">04</span>
+        <h2>How to report a bug</h2>
+        <p>Use the controlled-alpha GitHub bug form for reproducible product problems. A useful report contains:</p>
+        <dl class="alpha-guide-template">
+          <div><dt>Page</dt><dd>Where were you?</dd></div>
+          <div><dt>Action</dt><dd>What did you do?</dd></div>
+          <div><dt>Expected</dt><dd>What should have happened?</dd></div>
+          <div><dt>Actual</dt><dd>What happened instead?</dd></div>
+          <div><dt>Time</dt><dd>Approximate time of the problem.</dd></div>
+          <div><dt>Screenshot</dt><dd>Add one whenever it helps.</dd></div>
+        </dl>
+        <p><strong>Do not post private account or email information in a public GitHub issue.</strong> Contact the person who invited you directly for account/private-data problems.</p>
+        <p>The World Feed is the in-world community/news space. It is not the sole support channel.</p>
+      </article>
+
+      <article class="alpha-guide-card alpha-guide-wide">
+        <span class="alpha-guide-number">05</span>
+        <h2>Privacy and transparency</h2>
+        <p>TBG deliberately keeps its rules, governance and much of its source code public so managers can audit how the game works. Private game state is different: credentials, locked team selections, hidden scouting knowledge and other constitutionally private information stay protected.</p>
+        <p>For alpha operation we keep the minimum account information needed to authenticate and identify testers, including email/profile information, plus operational logs needed to diagnose failures, security events and state changes. Those records are used to run and support the alpha, not to create a public manager directory.</p>
+        <p>If a bug report contains private account information, send it directly to the inviter/admin rather than posting it publicly.</p>
+      </article>
+
+      <article class="alpha-guide-card alpha-guide-wide">
+        <span class="alpha-guide-number">06</span>
+        <h2>Known limits for the first cohort</h2>
+        <ul class="alpha-guide-known">
+          <li><strong>No cups yet.</strong> The first controlled alpha is centred on the shared league world.</li>
+          <li><strong>Economy is deliberately minimal.</strong> Canonical cash and wage affordability exist, but this is not yet a full financial simulation.</li>
+          <li><strong>Loans and three-club deals are not yet part of the ordinary flow.</strong></li>
+          <li><strong>Presentation will keep changing.</strong> Some screens and explanations are still being refined as real managers use them.</li>
+          <li><strong>State repair is possible.</strong> Alpha bugs may require an administrator to repair an appointment, transfer or other world state.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="alpha-guide-feedback">
+      <p class="alpha-guide-kicker">After a matchday</p>
+      <h2>Five questions we actually care about</h2>
+      <ol>
+        <li>What confused you?</li>
+        <li>What was fun?</li>
+        <li>What felt like work?</li>
+        <li>What did you expect to be able to do but could not?</li>
+        <li>What decision felt meaningless?</li>
+      </ol>
+    </section>
+  </main>
+</body>
+</html>
