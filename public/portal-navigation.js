@@ -5,6 +5,7 @@ import './player-updates.js';
 import './finance.js';
 import './world-feed.js';
 import './world-feed-enhancements.js';
+import './manager-participation.js';
 import { openManagerParticipation } from './manager-participation.js';
 
 const VIEW_ALIASES = new Map([
