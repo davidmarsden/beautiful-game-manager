@@ -1,6 +1,8 @@
 const MESSAGE_ID = 'transferNegotiationMessage';
 const STYLE_ID = 'transferFeedbackPlacementStyles';
 
+let placementObserver = null;
+
 function ensureStyles() {
   if (document.getElementById(STYLE_ID)) return;
   const style = document.createElement('style');
@@ -22,7 +24,7 @@ function ensureStyles() {
 
 function placeTransferFeedback() {
   const workspace = document.getElementById('transferNegotiationWorkspace');
-  const message = document.getElementById(MESSAGE_ID);
+  const message = workspace?.querySelector(`#${MESSAGE_ID}`);
   const heading = workspace?.querySelector('.world-control-heading');
   const grid = workspace?.querySelector('.transfer-negotiation-grid');
   if (!workspace || !message || !heading || !grid) return false;
@@ -39,18 +41,37 @@ function placeTransferFeedback() {
   return true;
 }
 
+function stopPlacementObserver() {
+  placementObserver?.disconnect();
+  placementObserver = null;
+}
+
+function armPlacementObserver() {
+  if (placementObserver) return;
+  const root = document.getElementById('transfersView') || document.body;
+  if (!root) return;
+
+  placementObserver = new MutationObserver(() => {
+    if (placeTransferFeedback()) stopPlacementObserver();
+  });
+  placementObserver.observe(root, { childList: true, subtree: true });
+}
+
 function schedulePlacement() {
-  queueMicrotask(() => placeTransferFeedback());
+  queueMicrotask(() => {
+    if (placeTransferFeedback()) {
+      stopPlacementObserver();
+      return;
+    }
+    // During a portal remount the transfer workspace may not exist yet. Observe
+    // only the Transfers view/body long enough to catch that mount, then detach.
+    armPlacementObserver();
+  });
 }
 
 window.addEventListener('tbg:portal-rendered', schedulePlacement);
 document.addEventListener('tbg:view-changed', (event) => {
   if (event.detail?.view === 'transfers') schedulePlacement();
 });
-
-const observer = new MutationObserver(() => {
-  if (document.getElementById(MESSAGE_ID)) placeTransferFeedback();
-});
-observer.observe(document.documentElement, { childList: true, subtree: true });
 
 schedulePlacement();
