@@ -1,5 +1,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+if (!document.querySelector('link[data-alpha-feedback-styles]')) {
+  const styles = document.createElement('link');
+  styles.rel = 'stylesheet';
+  styles.href = './alpha-feedback.css';
+  styles.dataset.alphaFeedbackStyles = 'true';
+  document.head.append(styles);
+}
+
 let supabase;
 
 async function accessToken() {
@@ -42,14 +50,26 @@ async function submit(payload) {
     headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
     body: JSON.stringify(payload)
   });
-  if (response.status === 401 && supabase) {
-    const { data } = await supabase.auth.getSession();
-    if (data.session?.access_token && data.session.access_token !== token) {
-      response = await fetch('/api/alpha-feedback', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${data.session.access_token}` },
-        body: JSON.stringify(payload)
-      });
+  if (response.status === 401) {
+    if (!supabase) {
+      const configResponse = await fetch('/api/auth-config', { cache: 'no-store' });
+      const config = await configResponse.json();
+      if (configResponse.ok && config.configured) {
+        supabase = createClient(config.supabase_url, config.supabase_anon_key, {
+          auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
+        });
+      }
+    }
+    if (supabase) {
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.access_token && data.session.access_token !== token) {
+        window.tbgPortalAuthorization = `Bearer ${data.session.access_token}`;
+        response = await fetch('/api/alpha-feedback', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${data.session.access_token}` },
+          body: JSON.stringify(payload)
+        });
+      }
     }
   }
   const body = await response.json().catch(() => ({}));
@@ -74,7 +94,7 @@ function mount() {
   dialog.id = 'alphaFeedbackDialog';
   dialog.className = 'alpha-feedback-dialog';
   dialog.innerHTML = `
-    <form method="dialog" class="alpha-feedback-card" id="alphaFeedbackForm">
+    <form class="alpha-feedback-card" id="alphaFeedbackForm">
       <div class="alpha-feedback-head"><div><small>CONTROLLED ALPHA</small><h2>Report something</h2></div><button class="alpha-feedback-close" type="button" aria-label="Close">×</button></div>
       <p class="alpha-feedback-help">Send this straight from the game — no GitHub account needed. Please don't include passwords, magic links or other secrets.</p>
       <div class="alpha-feedback-grid">
