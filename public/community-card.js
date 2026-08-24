@@ -37,12 +37,20 @@ function simplifyUpdatesCopy(root = document) {
   copy.textContent = copy.textContent.replace(' Manager does not recalculate these ratings.', '');
 }
 
-const updatesObserver = new MutationObserver((mutations) => {
-  if (mutations.some((mutation) => mutation.target.closest?.('#updatesView') || [...mutation.addedNodes].some((node) => node instanceof HTMLElement && (node.id === 'updatesView' || node.querySelector?.('#updatesView'))))) {
-    simplifyUpdatesCopy(document);
+const observer = new MutationObserver((mutations) => {
+  for (const mutation of mutations) {
+    for (const node of mutation.addedNodes) {
+      if (!(node instanceof HTMLElement)) continue;
+      if (node.matches?.('.world-feed-shell') || node.querySelector?.('.world-feed-shell')) {
+        mountCommunityCard();
+      }
+      if (node.id === 'updatesView' || node.querySelector?.('#updatesView') || node.closest?.('#updatesView')) {
+        simplifyUpdatesCopy(document);
+      }
+    }
   }
 });
-updatesObserver.observe(document.documentElement, { childList: true, subtree: true });
+observer.observe(document.documentElement, { childList: true, subtree: true });
 
 document.addEventListener('tbg:view-changed', (event) => {
   if (event.detail?.view === 'feed') mountCommunityCard();
