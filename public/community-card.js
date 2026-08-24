@@ -11,6 +11,7 @@ function loadStylesheet(href) {
 loadStylesheet('community-card.css');
 loadStylesheet('manager-contact.css');
 loadStylesheet('tbg-green-stock.css');
+loadStylesheet('tbg-brazil-polish.css');
 
 function communityCard() {
   const card = document.createElement('section');
