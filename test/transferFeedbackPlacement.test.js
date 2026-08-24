@@ -16,7 +16,7 @@ test('transfer action feedback keeps a page-level fallback above the tall transf
   assert.match(source, /transfer-negotiation-grid/);
   assert.match(source, /heading\.after\(message\)/);
   assert.match(source, /transfer-feedback-banner/);
-  assert.match(source, /aria-live/);
+  assert.match(source, /message\.setAttribute\('aria-live', 'polite'\)/);
 });
 
 test('transfer feedback is mirrored beside the action that triggered it', async () => {
@@ -32,6 +32,33 @@ test('transfer feedback is mirrored beside the action that triggered it', async 
   assert.match(source, /actions\.after\(local\)/);
   assert.match(source, /messageObserver\.observe\(message/);
   assert.match(source, /mirrorFeedbackLocally\(\)/);
+});
+
+test('mirrored transfer feedback is visual-only so screen readers hear one live region', async () => {
+  const source = await read('public/transfer-feedback-placement.js');
+
+  assert.match(source, /local\.setAttribute\('aria-hidden', 'true'\)/);
+  assert.doesNotMatch(source, /local\.setAttribute\('role', 'status'\)/);
+  assert.doesNotMatch(source, /local\.setAttribute\('aria-live'/);
+  assert.match(source, /single accessible live region/i);
+});
+
+test('listing feedback tracks the exact clicked player listing across refreshes', async () => {
+  const source = await read('public/transfer-feedback-placement.js');
+
+  assert.match(source, /type: 'listing', playerId: control\.dataset\.playerId/);
+  assert.match(source, /\[data-withdraw-listing\]\[data-player-id=/);
+  assert.match(source, /findControlHost\('#activeTransferListings'/);
+  assert.match(source, /directChildContaining\(container, control\)/);
+});
+
+test('legacy incoming and outgoing feedback stays with the clicked offer card', async () => {
+  const source = await read('public/transfer-feedback-placement.js');
+
+  assert.match(source, /type: 'legacy-incoming', proposalId: control\.dataset\.proposalId/);
+  assert.match(source, /type: 'legacy-outgoing', proposalId: control\.dataset\.proposalId/);
+  assert.match(source, /findControlHost\('#incomingTransferOffers', `\[data-legacy-transfer-response\]/);
+  assert.match(source, /findControlHost\('#outgoingTransferOffers', `\[data-withdraw-legacy-offer\]/);
 });
 
 test('offer-card refreshes can restore local feedback without observing unrelated app DOM', async () => {
