@@ -128,8 +128,9 @@ export default async (request) => {
     });
 
     const targetId = target || context.managerId;
-    result.contact = await contactFor(targetId, !target);
-    if (!target) result.directory = await managerDirectory(context.worldId, context.managerId);
+    const isSelf = String(targetId) === String(context.managerId) || result?.is_self === true;
+    result.contact = await contactFor(targetId, isSelf);
+    if (isSelf) result.directory = await managerDirectory(context.worldId, context.managerId);
     return json(result);
   } catch (error) {
     const message = String(error?.message || 'Could not load manager participation');
