@@ -1,6 +1,16 @@
 const COMMUNITY_URL = 'https://chat.whatsapp.com/HCUCxUHAkfLEQkUvyu3VsF';
 const COMMUNITY_QR = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKQAAACkAQAAAAAxzrjsAAABSElEQVR42u2XsZEdMQxDHz0/BztQ/2VtB2AFuEDrcWBHHl52yqQAoyWeQG6Fv9f84l/r5/S/Tquqp7roupslXSU0o7JpJWtfUY3wQ1OmekX385LFccDbVQ+e6ene0v0AoUeVSskdVnyrUKA/Tw3khfdGkiREiqK784quEgkgEjJbulEsJyEoSBu6H+hb4TlCoMmGbyRCFiFJbLRVB2w5BuRIXvPNOEgK3Bov3VeSTYzjRR4UG9txhJd4IJdeWbawlS1dgRN0ffMeD0Rg5GB7sw42iRUhdnyrMKg9HFx6ADFLPChEQcJoJ88+AE+5KVxpM9rKhyT2jWGzmA8yvxEGvMZDEi4MUrTDwzvvuBnE0Ev9+O1Db+js9Yt33hk4nCdTeHMu0THlA6ZWp8wHw4xZuu8773B4NAI4XvINLmBG4Kzlzs9/yzeefgF2dR5jGT1NKQAAAABJRU5ErkJggg==';
 
+function loadStylesheet(href) {
+  if (document.querySelector(`link[href$="${href}"]`)) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = `./${href}`;
+  document.head.append(link);
+}
+loadStylesheet('community-card.css');
+loadStylesheet('tbg-green-stock.css');
+
 function communityCard() {
   const card = document.createElement('section');
   card.className = 'tbg-community-card';
