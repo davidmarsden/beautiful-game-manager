@@ -53,14 +53,24 @@ function inviteDeliveryLabel(invite) {
   return 'email not sent';
 }
 
+function resultDeliveryMessage(result, successText, failurePrefix) {
+  if (result.email_sent && result.email_tracking_error) {
+    return `${successText} Delivery tracking could not be recorded: ${result.email_tracking_error}. Do not resend unless you confirm delivery failed.`;
+  }
+  return result.email_sent ? successText : `${failurePrefix}: ${result.email_error}`;
+}
+
 function renderInvites() {
   const rows = context.invites || [];
   $('inviteList').innerHTML = rows.length ? rows.map((invite) => {
     const allowed = invite.allowed_club_ids?.length ? `${invite.allowed_club_ids.length} specified club${invite.allowed_club_ids.length === 1 ? '' : 's'}` : 'Any vacant club';
+    const resendAction = invite.status === 'invited'
+      ? '<div class="alpha-actions"><button type="button" class="resend-invite-button">Resend invitation</button></div>'
+      : '';
     return `<article class="alpha-row" data-invite="${text(invite.id)}">
       <strong>${text(invite.email)}</strong>
       <small>${text(invite.status)} · ${text(allowed)}${invite.claimed_club_id ? ` · claimed ${text(invite.claimed_club_id)}` : ''} · ${text(inviteDeliveryLabel(invite))}</small>
-      <div class="alpha-actions"><button type="button" class="resend-invite-button">Resend invitation</button></div>
+      ${resendAction}
     </article>`;
   }).join('') : '<p class="muted">No alpha invitations yet.</p>';
 
@@ -72,7 +82,11 @@ function renderInvites() {
       const result = await api({ method: 'POST', body: JSON.stringify({ action: 'resend_invite', invite_id: row.dataset.invite }) });
       context = await api();
       render();
-      $('adminStatus').textContent = result.email_sent ? 'Invitation email sent.' : `Invitation remains saved, but email failed: ${result.email_error}`;
+      $('adminStatus').textContent = resultDeliveryMessage(
+        result,
+        'Invitation email sent.',
+        'Invitation remains saved, but email failed'
+      );
     } catch (error) {
       $('adminStatus').textContent = error.message;
     } finally {
@@ -145,7 +159,11 @@ $('inviteForm').addEventListener('submit', async (event) => {
     [...$('inviteClubs').options].forEach((option) => { option.selected = false; });
     context = await api();
     render();
-    $('inviteStatus').textContent = result.email_sent ? 'Invitation saved and email sent.' : `Invitation saved, but email delivery failed: ${result.email_error}`;
+    $('inviteStatus').textContent = resultDeliveryMessage(
+      result,
+      'Invitation saved and email sent.',
+      'Invitation saved, but email delivery failed'
+    );
   } catch (error) {
     $('inviteStatus').textContent = error.message;
   }
