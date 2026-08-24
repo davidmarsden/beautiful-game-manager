@@ -12,7 +12,7 @@ const bearerToken = (request) => {
   return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
 };
 const isJwt = (value) => String(value || '').split('.').length === 3;
-const runtimeEnv = (key) => globalThis.Netlify?.env?.get?.(key) || '';
+const runtimeEnv = (key) => globalThis.Netlify?.env?.get?.(key) || process.env[key] || '';
 const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
 async function authenticatedUser(token) {
