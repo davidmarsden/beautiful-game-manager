@@ -12,7 +12,8 @@ test('#310 publishes a discoverable controlled-alpha tester guide', () => {
   assert.match(guide, /try to break it like a tester/i);
   assert.match(guide, /Real life comes first/i);
   assert.match(guide, /reset may still be necessary/i);
-  assert.match(guide, /Do not post private account or email information/i);
+  assert.match(guide, /Do not include passwords, magic links, credentials or other secrets/i);
+  assert.match(guide, /private account information/i);
   assert.match(guide, /World Feed is the in-world community\/news space/i);
   assert.match(guide, /No cups yet/i);
   assert.match(guide, /loans and three-club deals/i);
