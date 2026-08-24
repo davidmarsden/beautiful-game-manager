@@ -38,6 +38,12 @@ function metric(label, value) {
   return node;
 }
 
+function sectionTitle(text) {
+  const h3 = document.createElement('h3');
+  h3.textContent = text;
+  return h3;
+}
+
 function render(data) {
   const modal = dialog();
   const root = modal.querySelector('.manager-participation-content');
@@ -69,9 +75,7 @@ function render(data) {
   const pins = Array.isArray(data.pins) ? data.pins : [];
   const pinSection = document.createElement('section');
   pinSection.className = 'manager-participation-section';
-  const pinTitle = document.createElement('h3');
-  pinTitle.textContent = 'Pins';
-  pinSection.append(pinTitle);
+  pinSection.append(sectionTitle('Pins'));
   const pinGrid = document.createElement('div');
   pinGrid.className = 'manager-pin-grid';
   if (!pins.length) {
@@ -101,9 +105,7 @@ function render(data) {
   const recent = Array.isArray(data.recent_activity) ? data.recent_activity : [];
   const recentSection = document.createElement('section');
   recentSection.className = 'manager-participation-section';
-  const recentTitle = document.createElement('h3');
-  recentTitle.textContent = 'Recently';
-  recentSection.append(recentTitle);
+  recentSection.append(sectionTitle('Recently'));
   const recentList = document.createElement('div');
   recentList.className = 'manager-recent-activity';
   if (!recent.length) {
@@ -130,8 +132,6 @@ function render(data) {
     const details = data.private_detail;
     const section = document.createElement('section');
     section.className = 'manager-participation-section';
-    const h3 = document.createElement('h3');
-    h3.textContent = 'Your participation snapshot';
     const note = document.createElement('p');
     note.className = 'manager-participation-note';
     note.textContent = 'For your eyes: raw counts that help you notice your own patterns. They are not combined into a score.';
@@ -146,7 +146,32 @@ function render(data) {
       metric('replies received', details.replies_received),
       metric('transfers', details.completed_transfers)
     );
-    section.append(h3, note, metrics);
+    section.append(sectionTitle('Your participation snapshot'), note, metrics);
+    root.append(section);
+  }
+
+  const directory = Array.isArray(data.directory) ? data.directory : [];
+  if (data.is_self && directory.length) {
+    const section = document.createElement('section');
+    section.className = 'manager-participation-section';
+    const note = document.createElement('p');
+    note.className = 'manager-participation-note';
+    note.textContent = 'See the same public, deliberately coarse participation view for other managers.';
+    const list = document.createElement('div');
+    list.className = 'manager-participation-directory';
+    directory.forEach((manager) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'manager-directory-row';
+      button.dataset.managerProfileId = manager.manager_id || '';
+      const name = document.createElement('strong');
+      name.textContent = manager.manager_name || 'Manager';
+      const club = document.createElement('small');
+      club.textContent = manager.club_id || '';
+      button.append(name, club);
+      list.append(button);
+    });
+    section.append(sectionTitle('Managers in this world'), note, list);
     root.append(section);
   }
 }
