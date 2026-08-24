@@ -28,15 +28,22 @@ async function session() {
   return null;
 }
 
-async function api(path, options = {}) {
+async function authorization() {
+  const bridged = String(window.tbgPortalAuthorization || '').trim();
+  if (bridged.toLowerCase().startsWith('bearer ')) return bridged;
   const current = await session();
-  if (!current?.access_token) throw new Error('Sign in again to continue');
+  return current?.access_token ? `Bearer ${current.access_token}` : '';
+}
+
+async function api(path, options = {}) {
+  const auth = await authorization();
+  if (!auth) throw new Error('Sign in again to continue');
   const response = await fetch(path, {
     ...options,
     headers: {
       ...(options.body ? { 'content-type': 'application/json' } : {}),
       ...(options.headers || {}),
-      authorization: `Bearer ${current.access_token}`
+      authorization: auth
     }
   });
   const body = await response.json().catch(() => ({}));
