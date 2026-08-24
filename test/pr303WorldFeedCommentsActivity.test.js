@@ -3,11 +3,12 @@ import fs from 'node:fs';
 import test from 'node:test';
 
 const enhancement = fs.readFileSync(new URL('../public/world-feed-enhancements.js', import.meta.url), 'utf8');
+const feed = fs.readFileSync(new URL('../public/world-feed.js', import.meta.url), 'utf8');
 const endpoint = fs.readFileSync(new URL('../netlify/functions/world-feed.mjs', import.meta.url), 'utf8');
 const migration = fs.readFileSync(new URL('../supabase/migrations/20260824a_world_feed_social_activity.sql', import.meta.url), 'utf8');
 const navigation = fs.readFileSync(new URL('../public/portal-navigation.js', import.meta.url), 'utf8');
 
- test('three or more comments collapse to the latest two with an accessible toggle', () => {
+test('three or more comments collapse to the latest two with an accessible toggle', () => {
   assert.ok(enhancement.includes('const COMMENT_PREVIEW_LIMIT = 2'));
   assert.ok(enhancement.includes("index < Math.max(0, rows.length - COMMENT_PREVIEW_LIMIT)"));
   assert.ok(enhancement.includes("toggle.setAttribute('aria-expanded', String(expanded))"));
@@ -25,6 +26,21 @@ test('social activity is loaded separately from the fast World Feed GET', () => 
   assert.ok(endpoint.includes("rpc('get_world_feed_social_activity_for_user'"));
   assert.ok(enhancement.includes("body: JSON.stringify({ action: 'activity' })"));
   assert.ok(enhancement.includes('const ACTIVITY_TTL = 5 * 60_000'));
+});
+
+test('cached activity can rebuild a panel after the feed shell is replaced', () => {
+  assert.ok(enhancement.includes('let activityCache = null'));
+  assert.ok(enhancement.includes('Date.now() - activityLoadedAt < ACTIVITY_TTL && activityCache'));
+  assert.ok(enhancement.includes('renderActivity(activityCache)'));
+  assert.ok(enhancement.includes('activityCache = data'));
+});
+
+test('activity refresh is triggered only after successful post or comment mutations', () => {
+  assert.ok(feed.includes("new CustomEvent('tbg:world-feed-mutation-succeeded', { detail: { action: 'comment'"));
+  assert.ok(feed.includes("new CustomEvent('tbg:world-feed-mutation-succeeded', { detail: { action: 'post'"));
+  assert.ok(enhancement.includes("document.addEventListener('tbg:world-feed-mutation-succeeded'"));
+  assert.ok(enhancement.includes("if (!['post', 'comment'].includes(event.detail?.action)) return"));
+  assert.equal(enhancement.includes("setTimeout(() => { void loadSocialActivity({ force: true }); }, 1500)"), false);
 });
 
 test('social activity measures participation without folding received replies into authored activity', () => {
