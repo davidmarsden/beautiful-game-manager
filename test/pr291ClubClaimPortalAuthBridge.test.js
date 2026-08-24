@@ -13,8 +13,12 @@ test('#291 club claiming reuses the already-proven portal authorization header',
   assert.match(claim, /authorization:\s*auth/);
 });
 
-test('#291 club claiming retains Supabase session lookup only as a fallback', () => {
+test('#291 club claiming retains Supabase session lookup as fallback and stale-token recovery', () => {
   assert.match(claim, /const bridged = String\(window\.tbgPortalAuthorization/);
   assert.match(claim, /const current = await session\(\)/);
   assert.match(claim, /current\?\.access_token/);
+  assert.match(claim, /response\.status === 401/);
+  assert.match(claim, /freshAuthorization\(\)/);
+  assert.match(claim, /response = await request\(refreshedAuth\)/);
+  assert.match(claim, /window\.tbgPortalAuthorization = auth/);
 });
