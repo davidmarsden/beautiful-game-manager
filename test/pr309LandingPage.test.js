@@ -6,10 +6,15 @@ const authCss = fs.readFileSync(new URL('../public/auth-fix.css', import.meta.ur
 const authEntry = fs.readFileSync(new URL('../public/auth-entry.js', import.meta.url), 'utf8');
 
 test('unauthenticated gate uses the Brazil palette from first paint', () => {
-  assert.ok(authCss.includes('#authGate.auth-gate'));
+  assert.ok(authCss.includes('#authGate.auth-gate:not([hidden])'));
   assert.ok(authCss.includes('#9fc785!important'));
   assert.ok(authCss.includes('background:#193375!important'));
   assert.ok(authCss.includes('border-color:#FFDC02!important'));
+});
+
+test('authenticated managers cannot be obstructed by the landing gate', () => {
+  assert.ok(authCss.includes('#authGate.auth-gate[hidden],#portal[hidden]{display:none!important}'));
+  assert.ok(!authCss.includes('#authGate.auth-gate{\n  min-height:100vh!important;\n  display:grid!important'));
 });
 
 test('landing page explains TBG before manager sign in', () => {
