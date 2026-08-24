@@ -52,6 +52,18 @@ test('listing feedback tracks the exact clicked player listing across refreshes'
   assert.match(source, /directChildContaining\(container, control\)/);
 });
 
+test('concurrent listing withdrawals cannot steal the action-local feedback target', async () => {
+  const source = await read('public/transfer-feedback-placement.js');
+
+  assert.match(source, /let listingActionInFlight = false/);
+  assert.match(source, /if \(listingActionInFlight\) \{[\s\S]*event\.preventDefault\(\);[\s\S]*event\.stopImmediatePropagation\(\);/);
+  assert.match(source, /setListingControlsDisabled\(true\)/);
+  assert.match(source, /text === 'Transfer listing withdrawn immediately\.'/);
+  assert.match(source, /listingAwaitingRefresh = true/);
+  assert.match(source, /listingActionInFlight && listingAwaitingRefresh/);
+  assert.match(source, /releaseListingActionLock\(\)/);
+});
+
 test('legacy incoming and outgoing feedback stays with the clicked offer card', async () => {
   const source = await read('public/transfer-feedback-placement.js');
 
