@@ -12,6 +12,15 @@ const bearerToken = (request) => {
   return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
 };
 const isJwt = (value) => String(value || '').split('.').length === 3;
+const CLIENT_CONTEXT_LIMIT = 8192;
+const CLIENT_CONTEXT_FIELDS = {
+  path: 1000,
+  page_area: 500,
+  user_agent: 1200,
+  viewport: 64,
+  language: 64,
+  local_time: 64
+};
 
 async function authenticatedUser(token) {
   const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
@@ -32,6 +41,25 @@ async function rpc(name, body) {
   return result;
 }
 
+function boundedClientContext(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  let serialized;
+  try {
+    serialized = JSON.stringify(value);
+  } catch {
+    throw Object.assign(new Error('Client context is invalid'), { status: 400 });
+  }
+  if (serialized.length > CLIENT_CONTEXT_LIMIT) {
+    throw Object.assign(new Error('Client context is too large'), { status: 400 });
+  }
+  const result = {};
+  for (const [key, maxLength] of Object.entries(CLIENT_CONTEXT_FIELDS)) {
+    if (value[key] === undefined || value[key] === null) continue;
+    result[key] = String(value[key]).slice(0, maxLength);
+  }
+  return result;
+}
+
 export default async (request) => {
   try {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured' }, 503);
@@ -40,6 +68,7 @@ export default async (request) => {
     if (!token) return json({ error: 'Authentication required' }, 401);
     const user = await authenticatedUser(token);
     const payload = await request.json().catch(() => ({}));
+    const clientContext = boundedClientContext(payload.client_context);
 
     const result = await rpc('submit_alpha_feedback_for_user', {
       p_user_id: user.id,
@@ -51,7 +80,7 @@ export default async (request) => {
       p_expected_result: String(payload.expected_result || '').trim() || null,
       p_actual_result: String(payload.actual_result || '').trim() || null,
       p_note: String(payload.note || '').trim() || null,
-      p_client_context: payload.client_context && typeof payload.client_context === 'object' ? payload.client_context : {}
+      p_client_context: clientContext
     });
 
     if (!result?.ok) {
