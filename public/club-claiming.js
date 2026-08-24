@@ -28,17 +28,39 @@ async function session() {
   return null;
 }
 
-async function api(path, options = {}) {
+async function authorization() {
+  const bridged = String(window.tbgPortalAuthorization || '').trim();
+  if (bridged.toLowerCase().startsWith('bearer ')) return bridged;
   const current = await session();
-  if (!current?.access_token) throw new Error('Sign in again to continue');
-  const response = await fetch(path, {
+  return current?.access_token ? `Bearer ${current.access_token}` : '';
+}
+
+async function freshAuthorization() {
+  const current = await session();
+  const auth = current?.access_token ? `Bearer ${current.access_token}` : '';
+  if (auth) window.tbgPortalAuthorization = auth;
+  return auth;
+}
+
+async function api(path, options = {}) {
+  const initialAuth = await authorization();
+  if (!initialAuth) throw new Error('Sign in again to continue');
+
+  const request = (auth) => fetch(path, {
     ...options,
     headers: {
       ...(options.body ? { 'content-type': 'application/json' } : {}),
       ...(options.headers || {}),
-      authorization: `Bearer ${current.access_token}`
+      authorization: auth
     }
   });
+
+  let response = await request(initialAuth);
+  if (response.status === 401 && String(window.tbgPortalAuthorization || '').trim() === initialAuth) {
+    const refreshedAuth = await freshAuthorization();
+    if (refreshedAuth && refreshedAuth !== initialAuth) response = await request(refreshedAuth);
+  }
+
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw Object.assign(new Error(body.error || `Request failed (${response.status})`), { status: response.status, body });
   return body;
