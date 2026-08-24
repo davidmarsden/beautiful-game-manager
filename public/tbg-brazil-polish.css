@@ -66,8 +66,9 @@ body{background:radial-gradient(circle at 15% 8%,rgba(255,255,255,.18),transpare
 .tbg-profile-empty p{color:#c3d0e9!important}
 
 /* Intentional TPF pink: this is an external-product brand link, not TBG chrome. */
-.tbg-pink-final-link{background:#e8a9bc!important;color:#28141b!important;border-color:#f4c6d4!important}
-.tbg-pink-final-link:hover{background:#efb6c7!important}
+.tbg-pink-final-link:not(.unavailable){background:#e8a9bc!important;color:#28141b!important;border-color:#f4c6d4!important}
+.tbg-pink-final-link:not(.unavailable):hover{background:#efb6c7!important}
+.tbg-pink-final-link.unavailable{background:#2a3740!important;color:#94a5af!important;border-color:#455864!important;cursor:default}
 
 @media(max-width:700px){
   .world-feed-comment{background:#fff!important}
