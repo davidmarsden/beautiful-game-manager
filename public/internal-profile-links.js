@@ -1,3 +1,4 @@
+import './transfer-feedback-placement.js';
 import './transfer-grace-pending-fix.js';
 import './transfer-history.js';
 import './open-market-review-fixes.js';
