@@ -46,7 +46,7 @@ test('community card retries when the async World Feed shell is inserted', () =>
 });
 
 test('TBG gets its own green identity layer while retaining existing layout', () => {
-  assert.ok(green.includes('--tbg-colour-paper:#8fae78'));
+  assert.ok(green.includes('--tbg-colour-paper:#b8d69f'));
   assert.ok(green.includes('--tbg-green-deep:#183a28'));
   assert.ok(green.includes('.tabs'));
   assert.ok(community.includes("loadStylesheet('tbg-green-stock.css')"));
