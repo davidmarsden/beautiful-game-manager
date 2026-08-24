@@ -1,33 +1,38 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const $ = (id) => document.getElementById(id);
-let session;
+let supabase;
 let context;
 
 function text(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch]));
 }
 
-async function authSession() {
+async function initAuth() {
   const configResponse = await fetch('/api/auth-config', { cache: 'no-store' });
   const config = await configResponse.json();
   if (!configResponse.ok || !config.configured) throw new Error(config.error || 'Supabase is not configured');
-  const supabase = createClient(config.supabase_url, config.supabase_anon_key, {
+  supabase = createClient(config.supabase_url, config.supabase_anon_key, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
   });
+}
+
+async function currentAccessToken() {
+  if (!supabase) await initAuth();
   const { data, error } = await supabase.auth.getSession();
   if (error) throw error;
   if (!data.session?.access_token) throw new Error('Sign in through the Manager Portal first');
-  return data.session;
+  return data.session.access_token;
 }
 
 async function api(options = {}) {
+  const accessToken = await currentAccessToken();
   const response = await fetch('/api/alpha-admin', {
     ...options,
     headers: {
       ...(options.body ? { 'content-type': 'application/json' } : {}),
       ...(options.headers || {}),
-      authorization: `Bearer ${session.access_token}`
+      authorization: `Bearer ${accessToken}`
     }
   });
   const body = await response.json().catch(() => ({}));
@@ -87,7 +92,7 @@ function render() {
 }
 
 async function load() {
-  session = await authSession();
+  await initAuth();
   context = await api();
   render();
 }
