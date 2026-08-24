@@ -1,7 +1,7 @@
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const WORLD_ID = process.env.TBG_WORLD_ID || 'tbg-world-1';
+const WORLD_ID = process.env.TBG_WORLD_ID || 'tbg-world-001';
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
