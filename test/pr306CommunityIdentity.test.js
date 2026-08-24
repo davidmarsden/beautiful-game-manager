@@ -18,6 +18,12 @@ test('manager contacts are opt-in and account email is not reused automatically'
   assert.ok(profile.includes('Your sign-in email is never exposed automatically.'));
 });
 
+test('explicit self profile IDs still receive private contact values and publish flags', () => {
+  assert.ok(endpoint.includes("String(targetId) === String(context.managerId)"));
+  assert.ok(endpoint.includes('result?.is_self === true'));
+  assert.ok(endpoint.includes('contactFor(targetId, isSelf)'));
+});
+
 test('managers can open other managers and see deliberately shared contact details', () => {
   assert.ok(profile.includes("sectionTitle('Managers in this world')"));
   assert.ok(profile.includes("sectionTitle('Contact')"));
@@ -30,6 +36,13 @@ test('alpha WhatsApp community is prominent and has direct link plus QR', () => 
   assert.ok(community.includes('data:image/png;base64,'));
   assert.ok(community.includes("#feedView .world-feed-shell"));
   assert.ok(profile.includes('communityCard()'));
+});
+
+test('community card retries when the async World Feed shell is inserted', () => {
+  assert.ok(community.includes("node.matches?.('.world-feed-shell')"));
+  assert.ok(community.includes("node.querySelector?.('.world-feed-shell')"));
+  assert.ok(community.includes('mountCommunityCard();'));
+  assert.ok(community.includes('observer.observe(document.documentElement'));
 });
 
 test('TBG gets its own green identity layer while retaining existing layout', () => {
