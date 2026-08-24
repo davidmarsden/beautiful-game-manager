@@ -6,17 +6,21 @@ import './finance.js';
 import './world-feed.js';
 import './world-feed-enhancements.js';
 import './manager-participation.js';
+import { openManagerParticipation } from './manager-participation.js';
 
 const VIEW_ALIASES = new Map([
   ['dashboard', 'dashboard'],
+  ['inbox', 'dashboard'],
   ['feed', 'feed'],
   ['news', 'feed'],
   ['newsfeed', 'feed'],
   ['world feed', 'feed'],
   ['squad', 'squad'],
   ['tactics', 'tactics'],
+  ['team', 'tactics'],
   ['tactics & team', 'tactics'],
   ['schedule', 'schedule'],
+  ['fixtures', 'schedule'],
   ['finance', 'finance'],
   ['finances', 'finance'],
   ['history', 'history'],
@@ -30,6 +34,21 @@ const VIEW_ALIASES = new Map([
   ['transfer market', 'transfers'],
   ['world', 'world']
 ]);
+
+const NAVIGATION = [
+  ['dashboard', 'Inbox'],
+  ['feed', 'News'],
+  ['squad', 'Squad'],
+  ['tactics', 'Team'],
+  ['schedule', 'Fixtures'],
+  ['updates', 'Updates'],
+  ['transfers', 'Transfers'],
+  ['competitions', 'Competitions'],
+  ['finance', 'Finances'],
+  ['history', 'History'],
+  ['managers', 'Managers'],
+  ['world', 'World']
+];
 
 function installStylesheet(href) {
   if (document.querySelector(`link[href$="${href.replace('./', '')}"]`)) return;
@@ -56,7 +75,7 @@ function installWorldFeedShell() {
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.view = 'feed';
-    button.textContent = 'World Feed';
+    button.textContent = 'News';
     const first = tabs.querySelector('[data-view="dashboard"]')?.nextSibling;
     if (first) tabs.insertBefore(button, first);
     else tabs.prepend(button);
@@ -164,6 +183,33 @@ function installTransfersShell() {
   }
 }
 
+function simplifyNavigation() {
+  const tabs = document.querySelector('.workspace .tabs');
+  if (!tabs) return;
+
+  let managers = tabs.querySelector('#managersNavButton');
+  if (!managers) {
+    managers = document.createElement('button');
+    managers.id = 'managersNavButton';
+    managers.type = 'button';
+    managers.dataset.portalAction = 'managers';
+    tabs.append(managers);
+  }
+
+  const controls = new Map();
+  tabs.querySelectorAll('[data-view]').forEach((control) => {
+    if (control.dataset.view) controls.set(control.dataset.view, control);
+  });
+  controls.set('managers', managers);
+
+  NAVIGATION.forEach(([key, label]) => {
+    const control = controls.get(key);
+    if (!control) return;
+    control.textContent = label;
+    tabs.append(control);
+  });
+}
+
 function installDynamicShells() {
   retireLegacyClubNav();
   installWorldFeedShell();
@@ -171,6 +217,7 @@ function installDynamicShells() {
   installFinanceShell();
   installTransfersShell();
   installPlayerUpdatesShell();
+  simplifyNavigation();
 }
 
 function normaliseView(value) {
@@ -220,6 +267,14 @@ export function showPortalView(viewName, { focus = false } = {}) {
 }
 
 function handleNavigation(event) {
+  const managers = event.target.closest?.('#managersNavButton');
+  if (managers) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    void openManagerParticipation('');
+    return;
+  }
+
   const view = viewFromTarget(event.target);
   if (!view) return;
   event.preventDefault();
