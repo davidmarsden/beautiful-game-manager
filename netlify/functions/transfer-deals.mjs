@@ -365,7 +365,7 @@ export default async (request) => {
         })
       });
       const message = responseAction === 'accept'
-        ? 'Transfer terms agreed. A 15-minute mistake-grace period now applies before the deal becomes binding.'
+        ? 'Transfer terms agreed. The applicable mistake-grace period now applies before the deal becomes binding.'
         : responseAction === 'decline'
           ? 'Transfer offer declined.'
           : 'Counter-offer sent immediately.';
@@ -474,7 +474,7 @@ export default async (request) => {
   } catch (error) {
     const message = String(error?.message || 'Transfer market request failed');
     const status = /Session|Authentication/.test(message) ? 401
-      : /required|owned|listing action|response action|change response|agreed-deal change|mistake-grace|grace period|active transfer listing|read model|canonical world|appointment|selling club|counterpart club|exchange|offer|deal|revision|participant|approved|pending change|safety metadata/i.test(message) ? 409
+      : /Seasonal transfer limit|Board refusal|required|owned|listing action|response action|change response|agreed-deal change|mistake-grace|grace period|active transfer listing|read model|canonical world|appointment|selling club|counterpart club|exchange|offer|deal|revision|participant|approved|pending change|safety metadata/i.test(message) ? 409
         : 503;
     return json({ error: message }, status);
   }

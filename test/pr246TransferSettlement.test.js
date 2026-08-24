@@ -67,7 +67,8 @@ test('settlement runs independently of matchday turns and opportunistically on t
   assert.match(gateway, /settleDueTransfers\(\{ worldId: current\.appointment\.world_id, limit: 5 \}\)/);
   assert.match(gateway, /get_manager_transfer_lifecycle_for_user/);
   assert.match(gateway, /cancel_in_grace/);
-  assert.match(gateway, /15-minute mistake-grace period/);
+  assert.match(gateway, /applicable mistake-grace period/);
+  assert.doesNotMatch(gateway, /15-minute mistake-grace period now applies before the deal becomes binding/);
 });
 
 test('manager UI explains grace and binding deadlines and preserves unilateral grace cancellation during pending changes', async () => {

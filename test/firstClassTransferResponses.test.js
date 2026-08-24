@@ -62,7 +62,8 @@ test('transfer gateway wires accept decline and counter with exact revision numb
   assert.match(source, /p_revision_no: revisionNo/);
   assert.match(source, /p_action: responseAction/);
   assert.match(source, /Counter-offer sent immediately/);
-  assert.match(source, /15-minute mistake-grace period now applies before the deal becomes binding/);
+  assert.match(source, /applicable mistake-grace period now applies before the deal becomes binding/);
+  assert.doesNotMatch(source, /15-minute mistake-grace period now applies before the deal becomes binding/);
 });
 
 test('Transfers UI renders exact-revision response controls and derives badge counts from rendered cards', async () => {
