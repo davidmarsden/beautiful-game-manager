@@ -11,6 +11,7 @@ const bearerToken = (request) => {
   return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
 };
 const isJwt = (value) => String(value || '').split('.').length === 3;
+const cleanText = (value) => String(value || '').trim().slice(0, 240) || null;
 
 async function requestSupabase(path, { apiKey, bearer, ...options } = {}) {
   const response = await fetch(`${SUPABASE_URL}${path}`, {
@@ -63,17 +64,60 @@ async function managerDirectory(worldId, selfId) {
     .sort((a, b) => String(a.manager_name).localeCompare(String(b.manager_name)));
 }
 
+async function contactFor(managerId, isSelf) {
+  const rows = await serviceSupabase(`/rest/v1/manager_public_contacts?manager_id=eq.${encodeURIComponent(managerId)}&select=whatsapp,contact_email,discord,publish_whatsapp,publish_email,publish_discord&limit=1`);
+  const row = rows[0] || {};
+  if (isSelf) return {
+    whatsapp: row.whatsapp || '',
+    contact_email: row.contact_email || '',
+    discord: row.discord || '',
+    publish_whatsapp: Boolean(row.publish_whatsapp),
+    publish_email: Boolean(row.publish_email),
+    publish_discord: Boolean(row.publish_discord)
+  };
+  return {
+    whatsapp: row.publish_whatsapp ? row.whatsapp || '' : '',
+    contact_email: row.publish_email ? row.contact_email || '' : '',
+    discord: row.publish_discord ? row.discord || '' : ''
+  };
+}
+
+async function saveContact(managerId, body) {
+  const row = {
+    manager_id: managerId,
+    whatsapp: cleanText(body.whatsapp),
+    contact_email: cleanText(body.contact_email),
+    discord: cleanText(body.discord),
+    publish_whatsapp: Boolean(body.publish_whatsapp),
+    publish_email: Boolean(body.publish_email),
+    publish_discord: Boolean(body.publish_discord),
+    updated_at: new Date().toISOString()
+  };
+  await serviceSupabase('/rest/v1/manager_public_contacts?on_conflict=manager_id', {
+    method: 'POST',
+    headers: { prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify(row)
+  });
+  return contactFor(managerId, true);
+}
+
 export default async (request) => {
   try {
-    if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
+    if (!['GET', 'POST'].includes(request.method)) return json({ error: 'Method not allowed' }, 405);
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured' }, 503);
     const token = bearerToken(request);
     if (!token) return json({ error: 'Authentication required' }, 401);
     const user = await identity(token);
     const context = await activeContext(user.id);
+
+    if (request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      if (body.action !== 'save-contact') return json({ error: 'Unknown action' }, 400);
+      return json({ contact: await saveContact(context.managerId, body) });
+    }
+
     const url = new URL(request.url);
     const target = String(url.searchParams.get('manager_id') || '').trim() || null;
-
     const result = await serviceSupabase('/rest/v1/rpc/get_manager_participation_for_user', {
       method: 'POST',
       body: JSON.stringify({
@@ -83,6 +127,8 @@ export default async (request) => {
       })
     });
 
+    const targetId = target || context.managerId;
+    result.contact = await contactFor(targetId, !target);
     if (!target) result.directory = await managerDirectory(context.worldId, context.managerId);
     return json(result);
   } catch (error) {
