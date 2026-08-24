@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TBG — Alpha onboarding admin</title>
+  <link rel="stylesheet" href="./styles.css">
+  <style>
+    body{background:#fff7fb;color:#351928}.alpha-admin-shell{max-width:1100px;margin:0 auto;padding:1.25rem}.alpha-admin-head{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-bottom:1rem}.alpha-admin-head a{color:#7e184b;font-weight:700}.alpha-panel{background:white;border:1px solid rgba(126,24,75,.18);border-radius:16px;padding:1rem;margin:1rem 0;box-shadow:0 8px 30px rgba(126,24,75,.06)}.alpha-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.8rem}.alpha-panel label{display:block;font-weight:700;margin:.6rem 0}.alpha-panel input,.alpha-panel select,.alpha-panel textarea{width:100%;padding:.7rem;border:1px solid #d6b8c8;border-radius:8px;background:white}.alpha-panel select[multiple]{min-height:180px}.alpha-actions{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.7rem}.alpha-list{display:grid;gap:.7rem}.alpha-row{border:1px solid #ead7e1;border-radius:12px;padding:.8rem;background:#fffafd}.alpha-row strong{color:#64143d}.alpha-row small{display:block;color:#765767;margin-top:.25rem}.alpha-row .alpha-actions select{width:auto;min-width:220px}.status{min-height:1.5rem;color:#64143d}.danger{background:#fff0f3;border-color:#d68ca4}.muted{color:#765767}
+  </style>
+</head>
+<body>
+  <main class="alpha-admin-shell">
+    <header class="alpha-admin-head"><div><p class="muted">THE BEAUTIFUL GAME</p><h1>Controlled alpha onboarding</h1><p class="muted">Invite testers, inspect active human appointments, and recover or reassign them without direct database edits.</p></div><a href="/">← Manager Portal</a></header>
+    <p id="adminStatus" class="status" aria-live="polite">Checking admin access…</p>
+    <section id="adminContent" hidden>
+      <section class="alpha-panel"><h2>Invite tester</h2><p class="muted">Leave the club list empty to allow any currently vacant club, or select a restricted set.</p><form id="inviteForm"><div class="alpha-grid"><label>Email<input id="inviteEmail" type="email" required placeholder="tester@example.com"></label><label>Eligible clubs<select id="inviteClubs" multiple></select></label></div><button class="submit" type="submit">Save invitation</button></form><p id="inviteStatus" class="status" aria-live="polite"></p></section>
+      <section class="alpha-panel"><h2>Invitations</h2><div id="inviteList" class="alpha-list"></div></section>
+      <section class="alpha-panel"><h2>Active human appointments</h2><p class="muted">Ending an appointment preserves its history. Reassignment ends the old appointment and creates a new authoritative one atomically.</p><div id="appointmentList" class="alpha-list"></div></section>
+    </section>
+  </main>
+  <script type="module" src="./alpha-admin.js"></script>
+</body>
+</html>
