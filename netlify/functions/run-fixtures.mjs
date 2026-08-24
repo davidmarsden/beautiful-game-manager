@@ -4,6 +4,11 @@ import {
   buildMatchStateApplication,
   hydrateMatchState
 } from '../../src/matchEngine/MatchStatePersistence.js';
+import {
+  createSeedNonce,
+  prepareCommittedFixtureSeed,
+  revealCommittedSeed
+} from '../../src/matchEngine/fixtureSeed.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -67,15 +72,34 @@ async function loadPersistedMatchState(contract) {
   return hydrateMatchState({ rows, playerIds, fixture: contract.fixture });
 }
 
-async function upsertPreparedRun(fixture, contract) {
-  const existing = await rest(`/rest/v1/match_runs?fixture_id=eq.${encodeURIComponent(fixture.id)}&select=id,attempt_count&limit=1`);
+async function existingMatchRun(fixtureId) {
+  const rows = await rest(
+    `/rest/v1/match_runs?fixture_id=eq.${encodeURIComponent(fixtureId)}`
+    + '&select=id,attempt_count,seed_nonce,seed_commitment,seed_committed_at&limit=1'
+  );
+  return rows[0] || null;
+}
+
+function prepareSeed(baseContract, existingRun) {
+  const nonce = existingRun?.seed_nonce || createSeedNonce();
+  const prepared = prepareCommittedFixtureSeed({ baseContract, nonce });
+  if (existingRun?.seed_commitment && existingRun.seed_commitment !== prepared.commitment) {
+    throw new Error(`Fixture ${baseContract.fixture.fixture_id} seed commitment changed across retries`);
+  }
+  return prepared;
+}
+
+async function upsertPreparedRun(fixture, contract, existingRun, preparedSeed) {
   const row = {
     fixture_id: fixture.id,
     world_id: contract.fixture.world_id,
     engine_contract_version: contract.contract_version,
     status: 'prepared',
     request_payload: contract,
-    attempt_count: Number(existing[0]?.attempt_count || 0),
+    attempt_count: Number(existingRun?.attempt_count || 0),
+    seed_nonce: preparedSeed.nonce,
+    seed_commitment: preparedSeed.commitment,
+    seed_committed_at: existingRun?.seed_committed_at || new Date().toISOString(),
     prepared_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     last_error: null
@@ -86,6 +110,32 @@ async function upsertPreparedRun(fixture, contract) {
     body: JSON.stringify(row)
   });
   return saved[0] || row;
+}
+
+async function publishSeedCommitment(fixture, preparedSeed) {
+  if (fixture.match_seed_commitment && fixture.match_seed_commitment !== preparedSeed.commitment) {
+    throw new Error(`Fixture ${fixture.id} already has a different seed commitment`);
+  }
+  const committedAt = fixture.match_seed_committed_at || new Date().toISOString();
+  await rest(`/rest/v1/fixtures?id=eq.${encodeURIComponent(fixture.id)}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json', prefer: 'return=minimal' },
+    body: JSON.stringify({
+      match_seed_commitment: preparedSeed.commitment,
+      match_seed_committed_at: committedAt
+    })
+  });
+}
+
+async function revealFixtureSeed(fixtureId, preparedSeed) {
+  await rest(`/rest/v1/fixtures?id=eq.${encodeURIComponent(fixtureId)}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json', prefer: 'return=minimal' },
+    body: JSON.stringify({
+      match_seed_reveal: preparedSeed.seed,
+      match_seed_revealed_at: new Date().toISOString()
+    })
+  });
 }
 
 async function recordRunAttempt(fixtureId, run) {
@@ -234,18 +284,24 @@ export default async () => {
       try {
         const submissions = await loadSubmissions(fixture.id);
         const baseContract = buildEngineMatchContract({ fixture, submissions, world });
-        const matchState = await loadPersistedMatchState(baseContract);
-        const contract = { ...baseContract, engine_mode: MATCH_ENGINE_MODE, match_state: matchState };
-        const run = await upsertPreparedRun(fixture, contract);
+        const existingRun = await existingMatchRun(fixture.id);
+        const preparedSeed = prepareSeed(baseContract, existingRun);
+        const matchState = await loadPersistedMatchState(preparedSeed.contract);
+        const contract = { ...preparedSeed.contract, engine_mode: MATCH_ENGINE_MODE, match_state: matchState };
+        const run = await upsertPreparedRun(fixture, contract, existingRun, preparedSeed);
+        await publishSeedCommitment(fixture, preparedSeed);
         await finishFixture(fixture.id, 'prepared');
         const attemptCount = await recordRunAttempt(fixture.id, run);
-        const result = ENGINE_RUNNER_URL ? await remoteResult(contract) : simulateMatch(contract, world);
+        const rawResult = ENGINE_RUNNER_URL ? await remoteResult(contract) : simulateMatch(contract, world);
+        const result = revealCommittedSeed(rawResult, preparedSeed);
         const stateApplied = await persistResult(fixture, contract, attemptCount, result);
+        await revealFixtureSeed(fixture.id, preparedSeed);
         processed.push({
           fixture_id: fixture.id,
           contract_version: contract.contract_version,
           result_version: result.result_version,
           score: result.score,
+          seed_commitment: preparedSeed.commitment,
           state_applied: Boolean(stateApplied),
           engine_mode: MATCH_ENGINE_MODE,
           mode: ENGINE_RUNNER_URL ? 'remote_engine' : 'built_in_simulator'
