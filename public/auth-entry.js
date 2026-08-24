@@ -4,6 +4,26 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const PENDING_CLUB_KEY = "tbg_pending_club_id";
 const SAFE_CLUB_ID = /^[A-Za-z0-9._:-]{1,160}$/;
 
+function addAlphaGuideLinks() {
+  const gateCard = document.querySelector('#authGate .auth-card');
+  if (gateCard && !gateCard.querySelector('.alpha-guide-entry-link')) {
+    const guide = document.createElement('p');
+    guide.className = 'alpha-guide-entry-link';
+    guide.innerHTML = '<a href="./alpha-guide.html">New tester? Read the controlled-alpha guide first.</a>';
+    gateCard.append(guide);
+  }
+
+  const topbar = document.querySelector('.topbar');
+  const managerChip = document.getElementById('managerChip');
+  if (topbar && managerChip && !topbar.querySelector('.alpha-guide-topbar-link')) {
+    const guide = document.createElement('a');
+    guide.className = 'manager-chip alpha-guide-topbar-link';
+    guide.href = './alpha-guide.html';
+    guide.textContent = 'Alpha guide';
+    managerChip.before(guide);
+  }
+}
+
 function enhanceLandingPage() {
   const gate = document.getElementById('authGate');
   const card = gate?.querySelector('.auth-card');
@@ -27,6 +47,7 @@ function enhanceLandingPage() {
       <li>Manager community</li>
     </ul>
     <p class="tbg-landing-alpha">Currently in controlled alpha. Access is limited to invited managers and testers while the world, match engine and management systems are being developed in public.</p>
+    <p><a href="./alpha-guide.html"><strong>Read the controlled-alpha tester guide →</strong></a></p>
   `;
 
   const signin = document.createElement('section');
@@ -39,6 +60,7 @@ function enhanceLandingPage() {
 }
 
 enhanceLandingPage();
+addAlphaGuideLinks();
 
 async function loadConfig() {
   const response = await fetch("/api/auth-config", { cache: "no-store" });
