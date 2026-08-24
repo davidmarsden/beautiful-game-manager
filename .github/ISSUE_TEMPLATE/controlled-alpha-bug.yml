@@ -1,5 +1,5 @@
 name: Controlled alpha bug
-about: Report a reproducible problem found while testing The Beautiful Game
+description: Report a reproducible problem found while testing The Beautiful Game
 labels: []
 body:
   - type: markdown
