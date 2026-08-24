@@ -29,5 +29,5 @@ test('known late Football Pink surfaces are explicitly remapped for TBG', () => 
 
 test('managed and selected states use Brazil yellow as the distinctive attention colour', () => {
   assert.ok(css.includes('#competitionsView .division-round-fixture.managed-fixture{background:rgba(255,220,2,.24)!important}'));
-  assert.ok(css.includes('#tacticsView .formation-slot .rating-badge{background:var(--tbg-brazil-yellow)!important'));
+  assert.ok(css.includes('#tacticsView .formation-slot .player-rating{background:var(--tbg-brazil-yellow)!important'));
 });
