@@ -2,6 +2,7 @@ const COMMENT_PREVIEW_LIMIT = 2;
 const ACTIVITY_TTL = 5 * 60_000;
 let activityLoadedAt = 0;
 let activityLoading = null;
+let activityCache = null;
 const expandAfterComment = new Set();
 
 function feedToken() {
@@ -155,10 +156,13 @@ function renderActivity(data) {
 }
 
 async function loadSocialActivity({ force = false } = {}) {
-  if (!force && Date.now() - activityLoadedAt < ACTIVITY_TTL) return;
-  if (activityLoading) return activityLoading;
   const panel = ensureActivityPanel();
   if (!panel) return;
+  if (!force && Date.now() - activityLoadedAt < ACTIVITY_TTL && activityCache) {
+    renderActivity(activityCache);
+    return;
+  }
+  if (activityLoading) return activityLoading;
   const token = feedToken();
   if (!token) return;
 
@@ -170,8 +174,9 @@ async function loadSocialActivity({ force = false } = {}) {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || 'Social activity is unavailable');
-    renderActivity(data);
+    activityCache = data;
     activityLoadedAt = Date.now();
+    renderActivity(data);
   })().catch((error) => {
     const current = ensureActivityPanel();
     const status = current?.querySelector('.world-feed-activity-heading > span');
@@ -202,13 +207,13 @@ document.addEventListener('submit', (event) => {
     expandAfterComment.add(itemId);
     setTimeout(() => expandAfterComment.delete(itemId), 30_000);
   }
-  setTimeout(() => { void loadSocialActivity({ force: true }); }, 1500);
 }, true);
 
-document.addEventListener('submit', (event) => {
-  if (!event.target.closest?.('.world-feed-composer')) return;
-  setTimeout(() => { void loadSocialActivity({ force: true }); }, 1500);
-}, true);
+document.addEventListener('tbg:world-feed-mutation-succeeded', (event) => {
+  if (!['post', 'comment'].includes(event.detail?.action)) return;
+  activityLoadedAt = 0;
+  void loadSocialActivity({ force: true });
+});
 
 document.addEventListener('tbg:view-changed', (event) => {
   if (event.detail?.view !== 'feed') return;
