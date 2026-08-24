@@ -6,6 +6,7 @@ const migration = fs.readFileSync(new URL('../supabase/migrations/20260824b_mana
 const endpoint = fs.readFileSync(new URL('../netlify/functions/manager-participation.mjs', import.meta.url), 'utf8');
 const client = fs.readFileSync(new URL('../public/manager-participation.js', import.meta.url), 'utf8');
 const navigation = fs.readFileSync(new URL('../public/portal-navigation.js', import.meta.url), 'utf8');
+const feed = fs.readFileSync(new URL('../public/world-feed.js', import.meta.url), 'utf8');
 
 test('participation is derived from meaningful authoritative actions rather than presence telemetry', () => {
   assert.ok(migration.includes('manager_turn_submissions'));
@@ -42,7 +43,13 @@ test('the manager chip opens the participation profile and self view includes an
   assert.ok(client.includes("event.target.closest?.('#managerChip')"));
   assert.ok(endpoint.includes('managerDirectory(context.worldId, context.managerId)'));
   assert.ok(client.includes("sectionTitle('Managers in this world')"));
-  assert.ok(client.includes('data.managerProfileId'));
+  assert.ok(client.includes('button.dataset.managerProfileId'));
+});
+
+test('World Feed manager identities carry profile IDs for participation profile navigation', () => {
+  assert.ok(feed.includes('comment.manager_id'));
+  assert.ok(feed.includes('identity.dataset.managerProfileId'));
+  assert.ok(feed.includes('item.actor_manager_id'));
 });
 
 test('participation endpoint authenticates and scopes targets to the caller world', () => {
