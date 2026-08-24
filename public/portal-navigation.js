@@ -144,7 +144,7 @@ function installPlayerUpdatesShell() {
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.view = 'updates';
-    button.textContent = 'Updates';
+    button.textContent = 'Player Updates';
     const transfers = tabs.querySelector('[data-view="transfers"]');
     const competition = tabs.querySelector('[data-view="competitions"]');
     if (transfers) transfers.before(button);
