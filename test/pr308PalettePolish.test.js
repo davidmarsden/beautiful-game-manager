@@ -25,7 +25,9 @@ test('player profile is integrated with the Brazil TBG identity', () => {
   assert.ok(css.includes('.tbg-profile-metric{background:rgba(255,255,255,.07)!important'));
 });
 
-test('Pink Final link remains intentionally pink as external product branding', () => {
-  assert.ok(css.includes('.tbg-pink-final-link{background:#e8a9bc!important'));
+test('Pink Final link remains intentionally pink only when available', () => {
+  assert.ok(css.includes('.tbg-pink-final-link:not(.unavailable){background:#e8a9bc!important'));
+  assert.ok(css.includes('.tbg-pink-final-link.unavailable{background:#2a3740!important'));
+  assert.ok(css.includes('color:#94a5af!important'));
   assert.ok(css.includes('Intentional TPF pink'));
 });
