@@ -217,6 +217,7 @@ function itemNode(item) {
       input.value = '';
       status.textContent = '';
       if (!replaceFeedItem(result.item)) await loadWorldFeed({ force: true });
+      document.dispatchEvent(new CustomEvent('tbg:world-feed-mutation-succeeded', { detail: { action: 'comment', feed_item_id: item.id } }));
     } catch (error) {
       status.textContent = error.message;
     } finally {
@@ -267,6 +268,7 @@ function renderFeed(data) {
       textarea.value = '';
       status.textContent = '';
       if (!prependFeedItem(result.item)) await loadWorldFeed({ force: true });
+      document.dispatchEvent(new CustomEvent('tbg:world-feed-mutation-succeeded', { detail: { action: 'post', feed_item_id: result?.id || result?.item?.id || '' } }));
     } catch (error) {
       status.textContent = error.message;
     } finally {
