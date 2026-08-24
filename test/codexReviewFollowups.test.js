@@ -40,7 +40,7 @@ test('skip to full time suppresses replay-completed auto finish', async () => {
 test('engine attempts are recorded before either runner executes', async () => {
   const source = await read('netlify/functions/run-fixtures.mjs');
   const recordIndex = source.indexOf('const attemptCount = await recordRunAttempt');
-  const executeIndex = source.indexOf('const result = ENGINE_RUNNER_URL');
+  const executeIndex = source.search(/const\s+(?:rawResult|result)\s*=\s*ENGINE_RUNNER_URL/);
   assert.ok(recordIndex > -1 && executeIndex > recordIndex);
   assert.match(source, /status: 'submitted'/);
   assert.match(source, /attempt_count: attemptCount/);
