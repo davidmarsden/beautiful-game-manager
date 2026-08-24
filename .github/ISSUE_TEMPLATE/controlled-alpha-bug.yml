@@ -1,0 +1,81 @@
+name: Controlled alpha bug
+about: Report a reproducible problem found while testing The Beautiful Game
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing The Beautiful Game. Please do not include private account details, email addresses, magic links, credentials or other sensitive information in a public issue.
+
+  - type: input
+    id: page
+    attributes:
+      label: Page / area
+      description: Where in the portal were you?
+      placeholder: e.g. Transfers → Negotiations
+    validations:
+      required: true
+
+  - type: textarea
+    id: action
+    attributes:
+      label: What did you do?
+      description: Give the shortest sequence of actions that reproduces the problem.
+      placeholder: I opened…, selected…, then pressed…
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened?
+    validations:
+      required: true
+
+  - type: input
+    id: time
+    attributes:
+      label: Approximate time
+      description: Include your time zone if it is not obvious.
+      placeholder: e.g. 24 Aug, about 21:30 BST
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot / extra evidence
+      description: Drag an image here if presentation or state looked wrong. Remove any private account information first.
+
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device
+      options:
+        - Desktop / laptop
+        - Tablet
+        - Phone
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser
+      placeholder: e.g. Chrome, Firefox, Safari
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I have not included private account data, magic links, credentials or other sensitive information.
+          required: true
