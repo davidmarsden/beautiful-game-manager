@@ -333,25 +333,51 @@ function revisionHistory(offer) {
   }).join('')}</details>`;
 }
 
+function lifecycleIntegrityDetail(lifecycle = {}) {
+  const reasons = Array.isArray(lifecycle.integrity_reasons) ? lifecycle.integrity_reasons : [];
+  const warning = lifecycle.integrity_level === 'warning';
+  const reasonText = reasons.map((reason) => String(reason?.detail || '').trim()).filter(Boolean).join(' ');
+  const coolingMinutes = Number(lifecycle.integrity_cooling_minutes || 0);
+  const coolingText = warning && coolingMinutes >= 1440
+    ? `${Math.round(coolingMinutes / 1440)}-day integrity cooling period`
+    : warning && coolingMinutes > 0
+      ? `${coolingMinutes}-minute integrity cooling period`
+      : '';
+  const warningText = warning
+    ? `Transfer-integrity warning${coolingText ? ` · ${coolingText}` : ''}${reasonText ? ` · ${reasonText}` : ''}`
+    : '';
+  const authorityText = lifecycle.binding_authority === 'tbg_transfer_mechanism_only'
+    ? 'Official TBG deal principle: only the in-game transfer process can create a binding obligation; external promises are non-binding.'
+    : '';
+  return [warningText, authorityText].filter(Boolean).join(' · ');
+}
+
 function lifecyclePresentation(offer) {
   const lifecycle = offer.lifecycle || {};
+  const integrityDetail = lifecycleIntegrityDetail(lifecycle);
   if (lifecycle.effective_state === 'grace_period') {
     return {
-      label: 'Deal agreed · mistake grace',
-      detail: `Unilateral cancellation available until ${formatDeadline(lifecycle.grace_expires_at)} · transfer completes at ${formatDeadline(lifecycle.settle_at)}`,
+      label: lifecycle.integrity_level === 'warning' ? 'Deal agreed · integrity cooling' : 'Deal agreed · mistake grace',
+      detail: [
+        `Unilateral cancellation available until ${formatDeadline(lifecycle.grace_expires_at)} · transfer completes at ${formatDeadline(lifecycle.settle_at)}`,
+        integrityDetail
+      ].filter(Boolean).join(' · '),
       canCancelInGrace: Boolean(lifecycle.can_cancel_in_grace)
     };
   }
   if (lifecycle.effective_state === 'binding') {
     return {
       label: 'Deal binding · awaiting completion',
-      detail: `Transfer completes at ${formatDeadline(lifecycle.settle_at)} · cancellation now requires mutual consent`,
+      detail: [
+        `Transfer completes at ${formatDeadline(lifecycle.settle_at)} · cancellation now requires mutual consent`,
+        integrityDetail
+      ].filter(Boolean).join(' · '),
       canCancelInGrace: false
     };
   }
   return {
     label: 'Terms agreed · awaiting completion',
-    detail: lifecycle.settle_at ? `Transfer completes at ${formatDeadline(lifecycle.settle_at)}` : '',
+    detail: [lifecycle.settle_at ? `Transfer completes at ${formatDeadline(lifecycle.settle_at)}` : '', integrityDetail].filter(Boolean).join(' · '),
     canCancelInGrace: false
   };
 }
