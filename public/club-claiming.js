@@ -1,8 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 let clientPromise;
-let sessionPromise;
 let claimLoaded = false;
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function client() {
   if (!clientPromise) clientPromise = (async () => {
@@ -10,20 +11,21 @@ async function client() {
     const config = await response.json();
     if (!response.ok || !config.configured) throw new Error(config.error || 'Supabase is not configured');
     return createClient(config.supabase_url, config.supabase_anon_key, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
+      auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
     });
   })();
   return clientPromise;
 }
 
 async function session() {
-  if (!sessionPromise) sessionPromise = (async () => {
-    const supabase = await client();
+  const supabase = await client();
+  for (let attempt = 0; attempt < 4; attempt += 1) {
     const { data, error } = await supabase.auth.getSession();
     if (error) throw error;
-    return data.session || null;
-  })();
-  return sessionPromise;
+    if (data.session?.access_token) return data.session;
+    if (attempt < 3) await wait(150 * (attempt + 1));
+  }
+  return null;
 }
 
 async function api(path, options = {}) {
