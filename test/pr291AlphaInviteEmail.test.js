@@ -21,6 +21,7 @@ test('#291 records alpha invitation delivery without coupling it to invite creat
 
 test('#291 sends through Resend from a server-only Netlify secret', () => {
   assert.match(adminApi, /Netlify\?\.env\?\.get/);
+  assert.match(adminApi, /process\.env\[key\]/);
   assert.match(adminApi, /RESEND_API_KEY/);
   assert.match(adminApi, /https:\/\/api\.resend\.com\/emails/);
   assert.match(adminApi, /The Beautiful Game <login@auth\.thebeautifulgame\.online>/);
