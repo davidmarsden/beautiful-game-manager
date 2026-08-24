@@ -54,8 +54,8 @@ async function managerDirectory(worldId, selfId) {
   const appointments = await serviceSupabase(`/rest/v1/manager_appointments?world_id=eq.${encodeURIComponent(worldId)}&status=eq.active&select=manager_id,club_id&order=club_id.asc`);
   const ids = [...new Set(appointments.map((row) => row.manager_id).filter(Boolean))];
   if (!ids.length) return [];
-  const idFilter = ids.map((id) => `"${String(id).replaceAll('"', '')}"`).join(',');
-  const profiles = await serviceSupabase(`/rest/v1/manager_profiles?id=in.(${encodeURIComponent(idFilter)})&select=id,display_name`);
+  const idFilter = ids.map((id) => String(id).replaceAll(',', '')).join(',');
+  const profiles = await serviceSupabase(`/rest/v1/manager_profiles?id=in.(${idFilter})&select=id,display_name`);
   const names = new Map(profiles.map((profile) => [String(profile.id), profile.display_name]));
   return appointments
     .filter((row) => String(row.manager_id) !== String(selfId))
