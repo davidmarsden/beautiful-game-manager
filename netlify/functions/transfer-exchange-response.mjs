@@ -169,7 +169,7 @@ export default async (request) => {
       action,
       deal: result,
       message: action === 'accept'
-        ? 'Exchange terms agreed. The normal mistake-grace period now applies before atomic settlement.'
+        ? 'Exchange terms agreed. The applicable mistake-grace period now applies before atomic settlement.'
         : action === 'decline'
           ? 'Exchange offer declined.'
           : 'Exchange counter-offer sent as a complete new revision.'
@@ -177,7 +177,7 @@ export default async (request) => {
   } catch (error) {
     const message = String(error?.message || 'Exchange response failed');
     const status = /Session|Authentication/.test(message) ? 401
-      : /required|revision|participant|exchange|counter|offer|deal|owned|stale|already responded|read model/i.test(message) ? 409
+      : /Seasonal transfer limit|Board refusal|required|revision|participant|exchange|counter|offer|deal|owned|stale|already responded|read model/i.test(message) ? 409
         : 503;
     return json({ error: message }, status);
   }
