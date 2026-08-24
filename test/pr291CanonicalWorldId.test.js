@@ -21,3 +21,11 @@ test('#291 reconciliation migration normalizes the club catalogue and alpha stat
   assert.match(migration, /legacy\.world_id = 'tbg-world-001'/);
   assert.match(migration, /active canonical collision exists/);
 });
+
+test('#291 reconciliation preserves the newest alpha invite delivery tuple', () => {
+  const migration = read('supabase/migrations/20260824f_normalize_canonical_world_id.sql');
+  assert.match(migration, /legacy\.email_last_attempt_at > canonical\.email_last_attempt_at/);
+  for (const field of ['email_last_attempt_at', 'email_sent_at', 'email_message_id', 'email_last_error']) {
+    assert.match(migration, new RegExp(`${field} = CASE[\\s\\S]*legacy\\.${field}[\\s\\S]*canonical\\.${field}`));
+  }
+});
