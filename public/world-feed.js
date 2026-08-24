@@ -1,3 +1,5 @@
+import './manager-participation.js';
+
 let feedLoadedAt = 0;
 let feedLoading = null;
 let feedCanModerate = false;
@@ -75,8 +77,10 @@ function hasActiveFeedDraft() {
 function commentNode(comment) {
   const row = el('article', 'world-feed-comment');
   const meta = el('div', 'world-feed-comment-meta');
-  const identity = comment.club_name ? `${comment.manager_name || 'Manager'} · ${comment.club_name}` : (comment.manager_name || 'Manager');
-  meta.append(el('strong', '', identity), el('time', '', timeLabel(comment.created_at)));
+  const identityText = comment.club_name ? `${comment.manager_name || 'Manager'} · ${comment.club_name}` : (comment.manager_name || 'Manager');
+  const identity = el('strong', '', identityText);
+  if (comment.manager_id) identity.dataset.managerProfileId = String(comment.manager_id);
+  meta.append(identity, el('time', '', timeLabel(comment.created_at)));
   row.append(meta, el('p', '', comment.body || ''));
   return row;
 }
@@ -182,6 +186,7 @@ function itemNode(item) {
   const identity = item.actor_manager_name
     ? el('p', 'world-feed-identity', `${item.actor_manager_name}${item.actor_club_name ? ` · ${item.actor_club_name}` : ''}`)
     : null;
+  if (identity && item.actor_manager_id) identity.dataset.managerProfileId = String(item.actor_manager_id);
   const body = el('p', 'world-feed-body', item.body || '');
   body.style.whiteSpace = 'pre-line';
 
