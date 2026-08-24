@@ -34,6 +34,19 @@ test('#291 invitation tells testers to use the invited identity and choose a clu
   assert.match(adminApi, /screenshot is especially useful/i);
 });
 
+test('#291 preserves a successful Resend acceptance even if tracking persistence fails', () => {
+  assert.match(adminApi, /let messageId/);
+  assert.match(adminApi, /email_sent:\s*true/);
+  assert.match(adminApi, /email_tracking_error/);
+  assert.match(adminUi, /Do not resend unless you confirm delivery failed/);
+});
+
+test('#291 rejects resend for claimed or revoked invitations', () => {
+  assert.match(adminApi, /invite\.status\s*!==\s*'invited'/);
+  assert.match(adminApi, /invite_not_active/);
+  assert.match(adminUi, /invite\.status\s*===\s*'invited'/);
+});
+
 test('#291 admin UI distinguishes saved, sent, failed and supports resend', () => {
   assert.match(adminUi, /email not sent/);
   assert.match(adminUi, /email failed:/);
