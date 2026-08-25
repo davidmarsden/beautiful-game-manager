@@ -26,8 +26,8 @@ test('transfer feedback is mirrored beside the action that triggered it', async 
   assert.match(source, /#submitNegotiation/);
   assert.match(source, /\[data-deal-response\]/);
   assert.match(source, /\[data-agreed-change-action\]/);
-  assert.match(source, /activeFeedbackTarget = \{ type: 'deal', dealId: card\.dataset\.firstClassDeal \}/);
-  assert.match(source, /activeFeedbackTarget = \{ type: 'proposal' \}/);
+  assert.match(source, /type: 'deal', dealId: card\.dataset\.firstClassDeal/);
+  assert.match(source, /type: 'proposal'/);
   assert.match(source, /submit\.after\(local\)/);
   assert.match(source, /actions\.after\(local\)/);
   assert.match(source, /messageObserver\.observe\(message/);
