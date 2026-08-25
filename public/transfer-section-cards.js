@@ -164,6 +164,52 @@ function scheduleMount() {
   });
 }
 
+function prepareLiveExchangeFromListing(button) {
+  const action = document.getElementById('negotiationAction');
+  const club = document.getElementById('negotiationClub');
+  const receivePlayer = document.getElementById('receivePlayer');
+  const addReceivePlayer = document.getElementById('addReceivePlayer');
+  const offerCash = document.getElementById('offerCash');
+  const receiveCash = document.getElementById('receiveCash');
+  const submit = document.getElementById('submitNegotiation');
+  const playerId = String(button?.dataset.playerId || '');
+  const clubId = String(button?.dataset.clubId || '');
+  const fee = Math.max(0, Number(button?.dataset.fee || 0) || 0);
+
+  if (!action || !club || !receivePlayer || !addReceivePlayer || !offerCash || !receiveCash || !submit || !playerId || !clubId) {
+    throw new Error('The first-class exchange composer is not ready yet.');
+  }
+
+  // The Open Market helper predates the multi-player composer and still fills the
+  // hidden legacy single-player controls. Drive the live composer through its own
+  // DOM events instead, so transfer-negotiations.js remains the owner of exchangeDraft.
+  action.value = 'offer';
+  action.dispatchEvent(new Event('change', { bubbles: true }));
+  club.value = clubId;
+  if (club.value !== clubId) throw new Error('That club is not currently available for a first-class offer.');
+  club.dispatchEvent(new Event('change', { bubbles: true }));
+
+  receivePlayer.value = playerId;
+  if (receivePlayer.value !== playerId) throw new Error('That listed player is no longer available in the offer composer.');
+  addReceivePlayer.click();
+
+  const selected = document.getElementById('receivePlayersSelected')
+    ?.querySelector(`[data-exchange-contract-player="${CSS.escape(playerId)}"]`);
+  if (!selected) throw new Error('The listed player could not be added to the offer draft.');
+
+  receiveCash.value = '£0';
+  offerCash.value = `£${fee.toLocaleString('en-GB')}`;
+  if (submit.disabled) throw new Error('The prepared offer is incomplete.');
+  return true;
+}
+
+function showMarketPreparationError(error) {
+  const message = document.getElementById('openMarketMessage');
+  const status = document.getElementById('openMarketStatus');
+  if (message) message.textContent = error.message;
+  if (status) status.textContent = 'Offer not prepared';
+}
+
 document.addEventListener('click', (event) => {
   const sectionButton = event.target.closest?.('[data-transfer-section]');
   if (sectionButton) {
@@ -172,10 +218,19 @@ document.addEventListener('click', (event) => {
     return;
   }
 
-  // Open Market's existing Prepare offer action fills the first-class composer.
-  // Move the manager to that composer after the market handler has populated it.
-  if (event.target.closest?.('[data-open-market-prepare-offer]')) {
-    queueMicrotask(() => selectSection('my'));
+  const prepare = event.target.closest?.('[data-open-market-prepare-offer]');
+  if (prepare) {
+    // The Open Market click handler runs on its shell first. Then populate the
+    // current multi-player draft and leave the market only after that succeeds.
+    queueMicrotask(() => {
+      try {
+        prepareLiveExchangeFromListing(prepare);
+        selectSection('my');
+        document.querySelector('.transfer-negotiation-compose')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } catch (error) {
+        showMarketPreparationError(error);
+      }
+    });
   }
 });
 
