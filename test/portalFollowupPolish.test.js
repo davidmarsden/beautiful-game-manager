@@ -31,12 +31,30 @@ test('inbox overview, updates and player links use the shared blue yellow cream 
   const css = await read('public/portal-followup.css');
 
   assert.match(css, /#dashboardView #portalOverview>article/);
+  assert.match(css, /#dashboardView #inboxList/);
   assert.match(css, /var\(--tbg-colour-cream,#f8f7e8\)/);
   assert.match(css, /var\(--tbg-brazil-blue,#193375\)/);
   assert.match(css, /var\(--tbg-brazil-yellow,#FFDC02\)/);
   assert.match(css, /#squadView \.player-link/);
   assert.match(css, /#updatesView \.player-updates-hero/);
   assert.match(css, /#updatesView \.player-update-card/);
+});
+
+test('squad transfer status is distinct and unlisted players have a direct listing action', async () => {
+  const [behaviour, css] = await Promise.all([
+    read('public/portal-followup.js'),
+    read('public/portal-followup.css')
+  ]);
+
+  assert.match(behaviour, /data\.squadListPlayer = playerId/);
+  assert.match(behaviour, /action\.textContent = 'List player'/);
+  assert.match(behaviour, /document\.querySelector\('\[data-view="transfers"\]'\)\?\.click\(\)/);
+  assert.match(behaviour, /action\.value = 'listing'/);
+  assert.match(behaviour, /refreshedPlayer\.value = playerId/);
+  assert.match(css, /#squadView \.squad-transfer-list-action/);
+  assert.match(css, /#squadView \.badge\.transfer/);
+  assert.match(css, /#squadView \.badge\.loan/);
+  assert.match(css, /#squadView \.badge\.loaned/);
 });
 
 test('manager directory resolves canonical club names instead of exposing club ids when available', async () => {
