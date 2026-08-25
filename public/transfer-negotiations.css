@@ -1,51 +1,283 @@
-.world-control-card.transfer-negotiation-workspace{margin-top:0;background:var(--tbg-colour-workspace-raised,#f6d4db);border-color:var(--portal-border,rgba(33,19,19,.24))}
-.transfer-negotiation-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;align-items:start}
-.transfer-negotiation-grid>article{border:1px solid var(--tbg-colour-rule,#d7a9b5);background:var(--tbg-surface-card,#f5d7dd);padding:1rem;min-width:0}
-.transfer-negotiation-grid h3,.transfer-negotiation-grid h4{margin:0 0 .75rem;font-family:var(--tbg-font-ui,inherit);text-transform:uppercase;letter-spacing:.05em}
-.transfer-negotiation-compose label{display:grid;gap:.35rem;margin:.7rem 0}
-.transfer-negotiation-compose input,.transfer-negotiation-compose select{width:100%;padding:.7rem;border:1px solid var(--tbg-colour-rule,#bdc8c2);background:var(--tbg-colour-cream,#fff0df);color:var(--tbg-colour-ink,#231919)}
+.world-control-card.transfer-negotiation-workspace{
+  margin-top:0;
+  background:var(--tbg-colour-workspace-raised,#eef6e8);
+  border-color:rgba(25,51,117,.34);
+}
+
+/* Transfer navigation should echo the main TBG chrome: blue structure, yellow selection. */
+.transfer-section-cards{
+  gap:.7rem;
+}
+.transfer-section-card{
+  border:1px solid rgba(25,51,117,.34)!important;
+  background:var(--tbg-colour-cream,#f8f7e8)!important;
+  color:var(--tbg-colour-ink,#17221a)!important;
+  box-shadow:0 1px 0 rgba(25,51,117,.04)!important;
+}
+.transfer-section-card:hover,
+.transfer-section-card:focus-visible{
+  border-color:var(--tbg-brazil-sky,#0C87D1)!important;
+  background:#fff!important;
+}
+.transfer-section-card strong{
+  color:var(--tbg-brazil-blue,#193375);
+}
+.transfer-section-card[aria-pressed="true"]{
+  border-color:var(--tbg-brazil-blue,#193375)!important;
+  background:var(--tbg-brazil-yellow,#FFDC02)!important;
+  color:var(--tbg-colour-ink,#17221a)!important;
+  box-shadow:inset 0 -4px var(--tbg-brazil-blue,#193375)!important;
+}
+.transfer-section-card[aria-pressed="true"] strong{
+  color:var(--tbg-brazil-blue,#193375);
+}
+
+.transfer-negotiation-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:1rem;
+  align-items:start;
+}
+.transfer-negotiation-grid>article{
+  border:1px solid rgba(25,51,117,.30);
+  border-top:3px solid var(--tbg-brazil-blue,#193375);
+  background:var(--tbg-colour-cream,#f8f7e8);
+  padding:1rem;
+  min-width:0;
+}
+.transfer-negotiation-grid h3,
+.transfer-negotiation-grid h4{
+  margin:0 0 .75rem;
+  font-family:var(--tbg-font-ui,inherit);
+  text-transform:uppercase;
+  letter-spacing:.05em;
+  color:var(--tbg-brazil-blue,#193375);
+}
+.transfer-negotiation-compose label{
+  display:grid;
+  gap:.35rem;
+  margin:.7rem 0;
+}
+.transfer-negotiation-compose input,
+.transfer-negotiation-compose select{
+  width:100%;
+  padding:.7rem;
+  border:1px solid rgba(25,51,117,.28);
+  background:#fff;
+  color:var(--tbg-colour-ink,#17221a);
+}
 
 /* Deal cards are vertical documents, not two competing horizontal columns. */
-.incoming-transfer-offer{display:grid;grid-template-columns:minmax(0,1fr);gap:.8rem;align-items:start;padding:1rem 0;border-top:1px solid var(--tbg-colour-rule,#d7a9b5);min-width:0}
-.incoming-transfer-offer:first-child{border-top:0;padding-top:0}
-.incoming-transfer-offer>div{min-width:0}
-.incoming-transfer-offer strong,.incoming-transfer-offer span,.incoming-transfer-offer small{display:block}
-.incoming-transfer-offer span{margin:.2rem 0;font-weight:700}
-.incoming-transfer-offer small{color:var(--tbg-colour-muted,#6d5b60);line-height:1.35}
+.incoming-transfer-offer{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  gap:.8rem;
+  align-items:start;
+  padding:1rem 0;
+  border-top:1px solid rgba(25,51,117,.22);
+  min-width:0;
+}
+.incoming-transfer-offer:first-child{
+  border-top:0;
+  padding-top:0;
+}
+.incoming-transfer-offer>div{
+  min-width:0;
+}
+.incoming-transfer-offer strong,
+.incoming-transfer-offer span,
+.incoming-transfer-offer small{
+  display:block;
+}
+.incoming-transfer-offer span{
+  margin:.2rem 0;
+  font-weight:700;
+}
+.incoming-transfer-offer small{
+  color:var(--tbg-colour-muted,#58685c);
+  line-height:1.35;
+}
 
-.transfer-exchange-summary-side{margin:.7rem 0 0;padding:.7rem .8rem;border:1px solid color-mix(in srgb,var(--tbg-colour-rule,#d7a9b5) 70%,transparent);background:var(--tbg-colour-workspace-raised,#f6d4db)}
-.transfer-exchange-summary-side strong{margin-bottom:.35rem}
-.transfer-exchange-summary-side small+small{margin-top:.18rem}
+.transfer-exchange-summary-side{
+  margin:.7rem 0 0;
+  padding:.7rem .8rem;
+  border:1px solid rgba(25,51,117,.24);
+  border-left:4px solid var(--tbg-brazil-sky,#0C87D1);
+  background:#fff;
+}
+.transfer-exchange-summary-side strong{
+  margin-bottom:.35rem;
+  color:var(--tbg-brazil-blue,#193375);
+}
+.transfer-exchange-summary-side small+small{
+  margin-top:.18rem;
+}
 
-.incoming-transfer-offer>.world-control-actions,.incoming-transfer-offer .first-class-response-controls{width:100%;min-width:0}
-.incoming-transfer-offer>.world-control-actions{display:block}
-.incoming-transfer-offer .first-class-response-controls{display:grid;gap:.55rem;padding-top:.15rem}
-.incoming-transfer-offer .first-class-response-controls>.world-control-status{justify-self:start;max-width:100%}
-.incoming-transfer-offer .world-control-actions{display:flex;flex-wrap:wrap;gap:.55rem;align-items:center}
-.incoming-transfer-offer .world-control-actions button{flex:0 0 auto}
+.incoming-transfer-offer>.world-control-actions,
+.incoming-transfer-offer .first-class-response-controls{
+  width:100%;
+  min-width:0;
+}
+.incoming-transfer-offer>.world-control-actions{
+  display:block;
+}
+.incoming-transfer-offer .first-class-response-controls{
+  display:grid;
+  gap:.55rem;
+  padding-top:.15rem;
+}
+.incoming-transfer-offer .first-class-response-controls>.world-control-status{
+  justify-self:start;
+  max-width:100%;
+}
+.incoming-transfer-offer .world-control-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.55rem;
+  align-items:center;
+}
+.incoming-transfer-offer .world-control-actions button{
+  flex:0 0 auto;
+}
 
 /* Status text must wrap inside the card instead of forcing the summary into a sliver. */
-.transfer-negotiation-workspace .world-control-status{white-space:normal;max-width:100%;overflow-wrap:anywhere}
-.transfer-negotiation-workspace .first-class-response-controls small{white-space:normal;overflow-wrap:anywhere}
+.transfer-negotiation-workspace .world-control-status{
+  white-space:normal;
+  max-width:100%;
+  overflow-wrap:anywhere;
+  border-color:rgba(25,51,117,.28);
+}
+.transfer-negotiation-workspace .first-class-response-controls small{
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
 
-.transfer-deal-review{margin:1rem 0;padding:.9rem;border:1px solid var(--tbg-colour-rule,#d7a9b5);background:var(--tbg-colour-workspace-raised,#f6d4db)}
-.transfer-deal-review h4{margin-bottom:.65rem}
-.transfer-deal-review-side{margin:.55rem 0}
-.transfer-deal-review-side strong{display:block;margin-bottom:.2rem}
-.transfer-deal-review-side ul{margin:.2rem 0 .5rem;padding-left:1.25rem}
-.transfer-deal-one-sided-warning{display:grid;gap:.45rem;margin-top:.75rem;padding:.7rem;border-left:4px solid var(--tbg-colour-rule,#d7a9b5);background:var(--tbg-colour-paper-light,#f2c7d0)}
-.transfer-deal-one-sided-warning label{display:flex;grid-template-columns:none;align-items:flex-start;gap:.45rem;margin:0}
-.transfer-deal-one-sided-warning input{width:auto;margin-top:.2rem}
-.transfer-complex-amendment-note{display:block;margin:.25rem 0 .5rem;line-height:1.4}
+.transfer-deal-review{
+  margin:1rem 0;
+  padding:.9rem;
+  border:1px solid rgba(25,51,117,.28);
+  border-left:4px solid var(--tbg-brazil-blue,#193375);
+  background:#fff;
+}
+.transfer-deal-review h4{
+  margin-bottom:.65rem;
+}
+.transfer-deal-review-side{
+  margin:.55rem 0;
+}
+.transfer-deal-review-side strong{
+  display:block;
+  margin-bottom:.2rem;
+}
+.transfer-deal-review-side ul{
+  margin:.2rem 0 .5rem;
+  padding-left:1.25rem;
+}
+.transfer-deal-one-sided-warning{
+  display:grid;
+  gap:.45rem;
+  margin-top:.75rem;
+  padding:.7rem;
+  border-left:4px solid #c5a900;
+  background:rgba(255,220,2,.16);
+}
+.transfer-deal-one-sided-warning label{
+  display:flex;
+  grid-template-columns:none;
+  align-items:flex-start;
+  gap:.45rem;
+  margin:0;
+}
+.transfer-deal-one-sided-warning input{
+  width:auto;
+  margin-top:.2rem;
+}
+.transfer-complex-amendment-note{
+  display:block;
+  margin:.25rem 0 .5rem;
+  line-height:1.4;
+}
 
-.transfer-legacy-note{margin-top:1rem;padding:.85rem 1rem;border-left:4px solid var(--tbg-colour-rule,#d7a9b5);background:var(--tbg-colour-workspace-raised,#f6d4db)}
-.transfer-legacy-note p{margin:.25rem 0 0}
-.legacy-transfer-offer{opacity:.78}
+/* History/world-register packages: neutral document, blue hierarchy, yellow money. */
+.transfer-history-panel{
+  background:var(--tbg-colour-cream,#f8f7e8)!important;
+  border-color:rgba(25,51,117,.30)!important;
+  border-top-color:var(--tbg-brazil-blue,#193375)!important;
+}
+.transfer-history-row.transfer-history-package{
+  margin:.75rem 0;
+  padding:.9rem;
+  border:1px solid rgba(25,51,117,.24);
+  border-left:4px solid var(--tbg-brazil-blue,#193375);
+  background:#fff;
+}
+.transfer-history-row.transfer-history-package:first-child{
+  padding-top:.9rem;
+  border-top:1px solid rgba(25,51,117,.24);
+}
+.transfer-history-package>div:first-child>strong{
+  margin-bottom:.15rem;
+  color:var(--tbg-brazil-blue,#193375);
+  font-size:1.05rem;
+}
+.transfer-history-legs{
+  display:grid;
+  gap:.45rem;
+  margin:.7rem 0;
+}
+.transfer-history-leg,
+.transfer-history-cash{
+  padding:.65rem .75rem;
+  border:1px solid rgba(25,51,117,.18);
+  border-radius:8px;
+}
+.transfer-history-leg{
+  background:rgba(12,135,209,.07);
+  border-left:3px solid var(--tbg-brazil-sky,#0C87D1);
+}
+.transfer-history-leg strong{
+  color:var(--tbg-brazil-blue,#193375);
+}
+.transfer-history-cash{
+  background:rgba(255,220,2,.18);
+  border-color:rgba(197,169,0,.42);
+  border-left:3px solid #c5a900;
+}
+.transfer-history-cash strong{
+  color:#665600;
+}
+.world-transfer-report{
+  margin-top:.75rem;
+  padding:.75rem;
+  border:1px solid rgba(25,51,117,.24);
+  background:var(--tbg-colour-cream,#f8f7e8);
+}
+.world-transfer-report select,
+.world-transfer-report textarea{
+  border-color:rgba(25,51,117,.28);
+  background:#fff;
+}
 
-@media(max-width:1100px){.transfer-negotiation-grid{grid-template-columns:1fr}}
+.transfer-legacy-note{
+  margin-top:1rem;
+  padding:.85rem 1rem;
+  border-left:4px solid var(--tbg-brazil-blue,#193375);
+  background:var(--tbg-colour-cream,#f8f7e8);
+}
+.transfer-legacy-note p{
+  margin:.25rem 0 0;
+}
+.legacy-transfer-offer{
+  opacity:.78;
+}
+
+@media(max-width:1100px){
+  .transfer-negotiation-grid{grid-template-columns:1fr}
+}
 @media(max-width:560px){
   .transfer-negotiation-grid>article{padding:.8rem}
   .incoming-transfer-offer .world-control-actions{display:grid;grid-template-columns:1fr}
   .incoming-transfer-offer button{width:100%}
   .transfer-exchange-summary-side{padding:.6rem}
+  .transfer-history-row.transfer-history-package{padding:.75rem}
 }
