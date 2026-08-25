@@ -56,12 +56,12 @@ test('#310 provides admin-only feedback triage and optional GitHub promotion', (
   assert.match(adminEndpoint, /admin_update_alpha_feedback_report/);
 });
 
-test('#310 guide makes in-game reporting primary instead of GitHub signup', () => {
+test('#310 guide makes in-game reporting primary without explaining GitHub signup', () => {
   const guide = read('public/alpha-guide.html');
   const auth = read('public/auth-entry.js');
 
-  assert.match(guide, /Use <strong>Report \/ feedback<\/strong> in the Manager Portal/);
-  assert.match(guide, /does not require a GitHub account/i);
+  assert.match(guide, /<p>Use <strong>Report \/ feedback<\/strong> in the Manager Portal\.<\/p>/);
+  assert.doesNotMatch(guide, /does not require a GitHub account/i);
   assert.doesNotMatch(guide, /issues\/new\?template=controlled-alpha-bug/);
   assert.match(auth, /alpha-feedback\.js/);
 });
