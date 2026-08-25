@@ -1,0 +1,219 @@
+/* Cross-portal hierarchy pass.
+ * Green remains the world/background. Cream/white are working surfaces,
+ * navy is structure and yellow is emphasis/action.
+ */
+
+/* Inbox */
+#dashboardView .inbox-heading{
+  padding:.9rem 1rem;
+  margin:0 0 .8rem;
+  background:var(--tbg-colour-cream,#f8f7e8);
+  border:1px solid rgba(25,51,117,.28);
+  border-top:3px solid var(--tbg-brazil-blue,#193375);
+}
+#dashboardView .inbox-heading h2{color:var(--tbg-brazil-blue,#193375)}
+#dashboardView .inbox-message{
+  background:#fff!important;
+  border:1px solid rgba(25,51,117,.18)!important;
+  border-left:4px solid var(--tbg-brazil-sky,#0C87D1)!important;
+  box-shadow:none!important;
+}
+#dashboardView .inbox-message.read{
+  background:var(--tbg-colour-cream,#f8f7e8)!important;
+  border-left-color:rgba(25,51,117,.28)!important;
+}
+#dashboardView .inbox-message.unread{
+  border-left-color:var(--tbg-brazil-yellow,#FFDC02)!important;
+  box-shadow:inset 4px 0 0 var(--tbg-brazil-yellow,#FFDC02)!important;
+}
+#dashboardView .message-heading strong{color:var(--tbg-brazil-blue,#193375)}
+#dashboardView .mark-all-read,
+#dashboardView .mark-message-read{background:var(--tbg-brazil-blue,#193375)!important}
+
+/* News / World Feed */
+#feedView .world-feed-shell{max-width:none}
+#feedView .world-feed-heading{
+  padding:.9rem 1rem;
+  background:var(--tbg-colour-cream,#f8f7e8);
+  border:1px solid rgba(25,51,117,.28);
+  border-top:3px solid var(--tbg-brazil-blue,#193375);
+}
+#feedView .world-feed-heading h2{color:var(--tbg-brazil-blue,#193375)}
+#feedView .world-feed-live{
+  background:rgba(255,220,2,.2)!important;
+  border-color:#c5a900!important;
+  color:#5b4c00!important;
+}
+#feedView .world-feed-composer,
+#feedView .world-feed-item,
+#feedView .world-feed-social-activity{
+  background:#fff!important;
+  border-color:rgba(25,51,117,.2)!important;
+  border-radius:10px!important;
+  box-shadow:none!important;
+}
+#feedView .world-feed-composer{border-left:4px solid var(--tbg-brazil-blue,#193375)!important}
+#feedView .world-feed-item{border-left-width:4px!important}
+#feedView .world-feed-item h3,
+#feedView .world-feed-identity{color:var(--tbg-brazil-blue,#193375)!important}
+#feedView .world-feed-type,
+#feedView .world-feed-pin-badge{
+  background:rgba(255,220,2,.18)!important;
+  border-color:#c5a900!important;
+  color:#5b4c00!important;
+}
+#feedView .world-feed-comment{background:var(--tbg-colour-cream,#f8f7e8)!important;border-color:rgba(25,51,117,.16)!important}
+
+/* Squad: keep this page dense and table-led, but give it the same structural grammar. */
+#squadView .panel,
+#squadView .portal-card,
+#squadView .competition-card{
+  background:var(--tbg-colour-cream,#f8f7e8)!important;
+  border-color:rgba(25,51,117,.26)!important;
+}
+#squadView .panel>h2,
+#squadView .panel>h3,
+#squadView .section-heading h2,
+#squadView .section-heading h3,
+#squadView .portal-section-heading h3{color:var(--tbg-brazil-blue,#193375)}
+#squadView .table-wrap{
+  background:#fff!important;
+  border:1px solid rgba(25,51,117,.22)!important;
+}
+#squadView table thead,
+#squadView .squad-table thead{background:var(--tbg-brazil-blue,#193375)!important;color:#fff!important}
+#squadView table thead th,
+#squadView .squad-table thead th{color:#fff!important;border-color:rgba(255,255,255,.16)!important}
+#squadView tbody tr:nth-child(even){background:rgba(12,135,209,.045)!important}
+#squadView tbody tr:hover{background:rgba(255,220,2,.12)!important}
+#squadView .position-separator td{
+  background:rgba(255,220,2,.18)!important;
+  color:var(--tbg-brazil-blue,#193375)!important;
+  border-top:1px solid rgba(25,51,117,.24)!important;
+}
+#squadView .squad-summary>div,
+#squadView .depth-card{
+  background:#fff!important;
+  border-color:rgba(25,51,117,.2)!important;
+}
+#squadView .squad-summary strong,
+#squadView .depth-card strong{color:var(--tbg-brazil-blue,#193375)}
+
+/* Finances: statement-like surfaces, with money highlighted rather than more green. */
+#financeView .finance-shell{
+  background:var(--tbg-colour-cream,#f8f7e8)!important;
+  border-color:rgba(25,51,117,.28)!important;
+  border-top:3px solid var(--tbg-brazil-blue,#193375)!important;
+  border-radius:10px!important;
+}
+#financeView .finance-heading h2{color:var(--tbg-brazil-blue,#193375)}
+#financeView .finance-status{
+  background:rgba(255,220,2,.18)!important;
+  border:1px solid #c5a900!important;
+  color:#5b4c00!important;
+}
+#financeView .finance-card,
+#financeView .finance-detail-card{
+  background:#fff!important;
+  border-color:rgba(25,51,117,.22)!important;
+  border-radius:8px!important;
+}
+#financeView .finance-card{border-top:3px solid var(--tbg-brazil-blue,#193375)!important}
+#financeView .finance-card strong{color:var(--tbg-brazil-blue,#193375)}
+#financeView .finance-detail-row strong:last-child,
+#financeView .finance-card [data-money],
+#financeView .finance-card .money{color:#665600}
+
+/* Managers directory: list first, profile card second. */
+#managersView{padding:0}
+.manager-directory-shell{
+  display:grid;
+  gap:.9rem;
+  padding:1rem;
+  background:var(--tbg-colour-cream,#f8f7e8);
+  border:1px solid rgba(25,51,117,.28);
+  border-top:3px solid var(--tbg-brazil-blue,#193375);
+}
+.manager-directory-heading{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:1rem;
+}
+.manager-directory-heading small{font-size:.72rem;font-weight:800;letter-spacing:.09em;color:var(--tbg-brazil-sky,#0C87D1)}
+.manager-directory-heading h2{margin:.2rem 0;color:var(--tbg-brazil-blue,#193375)}
+.manager-directory-heading p{margin:0;max-width:72ch;color:var(--tbg-colour-muted,#58685c);line-height:1.45}
+.manager-directory-self{
+  flex:0 0 auto;
+  border:1px solid var(--tbg-brazil-blue,#193375);
+  background:var(--tbg-brazil-yellow,#FFDC02);
+  color:var(--tbg-colour-ink,#17221a);
+  padding:.65rem .9rem;
+  font-weight:800;
+  cursor:pointer;
+}
+.manager-directory-summary{
+  display:flex;
+  align-items:baseline;
+  gap:.45rem;
+  padding:.65rem .8rem;
+  background:rgba(255,220,2,.14);
+  border-left:4px solid var(--tbg-brazil-yellow,#FFDC02);
+}
+.manager-directory-summary strong{font-size:1.35rem;color:var(--tbg-brazil-blue,#193375)}
+.manager-directory-list{display:grid;border:1px solid rgba(25,51,117,.2);background:#fff}
+.manager-directory-list-row{
+  appearance:none;
+  width:100%;
+  display:grid;
+  grid-template-columns:minmax(0,1.5fr) minmax(90px,.6fr) auto;
+  gap:1rem;
+  align-items:center;
+  padding:.75rem .85rem;
+  border:0;
+  border-bottom:1px solid rgba(25,51,117,.14);
+  background:#fff;
+  color:inherit;
+  text-align:left;
+  cursor:pointer;
+}
+.manager-directory-list-row:last-child{border-bottom:0}
+.manager-directory-list-row:nth-child(even){background:rgba(12,135,209,.035)}
+.manager-directory-list-row:hover,
+.manager-directory-list-row:focus-visible{background:rgba(255,220,2,.12);outline:2px solid var(--tbg-brazil-sky,#0C87D1);outline-offset:-2px}
+.manager-directory-identity strong,
+.manager-directory-identity small{display:block}
+.manager-directory-identity strong{color:var(--tbg-brazil-blue,#193375);font-size:1rem}
+.manager-directory-identity small{margin-top:.15rem;color:var(--tbg-colour-muted,#58685c)}
+.manager-directory-club{color:var(--tbg-colour-muted,#58685c);font-size:.86rem}
+.manager-directory-open{font-size:.82rem;font-weight:800;color:var(--tbg-brazil-blue,#193375);white-space:nowrap}
+.manager-directory-empty{padding:1rem;margin:0;color:var(--tbg-colour-muted,#58685c)}
+
+/* Manager profile modal deliberately keeps the richer player-profile-like card language,
+ * but brings it into the same blue/yellow/cream palette. */
+.manager-participation-card{
+  background:var(--tbg-colour-cream,#f8f7e8)!important;
+  border-color:rgba(25,51,117,.34)!important;
+  color:var(--tbg-colour-ink,#17221a)!important;
+}
+.manager-participation-head h2,
+.manager-participation-section h3{color:var(--tbg-brazil-blue,#193375)!important}
+.manager-participation-status,
+.manager-participation-principle{
+  background:rgba(255,220,2,.18)!important;
+  border-color:#c5a900!important;
+  color:#5b4c00!important;
+}
+.manager-pin,
+.manager-participation-metric,
+.manager-directory-row{background:#fff!important;border-color:rgba(25,51,117,.2)!important}
+.manager-directory-row:hover,
+.manager-directory-row:focus{background:rgba(255,220,2,.12)!important;outline-color:var(--tbg-brazil-sky,#0C87D1)!important}
+
+@media(max-width:700px){
+  .manager-directory-heading{display:grid}
+  .manager-directory-self{justify-self:start}
+  .manager-directory-list-row{grid-template-columns:1fr auto;gap:.35rem .75rem}
+  .manager-directory-club{grid-column:1}
+  .manager-directory-open{grid-column:2;grid-row:1/3;align-self:center}
+}
