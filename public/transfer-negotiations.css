@@ -198,52 +198,55 @@
   line-height:1.4;
 }
 
-/* History/world-register packages: neutral document, blue hierarchy, yellow money. */
+/* History/world-register packages: neutral document, blue hierarchy, yellow money.
+ * These selectors are intentionally scoped through the transfer panel so they
+ * outrank finance.css, which is appended later at runtime. */
 .transfer-history-panel{
   background:var(--tbg-colour-cream,#f8f7e8)!important;
   border-color:rgba(25,51,117,.30)!important;
   border-top-color:var(--tbg-brazil-blue,#193375)!important;
 }
-.transfer-history-row.transfer-history-package{
+.transfer-history-panel .transfer-history-row.transfer-history-package{
   margin:.75rem 0;
   padding:.9rem;
   border:1px solid rgba(25,51,117,.24);
   border-left:4px solid var(--tbg-brazil-blue,#193375);
   background:#fff;
 }
-.transfer-history-row.transfer-history-package:first-child{
+.transfer-history-panel .transfer-history-row.transfer-history-package:first-child{
   padding-top:.9rem;
   border-top:1px solid rgba(25,51,117,.24);
 }
-.transfer-history-package>div:first-child>strong{
+.transfer-history-panel .transfer-history-package>div:first-child>strong{
   margin-bottom:.15rem;
   color:var(--tbg-brazil-blue,#193375);
   font-size:1.05rem;
 }
-.transfer-history-legs{
+.transfer-history-panel .transfer-history-legs{
   display:grid;
   gap:.45rem;
   margin:.7rem 0;
 }
-.transfer-history-leg,
-.transfer-history-cash{
+.transfer-history-panel .transfer-history-leg,
+.transfer-history-panel .transfer-history-cash{
   padding:.65rem .75rem;
   border:1px solid rgba(25,51,117,.18);
   border-radius:8px;
 }
-.transfer-history-leg{
+.transfer-history-panel .transfer-history-leg{
   background:rgba(12,135,209,.07);
   border-left:3px solid var(--tbg-brazil-sky,#0C87D1);
 }
-.transfer-history-leg strong{
+.transfer-history-panel .transfer-history-leg strong{
   color:var(--tbg-brazil-blue,#193375);
 }
-.transfer-history-cash{
+.transfer-history-panel .transfer-history-cash{
   background:rgba(255,220,2,.18);
-  border-color:rgba(197,169,0,.42);
+  border:1px solid rgba(197,169,0,.42);
   border-left:3px solid #c5a900;
+  border-style:solid;
 }
-.transfer-history-cash strong{
+.transfer-history-panel .transfer-history-cash strong{
   color:#665600;
 }
 .world-transfer-report{
@@ -279,5 +282,5 @@
   .incoming-transfer-offer .world-control-actions{display:grid;grid-template-columns:1fr}
   .incoming-transfer-offer button{width:100%}
   .transfer-exchange-summary-side{padding:.6rem}
-  .transfer-history-row.transfer-history-package{padding:.75rem}
+  .transfer-history-panel .transfer-history-row.transfer-history-package{padding:.75rem}
 }
