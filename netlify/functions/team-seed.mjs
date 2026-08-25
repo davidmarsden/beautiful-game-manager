@@ -42,6 +42,50 @@ function normalizeTurnSubmission(row) {
   };
 }
 
+function archivedTeamSheet(row, clubId) {
+  const payload = row?.archive_payload;
+  const result = payload && typeof payload === 'object' ? payload.result : null;
+  const side = row?.home_club_id === clubId ? 'home' : row?.away_club_id === clubId ? 'away' : null;
+  const team = side ? result?.teams?.[side] : null;
+  if (!team || !Array.isArray(team.starting_xi) || team.starting_xi.length !== 11) return null;
+  const tactics = team.tactics && typeof team.tactics === 'object' ? team.tactics : {};
+  return {
+    id: `archive:${row.fixture_id}`,
+    world_id: row.world_id,
+    season_id: row.season_id,
+    matchday: row.matchday,
+    club_id: clubId,
+    status: 'consumed',
+    submitted_at: row.played_at,
+    updated_at: row.played_at,
+    fixture_id: row.fixture_id,
+    formation: team.formation || tactics.formation || null,
+    starting_xi: team.starting_xi.map(String),
+    bench: Array.isArray(team.bench) ? team.bench.map(String).slice(0, 7) : [],
+    captain_id: null,
+    set_piece_takers: {},
+    tactics: {
+      mentality: tactics.mentality || 'balanced',
+      pressing: tactics.pressing || 'mid',
+      tempo: tactics.tempo || 'normal',
+      width: tactics.width || 'balanced',
+      defensive_line: tactics.defensive_line || 'standard'
+    },
+    source: 'canonical_match_archive'
+  };
+}
+
+function mergeHistory(turnHistory, archiveHistory, fixtureId) {
+  const byFixture = new Map();
+  [...turnHistory, ...archiveHistory].forEach((sheet) => {
+    if (!sheet?.fixture_id || (fixtureId && String(sheet.fixture_id) === fixtureId)) return;
+    if (!byFixture.has(String(sheet.fixture_id))) byFixture.set(String(sheet.fixture_id), sheet);
+  });
+  return [...byFixture.values()]
+    .sort((left, right) => new Date(right.updated_at || right.submitted_at || 0) - new Date(left.updated_at || left.submitted_at || 0))
+    .slice(0, 10);
+}
+
 export default async (request) => {
   try {
     if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
@@ -69,9 +113,11 @@ export default async (request) => {
     const current = fixtureId
       ? submissions.find((row) => String(row.fixture_id || '') === fixtureId && ['submitted', 'locked'].includes(String(row.status))) || null
       : null;
-    const history = submissions
-      .filter((row) => !fixtureId || String(row.fixture_id || '') !== fixtureId)
-      .slice(0, 10);
+    const turnHistory = submissions.filter((row) => !fixtureId || String(row.fixture_id || '') !== fixtureId);
+
+    const archives = await serverRest(`/rest/v1/canonical_match_archives?world_id=eq.${encodeURIComponent(appointment.world_id)}&or=(home_club_id.eq.${encodeURIComponent(clubId)},away_club_id.eq.${encodeURIComponent(clubId)})&select=fixture_id,world_id,season_id,matchday,home_club_id,away_club_id,played_at,archive_payload&order=played_at.desc&limit=12`);
+    const archiveHistory = (archives || []).map((row) => archivedTeamSheet(row, clubId)).filter(Boolean);
+    const history = mergeHistory(turnHistory, archiveHistory, fixtureId);
     const submission = current || history[0] || null;
     const source = current ? 'current_submission' : submission ? 'last_team' : 'none';
 
