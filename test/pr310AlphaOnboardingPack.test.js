@@ -20,12 +20,13 @@ test('#310 publishes a discoverable controlled-alpha tester guide', () => {
   assert.match(auth, /alpha-guide\.html/);
 });
 
-test('#310 links styled local Alpha Rulebook and Road Ahead pages from guide and portal', () => {
+test('#310 links styled local governance pages while loading their content live from canonical governance', () => {
   const guide = read('public/alpha-guide.html');
   const auth = read('public/auth-entry.js');
   const css = read('public/governance-links.css');
   const rulebook = read('public/rulebook.html');
   const roadAhead = read('public/road-ahead.html');
+  const renderer = read('public/governance-document.js');
   const pageCss = read('public/governance-page.css');
 
   assert.match(guide, /\.\/rulebook\.html/);
@@ -41,16 +42,21 @@ test('#310 links styled local Alpha Rulebook and Road Ahead pages from guide and
   assert.match(css, /\.tbg-governance-links/);
 
   assert.match(rulebook, /CURRENT ALPHA RULES/);
-  assert.match(rulebook, /80 clubs/);
-  assert.match(rulebook, /25 first-team players/);
-  assert.match(rulebook, /Promotion and relegation — known alpha gap/);
-  assert.match(rulebook, /View the canonical Markdown source on GitHub/);
+  assert.match(rulebook, /raw\.githubusercontent\.com\/davidmarsden\/beautiful-game-governance\/main\/docs\/alpha-rulebook-v0\.1\.md/);
+  assert.match(rulebook, /governance-document\.js/);
+  assert.doesNotMatch(rulebook, /25 first-team players/);
+  assert.doesNotMatch(rulebook, /Promotion and relegation — known alpha gap/);
 
   assert.match(roadAhead, /PLANNED SYSTEMS/);
-  assert.match(roadAhead, /Players make career decisions/);
-  assert.match(roadAhead, /Knowledge Regions/);
-  assert.match(roadAhead, /Board Confidence/);
-  assert.match(roadAhead, /View the canonical Markdown source on GitHub/);
+  assert.match(roadAhead, /raw\.githubusercontent\.com\/davidmarsden\/beautiful-game-governance\/main\/docs\/road-ahead\.md/);
+  assert.match(roadAhead, /governance-document\.js/);
+  assert.doesNotMatch(roadAhead, /Players make career decisions/);
+  assert.doesNotMatch(roadAhead, /Knowledge Regions/);
+  assert.doesNotMatch(roadAhead, /Board Confidence/);
+
+  assert.match(renderer, /fetch\(sourceUrl, \{ cache: 'no-store' \}\)/);
+  assert.match(renderer, /We will not show a potentially stale local copy/);
+  assert.match(renderer, /Live content loaded from/);
   assert.match(pageCss, /\.governance-hero/);
 });
 
