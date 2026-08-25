@@ -20,6 +20,26 @@ test('#310 publishes a discoverable controlled-alpha tester guide', () => {
   assert.match(auth, /alpha-guide\.html/);
 });
 
+test('#310 links the current Alpha Rulebook and future Road Ahead from guide and portal', () => {
+  const guide = read('public/alpha-guide.html');
+  const auth = read('public/auth-entry.js');
+  const css = read('public/governance-links.css');
+  const rulebook = 'beautiful-game-governance/blob/main/docs/alpha-rulebook-v0.1.md';
+  const roadAhead = 'beautiful-game-governance/blob/main/docs/road-ahead.md';
+
+  assert.match(guide, new RegExp(rulebook.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(guide, new RegExp(roadAhead.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(guide, /Alpha Rulebook — current rules/);
+  assert.match(guide, /Road Ahead — planned systems/);
+
+  assert.match(auth, new RegExp(rulebook.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(auth, new RegExp(roadAhead.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(auth, /Rules &amp; roadmap/);
+  assert.match(auth, /Alpha Rulebook — current rules/);
+  assert.match(auth, /Road Ahead — planned systems/);
+  assert.match(css, /\.tbg-governance-links/);
+});
+
 test('#310 provides a valid structured external alpha bug-report form', () => {
   const form = read('.github/ISSUE_TEMPLATE/controlled-alpha-bug.yml');
 

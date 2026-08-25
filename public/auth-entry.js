@@ -3,6 +3,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const PENDING_CLUB_KEY = "tbg_pending_club_id";
 const SAFE_CLUB_ID = /^[A-Za-z0-9._:-]{1,160}$/;
+const ALPHA_RULEBOOK_URL = 'https://github.com/davidmarsden/beautiful-game-governance/blob/main/docs/alpha-rulebook-v0.1.md';
+const ROAD_AHEAD_URL = 'https://github.com/davidmarsden/beautiful-game-governance/blob/main/docs/road-ahead.md';
 
 function addAlphaGuideLinks() {
   const gateCard = document.querySelector('#authGate .auth-card');
@@ -22,6 +24,30 @@ function addAlphaGuideLinks() {
     guide.textContent = 'Alpha guide';
     managerChip.before(guide);
   }
+}
+
+function addGovernanceLinks() {
+  if (!document.querySelector('link[href="./governance-links.css"]')) {
+    const stylesheet = document.createElement('link');
+    stylesheet.rel = 'stylesheet';
+    stylesheet.href = './governance-links.css';
+    document.head.append(stylesheet);
+  }
+
+  const shell = document.querySelector('.shell');
+  if (!shell || document.getElementById('tbgGovernanceLinks')) return;
+
+  const links = document.createElement('aside');
+  links.id = 'tbgGovernanceLinks';
+  links.className = 'tbg-governance-links';
+  links.setAttribute('aria-label', 'Rules and development roadmap');
+  links.innerHTML = `
+    <strong>Rules &amp; roadmap</strong>
+    <a href="${ALPHA_RULEBOOK_URL}" target="_blank" rel="noopener">Alpha Rulebook — current rules</a>
+    <span class="tbg-governance-separator" aria-hidden="true">·</span>
+    <a href="${ROAD_AHEAD_URL}" target="_blank" rel="noopener">Road Ahead — planned systems</a>
+  `;
+  shell.prepend(links);
 }
 
 function enhanceLandingPage() {
@@ -61,6 +87,7 @@ function enhanceLandingPage() {
 
 enhanceLandingPage();
 addAlphaGuideLinks();
+addGovernanceLinks();
 
 async function loadConfig() {
   const response = await fetch("/api/auth-config", { cache: "no-store" });
