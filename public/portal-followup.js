@@ -126,15 +126,102 @@ function watchNewsFeed() {
   installNewsCategories();
 }
 
+function enhanceSquadTransferStatus() {
+  const body = document.getElementById('squadRows');
+  if (!body) return;
+  body.querySelectorAll('tr').forEach((row) => {
+    const playerLink = row.querySelector('.player-link[data-tbg-player-id]');
+    const statusCell = row.lastElementChild;
+    if (!playerLink || !statusCell || statusCell.dataset.transferEnhanced === 'true') return;
+    statusCell.dataset.transferEnhanced = 'true';
+    statusCell.classList.add('squad-transfer-status-cell');
+    const playerId = playerLink.dataset.tbgPlayerId || '';
+    const neutral = statusCell.querySelector('.badge.neutral');
+    if (neutral && neutral.textContent.trim().toLowerCase() === 'not listed') {
+      neutral.dataset.squadTransferNeutral = 'true';
+      const action = document.createElement('button');
+      action.type = 'button';
+      action.className = 'squad-transfer-list-action';
+      action.dataset.squadListPlayer = playerId;
+      action.textContent = 'List player';
+      statusCell.replaceChildren(action);
+    }
+  });
+}
+
+function watchSquadStatus() {
+  const body = document.getElementById('squadRows');
+  if (!body || body.dataset.transferStatusObserver === 'true') return;
+  body.dataset.transferStatusObserver = 'true';
+  const observer = new MutationObserver(() => enhanceSquadTransferStatus());
+  observer.observe(body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['data-tbg-player-id']
+  });
+  enhanceSquadTransferStatus();
+}
+
+function retryTransferListing(playerId, attempt) {
+  if (attempt < 30) setTimeout(() => prepareTransferListing(playerId, attempt + 1), 50);
+}
+
+function prepareTransferListing(playerId, attempt = 0) {
+  const action = document.getElementById('negotiationAction');
+  const player = document.getElementById('negotiationPlayer');
+  if (!action || !player || !playerId) {
+    retryTransferListing(playerId, attempt);
+    return;
+  }
+
+  action.value = 'listing';
+  action.dispatchEvent(new Event('change', { bubbles: true }));
+  queueMicrotask(() => {
+    const refreshedPlayer = document.getElementById('negotiationPlayer');
+    const requestedOption = refreshedPlayer
+      ? [...refreshedPlayer.options].find((option) => option.value === playerId)
+      : null;
+    if (!refreshedPlayer || !requestedOption) {
+      retryTransferListing(playerId, attempt);
+      return;
+    }
+
+    refreshedPlayer.value = playerId;
+    if (refreshedPlayer.value !== playerId) {
+      retryTransferListing(playerId, attempt);
+      return;
+    }
+
+    document.querySelector('[data-transfer-section="my"]')?.click();
+    document.querySelector('.transfer-negotiation-compose')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+}
+
+document.addEventListener('click', (event) => {
+  const button = event.target.closest?.('[data-squad-list-player]');
+  if (!button) return;
+  event.preventDefault();
+  document.querySelector('[data-view="transfers"]')?.click();
+  prepareTransferListing(button.dataset.squadListPlayer || '');
+});
+
 installStylesheet();
 watchNewsFeed();
+watchSquadStatus();
 document.addEventListener('tbg:view-changed', (event) => {
   if (event.detail?.view === 'feed') queueMicrotask(() => {
     watchNewsFeed();
     installNewsCategories();
   });
+  if (event.detail?.view === 'squad') queueMicrotask(() => {
+    watchSquadStatus();
+    enhanceSquadTransferStatus();
+  });
 });
 window.addEventListener('tbg:portal-rendered', () => {
   watchNewsFeed();
   installNewsCategories();
+  watchSquadStatus();
+  enhanceSquadTransferStatus();
 });
