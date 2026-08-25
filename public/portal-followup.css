@@ -28,13 +28,16 @@
 }
 #dashboardView #inboxList{
   display:grid;
-  gap:.7rem;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:.8rem;
   padding:.8rem;
   background:var(--tbg-colour-cream,#f8f7e8)!important;
   border:1px solid rgba(25,51,117,.18);
   border-top:3px solid var(--tbg-brazil-blue,#193375);
+  align-items:start;
 }
-#dashboardView #inboxList .inbox-message{margin:0!important}
+#dashboardView #inboxList .inbox-message{margin:0!important;min-width:0;height:100%}
+#dashboardView #inboxList>.empty-state{grid-column:1/-1}
 
 /* News: transfer-like category tabs and a more comfortable reading width. */
 #feedView .world-feed-shell{max-width:1180px!important;margin-inline:auto!important}
@@ -184,6 +187,7 @@
 }
 
 @media(max-width:980px){
+  #dashboardView #inboxList{grid-template-columns:1fr}
   #feedView .world-feed-category-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}
   #feedView .world-feed-list{grid-template-columns:1fr}
 }
