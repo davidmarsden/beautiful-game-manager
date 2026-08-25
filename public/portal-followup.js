@@ -17,20 +17,7 @@ window.fetch = async (...args) => {
   const headers = args[1]?.headers || (args[0] instanceof Request ? args[0].headers : null);
   const auth = headers instanceof Headers ? headers.get('authorization') : headers?.authorization;
   if (auth) portalAuthorization = auth;
-  const response = await followupFetch(...args);
-  const requestUrl = typeof args[0] === 'string' ? args[0] : args[0]?.url;
-  const method = String(args[1]?.method || (args[0] instanceof Request ? args[0].method : 'GET') || 'GET').toUpperCase();
-  if (response.ok && requestUrl && new URL(requestUrl, window.location.href).pathname === '/api/transfer-deals' && method === 'POST') {
-    try {
-      const body = typeof args[1]?.body === 'string' ? JSON.parse(args[1].body) : null;
-      if (['list', 'withdraw'].includes(String(body?.action || '').toLowerCase())) {
-        queueMicrotask(() => refreshLiveTransferPresentation().catch(() => {}));
-      }
-    } catch {
-      // A malformed body belongs to the owning transfer request; do not disturb it here.
-    }
-  }
-  return response;
+  return followupFetch(...args);
 };
 
 function installStylesheet() {
@@ -179,6 +166,12 @@ function makeLiveListedBadge(listing) {
   return badge;
 }
 
+function transferOnlyControls(statusCell) {
+  return [...statusCell.children].filter((child) => (
+    child.matches?.('.badge.neutral, .badge.transfer, [data-squad-list-player]')
+  ));
+}
+
 function enhanceSquadTransferStatus() {
   const body = document.getElementById('squadRows');
   if (!body) return;
@@ -192,13 +185,15 @@ function enhanceSquadTransferStatus() {
     const listing = liveTransferMarket ? liveListingFor(playerId) : null;
 
     if (liveTransferMarket && listing) {
-      if (!statusCell.querySelector('[data-live-transfer-listing]')) statusCell.replaceChildren(makeLiveListedBadge(listing));
+      transferOnlyControls(statusCell).forEach((control) => control.remove());
+      statusCell.append(makeLiveListedBadge(listing));
       return;
     }
 
     if (liveTransferMarket) {
-      statusCell.querySelectorAll('.badge.transfer').forEach((badge) => badge.remove());
-      if (statusCell.querySelector('.badge.loan, .badge.loaned')) return;
+      statusCell.querySelectorAll('.badge.transfer, [data-squad-list-player], .badge.neutral').forEach((control) => control.remove());
+      statusCell.append(makeListPlayerAction(playerId));
+      return;
     }
 
     const neutral = statusCell.querySelector('.badge.neutral');
@@ -207,9 +202,9 @@ function enhanceSquadTransferStatus() {
       existingAction.dataset.squadListPlayer = playerId;
       return;
     }
-    if ((neutral && neutral.textContent.trim().toLowerCase() === 'not listed') || (liveTransferMarket && !statusCell.children.length)) {
-      neutral?.setAttribute('data-squad-transfer-neutral', 'true');
-      statusCell.replaceChildren(makeListPlayerAction(playerId));
+    if (neutral && neutral.textContent.trim().toLowerCase() === 'not listed') {
+      neutral.setAttribute('data-squad-transfer-neutral', 'true');
+      neutral.replaceWith(makeListPlayerAction(playerId));
     }
   });
 }
@@ -228,21 +223,29 @@ function watchSquadStatus() {
   enhanceSquadTransferStatus();
 }
 
+function updateListedSummaryCount(listingCount) {
+  const status = document.getElementById('transferNegotiationStatus');
+  if (!status) return;
+  const current = status.textContent || '';
+  if (/\d+\s+incoming\s+·\s+\d+\s+outgoing\s+·\s+\d+\s+listed/.test(current)) {
+    status.textContent = current.replace(/·\s+\d+\s+listed\s*$/, `· ${listingCount} listed`);
+  }
+}
+
 function renderLiveTransferListings() {
   const target = document.getElementById('activeTransferListings');
   if (!target || !liveTransferMarket) return;
   const listings = ownLiveListings();
   const snapshot = listings.map((listing) => `${listing.player_id}:${listing.updated_at || ''}:${listing.asking_fee || 0}`).join('|');
-  if (target.dataset.liveListingSnapshot === snapshot) return;
-  target.dataset.liveListingSnapshot = snapshot;
-  target.innerHTML = listings.length ? listings.map((listing) => `
-    <article class="incoming-transfer-offer">
-      <div><strong>${escapeHtml(listing.player_name || listing.player_id)}</strong><span>Listed for ${formatMoney(listing.asking_fee || 0)}</span><small>Live now · updated ${escapeHtml(new Date(listing.updated_at).toLocaleString('en-GB'))}</small></div>
-      <div class="world-control-actions"><button type="button" data-withdraw-listing data-player-id="${escapeHtml(listing.player_id)}">Withdraw listing</button></div>
-    </article>`).join('') : '<p>No players are currently transfer listed.</p>';
-
-  const status = document.getElementById('transferNegotiationStatus');
-  if (status) status.textContent = `${(liveTransferMarket.incoming_offers || []).length} incoming · ${(liveTransferMarket.outgoing_offers || []).length} outgoing · ${listings.length} listed`;
+  if (target.dataset.liveListingSnapshot !== snapshot) {
+    target.dataset.liveListingSnapshot = snapshot;
+    target.innerHTML = listings.length ? listings.map((listing) => `
+      <article class="incoming-transfer-offer">
+        <div><strong>${escapeHtml(listing.player_name || listing.player_id)}</strong><span>Listed for ${formatMoney(listing.asking_fee || 0)}</span><small>Live now · updated ${escapeHtml(new Date(listing.updated_at).toLocaleString('en-GB'))}</small></div>
+        <div class="world-control-actions"><button type="button" data-withdraw-listing data-player-id="${escapeHtml(listing.player_id)}">Withdraw listing</button></div>
+      </article>`).join('') : '<p>No players are currently transfer listed.</p>';
+  }
+  updateListedSummaryCount(listings.length);
 }
 
 async function refreshLiveTransferPresentation() {
@@ -259,6 +262,27 @@ async function refreshLiveTransferPresentation() {
     return liveTransferMarket;
   }).finally(() => { liveTransferRefreshPromise = null; });
   return liveTransferRefreshPromise;
+}
+
+function transferMutationMessage(text) {
+  return /Player listed immediately|Transfer listing withdrawn immediately/i.test(String(text || ''));
+}
+
+function watchTransferMutationCompletion() {
+  const message = document.getElementById('transferNegotiationMessage');
+  if (!message || message.dataset.liveListingObserver === 'true') return;
+  message.dataset.liveListingObserver = 'true';
+  let lastText = message.textContent || '';
+  const observer = new MutationObserver(() => {
+    const text = message.textContent || '';
+    if (text !== lastText && transferMutationMessage(text)) {
+      lastText = text;
+      queueMicrotask(() => refreshLiveTransferPresentation().catch(() => {}));
+    } else {
+      lastText = text;
+    }
+  });
+  observer.observe(message, { childList: true, characterData: true, subtree: true });
 }
 
 function retryTransferListing(playerId, attempt) {
@@ -317,6 +341,7 @@ document.addEventListener('tbg:view-changed', (event) => {
     refreshLiveTransferPresentation().catch(() => enhanceSquadTransferStatus());
   });
   if (event.detail?.view === 'transfers') queueMicrotask(() => {
+    watchTransferMutationCompletion();
     refreshLiveTransferPresentation().catch(() => {});
   });
 });
@@ -325,5 +350,6 @@ window.addEventListener('tbg:portal-rendered', () => {
   installNewsCategories();
   watchSquadStatus();
   enhanceSquadTransferStatus();
+  watchTransferMutationCompletion();
   queueMicrotask(() => refreshLiveTransferPresentation().catch(() => {}));
 });
