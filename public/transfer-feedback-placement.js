@@ -7,6 +7,8 @@ let transferObserver = null;
 let messageObserver = null;
 let observedMessage = null;
 let activeFeedbackTarget = null;
+let listingActionInFlight = false;
+let listingAwaitingRefresh = false;
 
 function ensureStyles() {
   if (document.getElementById(STYLE_ID)) return;
@@ -51,6 +53,19 @@ function findDealCard(dealId) {
     .find((card) => card.dataset.firstClassDeal === dealId) || null;
 }
 
+function directChildContaining(container, control) {
+  if (!container || !control || !container.contains(control)) return null;
+  let node = control;
+  while (node?.parentElement && node.parentElement !== container) node = node.parentElement;
+  return node?.parentElement === container ? node : null;
+}
+
+function findControlHost(containerSelector, controlSelector) {
+  const container = transferWorkspace()?.querySelector(containerSelector);
+  const control = container?.querySelector(controlSelector);
+  return directChildContaining(container, control);
+}
+
 function localFeedbackHost() {
   if (!activeFeedbackTarget) return null;
   if (activeFeedbackTarget.type === 'proposal') {
@@ -58,7 +73,16 @@ function localFeedbackHost() {
   }
   if (activeFeedbackTarget.type === 'deal') return findDealCard(activeFeedbackTarget.dealId);
   if (activeFeedbackTarget.type === 'listing') {
-    return transferWorkspace()?.querySelector('#activeTransferListings') || null;
+    const playerId = CSS.escape(activeFeedbackTarget.playerId || '');
+    return findControlHost('#activeTransferListings', `[data-withdraw-listing][data-player-id="${playerId}"]`);
+  }
+  if (activeFeedbackTarget.type === 'legacy-incoming') {
+    const proposalId = CSS.escape(activeFeedbackTarget.proposalId || '');
+    return findControlHost('#incomingTransferOffers', `[data-legacy-transfer-response][data-proposal-id="${proposalId}"]`);
+  }
+  if (activeFeedbackTarget.type === 'legacy-outgoing') {
+    const proposalId = CSS.escape(activeFeedbackTarget.proposalId || '');
+    return findControlHost('#outgoingTransferOffers', `[data-withdraw-legacy-offer][data-proposal-id="${proposalId}"]`);
   }
   return null;
 }
@@ -69,8 +93,9 @@ function ensureLocalFeedback(host) {
   if (!local) {
     local = document.createElement('p');
     local.setAttribute(LOCAL_FEEDBACK_ATTR, '');
-    local.setAttribute('role', 'status');
-    local.setAttribute('aria-live', 'polite');
+    // The canonical page-level message remains the single live region. This
+    // mirror is deliberately visual-only to avoid duplicate announcements.
+    local.setAttribute('aria-hidden', 'true');
 
     if (activeFeedbackTarget?.type === 'proposal') {
       const submit = host.querySelector('#submitNegotiation');
@@ -85,6 +110,18 @@ function ensureLocalFeedback(host) {
   return local;
 }
 
+function setListingControlsDisabled(disabled) {
+  transferWorkspace()?.querySelectorAll('[data-withdraw-listing]').forEach((button) => {
+    button.disabled = disabled;
+  });
+}
+
+function releaseListingActionLock() {
+  listingActionInFlight = false;
+  listingAwaitingRefresh = false;
+  setListingControlsDisabled(false);
+}
+
 function mirrorFeedbackLocally() {
   const message = transferMessage();
   const text = String(message?.textContent || '').trim();
@@ -97,12 +134,29 @@ function mirrorFeedbackLocally() {
   return true;
 }
 
+function handleMessageChange() {
+  mirrorFeedbackLocally();
+  if (!listingActionInFlight || activeFeedbackTarget?.type !== 'listing') return;
+  const text = String(transferMessage()?.textContent || '').trim();
+  if (!text || text === 'Withdrawing transfer listing…') return;
+  if (text === 'Transfer listing withdrawn immediately.') {
+    // Keep every listing control disabled until the successful refresh mutates
+    // the listings DOM. Otherwise another withdrawal can start while the first
+    // request is still finishing and steal the singleton action-local target.
+    listingAwaitingRefresh = true;
+    return;
+  }
+  // Errors do not refresh the listing DOM, so release immediately once the
+  // request has produced its terminal error message.
+  releaseListingActionLock();
+}
+
 function bindMessageObserver() {
   const message = transferMessage();
   if (!message || observedMessage === message) return;
   messageObserver?.disconnect();
   observedMessage = message;
-  messageObserver = new MutationObserver(() => mirrorFeedbackLocally());
+  messageObserver = new MutationObserver(handleMessageChange);
   messageObserver.observe(message, { childList: true, characterData: true, subtree: true });
 }
 
@@ -118,8 +172,9 @@ function placeTransferFeedback() {
   message.setAttribute('role', 'status');
   message.setAttribute('aria-live', 'polite');
 
-  // The page-level banner is a fallback summary. Action-local feedback below is
-  // the primary response because it appears where the manager is already looking.
+  // The page-level banner is the single accessible live region and a fallback
+  // summary. The mirrored action-local copy is visual-only and stays beside the
+  // control the manager actually used.
   if (message.previousElementSibling !== heading) heading.after(message);
   bindMessageObserver();
   mirrorFeedbackLocally();
@@ -140,20 +195,34 @@ function captureFeedbackTarget(event) {
   ].join(','));
   if (!control) return;
 
+  if (control.matches('[data-withdraw-listing]')) {
+    if (listingActionInFlight) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+    listingActionInFlight = true;
+    listingAwaitingRefresh = false;
+    setListingControlsDisabled(true);
+  }
+
   const card = control.closest('[data-first-class-deal]');
   if (card?.dataset.firstClassDeal) {
     activeFeedbackTarget = { type: 'deal', dealId: card.dataset.firstClassDeal };
   } else if (control.id === 'submitNegotiation') {
     activeFeedbackTarget = { type: 'proposal' };
-  } else if (control.closest('#activeTransferListings')) {
-    activeFeedbackTarget = { type: 'listing' };
+  } else if (control.matches('[data-withdraw-listing]')) {
+    activeFeedbackTarget = { type: 'listing', playerId: control.dataset.playerId || '' };
+  } else if (control.matches('[data-legacy-transfer-response]')) {
+    activeFeedbackTarget = { type: 'legacy-incoming', proposalId: control.dataset.proposalId || '' };
+  } else if (control.matches('[data-withdraw-legacy-offer]')) {
+    activeFeedbackTarget = { type: 'legacy-outgoing', proposalId: control.dataset.proposalId || '' };
   } else {
     activeFeedbackTarget = { type: 'proposal' };
   }
 
-  // Clear any stale local message at the newly selected action. The transfer
-  // code will immediately write progress/success/error text to the canonical
-  // live region, which is then mirrored here.
+  // Clear stale local text only from the newly selected action host. The
+  // canonical live region receives the actual progress/success/error update.
   const host = localFeedbackHost();
   host?.querySelector(`:scope > [${LOCAL_FEEDBACK_ATTR}]`)?.remove();
   queueMicrotask(() => mirrorFeedbackLocally());
@@ -180,9 +249,12 @@ function armTransferObserver() {
   if (!root || transferObserver) return;
   transferObserver = new MutationObserver(() => {
     if (activeFeedbackTarget) queueMicrotask(() => mirrorFeedbackLocally());
+    if (listingActionInFlight && listingAwaitingRefresh) {
+      queueMicrotask(() => releaseListingActionLock());
+    }
   });
-  // Deliberately scoped to Transfers: offer-card refreshes can replace the local
-  // feedback node, but match replay/world-feed DOM churn must not wake this up.
+  // Deliberately scoped to Transfers: offer/listing refreshes can replace the
+  // local feedback node, but match replay/world-feed DOM churn must not wake it.
   transferObserver.observe(root, { childList: true, subtree: true });
 }
 
