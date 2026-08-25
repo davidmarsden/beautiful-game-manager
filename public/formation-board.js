@@ -134,7 +134,14 @@ function strongestFormationSelection() {
     if (usedIndex >= 0) remaining.splice(usedIndex, 1);
   });
 
-  const bench = remaining.sort((a, b) => Number(b.rating) - Number(a.rating)).slice(0, 7).map((player) => player.id);
+  const fallbackOrder = remaining.sort((a, b) => Number(b.rating) - Number(a.rating) || a.name.localeCompare(b.name));
+  slots.forEach(([role], index) => {
+    if (picked[index] || role === 'GK') return;
+    const candidate = fallbackOrder.shift();
+    if (candidate) picked[index] = candidate.id;
+  });
+
+  const bench = fallbackOrder.slice(0, 7).map((player) => player.id);
   while (bench.length < 7) bench.push(null);
   return { startingXi: picked, bench };
 }
