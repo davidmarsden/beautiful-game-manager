@@ -20,24 +20,38 @@ test('#310 publishes a discoverable controlled-alpha tester guide', () => {
   assert.match(auth, /alpha-guide\.html/);
 });
 
-test('#310 links the current Alpha Rulebook and future Road Ahead from guide and portal', () => {
+test('#310 links styled local Alpha Rulebook and Road Ahead pages from guide and portal', () => {
   const guide = read('public/alpha-guide.html');
   const auth = read('public/auth-entry.js');
   const css = read('public/governance-links.css');
-  const rulebook = 'beautiful-game-governance/blob/main/docs/alpha-rulebook-v0.1.md';
-  const roadAhead = 'beautiful-game-governance/blob/main/docs/road-ahead.md';
+  const rulebook = read('public/rulebook.html');
+  const roadAhead = read('public/road-ahead.html');
+  const pageCss = read('public/governance-page.css');
 
-  assert.match(guide, new RegExp(rulebook.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.match(guide, new RegExp(roadAhead.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(guide, /\.\/rulebook\.html/);
+  assert.match(guide, /\.\/road-ahead\.html/);
   assert.match(guide, /Alpha Rulebook — current rules/);
   assert.match(guide, /Road Ahead — planned systems/);
 
-  assert.match(auth, new RegExp(rulebook.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.match(auth, new RegExp(roadAhead.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(auth, /const ALPHA_RULEBOOK_URL = '\.\/rulebook\.html'/);
+  assert.match(auth, /const ROAD_AHEAD_URL = '\.\/road-ahead\.html'/);
   assert.match(auth, /Rules &amp; roadmap/);
   assert.match(auth, /Alpha Rulebook — current rules/);
   assert.match(auth, /Road Ahead — planned systems/);
   assert.match(css, /\.tbg-governance-links/);
+
+  assert.match(rulebook, /CURRENT ALPHA RULES/);
+  assert.match(rulebook, /80 clubs/);
+  assert.match(rulebook, /25 first-team players/);
+  assert.match(rulebook, /Promotion and relegation — known alpha gap/);
+  assert.match(rulebook, /View the canonical Markdown source on GitHub/);
+
+  assert.match(roadAhead, /PLANNED SYSTEMS/);
+  assert.match(roadAhead, /Players make career decisions/);
+  assert.match(roadAhead, /Knowledge Regions/);
+  assert.match(roadAhead, /Board Confidence/);
+  assert.match(roadAhead, /View the canonical Markdown source on GitHub/);
+  assert.match(pageCss, /\.governance-hero/);
 });
 
 test('#310 provides a valid structured external alpha bug-report form', () => {
