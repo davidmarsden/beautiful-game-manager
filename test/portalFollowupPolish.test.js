@@ -70,7 +70,7 @@ test('live transfer listings are re-read and reflected in Squad and Transfers im
   assert.match(behaviour, /refreshLiveTransferPresentation\(\)/);
   assert.match(behaviour, /listing\.is_own_listing && listing\.status === 'active'/);
   assert.match(behaviour, /makeLiveListedBadge/);
-  assert.match(behaviour, /data-live-transfer-listing/);
+  assert.match(behaviour, /badge\.dataset\.liveTransferListing = 'true'/);
   assert.match(behaviour, /renderLiveTransferListings/);
   assert.match(behaviour, /data-withdraw-listing/);
   assert.match(behaviour, /event\.detail\?\.view === 'squad'/);
