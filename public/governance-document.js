@@ -133,7 +133,7 @@ async function loadCanonicalGovernance() {
     if (status) status.innerHTML = `Live content loaded from <a href="${sourcePage}" target="_blank" rel="noopener">canonical governance on GitHub</a>.`;
   } catch (error) {
     console.error('Could not load canonical governance document:', error);
-    container.innerHTML = '<article class="governance-card wide"><h2>Rulebook temporarily unavailable</h2><p>TBG could not load the canonical governance document. We will not show a potentially stale local copy.</p></article>';
+    container.innerHTML = '<article class="governance-card wide"><h2>Document temporarily unavailable</h2><p>TBG could not load the canonical governance document. We will not show a potentially stale local copy.</p></article>';
     if (status) status.innerHTML = `Open the <a href="${sourcePage}" target="_blank" rel="noopener">canonical governance source</a> directly.`;
   }
 }
