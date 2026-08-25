@@ -185,14 +185,20 @@ function enhanceSquadTransferStatus() {
     const listing = liveTransferMarket ? liveListingFor(playerId) : null;
 
     if (liveTransferMarket && listing) {
-      transferOnlyControls(statusCell).forEach((control) => control.remove());
-      statusCell.append(makeLiveListedBadge(listing));
+      const existingBadge = statusCell.querySelector('[data-live-transfer-listing]');
+      const expectedTitle = `Live transfer listing · ${formatMoney(listing.asking_fee || 0)}`;
+      const staleControls = transferOnlyControls(statusCell).filter((control) => control !== existingBadge);
+      staleControls.forEach((control) => control.remove());
+      if (!existingBadge) statusCell.append(makeLiveListedBadge(listing));
+      else if (existingBadge.title !== expectedTitle) existingBadge.title = expectedTitle;
       return;
     }
 
     if (liveTransferMarket) {
-      statusCell.querySelectorAll('.badge.transfer, [data-squad-list-player], .badge.neutral').forEach((control) => control.remove());
-      statusCell.append(makeListPlayerAction(playerId));
+      statusCell.querySelectorAll('.badge.transfer, .badge.neutral').forEach((control) => control.remove());
+      const existingAction = statusCell.querySelector('[data-squad-list-player]');
+      if (!existingAction) statusCell.append(makeListPlayerAction(playerId));
+      else if (existingAction.dataset.squadListPlayer !== playerId) existingAction.dataset.squadListPlayer = playerId;
       return;
     }
 
@@ -215,7 +221,6 @@ function watchSquadStatus() {
   body.dataset.transferStatusObserver = 'true';
   const observer = new MutationObserver(() => enhanceSquadTransferStatus());
   observer.observe(body, {
-    childList: true,
     subtree: true,
     attributes: true,
     attributeFilter: ['data-tbg-player-id']

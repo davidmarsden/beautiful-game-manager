@@ -83,10 +83,23 @@ test('live listing refresh observes actual command completion and preserves para
   assert.match(behaviour, /watchTransferMutationCompletion/);
   assert.match(behaviour, /Player listed immediately\|Transfer listing withdrawn immediately/);
   assert.match(behaviour, /observer\.observe\(message, \{ childList: true, characterData: true, subtree: true \}\)/);
-  assert.match(behaviour, /transferOnlyControls\(statusCell\)\.forEach\(\(control\) => control\.remove\(\)\)/);
-  assert.match(behaviour, /statusCell\.append\(makeLiveListedBadge\(listing\)\)/);
-  assert.match(behaviour, /statusCell\.append\(makeListPlayerAction\(playerId\)\)/);
+  assert.match(behaviour, /staleControls\.forEach\(\(control\) => control\.remove\(\)\)/);
+  assert.match(behaviour, /if \(!existingBadge\) statusCell\.append\(makeLiveListedBadge\(listing\)\)/);
+  assert.match(behaviour, /if \(!existingAction\) statusCell\.append\(makeListPlayerAction\(playerId\)\)/);
   assert.doesNotMatch(behaviour, /statusCell\.replaceChildren\(makeLiveListedBadge/);
+});
+
+test('squad transfer observer cannot trigger itself into a DOM mutation loop', async () => {
+  const behaviour = await read('public/portal-followup.js');
+  const observerBlock = behaviour.match(/observer\.observe\(body, \{[\s\S]*?\}\);/)?.[0] || '';
+
+  assert.match(observerBlock, /attributes: true/);
+  assert.match(observerBlock, /subtree: true/);
+  assert.doesNotMatch(observerBlock, /childList: true/);
+  assert.match(behaviour, /const existingBadge = statusCell\.querySelector\('\[data-live-transfer-listing\]'\)/);
+  assert.match(behaviour, /if \(!existingBadge\) statusCell\.append\(makeLiveListedBadge\(listing\)\)/);
+  assert.match(behaviour, /const existingAction = statusCell\.querySelector\('\[data-squad-list-player\]'\)/);
+  assert.match(behaviour, /if \(!existingAction\) statusCell\.append\(makeListPlayerAction\(playerId\)\)/);
 });
 
 test('live listing reconciliation changes only the listed count so legacy offer counts survive', async () => {
