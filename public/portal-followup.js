@@ -51,12 +51,7 @@ function applyNewsCategory(root, category) {
   empty.hidden = visible > 0;
 }
 
-function installNewsCategories() {
-  const root = document.getElementById('feedView');
-  const shell = root?.querySelector('.world-feed-shell');
-  const list = shell?.querySelector('.world-feed-list');
-  if (!shell || !list || shell.querySelector('.world-feed-category-tabs')) return;
-
+function categoryCounts(list) {
   const cards = [...list.querySelectorAll('.world-feed-item')];
   const counts = new Map(NEWS_CATEGORIES.map(([key]) => [key, 0]));
   counts.set('all', cards.length);
@@ -64,7 +59,34 @@ function installNewsCategories() {
     const category = categoryForCard(card);
     if (category !== 'all') counts.set(category, (counts.get(category) || 0) + 1);
   });
+  return counts;
+}
 
+function refreshNewsCategories(root) {
+  const list = root?.querySelector('.world-feed-list');
+  const nav = root?.querySelector('.world-feed-category-tabs');
+  if (!list || !nav) return;
+  const counts = categoryCounts(list);
+  nav.querySelectorAll('.world-feed-category-tab').forEach((tab) => {
+    const count = counts.get(tab.dataset.newsCategory) || 0;
+    const countNode = tab.querySelector('small');
+    if (countNode) countNode.textContent = String(count);
+  });
+  const active = nav.querySelector('.world-feed-category-tab[aria-pressed="true"]')?.dataset.newsCategory || 'all';
+  applyNewsCategory(root, active);
+}
+
+function installNewsCategories() {
+  const root = document.getElementById('feedView');
+  const shell = root?.querySelector('.world-feed-shell');
+  const list = shell?.querySelector('.world-feed-list');
+  if (!shell || !list) return;
+  if (shell.querySelector('.world-feed-category-tabs')) {
+    refreshNewsCategories(root);
+    return;
+  }
+
+  const counts = categoryCounts(list);
   const nav = document.createElement('nav');
   nav.className = 'world-feed-category-tabs';
   nav.setAttribute('aria-label', 'News categories');
