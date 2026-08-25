@@ -35,7 +35,10 @@ test('simplified labels retain compatibility aliases for existing routes', () =>
   assert.ok(navigation.includes("['fixtures', 'schedule']"));
 });
 
-test('Managers opens the existing participation profile and directory', () => {
-  assert.ok(navigation.includes("managers.id = 'managersNavButton'"));
-  assert.ok(navigation.includes("void openManagerParticipation('')"));
+test('Managers is a first-class portal view', () => {
+  assert.ok(navigation.includes("['managers', 'managers']"));
+  assert.ok(navigation.includes("section.id = 'managersView'"));
+  assert.ok(navigation.includes("button.dataset.view = 'managers'"));
+  assert.ok(navigation.includes("installManagersShell();"));
+  assert.ok(!navigation.includes("managers.id = 'managersNavButton'"));
 });
