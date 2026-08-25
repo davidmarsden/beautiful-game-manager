@@ -106,6 +106,39 @@ function initialiseAssignments() {
   benchAssignments = Array.from({length:7}, (_, index) => checkedBench[index] || null);
 }
 
+function roleCandidates(role, pool) {
+  const allowed = ROLE_FAMILIES[role] || [];
+  if (!allowed.length) return [];
+  return pool
+    .filter((player) => allowed.includes(player.position))
+    .sort((left, right) => {
+      const leftFit = allowed.indexOf(left.position);
+      const rightFit = allowed.indexOf(right.position);
+      return leftFit - rightFit || Number(right.rating) - Number(left.rating) || left.name.localeCompare(right.name);
+    });
+}
+
+function strongestFormationSelection() {
+  const slots = FORMATIONS[byId('formation')?.value || '4-3-3-wide'] || FORMATIONS['4-3-3-wide'];
+  const remaining = [...players];
+  const picked = Array(slots.length).fill(null);
+  const slotOrder = slots
+    .map(([role], index) => ({ role, index, choices: roleCandidates(role, remaining).length }))
+    .sort((left, right) => left.choices - right.choices || left.index - right.index);
+
+  slotOrder.forEach(({ role, index }) => {
+    const candidate = roleCandidates(role, remaining)[0];
+    if (!candidate) return;
+    picked[index] = candidate.id;
+    const usedIndex = remaining.findIndex((player) => player.id === candidate.id);
+    if (usedIndex >= 0) remaining.splice(usedIndex, 1);
+  });
+
+  const bench = remaining.sort((a, b) => Number(b.rating) - Number(a.rating)).slice(0, 7).map((player) => player.id);
+  while (bench.length < 7) bench.push(null);
+  return { startingXi: picked, bench };
+}
+
 function token(player, role) {
   if (!player) return '';
   const allowed = ROLE_FAMILIES[role] || [];
@@ -240,7 +273,7 @@ function buildBoard() {
   board.addEventListener('dragover',(event)=>{ if(event.target.closest('[data-zone][data-index]')) event.preventDefault(); });
   board.addEventListener('drop',(event)=>{ const slot=event.target.closest('[data-zone][data-index]'); if(!slot)return; event.preventDefault(); placePlayer(event.dataTransfer.getData('text/plain'),slot.dataset.zone,Number(slot.dataset.index)); });
   byId('clearFormation').addEventListener('click',()=>{markManagerEdited();assignments=Array(11).fill(null);benchAssignments=Array(7).fill(null);selected=null;renderBoard();});
-  byId('autoPickFormation').addEventListener('click',()=>{ markManagerEdited(); const sorted=[...players].sort((a,b)=>Number(b.rating)-Number(a.rating)); const gk=sorted.find((p)=>p.position==='Goalkeeper'); const rest=sorted.filter((p)=>p.id!==gk?.id); assignments=[gk?.id||null,...rest.slice(0,10).map((p)=>p.id)]; benchAssignments=rest.slice(10,17).map((p)=>p.id); while(benchAssignments.length<7)benchAssignments.push(null);renderBoard(); });
+  byId('autoPickFormation').addEventListener('click',()=>{ markManagerEdited(); const picked=strongestFormationSelection(); assignments=picked.startingXi; benchAssignments=picked.bench; selected=null; renderBoard(); });
   window.dispatchEvent(new CustomEvent('tbg:formation-board-ready'));
   return true;
 }
