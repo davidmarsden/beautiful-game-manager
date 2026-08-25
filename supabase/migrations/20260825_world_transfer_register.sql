@@ -84,6 +84,10 @@ begin
       deal.current_revision_no,
       deal.created_at,
       deal.updated_at,
+      -- Agreement time must remain stable after later lifecycle updates mutate
+      -- updated_at. grace_expires_at is the retained end of the agreement cooling
+      -- clock, so subtract the public cooling duration to recover acceptance time.
+      deal.grace_expires_at - make_interval(mins => coalesce(deal.integrity_cooling_minutes, 15)) as agreed_at,
       deal.grace_expires_at,
       deal.binding_at,
       deal.settle_at,
@@ -114,7 +118,7 @@ begin
       else deal.status
     end,
     'revision_no', deal.current_revision_no,
-    'agreed_at', deal.updated_at,
+    'agreed_at', deal.agreed_at,
     'grace_expires_at', deal.grace_expires_at,
     'binding_at', deal.binding_at,
     'settle_at', deal.settle_at,
