@@ -41,7 +41,8 @@ test('the manager chip opens the participation profile and self view includes an
   assert.ok(navigation.includes("import './manager-participation.js';"));
   assert.ok(navigation.includes("installStylesheet('./manager-participation.css')"));
   assert.ok(client.includes("event.target.closest?.('#managerChip')"));
-  assert.ok(endpoint.includes('managerDirectory(context.worldId, context.managerId)'));
+  assert.ok(endpoint.includes('managerDirectory(context.worldId, context.managerId, user.id)'));
+  assert.ok(endpoint.includes('club_name: clubNames.get(String(row.club_id)) || row.club_id'));
   assert.ok(client.includes("sectionTitle('Managers in this world')"));
   assert.ok(client.includes('button.dataset.managerProfileId'));
 });

@@ -1,0 +1,143 @@
+/* Follow-up portal polish after the cross-page hierarchy pass. */
+
+/* Inbox: the overview and action cards should read like the Squad page, not another green layer. */
+#dashboardView #portalOverview>article,
+#dashboardView .portal-layout>.portal-card{
+  background:var(--tbg-colour-cream,#f8f7e8)!important;
+  border:1px solid rgba(25,51,117,.24)!important;
+  box-shadow:none!important;
+}
+#dashboardView #portalOverview>article{
+  border-top:3px solid var(--tbg-brazil-blue,#193375)!important;
+}
+#dashboardView #portalOverview>article>span,
+#dashboardView .portal-layout>.portal-card>h3{
+  color:var(--tbg-brazil-blue,#193375)!important;
+}
+#dashboardView #portalOverview>article>strong{color:var(--tbg-colour-ink,#17221a)!important}
+#dashboardView .portal-alert{
+  background:#fff!important;
+  border-color:rgba(25,51,117,.2)!important;
+}
+#dashboardView .season-progress-shell{
+  background:#fff!important;
+  border:1px solid rgba(25,51,117,.16);
+}
+#dashboardView .season-progress-bar{
+  background:linear-gradient(90deg,var(--tbg-brazil-yellow,#FFDC02),var(--tbg-brazil-sky,#0C87D1))!important;
+}
+
+/* News: transfer-like category tabs and a more comfortable reading width. */
+#feedView .world-feed-shell{max-width:1180px!important;margin-inline:auto!important}
+#feedView .world-feed-heading,
+#feedView .world-feed-composer,
+#feedView .world-feed-category-tabs{grid-column:1/-1}
+#feedView .world-feed-category-tabs{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:.55rem;
+  margin:0 0 1rem;
+}
+#feedView .world-feed-category-tab{
+  min-height:0;
+  display:grid;
+  gap:.18rem;
+  padding:.7rem .75rem;
+  border:1px solid rgba(25,51,117,.3);
+  background:var(--tbg-colour-cream,#f8f7e8);
+  color:var(--tbg-colour-ink,#17221a);
+  text-align:left;
+  cursor:pointer;
+  box-shadow:none;
+}
+#feedView .world-feed-category-tab strong{color:var(--tbg-brazil-blue,#193375);font-size:.9rem}
+#feedView .world-feed-category-tab small{color:var(--tbg-colour-muted,#58685c);font-size:.75rem}
+#feedView .world-feed-category-tab[aria-pressed="true"]{
+  background:var(--tbg-brazil-yellow,#FFDC02);
+  border-color:var(--tbg-brazil-blue,#193375);
+  box-shadow:inset 0 -4px var(--tbg-brazil-blue,#193375);
+}
+#feedView .world-feed-list{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:1rem!important;
+  align-items:start;
+}
+#feedView .world-feed-item{
+  min-width:0;
+  height:auto;
+}
+#feedView .world-feed-item[hidden]{display:none!important}
+#feedView .world-feed-category-empty{grid-column:1/-1;margin:0;padding:1rem;background:var(--tbg-colour-cream,#f8f7e8);border-left:4px solid var(--tbg-brazil-yellow,#FFDC02)}
+#feedView .world-feed-body{line-height:1.58!important}
+
+/* Squad and Updates player links: TBG navy, not the old dark-red action colour. */
+#squadView .player-link,
+#squadView .internal-player-link,
+#updatesView .player-link,
+#updatesView .player-update-name.player-link{
+  color:var(--tbg-brazil-blue,#193375)!important;
+  text-decoration-color:rgba(25,51,117,.45)!important;
+}
+#squadView .player-link:hover,
+#squadView .internal-player-link:hover,
+#updatesView .player-link:hover,
+#updatesView .player-update-name.player-link:hover{
+  color:var(--tbg-brazil-sky,#0C87D1)!important;
+}
+
+/* Updates: give the release view the same working-surface hierarchy as Transfers and Squad. */
+#updatesView .player-updates-shell{gap:.9rem}
+#updatesView .player-updates-hero,
+#updatesView .player-updates-section{
+  background:var(--tbg-colour-cream,#f8f7e8)!important;
+  border:1px solid rgba(25,51,117,.26)!important;
+  border-radius:8px!important;
+  box-shadow:none!important;
+}
+#updatesView .player-updates-hero{
+  border-top:3px solid var(--tbg-brazil-blue,#193375)!important;
+}
+#updatesView .player-updates-hero h2,
+#updatesView .player-updates-section h3{
+  color:var(--tbg-brazil-blue,#193375)!important;
+}
+#updatesView .player-updates-pill{
+  background:rgba(255,220,2,.18)!important;
+  border:1px solid rgba(197,169,0,.42);
+  color:#5b4c00!important;
+}
+#updatesView .player-updates-section>header{
+  background:#fff;
+  border-bottom-color:rgba(25,51,117,.18)!important;
+}
+#updatesView .player-update-card{
+  background:#fff;
+  border-top-color:rgba(25,51,117,.14)!important;
+}
+#updatesView .player-update-card:nth-child(even){background:rgba(12,135,209,.035)}
+#updatesView .player-update-rating{
+  color:var(--tbg-brazil-blue,#193375);
+  background:rgba(12,135,209,.08);
+  border:1px solid rgba(25,51,117,.14);
+  padding:.35rem .45rem;
+}
+#updatesView .player-update-new{
+  color:var(--tbg-colour-ink,#17221a);
+  background:var(--tbg-brazil-yellow,#FFDC02);
+  border:1px solid #c5a900;
+  padding:.35rem .55rem;
+}
+#updatesView .player-update-provenance{
+  padding:.55rem .65rem;
+  background:var(--tbg-colour-cream,#f8f7e8);
+  border-left:3px solid var(--tbg-brazil-sky,#0C87D1);
+}
+
+@media(max-width:980px){
+  #feedView .world-feed-category-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}
+  #feedView .world-feed-list{grid-template-columns:1fr}
+}
+@media(max-width:620px){
+  #feedView .world-feed-category-tabs{grid-template-columns:1fr 1fr}
+}

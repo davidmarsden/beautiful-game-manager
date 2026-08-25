@@ -1,4 +1,5 @@
 import { openManagerParticipation } from './manager-participation.js';
+import './portal-followup.js';
 
 let loadedAt = 0;
 let loading = null;

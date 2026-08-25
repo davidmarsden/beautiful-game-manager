@@ -51,16 +51,39 @@ async function activeContext(userId) {
   return { managerId: profiles[0].id, worldId: appointments[0].world_id };
 }
 
-async function managerDirectory(worldId, selfId) {
+async function clubNamesForWorld(userId, worldId) {
+  try {
+    const result = await serviceSupabase('/rest/v1/rpc/get_manager_transfer_directory_for_user', {
+      method: 'POST',
+      body: JSON.stringify({ p_user_id: userId, p_world_id: worldId })
+    });
+    const clubs = Array.isArray(result?.directory?.clubs) ? result.directory.clubs : [];
+    return new Map(clubs.map((club) => [String(club.club_id || ''), club.club_name || club.club_id]).filter(([id]) => id));
+  } catch {
+    // Club-name decoration is presentational. Keep manager profiles usable if the
+    // cached transfer directory is temporarily unavailable and fall back to IDs.
+    return new Map();
+  }
+}
+
+async function managerDirectory(worldId, selfId, userId) {
   const appointments = await serviceSupabase(`/rest/v1/manager_appointments?world_id=eq.${encodeURIComponent(worldId)}&status=eq.active&select=manager_id,club_id&order=club_id.asc`);
   const ids = [...new Set(appointments.map((row) => row.manager_id).filter(Boolean))];
   if (!ids.length) return [];
   const idFilter = ids.map((id) => String(id).replaceAll(',', '')).join(',');
-  const profiles = await serviceSupabase(`/rest/v1/manager_profiles?id=in.(${idFilter})&select=id,display_name`);
+  const [profiles, clubNames] = await Promise.all([
+    serviceSupabase(`/rest/v1/manager_profiles?id=in.(${idFilter})&select=id,display_name`),
+    clubNamesForWorld(userId, worldId)
+  ]);
   const names = new Map(profiles.map((profile) => [String(profile.id), profile.display_name]));
   return appointments
     .filter((row) => String(row.manager_id) !== String(selfId))
-    .map((row) => ({ manager_id: row.manager_id, manager_name: names.get(String(row.manager_id)) || 'Manager', club_id: row.club_id }))
+    .map((row) => ({
+      manager_id: row.manager_id,
+      manager_name: names.get(String(row.manager_id)) || 'Manager',
+      club_id: row.club_id,
+      club_name: clubNames.get(String(row.club_id)) || row.club_id
+    }))
     .sort((a, b) => String(a.manager_name).localeCompare(String(b.manager_name)));
 }
 
@@ -130,7 +153,7 @@ export default async (request) => {
     const targetId = target || context.managerId;
     const isSelf = String(targetId) === String(context.managerId) || result?.is_self === true;
     result.contact = await contactFor(targetId, isSelf);
-    if (isSelf) result.directory = await managerDirectory(context.worldId, context.managerId);
+    if (isSelf) result.directory = await managerDirectory(context.worldId, context.managerId, user.id);
     return json(result);
   } catch (error) {
     const message = String(error?.message || 'Could not load manager participation');
