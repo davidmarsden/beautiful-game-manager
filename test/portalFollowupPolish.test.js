@@ -46,11 +46,14 @@ test('squad transfer status is distinct and unlisted players have a direct listi
     read('public/portal-followup.css')
   ]);
 
-  assert.match(behaviour, /data\.squadListPlayer = playerId/);
+  assert.match(behaviour, /action\.dataset\.squadListPlayer = playerId/);
   assert.match(behaviour, /action\.textContent = 'List player'/);
+  assert.match(behaviour, /attributeFilter: \['data-tbg-player-id'\]/);
   assert.match(behaviour, /document\.querySelector\('\[data-view="transfers"\]'\)\?\.click\(\)/);
   assert.match(behaviour, /action\.value = 'listing'/);
+  assert.match(behaviour, /find\(\(option\) => option\.value === playerId\)/);
   assert.match(behaviour, /refreshedPlayer\.value = playerId/);
+  assert.match(behaviour, /refreshedPlayer\.value !== playerId/);
   assert.match(css, /#squadView \.squad-transfer-list-action/);
   assert.match(css, /#squadView \.badge\.transfer/);
   assert.match(css, /#squadView \.badge\.loan/);
