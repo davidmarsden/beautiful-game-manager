@@ -75,6 +75,8 @@ test('#310 links styled local governance pages while loading their content live 
   assert.doesNotMatch(roadAhead, /Board Confidence/);
 
   assert.match(renderer, /fetch\(sourceUrl, \{ cache: 'no-store' \}\)/);
+  assert.match(renderer, /Document temporarily unavailable/);
+  assert.doesNotMatch(renderer, /Rulebook temporarily unavailable/);
   assert.match(renderer, /We will not show a potentially stale local copy/);
   assert.match(renderer, /Live content loaded from/);
   assert.match(pageCss, /\.governance-hero/);
