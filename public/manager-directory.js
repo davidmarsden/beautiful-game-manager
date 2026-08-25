@@ -31,20 +31,28 @@ function render(data) {
   const root = host();
   if (!root) return;
   const directory = Array.isArray(data.directory) ? data.directory : [];
+  const hasSelf = Boolean(data.manager_name || data.club_name);
+  const selfRow = hasSelf ? `
+    <button type="button" class="manager-directory-list-row manager-directory-list-row-self" data-manager-directory-self>
+      <span class="manager-directory-identity"><strong>${escapeHtml(data.manager_name || 'Manager')} <small class="manager-directory-you">You</small></strong><small>${escapeHtml(data.club_name || 'No club')}</small></span>
+      <span class="manager-directory-club">${escapeHtml(data.division_name || data.division || '')}</span>
+      <span class="manager-directory-open">View profile <span aria-hidden="true">→</span></span>
+    </button>` : '';
   const rows = directory.map((manager) => `
     <button type="button" class="manager-directory-list-row" data-manager-profile-id="${escapeHtml(manager.manager_id || '')}">
       <span class="manager-directory-identity"><strong>${escapeHtml(manager.manager_name || 'Manager')}</strong><small>${escapeHtml(manager.club_name || manager.club_id || 'No club')}</small></span>
       <span class="manager-directory-club">${escapeHtml(manager.division_name || manager.division || '')}</span>
       <span class="manager-directory-open">View profile <span aria-hidden="true">→</span></span>
     </button>`).join('');
+  const appointedCount = directory.length + (hasSelf ? 1 : 0);
 
   root.innerHTML = `<section class="manager-directory-shell">
     <header class="manager-directory-heading">
       <div><small>THE MANAGERS</small><h2>Managers</h2><p>Everyone running a club in this world. Open a manager profile for public pins, recent participation and contact details they chose to share.</p></div>
       <button type="button" class="manager-directory-self" data-manager-directory-self>My profile</button>
     </header>
-    <div class="manager-directory-summary"><strong>${directory.length}</strong><span>appointed managers</span></div>
-    <div class="manager-directory-list" role="list">${rows || '<p class="manager-directory-empty">No appointed managers are available yet.</p>'}</div>
+    <div class="manager-directory-summary"><strong>${appointedCount}</strong><span>appointed managers</span></div>
+    <div class="manager-directory-list" role="list">${selfRow}${rows}${appointedCount ? '' : '<p class="manager-directory-empty">No appointed managers are available yet.</p>'}</div>
   </section>`;
 }
 
