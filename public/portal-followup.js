@@ -47,7 +47,8 @@ function applyNewsCategory(root, category) {
     empty.className = 'world-feed-category-empty';
     root.querySelector('.world-feed-list')?.append(empty);
   }
-  empty.textContent = category === 'all' ? 'No world activity yet.' : 'Nothing in this news category yet.';
+  const emptyText = category === 'all' ? 'No world activity yet.' : 'Nothing in this news category yet.';
+  if (empty.textContent !== emptyText) empty.textContent = emptyText;
   empty.hidden = visible > 0;
 }
 
@@ -68,9 +69,9 @@ function refreshNewsCategories(root) {
   if (!list || !nav) return;
   const counts = categoryCounts(list);
   nav.querySelectorAll('.world-feed-category-tab').forEach((tab) => {
-    const count = counts.get(tab.dataset.newsCategory) || 0;
+    const count = String(counts.get(tab.dataset.newsCategory) || 0);
     const countNode = tab.querySelector('small');
-    if (countNode) countNode.textContent = String(count);
+    if (countNode && countNode.textContent !== count) countNode.textContent = count;
   });
   const active = nav.querySelector('.world-feed-category-tab[aria-pressed="true"]')?.dataset.newsCategory || 'all';
   applyNewsCategory(root, active);
@@ -106,11 +107,21 @@ function installNewsCategories() {
   applyNewsCategory(root, 'all');
 }
 
+function mutationContainsFeedCard(mutation) {
+  const nodes = [...mutation.addedNodes, ...mutation.removedNodes];
+  return nodes.some((node) => node.nodeType === Node.ELEMENT_NODE && (
+    node.matches?.('.world-feed-item, .world-feed-list, .world-feed-shell')
+    || node.querySelector?.('.world-feed-item')
+  ));
+}
+
 function watchNewsFeed() {
   const root = document.getElementById('feedView');
   if (!root || root.dataset.newsCategoryObserver === 'true') return;
   root.dataset.newsCategoryObserver = 'true';
-  const observer = new MutationObserver(() => installNewsCategories());
+  const observer = new MutationObserver((mutations) => {
+    if (mutations.some(mutationContainsFeedCard)) installNewsCategories();
+  });
   observer.observe(root, { childList: true, subtree: true });
   installNewsCategories();
 }
