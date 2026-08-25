@@ -19,6 +19,9 @@ test('news adds transfer-style category tabs and tablet-friendly reading columns
   assert.match(behaviour, /\['community', 'Community'\]/);
   assert.match(behaviour, /world-feed-matchday_press_conference/);
   assert.match(behaviour, /MutationObserver/);
+  assert.match(behaviour, /mutations\.some\(mutationContainsFeedCard\)/);
+  assert.match(behaviour, /node\.matches\?\.\('\.world-feed-item, \.world-feed-list, \.world-feed-shell'\)/);
+  assert.match(behaviour, /countNode\.textContent !== count/);
   assert.match(css, /#feedView \.world-feed-category-tabs/);
   assert.match(css, /grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(css, /@media\(max-width:980px\)/);
