@@ -17,6 +17,11 @@ test('#310 publishes a discoverable controlled-alpha tester guide', () => {
   assert.match(guide, /World Feed is the in-world community\/news space/i);
   assert.match(guide, /No cups yet/i);
   assert.match(guide, /loans and three-club deals/i);
+  assert.match(guide, /Where do the player ratings come from\?/i);
+  assert.match(guide, /ratings in TBG are our own ratings/i);
+  assert.match(guide, /SoccerWiki and SMW-derived ratings are historical calibration references, not live inputs/i);
+  assert.match(guide, /Ratings Updates/);
+  assert.match(guide, /New Players/);
   assert.match(auth, /alpha-guide\.html/);
 });
 
@@ -25,31 +30,46 @@ test('#310 links styled local governance pages while loading their content live 
   const auth = read('public/auth-entry.js');
   const css = read('public/governance-links.css');
   const rulebook = read('public/rulebook.html');
+  const ratings = read('public/ratings.html');
   const roadAhead = read('public/road-ahead.html');
   const renderer = read('public/governance-document.js');
   const pageCss = read('public/governance-page.css');
 
   assert.match(guide, /\.\/rulebook\.html/);
+  assert.match(guide, /\.\/ratings\.html/);
   assert.match(guide, /\.\/road-ahead\.html/);
   assert.match(guide, /Alpha Rulebook — current rules/);
+  assert.match(guide, /How Ratings Work — The Pink Final/);
   assert.match(guide, /Road Ahead — planned systems/);
 
   assert.match(auth, /const ALPHA_RULEBOOK_URL = '\.\/rulebook\.html'/);
+  assert.match(auth, /const RATINGS_EXPLAINER_URL = '\.\/ratings\.html'/);
   assert.match(auth, /const ROAD_AHEAD_URL = '\.\/road-ahead\.html'/);
-  assert.match(auth, /Rules &amp; roadmap/);
+  assert.match(auth, /Rules, ratings &amp; roadmap/);
   assert.match(auth, /Alpha Rulebook — current rules/);
+  assert.match(auth, /How Ratings Work — The Pink Final/);
   assert.match(auth, /Road Ahead — planned systems/);
   assert.match(css, /\.tbg-governance-links/);
 
   assert.match(rulebook, /CURRENT ALPHA RULES/);
   assert.match(rulebook, /raw\.githubusercontent\.com\/davidmarsden\/beautiful-game-governance\/main\/docs\/alpha-rulebook-v0\.1\.md/);
   assert.match(rulebook, /governance-document\.js/);
+  assert.match(rulebook, /\.\/ratings\.html/);
   assert.doesNotMatch(rulebook, /25 first-team players/);
   assert.doesNotMatch(rulebook, /Promotion and relegation — known alpha gap/);
+
+  assert.match(ratings, /THE PINK FINAL · RATINGS/);
+  assert.match(ratings, /How Ratings Work/);
+  assert.match(ratings, /raw\.githubusercontent\.com\/davidmarsden\/beautiful-game-governance\/main\/docs\/how-ratings-work\.md/);
+  assert.match(ratings, /governance-document\.js/);
+  assert.match(ratings, /https:\/\/thepinkfinal\.online\//);
+  assert.doesNotMatch(ratings, /SoccerWiki and SMW-derived datasets are legacy calibration/);
+  assert.doesNotMatch(ratings, /Transfermarkt-derived player data/);
 
   assert.match(roadAhead, /PLANNED SYSTEMS/);
   assert.match(roadAhead, /raw\.githubusercontent\.com\/davidmarsden\/beautiful-game-governance\/main\/docs\/road-ahead\.md/);
   assert.match(roadAhead, /governance-document\.js/);
+  assert.match(roadAhead, /\.\/ratings\.html/);
   assert.doesNotMatch(roadAhead, /Players make career decisions/);
   assert.doesNotMatch(roadAhead, /Knowledge Regions/);
   assert.doesNotMatch(roadAhead, /Board Confidence/);
