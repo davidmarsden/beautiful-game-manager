@@ -6,6 +6,33 @@ const NEWS_CATEGORIES = [
   ['community', 'Community']
 ];
 
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
+const formatMoney = (value) => `£${Math.max(0, Number(value) || 0).toLocaleString('en-GB')}`;
+let portalAuthorization = '';
+let liveTransferMarket = null;
+let liveTransferRefreshPromise = null;
+const followupFetch = window.fetch.bind(window);
+
+window.fetch = async (...args) => {
+  const headers = args[1]?.headers || (args[0] instanceof Request ? args[0].headers : null);
+  const auth = headers instanceof Headers ? headers.get('authorization') : headers?.authorization;
+  if (auth) portalAuthorization = auth;
+  const response = await followupFetch(...args);
+  const requestUrl = typeof args[0] === 'string' ? args[0] : args[0]?.url;
+  const method = String(args[1]?.method || (args[0] instanceof Request ? args[0].method : 'GET') || 'GET').toUpperCase();
+  if (response.ok && requestUrl && new URL(requestUrl, window.location.href).pathname === '/api/transfer-deals' && method === 'POST') {
+    try {
+      const body = typeof args[1]?.body === 'string' ? JSON.parse(args[1].body) : null;
+      if (['list', 'withdraw'].includes(String(body?.action || '').toLowerCase())) {
+        queueMicrotask(() => refreshLiveTransferPresentation().catch(() => {}));
+      }
+    } catch {
+      // A malformed body belongs to the owning transfer request; do not disturb it here.
+    }
+  }
+  return response;
+};
+
 function installStylesheet() {
   if (document.querySelector('link[href$="portal-followup.css"]')) return;
   const link = document.createElement('link');
@@ -126,25 +153,63 @@ function watchNewsFeed() {
   installNewsCategories();
 }
 
+function ownLiveListings() {
+  return (liveTransferMarket?.listings || []).filter((listing) => listing.is_own_listing && listing.status === 'active');
+}
+
+function liveListingFor(playerId) {
+  return ownLiveListings().find((listing) => String(listing.player_id) === String(playerId)) || null;
+}
+
+function makeListPlayerAction(playerId) {
+  const action = document.createElement('button');
+  action.type = 'button';
+  action.className = 'squad-transfer-list-action';
+  action.dataset.squadListPlayer = playerId;
+  action.textContent = 'List player';
+  return action;
+}
+
+function makeLiveListedBadge(listing) {
+  const badge = document.createElement('span');
+  badge.className = 'badge transfer';
+  badge.dataset.liveTransferListing = 'true';
+  badge.textContent = 'Listed';
+  badge.title = `Live transfer listing · ${formatMoney(listing.asking_fee || 0)}`;
+  return badge;
+}
+
 function enhanceSquadTransferStatus() {
   const body = document.getElementById('squadRows');
   if (!body) return;
   body.querySelectorAll('tr').forEach((row) => {
     const playerLink = row.querySelector('.player-link[data-tbg-player-id]');
     const statusCell = row.lastElementChild;
-    if (!playerLink || !statusCell || statusCell.dataset.transferEnhanced === 'true') return;
+    if (!playerLink || !statusCell) return;
     statusCell.dataset.transferEnhanced = 'true';
     statusCell.classList.add('squad-transfer-status-cell');
     const playerId = playerLink.dataset.tbgPlayerId || '';
+    const listing = liveTransferMarket ? liveListingFor(playerId) : null;
+
+    if (liveTransferMarket && listing) {
+      if (!statusCell.querySelector('[data-live-transfer-listing]')) statusCell.replaceChildren(makeLiveListedBadge(listing));
+      return;
+    }
+
+    if (liveTransferMarket) {
+      statusCell.querySelectorAll('.badge.transfer').forEach((badge) => badge.remove());
+      if (statusCell.querySelector('.badge.loan, .badge.loaned')) return;
+    }
+
     const neutral = statusCell.querySelector('.badge.neutral');
-    if (neutral && neutral.textContent.trim().toLowerCase() === 'not listed') {
-      neutral.dataset.squadTransferNeutral = 'true';
-      const action = document.createElement('button');
-      action.type = 'button';
-      action.className = 'squad-transfer-list-action';
-      action.dataset.squadListPlayer = playerId;
-      action.textContent = 'List player';
-      statusCell.replaceChildren(action);
+    const existingAction = statusCell.querySelector('[data-squad-list-player]');
+    if (existingAction) {
+      existingAction.dataset.squadListPlayer = playerId;
+      return;
+    }
+    if ((neutral && neutral.textContent.trim().toLowerCase() === 'not listed') || (liveTransferMarket && !statusCell.children.length)) {
+      neutral?.setAttribute('data-squad-transfer-neutral', 'true');
+      statusCell.replaceChildren(makeListPlayerAction(playerId));
     }
   });
 }
@@ -161,6 +226,39 @@ function watchSquadStatus() {
     attributeFilter: ['data-tbg-player-id']
   });
   enhanceSquadTransferStatus();
+}
+
+function renderLiveTransferListings() {
+  const target = document.getElementById('activeTransferListings');
+  if (!target || !liveTransferMarket) return;
+  const listings = ownLiveListings();
+  const snapshot = listings.map((listing) => `${listing.player_id}:${listing.updated_at || ''}:${listing.asking_fee || 0}`).join('|');
+  if (target.dataset.liveListingSnapshot === snapshot) return;
+  target.dataset.liveListingSnapshot = snapshot;
+  target.innerHTML = listings.length ? listings.map((listing) => `
+    <article class="incoming-transfer-offer">
+      <div><strong>${escapeHtml(listing.player_name || listing.player_id)}</strong><span>Listed for ${formatMoney(listing.asking_fee || 0)}</span><small>Live now · updated ${escapeHtml(new Date(listing.updated_at).toLocaleString('en-GB'))}</small></div>
+      <div class="world-control-actions"><button type="button" data-withdraw-listing data-player-id="${escapeHtml(listing.player_id)}">Withdraw listing</button></div>
+    </article>`).join('') : '<p>No players are currently transfer listed.</p>';
+
+  const status = document.getElementById('transferNegotiationStatus');
+  if (status) status.textContent = `${(liveTransferMarket.incoming_offers || []).length} incoming · ${(liveTransferMarket.outgoing_offers || []).length} outgoing · ${listings.length} listed`;
+}
+
+async function refreshLiveTransferPresentation() {
+  if (!portalAuthorization) return null;
+  if (liveTransferRefreshPromise) return liveTransferRefreshPromise;
+  liveTransferRefreshPromise = followupFetch('/api/transfer-deals', {
+    headers: { authorization: portalAuthorization },
+    cache: 'no-store'
+  }).then(async (response) => {
+    if (!response.ok) throw new Error(`Transfer market refresh failed (${response.status})`);
+    liveTransferMarket = await response.json();
+    enhanceSquadTransferStatus();
+    renderLiveTransferListings();
+    return liveTransferMarket;
+  }).finally(() => { liveTransferRefreshPromise = null; });
+  return liveTransferRefreshPromise;
 }
 
 function retryTransferListing(playerId, attempt) {
@@ -216,7 +314,10 @@ document.addEventListener('tbg:view-changed', (event) => {
   });
   if (event.detail?.view === 'squad') queueMicrotask(() => {
     watchSquadStatus();
-    enhanceSquadTransferStatus();
+    refreshLiveTransferPresentation().catch(() => enhanceSquadTransferStatus());
+  });
+  if (event.detail?.view === 'transfers') queueMicrotask(() => {
+    refreshLiveTransferPresentation().catch(() => {});
   });
 });
 window.addEventListener('tbg:portal-rendered', () => {
@@ -224,4 +325,5 @@ window.addEventListener('tbg:portal-rendered', () => {
   installNewsCategories();
   watchSquadStatus();
   enhanceSquadTransferStatus();
+  queueMicrotask(() => refreshLiveTransferPresentation().catch(() => {}));
 });
