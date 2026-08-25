@@ -39,9 +39,19 @@ test('#310 landing-page guide link remains readable on the dark story panel', ()
   assert.match(css, /outline:\s*2px solid #FFDC02/i);
 });
 
-test('#310 guide includes the five post-matchday feedback questions', () => {
+test('#310 guide puts post-matchday questions directly after tester-role guidance', () => {
   const guide = read('public/alpha-guide.html');
   for (const question of ['What confused you?', 'What was fun?', 'What felt like work?', 'What did you expect to be able to do but could not?', 'What decision felt meaningless?']) {
     assert.match(guide, new RegExp(question.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
+  const testerIndex = guide.indexOf('Your job as a tester');
+  const feedbackIndex = guide.indexOf('Five questions we actually care about');
+  const expectationsIndex = guide.indexOf('What to expect');
+  assert.ok(testerIndex >= 0 && feedbackIndex > testerIndex && expectationsIndex > feedbackIndex);
+});
+
+test('#310 guide keeps the in-game report instruction concise', () => {
+  const guide = read('public/alpha-guide.html');
+  assert.match(guide, /Use <strong>Report \/ feedback<\/strong> in the Manager Portal\.<\/p>/);
+  assert.doesNotMatch(guide, /does not require a GitHub account/i);
 });
