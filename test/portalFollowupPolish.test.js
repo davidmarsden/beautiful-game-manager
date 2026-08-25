@@ -27,11 +27,13 @@ test('news adds transfer-style category tabs and tablet-friendly reading columns
   assert.match(css, /@media\(max-width:980px\)/);
 });
 
-test('inbox overview, updates and player links use the shared blue yellow cream hierarchy', async () => {
+test('inbox uses the shared hierarchy and two reading columns on wide screens', async () => {
   const css = await read('public/portal-followup.css');
 
   assert.match(css, /#dashboardView #portalOverview>article/);
-  assert.match(css, /#dashboardView #inboxList/);
+  assert.match(css, /#dashboardView #inboxList\{/);
+  assert.match(css, /#dashboardView #inboxList\{[\s\S]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(css, /@media\(max-width:980px\)\{[\s\S]*#dashboardView #inboxList\{grid-template-columns:1fr\}/);
   assert.match(css, /var\(--tbg-colour-cream,#f8f7e8\)/);
   assert.match(css, /var\(--tbg-brazil-blue,#193375\)/);
   assert.match(css, /var\(--tbg-brazil-yellow,#FFDC02\)/);
@@ -58,6 +60,41 @@ test('squad transfer status is distinct and unlisted players have a direct listi
   assert.match(css, /#squadView \.badge\.transfer/);
   assert.match(css, /#squadView \.badge\.loan/);
   assert.match(css, /#squadView \.badge\.loaned/);
+});
+
+test('live transfer listings are re-read and reflected in Squad and Transfers immediately', async () => {
+  const behaviour = await read('public/portal-followup.js');
+
+  assert.match(behaviour, /followupFetch\('\/api\/transfer-deals'/);
+  assert.match(behaviour, /cache: 'no-store'/);
+  assert.match(behaviour, /refreshLiveTransferPresentation\(\)/);
+  assert.match(behaviour, /listing\.is_own_listing && listing\.status === 'active'/);
+  assert.match(behaviour, /makeLiveListedBadge/);
+  assert.match(behaviour, /badge\.dataset\.liveTransferListing = 'true'/);
+  assert.match(behaviour, /renderLiveTransferListings/);
+  assert.match(behaviour, /data-withdraw-listing/);
+  assert.match(behaviour, /event\.detail\?\.view === 'squad'/);
+  assert.match(behaviour, /event\.detail\?\.view === 'transfers'/);
+});
+
+test('live listing refresh observes actual command completion and preserves parallel loan states', async () => {
+  const behaviour = await read('public/portal-followup.js');
+
+  assert.match(behaviour, /watchTransferMutationCompletion/);
+  assert.match(behaviour, /Player listed immediately\|Transfer listing withdrawn immediately/);
+  assert.match(behaviour, /observer\.observe\(message, \{ childList: true, characterData: true, subtree: true \}\)/);
+  assert.match(behaviour, /transferOnlyControls\(statusCell\)\.forEach\(\(control\) => control\.remove\(\)\)/);
+  assert.match(behaviour, /statusCell\.append\(makeLiveListedBadge\(listing\)\)/);
+  assert.match(behaviour, /statusCell\.append\(makeListPlayerAction\(playerId\)\)/);
+  assert.doesNotMatch(behaviour, /statusCell\.replaceChildren\(makeLiveListedBadge/);
+});
+
+test('live listing reconciliation changes only the listed count so legacy offer counts survive', async () => {
+  const behaviour = await read('public/portal-followup.js');
+
+  assert.match(behaviour, /function updateListedSummaryCount\(listingCount\)/);
+  assert.match(behaviour, /current\.replace\(\/·\\s\+\\d\+\\s\+listed\\s\*\$\/, `· \$\{listingCount\} listed`\)/);
+  assert.doesNotMatch(behaviour, /liveTransferMarket\.incoming_offers \|\| \[\]\)\.length.*liveTransferMarket\.outgoing_offers/s);
 });
 
 test('manager directory resolves canonical club names instead of exposing club ids when available', async () => {
