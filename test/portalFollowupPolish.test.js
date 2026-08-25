@@ -67,7 +67,6 @@ test('live transfer listings are re-read and reflected in Squad and Transfers im
 
   assert.match(behaviour, /followupFetch\('\/api\/transfer-deals'/);
   assert.match(behaviour, /cache: 'no-store'/);
-  assert.match(behaviour, /\['list', 'withdraw'\]\.includes/);
   assert.match(behaviour, /refreshLiveTransferPresentation\(\)/);
   assert.match(behaviour, /listing\.is_own_listing && listing\.status === 'active'/);
   assert.match(behaviour, /makeLiveListedBadge/);
@@ -76,6 +75,26 @@ test('live transfer listings are re-read and reflected in Squad and Transfers im
   assert.match(behaviour, /data-withdraw-listing/);
   assert.match(behaviour, /event\.detail\?\.view === 'squad'/);
   assert.match(behaviour, /event\.detail\?\.view === 'transfers'/);
+});
+
+test('live listing refresh observes actual command completion and preserves parallel loan states', async () => {
+  const behaviour = await read('public/portal-followup.js');
+
+  assert.match(behaviour, /watchTransferMutationCompletion/);
+  assert.match(behaviour, /Player listed immediately\|Transfer listing withdrawn immediately/);
+  assert.match(behaviour, /observer\.observe\(message, \{ childList: true, characterData: true, subtree: true \}\)/);
+  assert.match(behaviour, /transferOnlyControls\(statusCell\)\.forEach\(\(control\) => control\.remove\(\)\)/);
+  assert.match(behaviour, /statusCell\.append\(makeLiveListedBadge\(listing\)\)/);
+  assert.match(behaviour, /statusCell\.append\(makeListPlayerAction\(playerId\)\)/);
+  assert.doesNotMatch(behaviour, /statusCell\.replaceChildren\(makeLiveListedBadge/);
+});
+
+test('live listing reconciliation changes only the listed count so legacy offer counts survive', async () => {
+  const behaviour = await read('public/portal-followup.js');
+
+  assert.match(behaviour, /function updateListedSummaryCount\(listingCount\)/);
+  assert.match(behaviour, /current\.replace\(\/·\\s\+\\d\+\\s\+listed\\s\*\$\/, `· \$\{listingCount\} listed`\)/);
+  assert.doesNotMatch(behaviour, /liveTransferMarket\.incoming_offers \|\| \[\]\)\.length.*liveTransferMarket\.outgoing_offers/s);
 });
 
 test('manager directory resolves canonical club names instead of exposing club ids when available', async () => {
