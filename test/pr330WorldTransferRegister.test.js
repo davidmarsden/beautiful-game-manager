@@ -27,6 +27,15 @@ test('#330 world register exposes the exact current revision package and deal-le
   assert.match(sql, /'integrity_level', deal\.integrity_level/);
 });
 
+test('#330 preserves the original agreement time after terminal lifecycle updates', async () => {
+  const sql = await read(migration);
+
+  assert.match(sql, /deal\.grace_expires_at - make_interval\(mins => coalesce\(deal\.integrity_cooling_minutes, 15\)\) as agreed_at/);
+  assert.match(sql, /'agreed_at', deal\.agreed_at/);
+  assert.doesNotMatch(sql, /'agreed_at', deal\.updated_at/);
+  assert.match(sql, /Agreement time must remain stable after later lifecycle updates mutate/);
+});
+
 test('#330 private reports are service-only, structured and idempotent per manager/deal', async () => {
   const sql = await read(migration);
 
