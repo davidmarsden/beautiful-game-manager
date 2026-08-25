@@ -52,9 +52,17 @@ test('#333 section cards expose accessible selected state and responsive card la
   assert.match(source, /@media \(max-width: 480px\)/);
 });
 
-test('#333 preparing a listed-player offer returns the manager to My Transfers', async () => {
+test('#333 prepares the live exchange draft before leaving Transfer Market', async () => {
   const source = await read('public/transfer-section-cards.js');
 
-  assert.match(source, /\[data-open-market-prepare-offer\]/);
-  assert.match(source, /queueMicrotask\(\(\) => selectSection\('my'\)\)/);
+  assert.match(source, /function prepareLiveExchangeFromListing\(button\)/);
+  assert.match(source, /getElementById\('receivePlayer'\)/);
+  assert.match(source, /getElementById\('addReceivePlayer'\)/);
+  assert.match(source, /getElementById\('offerCash'\)/);
+  assert.match(source, /club\.dispatchEvent\(new Event\('change'/);
+  assert.match(source, /addReceivePlayer\.click\(\)/);
+  assert.match(source, /data-exchange-contract-player/);
+  assert.match(source, /if \(submit\.disabled\) throw new Error\('The prepared offer is incomplete\.'/);
+  assert.match(source, /prepareLiveExchangeFromListing\(prepare\);\s*selectSection\('my'\)/s);
+  assert.match(source, /catch \(error\) \{\s*showMarketPreparationError\(error\);/s);
 });
