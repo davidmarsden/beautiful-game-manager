@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>The Beautiful Game — Alpha Rulebook</title>
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./football-pink-stock.css">
+  <link rel="stylesheet" href="./governance-page.css">
+</head>
+<body class="governance-page">
+  <header class="governance-topbar">
+    <a href="./">THE BEAUTIFUL GAME</a>
+    <span class="governance-pill">CURRENT ALPHA RULES</span>
+  </header>
+  <main class="governance-shell">
+    <section class="governance-hero">
+      <span class="governance-label">Player-facing rules · v0.1</span>
+      <h1>Alpha Rulebook</h1>
+      <p>This is the rulebook for the current controlled-alpha game: what managers can actually use now, plus the known limitations that materially affect play. Future constitutional systems are deliberately kept separate.</p>
+      <div class="governance-actions">
+        <a class="primary" href="./">Open Manager Portal</a>
+        <a href="./alpha-guide.html">Alpha Guide</a>
+        <a href="./road-ahead.html">The Road Ahead</a>
+      </div>
+    </section>
+
+    <section class="governance-grid">
+      <article class="governance-card"><span class="governance-number">01</span><h2>The World</h2><p>TBG currently runs as one persistent shared world with <strong>80 clubs</strong>, <strong>4 divisions</strong> and <strong>20 clubs per division</strong>. Clubs, players, transfers, results and history persist from matchday to matchday.</p></article>
+      <article class="governance-card"><span class="governance-number">02</span><h2>Managers and clubs</h2><p>A human manager controls one appointed club. The Manager Portal is private to that appointment. The first alpha cohort is deliberately small; unmanaged clubs still exist in the same canonical world.</p></article>
+      <article class="governance-card wide"><span class="governance-number">03</span><h2>Squads</h2><p>Every club has two separate ownership cohorts: <strong>25 first-team players</strong> and <strong>25 youth players</strong>. A player aged 21 or under at season start remains youth-eligible for that season, even if he turns 22 during it.</p><p>The caps are independent. A transfer that would breach either cap must not complete.</p><p>If players age out of the youth cohort at a season boundary and push the first team over 25, they are not automatically released. The club enters temporary over-cap status, cannot add further first-team players, and must reduce to 25 before the first competitive matchday. If it does not, only 25 may be registered; the remaining contracted players stay owned but unregistered.</p></article>
+      <article class="governance-card"><span class="governance-number">04</span><h2>Players and real-world data</h2><p>TBG uses real footballers. Real-world evidence supplies governed identity, position and published ratings. A player's in-game owner is independent of his real-world club: a real-world transfer does not move him inside TBG.</p></article>
+      <article class="governance-card"><span class="governance-number">05</span><h2>Player ratings</h2><p>The match engine reads canonical player ratings. Match performances do not rewrite a player's underlying Ability. Match ratings describe that match only.</p></article>
+      <article class="governance-card"><span class="governance-number">06</span><h2>Matchdays</h2><p>Matchdays are centrally scheduled. Managers submit their team and available tactical choices before the deadline. The shared world then advances for every club, producing results, replay/commentary, player performances, tables and history.</p><p>There is no advantage to being online while the match resolves.</p></article>
+      <article class="governance-card"><span class="governance-number">07</span><h2>Missing submissions</h2><p>If a manager misses a deadline or submits an invalid XI, TBG uses a deterministic fallback. One manager's missed submission cannot block the shared world.</p></article>
+      <article class="governance-card"><span class="governance-number">08</span><h2>Fitness, morale and availability</h2><p>Fitness, morale, injuries and suspensions can affect selection and match performance. They are in-world match states and do not change underlying real-world-derived Ability.</p></article>
+      <article class="governance-card"><span class="governance-number">09</span><h2>Transfers</h2><p>The current market supports listings, offers, counter-offers, declines, withdrawals, agreements and delayed settlement. Completed transfers are recorded in Transfer History. Settlement is designed to update ownership, contracts and finance together rather than partially.</p></article>
+      <article class="governance-card"><span class="governance-number">10</span><h2>Free agents and external players</h2><p>Managers can acquire eligible free agents and eligible real players from the wider registry who are not yet owned in the canonical world. Identity checks prevent duplicate versions of the same footballer.</p></article>
+      <article class="governance-card"><span class="governance-number">11</span><h2>Contracts and renewals</h2><p>The alpha includes the contract lifecycle needed to keep squads viable, including expiries and renewals. Incoming transfers, renewals and free agents must respect wage affordability.</p><p>Agents, promises, player ambitions and competing career choices are not yet part of the current alpha.</p></article>
+      <article class="governance-card"><span class="governance-number">12</span><h2>Club finance</h2><p>Every club currently has canonical cash, wage bill, wage budget and wage headroom. Transfer cash moves with settlement. Unaffordable deals must fail without partially changing world state.</p><p>The richer economy, FFP sanctions and Board Backing are future systems.</p></article>
+      <article class="governance-card"><span class="governance-number">13</span><h2>World Feed</h2><p>World Feed v0 supports manager posts, comments, system-generated events and moderation. It is a community/presentation layer and does not directly alter match simulation.</p><p>Automated journalism, press conferences and transfer-rumour mechanics are not implemented yet.</p></article>
+      <article class="governance-card"><span class="governance-number">14</span><h2>Results, replay and history</h2><p>Managers can see canonical results, league tables, archives, replay/presentation data and player-performance ratings. Completed matchdays become permanent world history.</p></article>
+      <article class="governance-card wide"><span class="governance-number">15</span><h2>Promotion and relegation — known alpha gap</h2><div class="governance-note"><p>The constitutional rule is: 1st–3rd promoted automatically from Divisions 2–4; 4th–7th enter playoffs; the playoff winner takes the fourth promotion place; bottom four are relegated automatically from Divisions 1–3.</p><p>Semi-finals are 4th v 7th and 5th v 6th over two legs, with the higher-finishing club at home second. Level aggregate ties go to extra time and penalties. The final is a single neutral-venue match. There is no away-goals rule.</p></div><p>The current engine still lacks this playoff stage. Once World Constitution v0.4 governs, the old four-automatic-promotion rollover must not be used. If alpha reaches season end first, the final tables stand but promotion, relegation and next-season divisional membership wait until the correct playoff path is available.</p></article>
+      <article class="governance-card"><span class="governance-number">16</span><h2>Cups</h2><p>The wider design includes cup competitions, but cups are not part of the current production-proven controlled-alpha core.</p></article>
+      <article class="governance-card"><span class="governance-number">17</span><h2>Loans and multi-club deals</h2><p>Straight transfers and the core exchange path exist at alpha entry. First-class loans, automatic returns and broader three-or-more-club transactions are still being developed and exercised.</p></article>
+      <article class="governance-card wide"><span class="governance-number">18</span><h2>Not yet implemented</h2><ul><li>Board Objectives and Contract Objectives</li><li>Board Confidence and the full sack race</li><li>Board Backing</li><li>Professionalism scoring</li><li>Away Mode and Warning → Caretaker → Removal</li><li>72-hour transfer-response enforcement</li><li>Knowledge Regions and deeper scouting uncertainty</li><li>autonomous player career decisions</li><li>Recruitment Windows</li><li>agents and promises</li><li>the full young-player development and Development Levy system</li><li>the constitutional transfer-fee ceiling</li><li>the wider FFP regime</li><li>automated journalism and press conferences</li><li>transfer rumours</li><li>emergent manager-style labels and deeper career reputation</li></ul></article>
+      <article class="governance-card"><span class="governance-number">19</span><h2>Alpha principle</h2><p>The alpha exists to prove that multiple human managers can safely operate different clubs in one persistent world. Reliability, world integrity, safe transactions, governed updates and clear presentation come before extra feature breadth.</p></article>
+      <article class="governance-card"><span class="governance-number">20</span><h2>Conduct</h2><p>Compete hard and negotiate hard, but treat other managers with respect. No multi-accounting, collusion, deliberate exploitation of technical faults, dishonesty or abuse.</p><p><strong>Fun. Friendship. Fair play. While attempting to utterly destroy your rivals on the pitch.</strong></p></article>
+      <article class="governance-card wide"><h2>The simple rule</h2><p>If this Alpha Rulebook says a feature exists, a manager should be able to use or encounter it in the current game. If it exists only in a constitution or roadmap, it is part of the game TBG is building — not something an alpha tester should go looking for today.</p><div class="governance-source"><strong>Source of truth:</strong> this page is a styled player-facing presentation of the governance document. <a href="https://github.com/davidmarsden/beautiful-game-governance/blob/main/docs/alpha-rulebook-v0.1.md" target="_blank" rel="noopener">View the canonical Markdown source on GitHub</a>.</div></article>
+    </section>
+  </main>
+</body>
+</html>
