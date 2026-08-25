@@ -22,6 +22,7 @@
       <div class="alpha-guide-actions">
         <a class="alpha-guide-primary" href="./">Open the Manager Portal</a>
         <a href="./rulebook.html">Alpha Rulebook — current rules</a>
+        <a href="./ratings.html">How Ratings Work — The Pink Final</a>
         <a href="./road-ahead.html">Road Ahead — planned systems</a>
       </div>
     </section>
@@ -33,7 +34,7 @@
         <p><strong>The Beautiful Game (TBG)</strong> is the shared game world: one continuing universe where managers run clubs, submit teams and tactics, negotiate transfers and live with the consequences.</p>
         <p><strong>The Pink Final (TPF)</strong> is the public player/profile/rating layer that feeds TBG. It is part of the same project philosophy: real-world evidence in, transparent and reproducible football judgements out.</p>
         <p>The ambition is a deep, governed multiplayer football game where football judgement matters more than grinding, spending or hidden admin intervention. It may grow well beyond this alpha; it may also remain a smaller community experiment. There is no promise that it becomes a commercial Football Manager-scale product.</p>
-        <p>For the rules that apply to the game you can play now, read the <a href="./rulebook.html"><strong>Alpha Rulebook</strong></a>. For constitutional systems that are planned but not necessarily implemented yet, read <a href="./road-ahead.html"><strong>The Road Ahead</strong></a>.</p>
+        <p>For the rules that apply to the game you can play now, read the <a href="./rulebook.html"><strong>Alpha Rulebook</strong></a>. For how the player ratings and update pipeline work, read <a href="./ratings.html"><strong>How Ratings Work</strong></a>. For constitutional systems that are planned but not necessarily implemented yet, read <a href="./road-ahead.html"><strong>The Road Ahead</strong></a>.</p>
       </article>
 
       <article class="alpha-guide-card">
@@ -105,6 +106,15 @@
           <li><strong>State repair is possible.</strong> Alpha bugs may require an administrator to repair an appointment, transfer or other world state.</li>
           <li><strong>Screenshot upload is not in the first report form.</strong> Add the written report in-game first; screenshots can be shared separately when useful.</li>
         </ul>
+      </article>
+
+      <article class="alpha-guide-card alpha-guide-wide">
+        <span class="alpha-guide-number">07</span>
+        <h2>Where do the player ratings come from?</h2>
+        <p><strong>The ratings in TBG are our own ratings.</strong> They are produced by a governed, deterministic TBG model rather than copied directly from another football game or database.</p>
+        <p>During development, Transfermarkt-derived data and historical SoccerWiki / Soccer Manager datasets helped us calibrate and validate the scale across real players, competitive levels, ages and positions. SoccerWiki and SMW-derived ratings are historical calibration references, not live inputs to current ratings.</p>
+        <p>The current pipeline starts from Transfermarkt-derived real-player evidence, applies the TBG rating model and publication rules, and produces the published player database shown through <strong>The Pink Final</strong> and used by TBG.</p>
+        <p>When published player data changes, TBG can surface those changes through <strong>Ratings Updates</strong> and <strong>New Players</strong> rather than silently rewriting the world. <a href="./ratings.html"><strong>Read the full How Ratings Work explainer →</strong></a></p>
       </article>
     </section>
   </main>

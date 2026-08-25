@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const PENDING_CLUB_KEY = "tbg_pending_club_id";
 const SAFE_CLUB_ID = /^[A-Za-z0-9._:-]{1,160}$/;
 const ALPHA_RULEBOOK_URL = './rulebook.html';
+const RATINGS_EXPLAINER_URL = './ratings.html';
 const ROAD_AHEAD_URL = './road-ahead.html';
 
 function addAlphaGuideLinks() {
@@ -40,10 +41,12 @@ function addGovernanceLinks() {
   const links = document.createElement('aside');
   links.id = 'tbgGovernanceLinks';
   links.className = 'tbg-governance-links';
-  links.setAttribute('aria-label', 'Rules and development roadmap');
+  links.setAttribute('aria-label', 'Rules, ratings and development roadmap');
   links.innerHTML = `
-    <strong>Rules &amp; roadmap</strong>
+    <strong>Rules, ratings &amp; roadmap</strong>
     <a href="${ALPHA_RULEBOOK_URL}">Alpha Rulebook — current rules</a>
+    <span class="tbg-governance-separator" aria-hidden="true">·</span>
+    <a href="${RATINGS_EXPLAINER_URL}">How Ratings Work — The Pink Final</a>
     <span class="tbg-governance-separator" aria-hidden="true">·</span>
     <a href="${ROAD_AHEAD_URL}">Road Ahead — planned systems</a>
   `;
