@@ -1,6 +1,7 @@
 const MESSAGE_ID = 'transferNegotiationMessage';
 const STYLE_ID = 'transferFeedbackPlacementStyles';
 const LOCAL_FEEDBACK_ATTR = 'data-transfer-action-feedback';
+const ACTION_FEEDBACK_WINDOW_MS = 5000;
 
 let placementObserver = null;
 let transferObserver = null;
@@ -22,7 +23,8 @@ function ensureStyles() {
       border-radius: .55rem;
       font-weight: 700;
     }
-    #${MESSAGE_ID}.transfer-feedback-banner:empty {
+    #${MESSAGE_ID}.transfer-feedback-banner:empty,
+    #${MESSAGE_ID}.transfer-feedback-suppressed {
       display: none;
     }
     [${LOCAL_FEEDBACK_ATTR}] {
@@ -122,15 +124,42 @@ function releaseListingActionLock() {
   setListingControlsDisabled(false);
 }
 
+function syncGlobalFeedbackVisibility(localShown) {
+  const message = transferMessage();
+  if (!message) return;
+  message.classList.toggle('transfer-feedback-suppressed', Boolean(localShown));
+}
+
+function targetMatchesCurrentAction(text) {
+  if (!activeFeedbackTarget) return false;
+  if (Date.now() - activeFeedbackTarget.capturedAt > ACTION_FEEDBACK_WINDOW_MS) return false;
+  if (!activeFeedbackTarget.confirmed) {
+    if (text === activeFeedbackTarget.baselineText) return false;
+    activeFeedbackTarget.confirmed = true;
+  }
+  return true;
+}
+
 function mirrorFeedbackLocally() {
   const message = transferMessage();
   const text = String(message?.textContent || '').trim();
+  if (!text || !targetMatchesCurrentAction(text)) {
+    syncGlobalFeedbackVisibility(false);
+    return false;
+  }
   const host = localFeedbackHost();
-  if (!host || !text) return false;
+  if (!host) {
+    syncGlobalFeedbackVisibility(false);
+    return false;
+  }
   ensureStyles();
   const local = ensureLocalFeedback(host);
-  if (!local) return false;
+  if (!local) {
+    syncGlobalFeedbackVisibility(false);
+    return false;
+  }
   if (local.textContent !== text) local.textContent = text;
+  syncGlobalFeedbackVisibility(true);
   return true;
 }
 
@@ -172,9 +201,10 @@ function placeTransferFeedback() {
   message.setAttribute('role', 'status');
   message.setAttribute('aria-live', 'polite');
 
-  // The page-level banner is the single accessible live region and a fallback
-  // summary. The mirrored action-local copy is visual-only and stays beside the
-  // control the manager actually used.
+  // The page-level message remains the single accessible live region and the
+  // fallback when no current action-local target can be proven. Hide it only
+  // after the freshly captured action changes the canonical message and its
+  // visual mirror is successfully placed beside that exact action.
   if (message.previousElementSibling !== heading) heading.after(message);
   bindMessageObserver();
   mirrorFeedbackLocally();
@@ -187,13 +217,18 @@ function captureFeedbackTarget(event) {
   const control = event.target.closest?.([
     '#submitNegotiation',
     '[data-deal-response]',
+    '[data-exchange-response]',
     '[data-agreed-change-action]',
     '[data-withdraw-offer]',
     '[data-withdraw-listing]',
     '[data-withdraw-legacy-offer]',
     '[data-legacy-transfer-response]'
   ].join(','));
-  if (!control) return;
+  if (!control) {
+    activeFeedbackTarget = null;
+    syncGlobalFeedbackVisibility(false);
+    return;
+  }
 
   if (control.matches('[data-withdraw-listing]')) {
     if (listingActionInFlight) {
@@ -206,25 +241,29 @@ function captureFeedbackTarget(event) {
     setListingControlsDisabled(true);
   }
 
+  const baselineText = String(transferMessage()?.textContent || '').trim();
+  const common = { baselineText, capturedAt: Date.now(), confirmed: false };
   const card = control.closest('[data-first-class-deal]');
   if (card?.dataset.firstClassDeal) {
-    activeFeedbackTarget = { type: 'deal', dealId: card.dataset.firstClassDeal };
+    activeFeedbackTarget = { ...common, type: 'deal', dealId: card.dataset.firstClassDeal };
   } else if (control.id === 'submitNegotiation') {
-    activeFeedbackTarget = { type: 'proposal' };
+    activeFeedbackTarget = { ...common, type: 'proposal' };
   } else if (control.matches('[data-withdraw-listing]')) {
-    activeFeedbackTarget = { type: 'listing', playerId: control.dataset.playerId || '' };
+    activeFeedbackTarget = { ...common, type: 'listing', playerId: control.dataset.playerId || '' };
   } else if (control.matches('[data-legacy-transfer-response]')) {
-    activeFeedbackTarget = { type: 'legacy-incoming', proposalId: control.dataset.proposalId || '' };
+    activeFeedbackTarget = { ...common, type: 'legacy-incoming', proposalId: control.dataset.proposalId || '' };
   } else if (control.matches('[data-withdraw-legacy-offer]')) {
-    activeFeedbackTarget = { type: 'legacy-outgoing', proposalId: control.dataset.proposalId || '' };
+    activeFeedbackTarget = { ...common, type: 'legacy-outgoing', proposalId: control.dataset.proposalId || '' };
   } else {
-    activeFeedbackTarget = { type: 'proposal' };
+    activeFeedbackTarget = { ...common, type: 'proposal' };
   }
 
   // Clear stale local text only from the newly selected action host. The
-  // canonical live region receives the actual progress/success/error update.
+  // canonical live region receives the real progress/success/error update;
+  // only a post-click change confirms this target and suppresses the fallback.
   const host = localFeedbackHost();
   host?.querySelector(`:scope > [${LOCAL_FEEDBACK_ATTR}]`)?.remove();
+  syncGlobalFeedbackVisibility(false);
   queueMicrotask(() => mirrorFeedbackLocally());
 }
 
