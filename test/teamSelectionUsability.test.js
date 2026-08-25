@@ -16,7 +16,7 @@ test('previous team history falls back to canonical match archives for newly app
   assert.match(source, /current \|\| history\[0\] \|\| null/);
 });
 
-test('auto-pick fills formation roles by compatible position before rating', async () => {
+test('auto-pick fills formation roles by compatible position before rating and falls back for unmatched outfield slots', async () => {
   const source = await read('public/formation-board.js');
 
   assert.match(source, /function roleCandidates\(role, pool\)/);
@@ -25,6 +25,9 @@ test('auto-pick fills formation roles by compatible position before rating', asy
   assert.match(source, /function strongestFormationSelection\(\)/);
   assert.match(source, /slotOrder/);
   assert.match(source, /left\.choices - right\.choices/);
+  assert.match(source, /const fallbackOrder = remaining\.sort/);
+  assert.match(source, /if \(picked\[index\] \|\| role === 'GK'\) return/);
+  assert.match(source, /const candidate = fallbackOrder\.shift\(\)/);
   assert.match(source, /const picked=strongestFormationSelection\(\)/);
   assert.doesNotMatch(source, /assignments=\[gk\?\.id\|\|null,\.\.\.rest\.slice\(0,10\)/);
 });
