@@ -154,25 +154,48 @@ function watchSquadStatus() {
   if (!body || body.dataset.transferStatusObserver === 'true') return;
   body.dataset.transferStatusObserver = 'true';
   const observer = new MutationObserver(() => enhanceSquadTransferStatus());
-  observer.observe(body, { childList: true });
+  observer.observe(body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['data-tbg-player-id']
+  });
   enhanceSquadTransferStatus();
+}
+
+function retryTransferListing(playerId, attempt) {
+  if (attempt < 30) setTimeout(() => prepareTransferListing(playerId, attempt + 1), 50);
 }
 
 function prepareTransferListing(playerId, attempt = 0) {
   const action = document.getElementById('negotiationAction');
   const player = document.getElementById('negotiationPlayer');
-  if (action && player) {
-    action.value = 'listing';
-    action.dispatchEvent(new Event('change', { bubbles: true }));
-    queueMicrotask(() => {
-      const refreshedPlayer = document.getElementById('negotiationPlayer');
-      if (refreshedPlayer) refreshedPlayer.value = playerId;
-      document.querySelector('[data-transfer-section="my"]')?.click();
-      document.querySelector('.transfer-negotiation-compose')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    });
+  if (!action || !player || !playerId) {
+    retryTransferListing(playerId, attempt);
     return;
   }
-  if (attempt < 30) setTimeout(() => prepareTransferListing(playerId, attempt + 1), 50);
+
+  action.value = 'listing';
+  action.dispatchEvent(new Event('change', { bubbles: true }));
+  queueMicrotask(() => {
+    const refreshedPlayer = document.getElementById('negotiationPlayer');
+    const requestedOption = refreshedPlayer
+      ? [...refreshedPlayer.options].find((option) => option.value === playerId)
+      : null;
+    if (!refreshedPlayer || !requestedOption) {
+      retryTransferListing(playerId, attempt);
+      return;
+    }
+
+    refreshedPlayer.value = playerId;
+    if (refreshedPlayer.value !== playerId) {
+      retryTransferListing(playerId, attempt);
+      return;
+    }
+
+    document.querySelector('[data-transfer-section="my"]')?.click();
+    document.querySelector('.transfer-negotiation-compose')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
 }
 
 document.addEventListener('click', (event) => {
