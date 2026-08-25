@@ -4,12 +4,13 @@ import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('Transfers uses shared Football Pink surfaces instead of white overlays', async () => {
+test('Transfers uses the current TBG Brazil surface hierarchy instead of legacy pink stock', async () => {
   const css = await read('public/transfer-negotiations.css');
-  assert.match(css, /background:var\(--tbg-surface-card,#f5d7dd\)/);
-  assert.match(css, /background:var\(--tbg-colour-workspace-raised,#f6d4db\)/);
-  assert.match(css, /background:var\(--tbg-colour-cream,#fff0df\)/);
-  assert.doesNotMatch(css, /background:rgba\(255,255,255,/);
+  assert.match(css, /background:var\(--tbg-colour-workspace-raised,#eef6e8\)/);
+  assert.match(css, /background:var\(--tbg-colour-cream,#f8f7e8\)/);
+  assert.match(css, /background:var\(--tbg-brazil-yellow,#FFDC02\)!important/);
+  assert.match(css, /border-top:3px solid var\(--tbg-brazil-blue,#193375\)/);
+  assert.doesNotMatch(css, /#f5d7dd|#f6d4db|#fff0df/);
 });
 
 test('Player Updates inherits World-page Football Pink card surfaces', async () => {
