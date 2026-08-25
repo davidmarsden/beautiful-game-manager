@@ -19,6 +19,15 @@ test('Managers is a first-class portal view rather than a nav-triggered modal', 
   assert.match(directory, /openManagerParticipation\(''\)/);
 });
 
+test('Managers directory includes the signed-in manager in the appointed total', async () => {
+  const directory = await read('public/manager-directory.js');
+
+  assert.match(directory, /const hasSelf = Boolean\(data\.manager_name \|\| data\.club_name\)/);
+  assert.match(directory, /data-manager-directory-self/);
+  assert.match(directory, /const appointedCount = directory\.length \+ \(hasSelf \? 1 : 0\)/);
+  assert.match(directory, /<strong>\$\{appointedCount\}<\/strong><span>appointed managers<\/span>/);
+});
+
 test('shared hierarchy stylesheet is loaded after dynamic page styles', async () => {
   const navigation = await read('public/portal-navigation.js');
   const hierarchy = await read('public/portal-hierarchy.css');
