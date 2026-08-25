@@ -17,14 +17,28 @@ test('transfer section cards use blue structure and yellow selected state', asyn
 test('transfer packages use neutral cards with blue player and yellow cash hierarchy', async () => {
   const css = await read('public/transfer-negotiations.css');
 
-  assert.match(css, /\.transfer-history-row\.transfer-history-package\{/);
+  assert.match(css, /\.transfer-history-panel \.transfer-history-row\.transfer-history-package\{/);
   assert.match(css, /border-left:4px solid var\(--tbg-brazil-blue,#193375\)/);
-  assert.match(css, /\.transfer-history-package>div:first-child>strong\{/);
+  assert.match(css, /\.transfer-history-panel \.transfer-history-package>div:first-child>strong\{/);
   assert.match(css, /color:var\(--tbg-brazil-blue,#193375\)/);
-  assert.match(css, /\.transfer-history-leg\{/);
+  assert.match(css, /\.transfer-history-panel \.transfer-history-leg\{/);
   assert.match(css, /background:rgba\(12,135,209,\.07\)/);
-  assert.match(css, /\.transfer-history-cash\{/);
+  assert.match(css, /\.transfer-history-panel \.transfer-history-cash\{/);
   assert.match(css, /background:rgba\(255,220,2,\.18\)/);
+  assert.match(css, /border-style:solid/);
+});
+
+test('transfer history palette outranks the later finance stylesheet rules', async () => {
+  const [transferCss, financeCss] = await Promise.all([
+    read('public/transfer-negotiations.css'),
+    read('public/finance.css')
+  ]);
+
+  assert.match(financeCss, /\.transfer-history-leg,\.transfer-history-cash\{/);
+  assert.match(financeCss, /\.transfer-history-cash\{border-style:dashed\}/);
+  assert.match(transferCss, /\.transfer-history-panel \.transfer-history-leg,/);
+  assert.match(transferCss, /\.transfer-history-panel \.transfer-history-cash\{/);
+  assert.match(transferCss, /border-style:solid/);
 });
 
 test('transfer workspaces no longer use green card fill for every content layer', async () => {
