@@ -26,6 +26,15 @@
 #dashboardView .season-progress-bar{
   background:linear-gradient(90deg,var(--tbg-brazil-yellow,#FFDC02),var(--tbg-brazil-sky,#0C87D1))!important;
 }
+#dashboardView #inboxList{
+  display:grid;
+  gap:.7rem;
+  padding:.8rem;
+  background:var(--tbg-colour-cream,#f8f7e8)!important;
+  border:1px solid rgba(25,51,117,.18);
+  border-top:3px solid var(--tbg-brazil-blue,#193375);
+}
+#dashboardView #inboxList .inbox-message{margin:0!important}
 
 /* News: transfer-like category tabs and a more comfortable reading width. */
 #feedView .world-feed-shell{max-width:1180px!important;margin-inline:auto!important}
@@ -85,6 +94,46 @@
 #updatesView .player-update-name.player-link:hover{
   color:var(--tbg-brazil-sky,#0C87D1)!important;
 }
+
+/* Squad transfer states are meaningful, not one generic pink pill. */
+#squadView .badge.neutral[data-squad-transfer-neutral],
+#squadView .squad-transfer-list-action{
+  color:#5b4c00!important;
+  background:rgba(255,220,2,.22)!important;
+  border-color:#c5a900!important;
+}
+#squadView .squad-transfer-list-action{
+  appearance:none;
+  min-height:0;
+  padding:.28rem .55rem;
+  border:1px solid #c5a900;
+  border-radius:999px;
+  font:inherit;
+  font-weight:800;
+  cursor:pointer;
+  white-space:nowrap;
+}
+#squadView .squad-transfer-list-action:hover,
+#squadView .squad-transfer-list-action:focus-visible{
+  background:var(--tbg-brazil-yellow,#FFDC02)!important;
+  color:var(--tbg-brazil-blue,#193375)!important;
+}
+#squadView .badge.transfer{
+  color:var(--tbg-brazil-blue,#193375)!important;
+  background:rgba(12,135,209,.10)!important;
+  border-color:rgba(25,51,117,.45)!important;
+}
+#squadView .badge.loan{
+  color:#075f91!important;
+  background:rgba(12,135,209,.08)!important;
+  border-color:rgba(12,135,209,.42)!important;
+}
+#squadView .badge.loaned{
+  color:#fff!important;
+  background:var(--tbg-brazil-blue,#193375)!important;
+  border-color:var(--tbg-brazil-blue,#193375)!important;
+}
+#squadView .squad-transfer-status-cell{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center}
 
 /* Updates: give the release view the same working-surface hierarchy as Transfers and Squad. */
 #updatesView .player-updates-shell{gap:.9rem}
