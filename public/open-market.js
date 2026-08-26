@@ -207,6 +207,7 @@ function prepareListedOffer(button) {
   club.value = clubId;
   club.dispatchEvent(new Event('change', { bubbles: true }));
 
+  document.querySelectorAll('#offerPlayersSelected [data-remove-exchange-player]').forEach((remove) => remove.click());
   const playerOption = [...receivePlayer.options].find((option) => option.value === playerId);
   if (!playerOption) throw new Error(`${playerName} is not available in ${clubName}'s current transfer directory.`);
   receivePlayer.value = playerId;
