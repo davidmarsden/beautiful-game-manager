@@ -20,15 +20,20 @@ test('News feed resolves actor and commenter club names from the relational club
   assert.match(executableSql, /coalesce\(actor_club\.name, item\.actor_club_id\)/i);
 });
 
-test('News feed aggregates visible comments once before projecting feed items', () => {
-  assert.match(executableSql, /with comment_rows as \(/i);
-  assert.match(executableSql, /where comment\.hidden_at is null/i);
+test('News feed computes cheap comment activity before applying the bounded item limit', () => {
+  assert.match(executableSql, /with comment_activity as \([\s\S]*max\(comment\.created_at\) as latest_comment_at/i);
+  assert.match(executableSql, /limited_items as \([\s\S]*left join comment_activity/i);
+  assert.match(executableSql, /limit greatest\(1, least\(coalesce\(p_limit, 50\), 100\)\)/i);
+});
+
+test('News feed only builds full comment JSON for selected feed items', () => {
+  assert.match(executableSql, /comment_rows as \([\s\S]*from limited_items limited_item[\s\S]*join public\.world_feed_comments comment/i);
+  assert.match(executableSql, /comment\.hidden_at is null/i);
   assert.match(executableSql, /group by comment\.feed_item_id/i);
   assert.match(executableSql, /jsonb_agg\([\s\S]*order by comment\.created_at asc, comment\.id asc/i);
 });
 
-test('News feed preserves pinned and activity ordering and the bounded limit', () => {
+test('News feed preserves pinned and activity ordering', () => {
   assert.match(executableSql, /\(item\.pinned_at is not null\) desc/i);
   assert.match(executableSql, /item\.activity_at desc/i);
-  assert.match(executableSql, /limit greatest\(1, least\(coalesce\(p_limit, 50\), 100\)\)/i);
 });
