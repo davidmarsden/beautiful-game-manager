@@ -38,10 +38,37 @@ begin
     raise exception 'No active manager appointment for this user and world';
   end if;
 
-  with comment_rows as (
+  with comment_activity as (
     select
       comment.feed_item_id,
-      max(comment.created_at) as latest_comment_at,
+      max(comment.created_at) as latest_comment_at
+    from public.world_feed_comments comment
+    join public.world_feed_items comment_item
+      on comment_item.id = comment.feed_item_id
+     and comment_item.world_id = p_world_id
+    where comment.hidden_at is null
+    group by comment.feed_item_id
+  ),
+  limited_items as (
+    select
+      item.*,
+      greatest(item.created_at, coalesce(comment_activity.latest_comment_at, item.created_at)) as activity_at
+    from public.world_feed_items item
+    left join comment_activity
+      on comment_activity.feed_item_id = item.id
+    where item.world_id = p_world_id
+      and item.hidden_at is null
+    order by
+      (item.pinned_at is not null) desc,
+      item.pinned_at desc nulls last,
+      greatest(item.created_at, coalesce(comment_activity.latest_comment_at, item.created_at)) desc,
+      item.created_at desc,
+      item.id desc
+    limit greatest(1, least(coalesce(p_limit, 50), 100))
+  ),
+  comment_rows as (
+    select
+      comment.feed_item_id,
       jsonb_agg(
         jsonb_build_object(
           'id', comment.id,
@@ -55,34 +82,16 @@ begin
         )
         order by comment.created_at asc, comment.id asc
       ) as comments
-    from public.world_feed_comments comment
-    join public.world_feed_items comment_item
-      on comment_item.id = comment.feed_item_id
-     and comment_item.world_id = p_world_id
+    from limited_items limited_item
+    join public.world_feed_comments comment
+      on comment.feed_item_id = limited_item.id
+     and comment.hidden_at is null
     join public.manager_profiles commenter
       on commenter.id = comment.manager_id
     left join public.clubs comment_club
       on comment_club.id = comment.club_id
      and comment_club.world_id = p_world_id
-    where comment.hidden_at is null
     group by comment.feed_item_id
-  ),
-  limited_items as (
-    select
-      item.*,
-      greatest(item.created_at, coalesce(comment_rows.latest_comment_at, item.created_at)) as activity_at
-    from public.world_feed_items item
-    left join comment_rows
-      on comment_rows.feed_item_id = item.id
-    where item.world_id = p_world_id
-      and item.hidden_at is null
-    order by
-      (item.pinned_at is not null) desc,
-      item.pinned_at desc nulls last,
-      greatest(item.created_at, coalesce(comment_rows.latest_comment_at, item.created_at)) desc,
-      item.created_at desc,
-      item.id desc
-    limit greatest(1, least(coalesce(p_limit, 50), 100))
   )
   select coalesce(
     jsonb_agg(
@@ -133,4 +142,4 @@ end;
 $function$;
 
 comment on function public.get_manager_world_feed_for_user(uuid, text, integer) is
-  'Returns the manager-visible World Feed using relational club names and one-pass comment aggregation; avoids monolithic world JSONB reads on the News hot path.';
+  'Returns the manager-visible World Feed using relational club names, lightweight activity aggregation and comment payloads bounded to the selected feed items; avoids monolithic world JSONB reads on the News hot path.';
