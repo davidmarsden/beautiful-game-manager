@@ -1,5 +1,15 @@
 const $ = (id) => document.getElementById(id);
 
+function applyContractDateDisplay() {
+  document.querySelectorAll('#squadRows tr').forEach((row) => {
+    const contractCell = row.children?.[8];
+    if (!contractCell) return;
+    const value = String(contractCell.textContent || '').trim();
+    const match = value.match(/^(\d{4}-\d{2}-\d{2})T/);
+    if (match) contractCell.textContent = match[1];
+  });
+}
+
 function applyCanonicalDisplay(data) {
   if (!data?.club || !data?.world) return;
   const clubName = data.club.canonical_name || data.club.club_name;
@@ -17,6 +27,7 @@ function applyCanonicalDisplay(data) {
 
   const last = data.last_fixture;
   if ($('lastFixtureCard') && !last) $('lastFixtureCard').innerHTML = '<div class="placeholder">No canonical matches have been played yet</div>';
+  applyContractDateDisplay();
 }
 
 window.addEventListener('tbg:portal-rendered', (event) => applyCanonicalDisplay(event.detail));
