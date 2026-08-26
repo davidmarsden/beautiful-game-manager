@@ -1,6 +1,5 @@
 const $ = (id) => document.getElementById(id);
-let contractDateObserver = null;
-let observedSquadRows = null;
+let contractDateInteractionsBound = false;
 
 function applyContractDateDisplay() {
   document.querySelectorAll('#squadRows tr').forEach((row) => {
@@ -12,13 +11,23 @@ function applyContractDateDisplay() {
   });
 }
 
-function observeContractDateDisplay() {
-  const squadRows = $('squadRows');
-  if (!squadRows || observedSquadRows === squadRows) return;
-  contractDateObserver?.disconnect();
-  observedSquadRows = squadRows;
-  contractDateObserver = new MutationObserver(() => applyContractDateDisplay());
-  contractDateObserver.observe(squadRows, { childList: true, subtree: true });
+function scheduleContractDateDisplay() {
+  window.setTimeout(applyContractDateDisplay, 0);
+}
+
+function bindContractDateInteractions() {
+  if (contractDateInteractionsBound) return;
+  contractDateInteractionsBound = true;
+
+  for (const id of ['registrationFilter', 'squadSearch', 'positionFilter', 'availabilityFilter']) {
+    const control = $(id);
+    if (!control) continue;
+    control.addEventListener(id === 'squadSearch' ? 'input' : 'change', scheduleContractDateDisplay);
+  }
+
+  document.querySelectorAll('#squadTable th[data-sort]').forEach((header) => {
+    header.addEventListener('click', scheduleContractDateDisplay);
+  });
 }
 
 function applyCanonicalDisplay(data) {
@@ -38,7 +47,7 @@ function applyCanonicalDisplay(data) {
 
   const last = data.last_fixture;
   if ($('lastFixtureCard') && !last) $('lastFixtureCard').innerHTML = '<div class="placeholder">No canonical matches have been played yet</div>';
-  observeContractDateDisplay();
+  bindContractDateInteractions();
   applyContractDateDisplay();
 }
 
