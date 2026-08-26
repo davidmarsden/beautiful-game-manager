@@ -19,7 +19,16 @@ test('listed player offer is prepared in the first-class exchange composer', () 
   assert.match(source, /Make offer for \$\{playerName\}/);
 });
 
-test('starting a listed-player offer clears stale part-exchange selections', () => {
-  assert.match(source, /#offerPlayersSelected \[data-remove-exchange-player\]/);
-  assert.match(source, /forEach\(\(remove\) => remove\.click\(\)\)/);
+test('starting a listed-player offer clears every stale part-exchange selection from live DOM', () => {
+  assert.match(source, /function clearStalePartExchangePlayers\(\)/);
+  assert.match(source, /for \(let guard = 0; guard < 100; guard \+= 1\)/);
+  assert.match(source, /document\.querySelector\('#offerPlayersSelected \[data-remove-exchange-player\]'\)/);
+  assert.match(source, /remove\.click\(\)/);
+  assert.match(source, /Could not clear the previous part-exchange draft/);
+});
+
+test('open-market offer preparation owns the listing click and blocks the legacy document handler', () => {
+  assert.match(source, /event\.stopPropagation\(\)/);
+  assert.match(source, /prepareListedOffer\(prepare\)/);
+  assert.match(source, /\[data-transfer-section="my"\]/);
 });
