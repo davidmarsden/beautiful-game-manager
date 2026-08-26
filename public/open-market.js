@@ -49,6 +49,7 @@ function ensureOpenMarketStyles() {
     .open-market-tabs{display:flex;gap:.4rem;padding:0 1rem .8rem;overflow-x:auto}.open-market-tabs button{white-space:nowrap}.open-market-tabs button[aria-selected="true"]{font-weight:700;box-shadow:inset 0 -2px currentColor}
     .open-market-panel{padding:0 1rem 1rem}.open-market-toolbar{display:flex;gap:.6rem;flex-wrap:wrap;align-items:end;margin-bottom:.8rem}.open-market-toolbar label{min-width:220px;flex:1}.open-market-toolbar input{width:100%}
     .open-market-results{display:grid;gap:.65rem}.open-market-card{display:flex;gap:1rem;justify-content:space-between;align-items:center;padding:.8rem;border:1px solid var(--border,#dedede);border-radius:10px}.open-market-card>div:first-child{min-width:0}.open-market-card strong,.open-market-card span,.open-market-card small{display:block}.open-market-card small{opacity:.8;margin-top:.18rem}.open-market-actions{display:flex;gap:.45rem;align-items:end;flex-wrap:wrap;justify-content:flex-end}.open-market-actions label{font-size:.82rem;min-width:95px}.open-market-actions input,.open-market-actions select{display:block;max-width:120px}.open-market-empty{padding:.85rem 0;opacity:.8}.open-market-status{padding:.55rem .8rem;border-radius:999px;background:rgba(127,127,127,.12);white-space:nowrap}.open-market-external-note{padding:.8rem;border:1px dashed var(--border,#bbb);border-radius:10px}.open-market-badge{display:inline-block!important;padding:.1rem .4rem;border-radius:999px;background:rgba(127,127,127,.12);font-size:.78rem;margin-top:.3rem}.open-market-card button[disabled]{opacity:.55}
+    .transfer-negotiation-compose[data-prepared-player-id]{outline:2px solid rgba(70,130,180,.35);outline-offset:2px}.transfer-negotiation-compose[data-prepared-player-id] h3{margin-bottom:.2rem}
     @media(max-width:720px){.open-market-card{align-items:flex-start;flex-direction:column}.open-market-actions{justify-content:flex-start;width:100%}.open-market-heading{flex-direction:column}.open-market-status{white-space:normal}}
   `;
   document.head.append(style);
@@ -76,7 +77,7 @@ function mountOpenMarket() {
   shell.className = 'open-market-shell';
   shell.innerHTML = `
     <div class="open-market-heading">
-      <div><h3>Open market</h3><p>Discover players in one place: club listings, unowned TBG/TPF free agents and Transfermarkt-ID lookup.</p></div>
+      <div><h3>Transfer market</h3><p>Find a player, make an offer, then add cash or part-exchange players if you want.</p></div>
       <span id="openMarketStatus" class="open-market-status">Ready</span>
     </div>
     <div class="open-market-tabs" role="tablist" aria-label="Open transfer market">
@@ -115,7 +116,7 @@ function listingCard(listing) {
       ${mine ? '<small class="open-market-badge">Your listing</small>' : ''}
     </div>
     <div class="open-market-actions">
-      ${mine ? '<span class="open-market-status">Already listed</span>' : `<button type="button" data-open-market-prepare-offer data-player-id="${openMarketEscape(listing.player_id)}" data-club-id="${openMarketEscape(listing.club_id || listing.seller_club_id || '')}" data-fee="${openMarketEscape(listing.asking_fee || 0)}">Prepare offer</button>`}
+      ${mine ? '<span class="open-market-status">Already listed</span>' : `<button type="button" data-open-market-prepare-offer data-player-id="${openMarketEscape(listing.player_id)}" data-player-name="${openMarketEscape(listing.player_name || listing.player_id)}" data-club-id="${openMarketEscape(listing.club_id || listing.seller_club_id || '')}" data-club-name="${openMarketEscape(listing.club_name || listing.seller_club_name || listing.club_id || listing.seller_club_id || '')}" data-fee="${openMarketEscape(listing.asking_fee || 0)}">Make offer</button>`}
     </div>
   </article>`;
 }
@@ -145,7 +146,7 @@ function renderOpenMarket() {
   });
 
   if (openMarketTab === 'listed') {
-    panel.innerHTML = `<div class="open-market-toolbar"><div><strong>Club listings</strong><div><small>Use a listing to prefill the existing first-class offer composer.</small></div></div><button type="button" data-refresh-listings>Refresh</button></div><p id="openMarketMessage" aria-live="polite"></p><div class="open-market-results">${openMarketListings.length ? openMarketListings.map(listingCard).join('') : '<p class="open-market-empty">No active transfer listings found.</p>'}</div>`;
+    panel.innerHTML = `<div class="open-market-toolbar"><div><strong>Club listings</strong><div><small>Choose a player first. TBG will open a ready-to-edit offer for that player; cash and part exchange are optional.</small></div></div><button type="button" data-refresh-listings>Refresh</button></div><p id="openMarketMessage" aria-live="polite"></p><div class="open-market-results">${openMarketListings.length ? openMarketListings.map(listingCard).join('') : '<p class="open-market-empty">No active transfer listings found.</p>'}</div>`;
     return;
   }
 
@@ -180,20 +181,59 @@ async function searchFreeAgents(query = '') {
   }
 }
 
+function clearStalePartExchangePlayers() {
+  for (let guard = 0; guard < 100; guard += 1) {
+    const remove = document.querySelector('#offerPlayersSelected [data-remove-exchange-player]');
+    if (!remove) return;
+    remove.click();
+  }
+  if (document.querySelector('#offerPlayersSelected [data-remove-exchange-player]')) {
+    throw new Error('Could not clear the previous part-exchange draft.');
+  }
+}
+
 function prepareListedOffer(button) {
   const action = document.getElementById('negotiationAction');
   const club = document.getElementById('negotiationClub');
-  const player = document.getElementById('negotiationPlayer');
-  const fee = document.getElementById('negotiationFee');
-  if (!action || !club || !player || !fee) throw new Error('The first-class offer composer is not ready yet.');
+  const receivePlayer = document.getElementById('receivePlayer');
+  const addReceivePlayer = document.getElementById('addReceivePlayer');
+  const offerCash = document.getElementById('offerCash');
+  const submit = document.getElementById('submitNegotiation');
+  const composer = document.querySelector('.transfer-negotiation-compose');
+  if (!action || !club || !receivePlayer || !addReceivePlayer || !offerCash || !submit || !composer) {
+    throw new Error('The transfer offer composer is not ready yet.');
+  }
+
+  const playerId = button.dataset.playerId || '';
+  const playerName = button.dataset.playerName || playerId || 'player';
+  const clubId = button.dataset.clubId || '';
+  const clubName = button.dataset.clubName || clubId || 'club';
+  if (!playerId || !clubId) throw new Error('This listing is missing its player or club identity.');
+
   action.value = 'offer';
   action.dispatchEvent(new Event('change', { bubbles: true }));
-  club.value = button.dataset.clubId || '';
+
+  const counterpartOption = [...club.options].find((option) => option.value === clubId);
+  if (!counterpartOption) throw new Error(`${clubName} is not currently available for direct negotiation.`);
+  club.value = clubId;
   club.dispatchEvent(new Event('change', { bubbles: true }));
-  player.value = button.dataset.playerId || '';
-  fee.value = openMarketMoney(button.dataset.fee || 0);
-  document.querySelector('.transfer-negotiation-compose')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  setOpenMarketStatus('Offer prepared');
+
+  clearStalePartExchangePlayers();
+  const playerOption = [...receivePlayer.options].find((option) => option.value === playerId);
+  if (!playerOption) throw new Error(`${playerName} is not available in ${clubName}'s current transfer directory.`);
+  receivePlayer.value = playerId;
+  addReceivePlayer.click();
+
+  offerCash.value = openMarketMoney(0);
+  submit.textContent = 'Propose offer';
+  composer.dataset.preparedPlayerId = playerId;
+  const heading = composer.querySelector('h3');
+  if (heading) heading.textContent = `Make offer for ${playerName}`;
+
+  setOpenMarketStatus(`Offer ready · ${playerName}`);
+  const message = document.getElementById('transferNegotiationMessage');
+  if (message) message.textContent = `${playerName} from ${clubName} has been added to your offer. Enter cash or add a part-exchange player, then propose the offer.`;
+  setTimeout(() => offerCash.focus({ preventScroll: true }), 0);
 }
 
 async function signFreeAgent(button) {
@@ -266,7 +306,18 @@ function handleOpenMarketClick(event) {
   const browse = event.target.closest('[data-free-agent-browse]');
   if (browse) { searchFreeAgents('').catch(showOpenMarketError); return; }
   const prepare = event.target.closest('[data-open-market-prepare-offer]');
-  if (prepare) { try { prepareListedOffer(prepare); } catch (error) { showOpenMarketError(error); } return; }
+  if (prepare) {
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      prepareListedOffer(prepare);
+      document.querySelector('[data-transfer-section="my"]')?.click();
+      document.querySelector('.transfer-negotiation-compose')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (error) {
+      showOpenMarketError(error);
+    }
+    return;
+  }
   const sign = event.target.closest('[data-sign-free-agent]');
   if (sign) { signFreeAgent(sign); }
 }
