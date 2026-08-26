@@ -181,6 +181,17 @@ async function searchFreeAgents(query = '') {
   }
 }
 
+function clearStalePartExchangePlayers() {
+  for (let guard = 0; guard < 100; guard += 1) {
+    const remove = document.querySelector('#offerPlayersSelected [data-remove-exchange-player]');
+    if (!remove) return;
+    remove.click();
+  }
+  if (document.querySelector('#offerPlayersSelected [data-remove-exchange-player]')) {
+    throw new Error('Could not clear the previous part-exchange draft.');
+  }
+}
+
 function prepareListedOffer(button) {
   const action = document.getElementById('negotiationAction');
   const club = document.getElementById('negotiationClub');
@@ -207,7 +218,7 @@ function prepareListedOffer(button) {
   club.value = clubId;
   club.dispatchEvent(new Event('change', { bubbles: true }));
 
-  document.querySelectorAll('#offerPlayersSelected [data-remove-exchange-player]').forEach((remove) => remove.click());
+  clearStalePartExchangePlayers();
   const playerOption = [...receivePlayer.options].find((option) => option.value === playerId);
   if (!playerOption) throw new Error(`${playerName} is not available in ${clubName}'s current transfer directory.`);
   receivePlayer.value = playerId;
@@ -219,7 +230,6 @@ function prepareListedOffer(button) {
   const heading = composer.querySelector('h3');
   if (heading) heading.textContent = `Make offer for ${playerName}`;
 
-  composer.scrollIntoView({ behavior: 'smooth', block: 'center' });
   setOpenMarketStatus(`Offer ready · ${playerName}`);
   const message = document.getElementById('transferNegotiationMessage');
   if (message) message.textContent = `${playerName} from ${clubName} has been added to your offer. Enter cash or add a part-exchange player, then propose the offer.`;
@@ -296,7 +306,18 @@ function handleOpenMarketClick(event) {
   const browse = event.target.closest('[data-free-agent-browse]');
   if (browse) { searchFreeAgents('').catch(showOpenMarketError); return; }
   const prepare = event.target.closest('[data-open-market-prepare-offer]');
-  if (prepare) { try { prepareListedOffer(prepare); } catch (error) { showOpenMarketError(error); } return; }
+  if (prepare) {
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      prepareListedOffer(prepare);
+      document.querySelector('[data-transfer-section="my"]')?.click();
+      document.querySelector('.transfer-negotiation-compose')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (error) {
+      showOpenMarketError(error);
+    }
+    return;
+  }
   const sign = event.target.closest('[data-sign-free-agent]');
   if (sign) { signFreeAgent(sign); }
 }
