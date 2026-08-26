@@ -1,4 +1,6 @@
 const $ = (id) => document.getElementById(id);
+let contractDateObserver = null;
+let observedSquadRows = null;
 
 function applyContractDateDisplay() {
   document.querySelectorAll('#squadRows tr').forEach((row) => {
@@ -8,6 +10,15 @@ function applyContractDateDisplay() {
     const match = value.match(/^(\d{4}-\d{2}-\d{2})T/);
     if (match) contractCell.textContent = match[1];
   });
+}
+
+function observeContractDateDisplay() {
+  const squadRows = $('squadRows');
+  if (!squadRows || observedSquadRows === squadRows) return;
+  contractDateObserver?.disconnect();
+  observedSquadRows = squadRows;
+  contractDateObserver = new MutationObserver(() => applyContractDateDisplay());
+  contractDateObserver.observe(squadRows, { childList: true, subtree: true });
 }
 
 function applyCanonicalDisplay(data) {
@@ -27,6 +38,7 @@ function applyCanonicalDisplay(data) {
 
   const last = data.last_fixture;
   if ($('lastFixtureCard') && !last) $('lastFixtureCard').innerHTML = '<div class="placeholder">No canonical matches have been played yet</div>';
+  observeContractDateDisplay();
   applyContractDateDisplay();
 }
 
