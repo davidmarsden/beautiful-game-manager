@@ -9,7 +9,7 @@ test('alpha bootstrap bridge gates authenticated secondary API traffic behind bo
   assert.match(bridge, /MAX_SECONDARY_CONCURRENCY\s*=\s*2/);
   assert.match(bridge, /bootstrapState\s*=\s*'waiting'/);
   assert.match(bridge, /details\.url\.pathname\s*===\s*'\/api\/bootstrap'/);
-  assert.match(bridge, /return queueSecondaryRequest\(args\)/);
+  assert.match(bridge, /return queueSecondaryRequest\(args, details\)/);
   assert.match(bridge, /bootstrapState !== 'ready'/);
 });
 
