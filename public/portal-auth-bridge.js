@@ -5,6 +5,7 @@
   let activeSecondary = 0;
   let bootstrapState = 'waiting';
   let bootstrapInFlight = null;
+  let requestSequence = 0;
 
   window.tbgPortalAuthorization = window.tbgPortalAuthorization || '';
 
@@ -18,8 +19,49 @@
     return {
       url,
       authorization: headers.get('authorization') || '',
-      method: String(init.method || (input instanceof Request ? input.method : 'GET')).toUpperCase()
+      priority: String(headers.get('x-tbg-priority') || '').trim().toLowerCase(),
+      method: String(init.method || (input instanceof Request ? input.method : 'GET')).toUpperCase(),
+      body: init.body
     };
+  };
+
+  const worldFeedAction = (details) => {
+    if (details?.url?.pathname !== '/api/world-feed' || details.method !== 'POST') return '';
+    if (typeof details.body !== 'string') return '';
+    try {
+      return String(JSON.parse(details.body)?.action || '').trim().toLowerCase();
+    } catch {
+      return '';
+    }
+  };
+
+  const requestPriority = (details) => {
+    if (['interactive', 'normal', 'background'].includes(details.priority)) return details.priority;
+
+    // The World Feed's first-paint GET is user-facing and should not sit behind
+    // portal background work. Projection sync and social metrics are explicitly
+    // best-effort/background actions and should yield to interactive requests.
+    if (details?.url?.pathname === '/api/world-feed') {
+      if (details.method === 'GET') return 'interactive';
+      if (['sync', 'activity'].includes(worldFeedAction(details))) return 'background';
+      return 'interactive';
+    }
+
+    return 'normal';
+  };
+
+  const priorityRank = (priority) => ({ interactive: 0, normal: 1, background: 2 })[priority] ?? 1;
+
+  const nextQueuedTask = () => {
+    if (!queue.length) return null;
+    let bestIndex = 0;
+    for (let index = 1; index < queue.length; index += 1) {
+      const best = queue[bestIndex];
+      const candidate = queue[index];
+      const rankDelta = priorityRank(candidate.priority) - priorityRank(best.priority);
+      if (rankDelta < 0 || (rankDelta === 0 && candidate.sequence < best.sequence)) bestIndex = index;
+    }
+    return queue.splice(bestIndex, 1)[0];
   };
 
   const unavailableResponse = (status = 503) => new Response(JSON.stringify({
@@ -37,7 +79,7 @@
   const drain = () => {
     if (bootstrapState !== 'ready') return;
     while (activeSecondary < MAX_SECONDARY_CONCURRENCY && queue.length) {
-      const task = queue.shift();
+      const task = nextQueuedTask();
       activeSecondary += 1;
       upstreamFetch(...task.args)
         .then(task.resolve, task.reject)
@@ -48,8 +90,14 @@
     }
   };
 
-  const queueSecondaryRequest = (args) => new Promise((resolve, reject) => {
-    queue.push({ args, resolve, reject });
+  const queueSecondaryRequest = (args, details) => new Promise((resolve, reject) => {
+    queue.push({
+      args,
+      resolve,
+      reject,
+      priority: requestPriority(details),
+      sequence: requestSequence++
+    });
     drain();
   });
 
@@ -95,6 +143,6 @@
     }
 
     if (bootstrapState === 'failed') return unavailableResponse();
-    return queueSecondaryRequest(args);
+    return queueSecondaryRequest(args, details);
   };
 })();
