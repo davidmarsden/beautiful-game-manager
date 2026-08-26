@@ -16,3 +16,10 @@ test('canonical display reapplies contract date formatting after portal render',
   assert.match(source, /applyContractDateDisplay\(\);/);
   assert.match(source, /tbg:portal-rendered/);
 });
+
+test('squad-table rerenders keep contract dates trimmed', () => {
+  assert.match(source, /function observeContractDateDisplay\(\)/);
+  assert.match(source, /new MutationObserver\(\(\) => applyContractDateDisplay\(\)\)/);
+  assert.match(source, /observe\(squadRows, \{ childList: true, subtree: true \}\)/);
+  assert.match(source, /observeContractDateDisplay\(\);/);
+});
