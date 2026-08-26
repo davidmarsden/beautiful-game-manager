@@ -1,4 +1,34 @@
 const $ = (id) => document.getElementById(id);
+let contractDateInteractionsBound = false;
+
+function applyContractDateDisplay() {
+  document.querySelectorAll('#squadRows tr').forEach((row) => {
+    const contractCell = row.children?.[8];
+    if (!contractCell) return;
+    const value = String(contractCell.textContent || '').trim();
+    const match = value.match(/^(\d{4}-\d{2}-\d{2})T/);
+    if (match) contractCell.textContent = match[1];
+  });
+}
+
+function scheduleContractDateDisplay() {
+  window.setTimeout(applyContractDateDisplay, 0);
+}
+
+function bindContractDateInteractions() {
+  if (contractDateInteractionsBound) return;
+  contractDateInteractionsBound = true;
+
+  for (const id of ['registrationFilter', 'squadSearch', 'positionFilter', 'availabilityFilter']) {
+    const control = $(id);
+    if (!control) continue;
+    control.addEventListener(id === 'squadSearch' ? 'input' : 'change', scheduleContractDateDisplay);
+  }
+
+  document.querySelectorAll('#squadTable th[data-sort]').forEach((header) => {
+    header.addEventListener('click', scheduleContractDateDisplay);
+  });
+}
 
 function applyCanonicalDisplay(data) {
   if (!data?.club || !data?.world) return;
@@ -17,6 +47,8 @@ function applyCanonicalDisplay(data) {
 
   const last = data.last_fixture;
   if ($('lastFixtureCard') && !last) $('lastFixtureCard').innerHTML = '<div class="placeholder">No canonical matches have been played yet</div>';
+  bindContractDateInteractions();
+  applyContractDateDisplay();
 }
 
 window.addEventListener('tbg:portal-rendered', (event) => applyCanonicalDisplay(event.detail));
