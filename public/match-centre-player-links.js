@@ -1,3 +1,4 @@
+import './match-centre-runtime-guard.js';
 import './replay-feed-queue-visibility.js';
 
 const linkedFetch = window.fetch.bind(window);
