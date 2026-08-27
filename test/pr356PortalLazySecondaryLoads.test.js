@@ -17,6 +17,8 @@ test('hidden portal views do not issue their secondary requests after dashboard 
 
   assert.match(world, /tbg:view-changed[\s\S]*view === 'world'[\s\S]*loadSharedState/);
   assert.doesNotMatch(world, /tbg:portal-rendered'[\s\S]{0,300}await api\(\)/);
+  assert.match(world, /tbg:portal-rendered'[\s\S]*sharedStateVersion \+= 1;[\s\S]*sharedState = null;[\s\S]*sharedStatePromise = null;[\s\S]*worldView[\s\S]*loadSharedState/);
+  assert.match(world, /const version = \+\+sharedStateVersion;[\s\S]*if \(version !== sharedStateVersion\) return state;/);
   assert.match(bulk, /tbg:view-changed[\s\S]*view === 'world'[\s\S]*loadBulkRegistration/);
   assert.match(ratings, /tbg:view-changed[\s\S]*view === 'squad'[\s\S]*refresh/);
   assert.doesNotMatch(ratings, /if \(!document\.getElementById\('portal'\)\?\.hidden\) refresh\(\)/);
