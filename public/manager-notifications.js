@@ -1,6 +1,7 @@
 let notificationDialog = null;
 let notificationData = null;
 let pollTimer = null;
+let notificationsActive = false;
 
 function authToken() {
   for (let index = 0; index < localStorage.length; index += 1) {
@@ -226,11 +227,18 @@ function install() {
       await refresh(true, true);
     });
   }
+}
+
+function activateNotifications() {
+  install();
+  if (notificationsActive) return;
+  notificationsActive = true;
   void refresh();
   if (!pollTimer) pollTimer = window.setInterval(() => void refresh(), 60_000);
 }
 
-window.addEventListener('tbg:portal-rendered', install);
-document.addEventListener('DOMContentLoaded', install);
-window.addEventListener('tbg:alpha-feedback-submitted', () => void refresh(true));
-install();
+window.addEventListener('tbg:portal-rendered', activateNotifications);
+window.addEventListener('tbg:portal-refreshed', activateNotifications);
+window.addEventListener('tbg:alpha-feedback-submitted', () => { if (notificationsActive) void refresh(true); });
+
+if (document.documentElement.dataset.portalReady === 'true') activateNotifications();
