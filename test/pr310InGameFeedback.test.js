@@ -63,6 +63,23 @@ test('#310 provides admin-only feedback triage and optional GitHub promotion', (
   assert.match(adminEndpoint, /Private admin notes and reporter contact details are deliberately not copied to GitHub/);
 });
 
+test('#310 GitHub promotion serializes concurrent creates and can recover stale reservations', () => {
+  const reservationMigration = read('supabase/migrations/20260827a_alpha_feedback_github_promotion_lock.sql');
+  const adminEndpoint = read('netlify/functions/alpha-feedback-admin.mjs');
+
+  assert.match(reservationMigration, /github_promotion_token uuid/);
+  assert.match(reservationMigration, /github_promotion_started_at timestamptz/);
+  assert.match(reservationMigration, /admin_reserve_alpha_feedback_promotion/);
+  assert.match(reservationMigration, /for update/);
+  assert.match(reservationMigration, /interval '5 minutes'/);
+  assert.match(reservationMigration, /promotion_in_progress/);
+  assert.match(reservationMigration, /admin_finish_alpha_feedback_promotion/);
+  assert.match(reservationMigration, /github_promotion_token = p_promotion_token/);
+  assert.match(reservationMigration, /admin_release_alpha_feedback_promotion/);
+  assert.match(adminEndpoint, /reservePromotion\(user\.id, stored\.id\)/);
+  assert.match(adminEndpoint, /releasePromotion\(user\.id, stored\.id, promotionToken\)/);
+});
+
 test('#310 GitHub promotion recovers existing links and recent issue markers before creating again', () => {
   const adminEndpoint = read('netlify/functions/alpha-feedback-admin.mjs');
 
@@ -70,6 +87,13 @@ test('#310 GitHub promotion recovers existing links and recent issue markers bef
   assert.match(adminEndpoint, /latestMatchingGithubIssue\(report\.id\)/);
   assert.match(adminEndpoint, /issues\?state=all&per_page=100&sort=created&direction=desc/);
   assert.match(adminEndpoint, /report\.status === 'new' \? 'triaged' : report\.status/);
+});
+
+test('#310 GitHub promotion treats an explicitly blank severity as a clear', () => {
+  const adminEndpoint = read('netlify/functions/alpha-feedback-admin.mjs');
+
+  assert.match(adminEndpoint, /hasOwn\(payload, 'severity'\) \? \(clean\(payload\.severity\) \|\| null\) : stored\.severity/);
+  assert.doesNotMatch(adminEndpoint, /severity: clean\(payload\.severity\) \|\| stored\.severity/);
 });
 
 test('#310 guide makes in-game reporting primary without explaining GitHub signup', () => {
