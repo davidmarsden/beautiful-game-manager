@@ -10,8 +10,8 @@ test('#291 club claiming does not cache a null auth session', () => {
   assert.match(source, /for \(let attempt = 0; attempt < 4; attempt \+= 1\)/);
 });
 
-test('#291 club claiming uses the same PKCE auth mode as the manager portal', () => {
+test('#291 club claiming uses the same persisted PKCE session without competing for refresh ownership', () => {
   assert.match(source, /flowType:\s*['\"]pkce['\"]/);
   assert.match(source, /persistSession:\s*true/);
-  assert.match(source, /autoRefreshToken:\s*true/);
+  assert.match(source, /autoRefreshToken:\s*false/);
 });

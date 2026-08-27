@@ -18,7 +18,7 @@ async function config() {
 async function session() {
   if (!client) {
     const cfg = await config();
-    client = createClient(cfg.supabase_url, cfg.supabase_anon_key, { auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
+    client = createClient(cfg.supabase_url, cfg.supabase_anon_key, { auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
   }
   const { data, error } = await client.auth.getSession();
   if (error) throw error;

@@ -18,7 +18,7 @@ async function accessToken() {
     const config = await response.json();
     if (!response.ok || !config.configured) throw new Error(config.error || 'Supabase is not configured');
     supabase = createClient(config.supabase_url, config.supabase_anon_key, {
-      auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
+      auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: false, detectSessionInUrl: false }
     });
   }
   const { data, error } = await supabase.auth.getSession();
@@ -56,7 +56,7 @@ async function submit(payload) {
       const config = await configResponse.json();
       if (configResponse.ok && config.configured) {
         supabase = createClient(config.supabase_url, config.supabase_anon_key, {
-          auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
+          auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: false, detectSessionInUrl: false }
         });
       }
     }

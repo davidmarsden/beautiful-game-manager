@@ -129,7 +129,7 @@ async function completeAuthCallback() {
     auth: {
       flowType: "pkce",
       persistSession: true,
-      autoRefreshToken: true,
+      autoRefreshToken: false,
       detectSessionInUrl: false
     }
   });
