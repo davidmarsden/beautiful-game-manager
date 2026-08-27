@@ -6,6 +6,7 @@ import './finance.js';
 import './world-feed.js';
 import './world-feed-enhancements.js';
 import './manager-participation.js';
+import './manager-notifications.js';
 import './manager-directory.js';
 
 const VIEW_ALIASES = new Map([
@@ -71,6 +72,7 @@ function retireLegacyClubNav() {
 function installWorldFeedShell() {
   installStylesheet('./world-feed.css');
   installStylesheet('./manager-participation.css');
+  installStylesheet('./manager-notifications.css');
   const workspace = document.querySelector('.workspace');
   const tabs = workspace?.querySelector('.tabs');
   if (tabs && !tabs.querySelector('[data-view="feed"]')) {
@@ -210,12 +212,10 @@ function installTransfersShell() {
 function simplifyNavigation() {
   const tabs = document.querySelector('.workspace .tabs');
   if (!tabs) return;
-
   const controls = new Map();
   tabs.querySelectorAll('[data-view]').forEach((control) => {
     if (control.dataset.view) controls.set(control.dataset.view, control);
   });
-
   NAVIGATION.forEach(([key, label]) => {
     const control = controls.get(key);
     if (!control) return;
@@ -233,8 +233,6 @@ function installDynamicShells() {
   installPlayerUpdatesShell();
   installManagersShell();
   simplifyNavigation();
-  // Load the harmonisation layer last so page-specific legacy styles cannot
-  // silently restore pink/green surfaces after the shared TBG hierarchy.
   installStylesheet('./portal-hierarchy.css');
 }
 
@@ -260,7 +258,6 @@ export function showPortalView(viewName, { focus = false } = {}) {
   if (!view) return false;
   const target = document.getElementById(`${view}View`);
   if (!target) return false;
-
   document.querySelectorAll('.workspace .view').forEach((panel) => {
     const active = panel === target;
     panel.classList.toggle('active', active);
@@ -278,7 +275,6 @@ export function showPortalView(viewName, { focus = false } = {}) {
     if (active) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
-
   if (focus) target.focus?.({ preventScroll: true });
   document.dispatchEvent(new CustomEvent('tbg:view-changed', { detail: { view } }));
   return true;
