@@ -1,6 +1,8 @@
 let notificationDialog = null;
 let notificationData = null;
 let pollTimer = null;
+let notificationsActive = false;
+let unassignedObserver = null;
 
 function authToken() {
   for (let index = 0; index < localStorage.length; index += 1) {
@@ -226,11 +228,33 @@ function install() {
       await refresh(true, true);
     });
   }
+}
+
+function activateNotifications() {
+  install();
+  if (notificationsActive) return;
+  notificationsActive = true;
+  unassignedObserver?.disconnect();
+  unassignedObserver = null;
   void refresh();
   if (!pollTimer) pollTimer = window.setInterval(() => void refresh(), 60_000);
 }
 
-window.addEventListener('tbg:portal-rendered', install);
-document.addEventListener('DOMContentLoaded', install);
-window.addEventListener('tbg:alpha-feedback-submitted', () => void refresh(true));
-install();
+function observeUnassignedPortal() {
+  const unassigned = document.getElementById('unassignedState');
+  if (!unassigned) return;
+  const activateIfRendered = () => {
+    if (!unassigned.hidden) activateNotifications();
+  };
+  activateIfRendered();
+  if (notificationsActive) return;
+  unassignedObserver = new MutationObserver(activateIfRendered);
+  unassignedObserver.observe(unassigned, { attributes: true, attributeFilter: ['hidden'] });
+}
+
+window.addEventListener('tbg:portal-rendered', activateNotifications);
+window.addEventListener('tbg:portal-refreshed', activateNotifications);
+window.addEventListener('tbg:alpha-feedback-submitted', () => { if (notificationsActive) void refresh(true); });
+
+observeUnassignedPortal();
+if (document.documentElement.dataset.portalReady === 'true') activateNotifications();
