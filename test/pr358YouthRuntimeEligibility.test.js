@@ -93,6 +93,23 @@ test('#358 competitive registration includes youth-exempt players but excludes u
   });
 });
 
+test('#358 inactive youth stays outside competitive selection despite youth exemption', () => {
+  const world = fixtureWorld();
+  const club = world.squad_cycle.clubs['tbg-club-014'];
+  const player = world.squad_cycle.players['tbg-tm-01193849'];
+  player.lifecycle_status = 'inactive';
+  player.active_circulation = false;
+
+  assert.deepEqual(competitiveRegistration(world, club, player.tbg_player_id, player), {
+    registered: false,
+    status: 'inactive',
+    youth_exempt: false
+  });
+  const selection = validateManagerSelectionEligibility(world, club.club_id, { starting_xi: [player.tbg_player_id] });
+  assert.equal(selection.valid, false);
+  assert.match(selection.errors.join('; '), /not registered for competitive selection/);
+});
+
 test('#358 persistent matchday initialization includes youth-exempt players outside explicit registration', () => {
   const { world, clubId, youth } = persistentWorldWithYouthExemption();
   assert.equal(world.squad_cycle.clubs[clubId].registered_player_ids.includes(youth), false);
@@ -103,6 +120,18 @@ test('#358 persistent matchday initialization includes youth-exempt players outs
   const runtime = runtimeForClub(report.world, clubId);
   assert.ok(runtime.state.players[youth]);
   assert.ok(runtime.state.availability.players[youth]);
+});
+
+test('#358 persistent matchday initialization excludes inactive youth players', () => {
+  const { world, clubId, youth } = persistentWorldWithYouthExemption();
+  world.squad_cycle.players[youth].lifecycle_status = 'inactive';
+  world.squad_cycle.players[youth].active_circulation = false;
+
+  const report = advancePersistentMatchday(world);
+  assert.equal(report.accepted, true);
+  const runtime = runtimeForClub(report.world, clubId);
+  assert.equal(runtime.state.players[youth], undefined);
+  assert.equal(runtime.state.availability.players[youth], undefined);
 });
 
 test('#358 stale runtime availability does not turn a canonical youth player into unknown_player', () => {
@@ -125,6 +154,30 @@ test('#358 stale runtime availability does not turn a canonical youth player int
   });
   assert.equal(unknown.valid, false);
   assert.match(unknown.errors.join('; '), /not owned by the submitted club/);
+});
+
+test('#358 destination runtime falls back to source-runtime absence state', () => {
+  const world = fixtureWorld();
+  world.matchday_cycle.runtimes.d2 = {
+    state: {
+      availability: {
+        players: {
+          'tbg-tm-01193849': {
+            injury_until_matchday: 12,
+            suspension_until_matchday: 0,
+            injury_reason: 'hamstring',
+            suspension_reason: null
+          }
+        }
+      }
+    }
+  };
+
+  const result = validateManagerSelectionEligibility(world, 'tbg-club-014', {
+    starting_xi: ['tbg-tm-01193849']
+  });
+  assert.equal(result.valid, false);
+  assert.match(result.errors.join('; '), /is injured for matchday 11/);
 });
 
 test('#358 runtime reconciliation initializes missing eligible player state without erasing known absences', () => {
