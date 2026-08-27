@@ -97,7 +97,15 @@ function renderNotifications(root) {
     row.querySelector('strong').textContent = item.title || 'Notification';
     row.querySelector('p').textContent = item.body || '';
     row.querySelector('small').textContent = relativeTime(item.created_at);
-    row.addEventListener('click', () => { if (!item.read_at) void mutate({ action: 'mark-read', notification_id: item.id }); });
+    row.addEventListener('click', async () => {
+      if (item.read_at) return;
+      if (item.action_url) {
+        void mutate({ action: 'mark-read', notification_id: item.id });
+        return;
+      }
+      await mutate({ action: 'mark-read', notification_id: item.id });
+      await refresh(true);
+    });
     list.append(row);
   }
   root.append(list);
