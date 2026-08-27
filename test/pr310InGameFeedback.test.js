@@ -54,7 +54,7 @@ test('#310 provides admin-only feedback triage and optional GitHub promotion', (
   assert.match(adminClient, /client_context/);
   assert.match(adminClient, /Browser \/ device/);
   assert.match(adminClient, /Create GitHub issue/);
-  assert.match(adminClient, /action,'promote'/);
+  assert.match(adminClient, /rowPayload\(row,'promote'\)/);
   assert.match(adminClient, /Open GitHub issue/);
   assert.match(adminEndpoint, /admin_update_alpha_feedback_report/);
   assert.match(adminEndpoint, /process\.env\.GITHUB_TOKEN/);
