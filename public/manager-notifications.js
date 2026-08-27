@@ -1,0 +1,207 @@
+let notificationDialog = null;
+let notificationData = null;
+let pollTimer = null;
+
+function authToken() {
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (!key?.startsWith('sb-') || !key.endsWith('-auth-token')) continue;
+    try {
+      const stored = JSON.parse(localStorage.getItem(key));
+      const token = stored?.access_token || stored?.currentSession?.access_token;
+      if (token) return token;
+    } catch {}
+  }
+  return '';
+}
+
+function ensureBell() {
+  let button = document.getElementById('managerNotificationsButton');
+  if (button) return button;
+  const managerChip = document.getElementById('managerChip');
+  if (!managerChip?.parentElement) return null;
+  button = document.createElement('button');
+  button.id = 'managerNotificationsButton';
+  button.className = 'manager-notifications-button';
+  button.type = 'button';
+  button.setAttribute('aria-label', 'Notifications');
+  button.innerHTML = '<span aria-hidden="true">🔔</span><strong hidden>0</strong>';
+  managerChip.before(button);
+  return button;
+}
+
+function ensureDialog() {
+  if (notificationDialog) return notificationDialog;
+  const dialog = document.createElement('dialog');
+  dialog.className = 'manager-notifications-dialog';
+  dialog.innerHTML = `
+    <div class="manager-notifications-card">
+      <header><div><small>MANAGER INBOX</small><h2>Notifications</h2></div><button type="button" class="manager-notifications-close" aria-label="Close">×</button></header>
+      <div class="manager-notifications-tabs"><button type="button" data-tab="notifications" class="active">Notifications</button><button type="button" data-tab="reports">My reports</button></div>
+      <div class="manager-notifications-content"></div>
+    </div>`;
+  dialog.querySelector('.manager-notifications-close').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
+  dialog.querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => {
+    dialog.querySelectorAll('[data-tab]').forEach((node) => node.classList.toggle('active', node === button));
+    render(button.dataset.tab);
+  }));
+  document.body.append(dialog);
+  notificationDialog = dialog;
+  return dialog;
+}
+
+function relativeTime(value) {
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return '';
+  const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+  if (seconds < 60) return 'Just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+  return new Date(value).toLocaleDateString();
+}
+
+function statusLabel(report) {
+  if (report.status === 'new') return 'Received';
+  if (report.status === 'triaged') return 'Confirmed';
+  if (report.status === 'fixed') return 'Fixed';
+  if (report.status === 'wont_fix') return 'Closed';
+  return report.status || 'Received';
+}
+
+function renderNotifications(root) {
+  const notifications = notificationData?.notifications || [];
+  const controls = document.createElement('div');
+  controls.className = 'manager-notifications-controls';
+  controls.innerHTML = `<span>${Number(notificationData?.unread_count || 0)} unread</span><button type="button">Mark all read</button>`;
+  controls.querySelector('button').disabled = !Number(notificationData?.unread_count || 0);
+  controls.querySelector('button').addEventListener('click', async () => {
+    await mutate({ action: 'mark-all-read' });
+    await refresh(true);
+  });
+  root.append(controls);
+  if (!notifications.length) {
+    root.insertAdjacentHTML('beforeend', '<p class="manager-notifications-empty">Nothing here yet.</p>');
+    return;
+  }
+  const list = document.createElement('div');
+  list.className = 'manager-notifications-list';
+  for (const item of notifications) {
+    const row = document.createElement(item.action_url ? 'a' : 'button');
+    row.className = `manager-notification manager-notification-${item.notification_class || 'info'}${item.read_at ? '' : ' unread'}`;
+    if (item.action_url) { row.href = item.action_url; row.target = /^https?:/i.test(item.action_url) ? '_blank' : '_self'; row.rel = 'noopener noreferrer'; }
+    else row.type = 'button';
+    row.innerHTML = '<span class="manager-notification-icon"></span><div><strong></strong><p></p><small></small></div>';
+    row.querySelector('.manager-notification-icon').textContent = item.notification_class === 'action_required' ? '⚡' : item.notification_class === 'reward' ? '🏅' : '●';
+    row.querySelector('strong').textContent = item.title || 'Notification';
+    row.querySelector('p').textContent = item.body || '';
+    row.querySelector('small').textContent = relativeTime(item.created_at);
+    row.addEventListener('click', async () => {
+      if (item.read_at) return;
+      if (item.action_url) {
+        void mutate({ action: 'mark-read', notification_id: item.id });
+        return;
+      }
+      await mutate({ action: 'mark-read', notification_id: item.id });
+      await refresh(true);
+    });
+    list.append(row);
+  }
+  root.append(list);
+}
+
+function renderReports(root) {
+  const hunter = notificationData?.bug_hunter || {};
+  const summary = document.createElement('div');
+  summary.className = 'bug-hunter-summary';
+  summary.innerHTML = `<span>🐞</span><div><strong>Bug Hunter</strong><p><b>${Number(hunter.confirmed_reports || 0)}</b> confirmed reports · <b>${Number(hunter.points || 0)}</b> impact points</p></div>`;
+  root.append(summary);
+  const reports = notificationData?.reports || [];
+  if (!reports.length) { root.insertAdjacentHTML('beforeend', '<p class="manager-notifications-empty">You have not submitted any alpha reports yet.</p>'); return; }
+  const list = document.createElement('div');
+  list.className = 'manager-report-list';
+  for (const report of reports) {
+    const row = document.createElement('article');
+    row.className = 'manager-report-row';
+    const events = Array.isArray(report.events) ? report.events : [];
+    row.innerHTML = `<header><div><strong></strong><small></small></div><span></span></header><div class="manager-report-timeline"></div>`;
+    row.querySelector('strong').textContent = report.page_area || (report.kind === 'bug' ? 'Bug report' : 'Feedback');
+    row.querySelector('small').textContent = `${report.category || 'other'} · ${relativeTime(report.created_at)}`;
+    const badge = row.querySelector('header > span');
+    badge.textContent = statusLabel(report);
+    badge.dataset.status = report.status || 'new';
+    const timeline = row.querySelector('.manager-report-timeline');
+    for (const event of events) {
+      const item = document.createElement('div');
+      item.innerHTML = '<span></span><p></p><small></small>';
+      item.querySelector('span').textContent = '●';
+      item.querySelector('p').textContent = String(event.event_type || '').replace(/^status_/, '').replaceAll('_', ' ');
+      item.querySelector('small').textContent = relativeTime(event.created_at);
+      timeline.append(item);
+    }
+    if (report.github_issue_url) {
+      const link = document.createElement('a');
+      link.href = report.github_issue_url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = 'Open engineering issue ↗';
+      row.append(link);
+    }
+    list.append(row);
+  }
+  root.append(list);
+}
+
+function render(tab = 'notifications') {
+  const root = ensureDialog().querySelector('.manager-notifications-content');
+  root.replaceChildren();
+  if (!notificationData) { root.innerHTML = '<p class="manager-notifications-empty">Loading notifications…</p>'; return; }
+  if (tab === 'reports') renderReports(root); else renderNotifications(root);
+}
+
+async function mutate(body) {
+  const token = authToken();
+  if (!token) return;
+  await fetch('/api/manager-notifications', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+}
+
+async function refresh(forceRender = false) {
+  const token = authToken();
+  if (!token) return;
+  const response = await fetch('/api/manager-notifications', { headers: { authorization: `Bearer ${token}` } });
+  if (!response.ok) return;
+  notificationData = await response.json();
+  const bell = ensureBell();
+  const count = Number(notificationData.unread_count || 0);
+  const badge = bell?.querySelector('strong');
+  if (badge) { badge.textContent = String(count); badge.hidden = count === 0; }
+  if (forceRender && notificationDialog?.open) {
+    const tab = notificationDialog.querySelector('[data-tab].active')?.dataset.tab || 'notifications';
+    render(tab);
+  }
+}
+
+function install() {
+  const bell = ensureBell();
+  if (bell && !bell.dataset.notificationsBound) {
+    bell.dataset.notificationsBound = 'true';
+    bell.addEventListener('click', async () => {
+      const dialog = ensureDialog();
+      render('notifications');
+      if (!dialog.open) dialog.showModal();
+      await refresh(true);
+    });
+  }
+  void refresh();
+  if (!pollTimer) pollTimer = window.setInterval(() => void refresh(), 60_000);
+}
+
+window.addEventListener('tbg:portal-rendered', install);
+document.addEventListener('DOMContentLoaded', install);
+window.addEventListener('tbg:alpha-feedback-submitted', () => void refresh(true));
+install();

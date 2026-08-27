@@ -60,8 +60,6 @@ async function clubNamesForWorld(userId, worldId) {
     const clubs = Array.isArray(result?.directory?.clubs) ? result.directory.clubs : [];
     return new Map(clubs.map((club) => [String(club.club_id || ''), club.club_name || club.club_id]).filter(([id]) => id));
   } catch {
-    // Club-name decoration is presentational. Keep manager profiles usable if the
-    // cached transfer directory is temporarily unavailable and fall back to IDs.
     return new Map();
   }
 }
@@ -91,12 +89,8 @@ async function contactFor(managerId, isSelf) {
   const rows = await serviceSupabase(`/rest/v1/manager_public_contacts?manager_id=eq.${encodeURIComponent(managerId)}&select=whatsapp,contact_email,discord,publish_whatsapp,publish_email,publish_discord&limit=1`);
   const row = rows[0] || {};
   if (isSelf) return {
-    whatsapp: row.whatsapp || '',
-    contact_email: row.contact_email || '',
-    discord: row.discord || '',
-    publish_whatsapp: Boolean(row.publish_whatsapp),
-    publish_email: Boolean(row.publish_email),
-    publish_discord: Boolean(row.publish_discord)
+    whatsapp: row.whatsapp || '', contact_email: row.contact_email || '', discord: row.discord || '',
+    publish_whatsapp: Boolean(row.publish_whatsapp), publish_email: Boolean(row.publish_email), publish_discord: Boolean(row.publish_discord)
   };
   return {
     whatsapp: row.publish_whatsapp ? row.whatsapp || '' : '',
@@ -117,11 +111,16 @@ async function saveContact(managerId, body) {
     updated_at: new Date().toISOString()
   };
   await serviceSupabase('/rest/v1/manager_public_contacts?on_conflict=manager_id', {
-    method: 'POST',
-    headers: { prefer: 'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify(row)
+    method: 'POST', headers: { prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(row)
   });
   return contactFor(managerId, true);
+}
+
+async function bugHunterFor(userId, worldId, target) {
+  return serviceSupabase('/rest/v1/rpc/get_manager_bug_hunter_for_user', {
+    method: 'POST',
+    body: JSON.stringify({ p_user_id: userId, p_world_id: worldId, p_target_manager_id: target })
+  });
 }
 
 export default async (request) => {
@@ -141,17 +140,17 @@ export default async (request) => {
 
     const url = new URL(request.url);
     const target = String(url.searchParams.get('manager_id') || '').trim() || null;
-    const result = await serviceSupabase('/rest/v1/rpc/get_manager_participation_for_user', {
-      method: 'POST',
-      body: JSON.stringify({
-        p_user_id: user.id,
-        p_world_id: context.worldId,
-        p_target_manager_id: target
-      })
-    });
+    const [result, hunter] = await Promise.all([
+      serviceSupabase('/rest/v1/rpc/get_manager_participation_for_user', {
+        method: 'POST', body: JSON.stringify({ p_user_id: user.id, p_world_id: context.worldId, p_target_manager_id: target })
+      }),
+      bugHunterFor(user.id, context.worldId, target)
+    ]);
 
     const targetId = target || context.managerId;
     const isSelf = String(targetId) === String(context.managerId) || result?.is_self === true;
+    result.pins = [...(Array.isArray(result.pins) ? result.pins : []), ...(Array.isArray(hunter?.pins) ? hunter.pins : [])];
+    if (isSelf && hunter?.private_detail) result.bug_hunter = hunter.private_detail;
     result.contact = await contactFor(targetId, isSelf);
     if (isSelf) result.directory = await managerDirectory(context.worldId, context.managerId, user.id);
     return json(result);
