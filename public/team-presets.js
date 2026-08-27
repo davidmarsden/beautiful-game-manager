@@ -15,7 +15,7 @@ async function auth() {
   if (!client) {
     const response = await fetch('/api/auth-config', { cache: 'no-store' });
     const config = await response.json();
-    client = createClient(config.supabase_url, config.supabase_anon_key, { auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
+    client = createClient(config.supabase_url, config.supabase_anon_key, { auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
   }
   const { data, error } = await client.auth.getSession();
   if (error) throw error;
