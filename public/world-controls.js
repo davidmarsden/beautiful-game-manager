@@ -4,6 +4,7 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => 
 let authorization = '';
 let bootstrap = null;
 let sharedState = null;
+let sharedStatePromise = null;
 
 const nativeFetch = window.fetch.bind(window);
 window.fetch = async (...args) => {
@@ -185,6 +186,31 @@ async function api(body = null) {
   return data;
 }
 
+async function loadSharedState({ force = false } = {}) {
+  mount();
+  if (!force && sharedState) {
+    render();
+    return sharedState;
+  }
+  if (!force && sharedStatePromise) return sharedStatePromise;
+  const pending = api()
+    .then((state) => {
+      sharedState = state;
+      render();
+      return state;
+    })
+    .catch((error) => {
+      if ($('worldControlStatus')) $('worldControlStatus').textContent = 'World unavailable';
+      if ($('worldControlMessage')) $('worldControlMessage').textContent = error.message;
+      throw error;
+    })
+    .finally(() => {
+      if (sharedStatePromise === pending) sharedStatePromise = null;
+    });
+  sharedStatePromise = pending;
+  return pending;
+}
+
 async function initializeWorld() {
   const message = $('worldControlMessage');
   message.textContent = 'Initializing canonical world…';
@@ -262,9 +288,12 @@ function bind() {
   });
 }
 
-window.addEventListener('tbg:portal-rendered', async (event) => {
+window.addEventListener('tbg:portal-rendered', (event) => {
   bootstrap = event.detail;
   mount();
-  try { sharedState = await api(); render(); }
-  catch (error) { $('worldControlStatus').textContent = 'World unavailable'; $('worldControlMessage').textContent = error.message; }
+  if ($('worldView')?.classList.contains('active')) loadSharedState().catch(() => {});
+});
+
+document.addEventListener('tbg:view-changed', (event) => {
+  if (event.detail?.view === 'world') loadSharedState().catch(() => {});
 });

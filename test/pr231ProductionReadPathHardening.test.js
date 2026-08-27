@@ -69,7 +69,8 @@ test('transfer workspace deduplicates render refreshes and suppresses stale in-f
   assert.match(source, /if \(generation !== refreshGeneration\) return state/);
   assert.match(source, /if \(refreshPromise === nextPromise\) refreshPromise = null/);
   assert.ok((source.match(/await refresh\(\{ force: true \}\)/g) || []).length >= 2, 'offer/listing and response mutations must bypass the cache');
-  assert.match(source, /window\.addEventListener\('tbg:portal-rendered',[\s\S]*await refresh\(\)/);
+  assert.match(source, /document\.addEventListener\('tbg:view-changed',[\s\S]*view === 'transfers'[\s\S]*refresh\(\)/);
+  assert.match(source, /window\.addEventListener\('tbg:portal-rendered',[\s\S]*transfersView[\s\S]*refresh\(\)/);
 });
 
 test('read caches are service-role-only implementation details', async () => {

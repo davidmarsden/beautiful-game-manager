@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { loadPersistentWorld } from '../../src/world/persistentSeasonLoop.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
@@ -59,10 +58,13 @@ async function identity(token) {
   return { user, manager, appointment };
 }
 
-async function canonicalWorld(token, worldId) {
-  const rows = await userSupabase(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(worldId)}&select=*&limit=1`, token);
-  if (!rows[0]) throw new Error('Canonical world has not been initialized');
-  return rows[0];
+async function canonicalWorldFragment(worldId, clubId) {
+  const fragment = await serverSupabase('/rest/v1/rpc/get_manager_portal_world_fragment', {
+    method: 'POST',
+    body: JSON.stringify({ p_world_id: worldId, p_club_id: clubId })
+  });
+  if (!fragment?.world) throw new Error('Canonical world has not been initialized');
+  return fragment;
 }
 
 const playerId = (player) => String(player?.tbg_player_id || player?.player_id || player?.id || '').trim();
@@ -111,9 +113,9 @@ export default async (request) => {
     const token = bearerToken(request);
     if (!token) return json({ error: 'Authentication required' }, 401);
     const current = await identity(token);
-    const stored = await canonicalWorld(token, current.appointment.world_id);
+    const stored = await canonicalWorldFragment(current.appointment.world_id, current.appointment.club_id);
     if (stored.turn_status !== 'open') return json({ error: `World commands are locked while turn is ${stored.turn_status}` }, 409);
-    const world = loadPersistentWorld(JSON.stringify(stored.save_envelope));
+    const world = stored.world;
     const roster = registrationRoster(world, current.appointment.club_id);
 
     if (request.method === 'GET') return json({
