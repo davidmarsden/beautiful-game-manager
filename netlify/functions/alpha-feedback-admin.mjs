@@ -15,6 +15,7 @@ const bearerToken = (request) => {
 };
 const isJwt = (value) => String(value || '').split('.').length === 3;
 const clean = (value) => String(value || '').trim();
+const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
 const truncate = (value, max = 120) => {
   const text = clean(value).replace(/\s+/g, ' ');
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
@@ -117,6 +118,42 @@ async function updateReport(userId, payload, githubIssueUrl = null) {
   return result;
 }
 
+async function reservePromotion(userId, reportId) {
+  const result = await rpc('admin_reserve_alpha_feedback_promotion', {
+    p_admin_user_id: userId,
+    p_report_id: reportId
+  });
+  if (!result?.ok) {
+    const status = result?.code === 'admin_required' ? 403 : result?.code === 'promotion_in_progress' ? 409 : 400;
+    throw Object.assign(new Error(result?.code || 'Could not reserve feedback promotion'), { status });
+  }
+  return result;
+}
+
+async function finishPromotion(userId, report, payload, promotionToken, issueUrl) {
+  const status = report.status === 'new' ? 'triaged' : report.status;
+  const result = await rpc('admin_finish_alpha_feedback_promotion', {
+    p_admin_user_id: userId,
+    p_report_id: report.id,
+    p_promotion_token: promotionToken,
+    p_status: status,
+    p_severity: report.severity || null,
+    p_admin_note: clean(payload.admin_note) || null,
+    p_github_issue_url: issueUrl
+  });
+  if (!result?.ok) throw Object.assign(new Error(result?.code || 'Could not finish feedback promotion'), { status: 409 });
+  return result;
+}
+
+async function releasePromotion(userId, reportId, promotionToken) {
+  if (!promotionToken) return;
+  await rpc('admin_release_alpha_feedback_promotion', {
+    p_admin_user_id: userId,
+    p_report_id: reportId,
+    p_promotion_token: promotionToken
+  }).catch(() => {});
+}
+
 export default async (request) => {
   try {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured' }, 503);
@@ -140,16 +177,29 @@ export default async (request) => {
       return json({ ok: true, report_id: stored.id, issue_url: stored.github_issue_url, existing: true });
     }
 
-    const report = {
-      ...stored,
-      severity: clean(payload.severity) || stored.severity,
-      status: clean(payload.status) || stored.status,
-      admin_note: clean(payload.admin_note) || stored.admin_note
-    };
-    const github = await createGithubIssue(report);
-    const status = report.status === 'new' ? 'triaged' : report.status;
-    await updateReport(user.id, { ...payload, status }, github.issue_url);
-    return json({ ok: true, report_id: report.id, ...github });
+    let promotionToken = null;
+    try {
+      const reservation = await reservePromotion(user.id, stored.id);
+      if (reservation.already_linked) {
+        await updateReport(user.id, payload, reservation.issue_url);
+        return json({ ok: true, report_id: stored.id, issue_url: reservation.issue_url, existing: true });
+      }
+      promotionToken = reservation.promotion_token;
+
+      const selectedSeverity = hasOwn(payload, 'severity') ? (clean(payload.severity) || null) : stored.severity;
+      const report = {
+        ...stored,
+        severity: selectedSeverity,
+        status: clean(payload.status) || stored.status
+      };
+      const github = await createGithubIssue(report);
+      await finishPromotion(user.id, report, payload, promotionToken, github.issue_url);
+      promotionToken = null;
+      return json({ ok: true, report_id: report.id, ...github });
+    } catch (error) {
+      await releasePromotion(user.id, stored.id, promotionToken);
+      throw error;
+    }
   } catch (error) {
     return json({ error: error.message }, error.status || 500);
   }
