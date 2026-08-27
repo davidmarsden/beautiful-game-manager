@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 
 const migration = fs.readFileSync(new URL('../supabase/migrations/20260827b_manager_notifications_bug_hunter.sql', import.meta.url), 'utf8');
+const auditRepeatMigration = fs.readFileSync(new URL('../supabase/migrations/20260827d_manager_notification_audit_repeats.sql', import.meta.url), 'utf8');
 const endpoint = fs.readFileSync(new URL('../netlify/functions/manager-notifications.mjs', import.meta.url), 'utf8');
 const participation = fs.readFileSync(new URL('../netlify/functions/manager-participation.mjs', import.meta.url), 'utf8');
 const client = fs.readFileSync(new URL('../public/manager-notifications.js', import.meta.url), 'utf8');
@@ -25,6 +26,13 @@ test('alpha feedback emits independent lifecycle events when one update changes 
   assert.ok(migration.includes("'status_triaged', 'Report confirmed'"));
   assert.ok(migration.includes("'promoted_to_github', 'Investigation opened'"));
   assert.ok(migration.includes("'status_fixed', 'Report fixed'"));
+});
+
+test('repeated lifecycle transitions receive unique audit identities', () => {
+  assert.ok(auditRepeatMigration.includes('v_event_id uuid := gen_random_uuid()'));
+  assert.ok(auditRepeatMigration.includes("p_event_type || ':' || v_event_id::text"));
+  assert.ok(auditRepeatMigration.includes('insert into public.alpha_feedback_events'));
+  assert.equal(auditRepeatMigration.includes('on conflict(dedupe_key) do nothing'), false);
 });
 
 test('bug hunter credit is based on confirmed impact rather than raw submissions', () => {
@@ -54,6 +62,11 @@ test('portal exposes a notification bell and My reports timeline', () => {
   assert.ok(client.includes("Bug Hunter"));
   assert.ok(client.includes("Open engineering issue ↗"));
   assert.ok(client.includes('window.setInterval(() => void refresh(), 60_000)'));
+});
+
+test('marking an inert notification read refreshes the visible inbox immediately', () => {
+  assert.ok(client.includes("await mutate({ action: 'mark-read', notification_id: item.id });"));
+  assert.ok(client.includes('await refresh(true);'));
 });
 
 test('existing alpha reports are backfilled into history and reward credit', () => {
