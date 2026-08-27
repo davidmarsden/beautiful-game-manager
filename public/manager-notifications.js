@@ -77,8 +77,8 @@ function renderNotifications(root) {
   controls.innerHTML = `<span>${Number(notificationData?.unread_count || 0)} unread</span><button type="button">Mark all read</button>`;
   controls.querySelector('button').disabled = !Number(notificationData?.unread_count || 0);
   controls.querySelector('button').addEventListener('click', async () => {
-    await mutate({ action: 'mark-all-read' });
-    await refresh(true);
+    const marked = await mutate({ action: 'mark-all-read' });
+    if (marked) await refresh(true, true);
   });
   root.append(controls);
   if (!notifications.length) {
@@ -103,8 +103,8 @@ function renderNotifications(root) {
         void mutate({ action: 'mark-read', notification_id: item.id });
         return;
       }
-      await mutate({ action: 'mark-read', notification_id: item.id });
-      await refresh(true);
+      const marked = await mutate({ action: 'mark-read', notification_id: item.id });
+      if (marked) await refresh(true, true);
     });
     list.append(row);
   }
@@ -156,33 +156,62 @@ function renderReports(root) {
 function render(tab = 'notifications') {
   const root = ensureDialog().querySelector('.manager-notifications-content');
   root.replaceChildren();
+  delete root.dataset.notificationRefreshError;
   if (!notificationData) { root.innerHTML = '<p class="manager-notifications-empty">Loading notifications…</p>'; return; }
   if (tab === 'reports') renderReports(root); else renderNotifications(root);
 }
 
-async function mutate(body) {
-  const token = authToken();
-  if (!token) return;
-  await fetch('/api/manager-notifications', {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify(body)
-  });
+function renderRefreshError() {
+  if (!notificationDialog?.open) return;
+  const root = notificationDialog.querySelector('.manager-notifications-content');
+  if (!root) return;
+  root.dataset.notificationRefreshError = 'true';
+  root.innerHTML = '<p class="manager-notifications-empty">Notifications could not be refreshed just now. The rest of the portal is unaffected; please try again.</p>';
 }
 
-async function refresh(forceRender = false) {
+async function mutate(body) {
   const token = authToken();
-  if (!token) return;
-  const response = await fetch('/api/manager-notifications', { headers: { authorization: `Bearer ${token}` } });
-  if (!response.ok) return;
-  notificationData = await response.json();
-  const bell = ensureBell();
-  const count = Number(notificationData.unread_count || 0);
-  const badge = bell?.querySelector('strong');
-  if (badge) { badge.textContent = String(count); badge.hidden = count === 0; }
-  if (forceRender && notificationDialog?.open) {
-    const tab = notificationDialog.querySelector('[data-tab].active')?.dataset.tab || 'notifications';
-    render(tab);
+  if (!token) return false;
+  try {
+    const response = await fetch('/api/manager-notifications', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    return response.ok;
+  } catch (error) {
+    console.warn('Manager notification mutation failed', error);
+    return false;
+  }
+}
+
+async function refresh(forceRender = false, showError = false) {
+  const token = authToken();
+  if (!token) return false;
+  try {
+    const response = await fetch('/api/manager-notifications', { headers: { authorization: `Bearer ${token}` } });
+    if (!response.ok) {
+      if (showError) renderRefreshError();
+      return false;
+    }
+    notificationData = await response.json();
+    const bell = ensureBell();
+    const count = Number(notificationData.unread_count || 0);
+    const badge = bell?.querySelector('strong');
+    if (badge) { badge.textContent = String(count); badge.hidden = count === 0; }
+    if (notificationDialog?.open) {
+      const root = notificationDialog.querySelector('.manager-notifications-content');
+      const recoveredFromError = root?.dataset.notificationRefreshError === 'true';
+      if (forceRender || recoveredFromError) {
+        const tab = notificationDialog.querySelector('[data-tab].active')?.dataset.tab || 'notifications';
+        render(tab);
+      }
+    }
+    return true;
+  } catch (error) {
+    console.warn('Manager notification refresh failed', error);
+    if (showError) renderRefreshError();
+    return false;
   }
 }
 
@@ -194,7 +223,7 @@ function install() {
       const dialog = ensureDialog();
       render('notifications');
       if (!dialog.open) dialog.showModal();
-      await refresh(true);
+      await refresh(true, true);
     });
   }
   void refresh();

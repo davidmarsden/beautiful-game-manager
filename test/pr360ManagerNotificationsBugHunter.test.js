@@ -66,7 +66,7 @@ test('portal exposes a notification bell and My reports timeline', () => {
 
 test('marking an inert notification read refreshes the visible inbox immediately', () => {
   assert.ok(client.includes("await mutate({ action: 'mark-read', notification_id: item.id });"));
-  assert.ok(client.includes('await refresh(true);'));
+  assert.ok(client.includes('await refresh(true, true);'));
 });
 
 test('existing alpha reports are backfilled into history and reward credit', () => {
