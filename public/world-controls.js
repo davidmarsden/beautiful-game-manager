@@ -5,6 +5,7 @@ let authorization = '';
 let bootstrap = null;
 let sharedState = null;
 let sharedStatePromise = null;
+let sharedStateVersion = 0;
 
 const nativeFetch = window.fetch.bind(window);
 window.fetch = async (...args) => {
@@ -193,8 +194,10 @@ async function loadSharedState({ force = false } = {}) {
     return sharedState;
   }
   if (!force && sharedStatePromise) return sharedStatePromise;
+  const version = ++sharedStateVersion;
   const pending = api()
     .then((state) => {
+      if (version !== sharedStateVersion) return state;
       sharedState = state;
       render();
       return state;
@@ -291,6 +294,9 @@ function bind() {
 window.addEventListener('tbg:portal-rendered', (event) => {
   bootstrap = event.detail;
   mount();
+  sharedStateVersion += 1;
+  sharedState = null;
+  sharedStatePromise = null;
   if ($('worldView')?.classList.contains('active')) loadSharedState().catch(() => {});
 });
 
