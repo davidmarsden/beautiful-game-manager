@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { availabilityForPlayer } from '../src/matchEngine/squadAvailability.js';
 import { reconcileCrossDivisionRuntimePlayerState } from '../src/world/persistentMatchdayWorld.js';
-import { competitivePlayerIds } from '../src/world/registrationEligibility.js';
+import { competitiveRegistration } from '../src/world/registrationEligibility.js';
 import { validateManagerSelectionEligibility } from '../src/world/sharedWorldScheduler.js';
 
 const available = () => ({
@@ -55,14 +55,17 @@ function fixtureWorld() {
   };
 }
 
-test('#358 competitive runtime pool includes youth-exempt players but excludes unregistered seniors', () => {
+test('#358 competitive registration includes youth-exempt players but excludes unregistered seniors', () => {
   const world = fixtureWorld();
   const club = world.squad_cycle.clubs['tbg-club-014'];
 
-  assert.deepEqual(competitivePlayerIds(world, club), [
-    'senior-registered',
-    'tbg-tm-01193849'
-  ]);
+  assert.equal(competitiveRegistration(world, club, 'senior-registered').registered, true);
+  assert.equal(competitiveRegistration(world, club, 'senior-unregistered').registered, false);
+  assert.deepEqual(competitiveRegistration(world, club, 'tbg-tm-01193849'), {
+    registered: true,
+    status: 'youth_exempt',
+    youth_exempt: true
+  });
 });
 
 test('#358 stale runtime availability does not turn a canonical youth player into unknown_player', () => {
