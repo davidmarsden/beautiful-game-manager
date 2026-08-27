@@ -18,3 +18,10 @@ test('interactive inbox refresh can show a local retry message', () => {
   assert.ok(client.includes('Notifications could not be refreshed just now. The rest of the portal is unaffected; please try again.'));
   assert.ok(client.includes('await refresh(true, true);'));
 });
+
+test('successful polling clears a stale local refresh error', () => {
+  assert.ok(client.includes("root.dataset.notificationRefreshError = 'true';"));
+  assert.ok(client.includes("root?.dataset.notificationRefreshError === 'true'"));
+  assert.ok(client.includes('if (forceRender || recoveredFromError)'));
+  assert.ok(client.includes('delete root.dataset.notificationRefreshError;'));
+});
