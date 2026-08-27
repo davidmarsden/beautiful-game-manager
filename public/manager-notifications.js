@@ -156,6 +156,7 @@ function renderReports(root) {
 function render(tab = 'notifications') {
   const root = ensureDialog().querySelector('.manager-notifications-content');
   root.replaceChildren();
+  delete root.dataset.notificationRefreshError;
   if (!notificationData) { root.innerHTML = '<p class="manager-notifications-empty">Loading notifications…</p>'; return; }
   if (tab === 'reports') renderReports(root); else renderNotifications(root);
 }
@@ -164,6 +165,7 @@ function renderRefreshError() {
   if (!notificationDialog?.open) return;
   const root = notificationDialog.querySelector('.manager-notifications-content');
   if (!root) return;
+  root.dataset.notificationRefreshError = 'true';
   root.innerHTML = '<p class="manager-notifications-empty">Notifications could not be refreshed just now. The rest of the portal is unaffected; please try again.</p>';
 }
 
@@ -197,9 +199,13 @@ async function refresh(forceRender = false, showError = false) {
     const count = Number(notificationData.unread_count || 0);
     const badge = bell?.querySelector('strong');
     if (badge) { badge.textContent = String(count); badge.hidden = count === 0; }
-    if (forceRender && notificationDialog?.open) {
-      const tab = notificationDialog.querySelector('[data-tab].active')?.dataset.tab || 'notifications';
-      render(tab);
+    if (notificationDialog?.open) {
+      const root = notificationDialog.querySelector('.manager-notifications-content');
+      const recoveredFromError = root?.dataset.notificationRefreshError === 'true';
+      if (forceRender || recoveredFromError) {
+        const tab = notificationDialog.querySelector('[data-tab].active')?.dataset.tab || 'notifications';
+        render(tab);
+      }
     }
     return true;
   } catch (error) {
