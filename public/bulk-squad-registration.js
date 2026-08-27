@@ -123,5 +123,11 @@ async function submitBulkRegistration() {
 }
 
 window.addEventListener('tbg:portal-rendered', () => {
-  window.setTimeout(loadBulkRegistration, 0);
+  if (document.getElementById('worldView')?.classList.contains('active')) {
+    window.setTimeout(loadBulkRegistration, 0);
+  }
+});
+
+document.addEventListener('tbg:view-changed', (event) => {
+  if (event.detail?.view === 'world') window.setTimeout(loadBulkRegistration, 0);
 });

@@ -198,10 +198,10 @@ document.addEventListener('click', (event) => {
 document.addEventListener('tbg:view-changed', (event) => {
   if (event.detail?.view === 'transfers') schedule(false);
 });
-window.addEventListener('tbg:portal-rendered', () => schedule(false));
+window.addEventListener('tbg:portal-rendered', () => {
+  if (document.getElementById('transfersView')?.classList.contains('active')) schedule(false);
+});
 document.addEventListener('tbg:transfer-history-refresh', () => {
   lastLoadedAt = 0;
   schedule(true);
 });
-
-schedule(false);

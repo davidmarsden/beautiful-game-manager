@@ -714,12 +714,13 @@ async function respondLegacyOffer(proposalId, response) {
   }
 }
 
-window.addEventListener('tbg:portal-rendered', async () => {
+window.addEventListener('tbg:portal-rendered', () => {
   mount();
-  try { await refresh(); }
-  catch (error) {
-    if ($('transferNegotiationStatus')) $('transferNegotiationStatus').textContent = 'Unavailable';
-    if ($('transferNegotiationMessage')) $('transferNegotiationMessage').textContent = error.message;
+  if (document.getElementById('transfersView')?.classList.contains('active')) {
+    refresh().catch((error) => {
+      if ($('transferNegotiationStatus')) $('transferNegotiationStatus').textContent = 'Unavailable';
+      if ($('transferNegotiationMessage')) $('transferNegotiationMessage').textContent = error.message;
+    });
   }
 });
 

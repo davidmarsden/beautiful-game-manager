@@ -356,5 +356,4 @@ window.addEventListener('tbg:portal-rendered', () => {
   watchSquadStatus();
   enhanceSquadTransferStatus();
   watchTransferMutationCompletion();
-  queueMicrotask(() => refreshLiveTransferPresentation().catch(() => {}));
 });

@@ -86,8 +86,13 @@ async function refresh(detail = {}) {
   requestAnimationFrame(() => decorateSquadRows(detail.squad || detail.players || [], scope));
 }
 
-window.addEventListener('tbg:portal-rendered', (event) => refresh(event.detail || {}));
+window.addEventListener('tbg:portal-rendered', (event) => {
+  if (document.getElementById('squadView')?.classList.contains('active')) refresh(event.detail || {});
+});
 window.addEventListener('tbg:read-only-squad-rendered', (event) => refresh(event.detail || {}));
+document.addEventListener('tbg:view-changed', (event) => {
+  if (event.detail?.view === 'squad') refresh().catch(() => {});
+});
 
 ['registrationFilter', 'squadSearch', 'positionFilter', 'availabilityFilter'].forEach((id) => {
   document.getElementById(id)?.addEventListener(id === 'squadSearch' ? 'input' : 'change', () => requestAnimationFrame(() => decorateSquadRows()));
@@ -102,5 +107,3 @@ document.addEventListener('input', (event) => {
 document.addEventListener('change', (event) => {
   if (event.target.matches('[data-squad-view], [data-position-filter], [data-availability-filter]')) requestAnimationFrame(() => decorateSquadRows());
 });
-
-if (!document.getElementById('portal')?.hidden) refresh();

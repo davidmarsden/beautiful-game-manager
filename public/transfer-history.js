@@ -152,11 +152,11 @@ document.addEventListener('tbg:view-changed', (event) => {
   if (event.detail?.view === 'transfers') scheduleHistoryMount(false);
 });
 
-window.addEventListener('tbg:portal-rendered', () => scheduleHistoryMount(false));
+window.addEventListener('tbg:portal-rendered', () => {
+  if (document.getElementById('transfersView')?.classList.contains('active')) scheduleHistoryMount(false);
+});
 
 document.addEventListener('tbg:transfer-history-refresh', () => {
   lastLoadedAt = 0;
   setTimeout(() => maybeMount(true), 0);
 });
-
-maybeMount(false);
