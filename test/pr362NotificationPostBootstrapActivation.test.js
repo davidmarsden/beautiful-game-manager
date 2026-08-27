@@ -15,3 +15,10 @@ test('manager notifications do not make authenticated requests during portal boo
   assert.equal(client.trimEnd().endsWith('install();'), false);
   assert.equal(client.includes("document.addEventListener('DOMContentLoaded', install)"), false);
 });
+
+test('unassigned managers activate notifications only after their portal state renders', () => {
+  assert.ok(client.includes("document.getElementById('unassignedState')"));
+  assert.ok(client.includes('if (!unassigned.hidden) activateNotifications();'));
+  assert.ok(client.includes("unassignedObserver.observe(unassigned, { attributes: true, attributeFilter: ['hidden'] })"));
+  assert.ok(client.includes('observeUnassignedPortal();'));
+});
