@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { syntheticPlayableLeagueStructure } from '../src/matchEngine/leagueStructureSimulation.js';
 import { availabilityForPlayer } from '../src/matchEngine/squadAvailability.js';
-import { reconcileCrossDivisionRuntimePlayerState } from '../src/world/persistentMatchdayWorld.js';
+import { advancePersistentMatchday, reconcileCrossDivisionRuntimePlayerState } from '../src/world/persistentMatchdayWorld.js';
+import { createPersistentLeagueWorld } from '../src/world/persistentLeagueWorld.js';
 import { competitiveRegistration } from '../src/world/registrationEligibility.js';
 import { validateManagerSelectionEligibility } from '../src/world/sharedWorldScheduler.js';
 
@@ -55,6 +57,29 @@ function fixtureWorld() {
   };
 }
 
+function persistentWorldWithYouthExemption() {
+  const divisions = syntheticPlayableLeagueStructure({ clubsPerDivision: 4 });
+  const clubId = divisions[0].clubs[0].club_id;
+  const world = createPersistentLeagueWorld({
+    worldId: 'pr358-runtime-world',
+    divisions,
+    humanClubId: clubId,
+    movementCount: 1
+  });
+  const club = world.squad_cycle.clubs[clubId];
+  const youth = club.registered_player_ids.at(-1);
+  club.registered_player_ids = club.registered_player_ids.filter((playerId) => playerId !== youth);
+  world.squad_cycle.players[youth].age = 17;
+  world.squad_cycle.players[youth].season_start_age = 17;
+  world.squad_cycle.players[youth].youth_eligible_at_season_start = true;
+  return { world, clubId, youth };
+}
+
+function runtimeForClub(world, clubId) {
+  const division = world.competition.divisions.find((row) => row.club_ids.includes(clubId));
+  return world.matchday_cycle.runtimes[division.division_id];
+}
+
 test('#358 competitive registration includes youth-exempt players but excludes unregistered seniors', () => {
   const world = fixtureWorld();
   const club = world.squad_cycle.clubs['tbg-club-014'];
@@ -66,6 +91,18 @@ test('#358 competitive registration includes youth-exempt players but excludes u
     status: 'youth_exempt',
     youth_exempt: true
   });
+});
+
+test('#358 persistent matchday initialization includes youth-exempt players outside explicit registration', () => {
+  const { world, clubId, youth } = persistentWorldWithYouthExemption();
+  assert.equal(world.squad_cycle.clubs[clubId].registered_player_ids.includes(youth), false);
+  assert.equal(competitiveRegistration(world, world.squad_cycle.clubs[clubId], youth).registered, true);
+
+  const report = advancePersistentMatchday(world);
+  assert.equal(report.accepted, true);
+  const runtime = runtimeForClub(report.world, clubId);
+  assert.ok(runtime.state.players[youth]);
+  assert.ok(runtime.state.availability.players[youth]);
 });
 
 test('#358 stale runtime availability does not turn a canonical youth player into unknown_player', () => {
