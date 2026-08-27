@@ -41,10 +41,3 @@ export function competitiveRegistration(world, club, playerId, player = null) {
   const registered = Boolean(playerRow?.registered);
   return Object.freeze({ registered, status: registered ? 'registered' : 'unregistered', youth_exempt: false });
 }
-
-export function competitivePlayerIds(world, club) {
-  return Object.freeze((club?.player_ids || []).filter((playerId) => {
-    const player = world?.squad_cycle?.players?.[playerId] || null;
-    return Boolean(player) && competitiveRegistration(world, club, playerId, player).registered;
-  }));
-}
