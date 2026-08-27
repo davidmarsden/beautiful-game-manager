@@ -53,7 +53,23 @@ test('#310 provides admin-only feedback triage and optional GitHub promotion', (
   assert.match(adminClient, /Captured diagnostics/);
   assert.match(adminClient, /client_context/);
   assert.match(adminClient, /Browser \/ device/);
+  assert.match(adminClient, /Create GitHub issue/);
+  assert.match(adminClient, /action,'promote'/);
+  assert.match(adminClient, /Open GitHub issue/);
   assert.match(adminEndpoint, /admin_update_alpha_feedback_report/);
+  assert.match(adminEndpoint, /process\.env\.GITHUB_TOKEN/);
+  assert.match(adminEndpoint, /api\.github\.com\/repos\/\$\{GITHUB_REPOSITORY\}\/issues/);
+  assert.match(adminEndpoint, /alpha-feedback-report:\$\{report\.id\}/);
+  assert.match(adminEndpoint, /Private admin notes and reporter contact details are deliberately not copied to GitHub/);
+});
+
+test('#310 GitHub promotion recovers existing links and recent issue markers before creating again', () => {
+  const adminEndpoint = read('netlify/functions/alpha-feedback-admin.mjs');
+
+  assert.match(adminEndpoint, /if \(stored\.github_issue_url\)/);
+  assert.match(adminEndpoint, /latestMatchingGithubIssue\(report\.id\)/);
+  assert.match(adminEndpoint, /issues\?state=all&per_page=100&sort=created&direction=desc/);
+  assert.match(adminEndpoint, /report\.status === 'new' \? 'triaged' : report\.status/);
 });
 
 test('#310 guide makes in-game reporting primary without explaining GitHub signup', () => {
