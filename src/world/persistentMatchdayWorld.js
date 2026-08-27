@@ -21,6 +21,7 @@ import {
 import { executeAiSquadPlan } from '../intelligence/aiSquadManagement.js';
 import { analyseSquad } from '../intelligence/squadIntelligence.js';
 import { appendSeasonArchive, createSeasonArchive } from '../history/seasonArchive.js';
+import { competitiveRegistration } from './registrationEligibility.js';
 
 export const PERSISTENT_MATCHDAY_VERSION = 'tbg-persistent-matchday-world-v1.1';
 
@@ -48,8 +49,10 @@ function event(world, type, payload = {}) {
 function registeredClub(world, clubId) {
   const club = world.squad_cycle.clubs[clubId];
   const profile = world.club_profiles[clubId];
-  const players = club.registered_player_ids.map((id) => world.squad_cycle.players[id]).filter(Boolean);
-  if (players.length < 18) throw new Error(`${clubId} has only ${players.length} registered players`);
+  const players = (club.player_ids || [])
+    .map((id) => world.squad_cycle.players[id])
+    .filter((player) => player && competitiveRegistration(world, club, player.tbg_player_id, player).registered);
+  if (players.length < 18) throw new Error(`${clubId} has only ${players.length} competitively eligible players`);
   return { ...profile, players: players.map((player) => ({ ...player })) };
 }
 
@@ -129,11 +132,20 @@ export function reconcileCrossDivisionRuntimePlayerState(cycle, clubsByDivision 
       for (const player of club.players || []) {
         const playerId = String(player?.tbg_player_id || '').trim();
         if (!playerId) continue;
-        if (!runtime.state.players[playerId] && playerSnapshot[playerId]) {
-          runtime.state.players[playerId] = clone(playerSnapshot[playerId]);
+        if (!runtime.state.players[playerId]) {
+          runtime.state.players[playerId] = playerSnapshot[playerId]
+            ? clone(playerSnapshot[playerId])
+            : { fitness: 100, sharpness: 100, morale: 50 };
         }
-        if (!runtime.state.availability.players[playerId] && availabilitySnapshot[playerId]) {
-          runtime.state.availability.players[playerId] = clone(availabilitySnapshot[playerId]);
+        if (!runtime.state.availability.players[playerId]) {
+          runtime.state.availability.players[playerId] = availabilitySnapshot[playerId]
+            ? clone(availabilitySnapshot[playerId])
+            : {
+                injury_until_matchday: 0,
+                suspension_until_matchday: 0,
+                injury_reason: null,
+                suspension_reason: null
+              };
         }
       }
     }

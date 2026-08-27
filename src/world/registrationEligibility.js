@@ -14,6 +14,11 @@ export function isYouthRegistrationExempt(player, contract = null) {
 
 export function competitiveRegistration(world, club, playerId, player = null) {
   const playerRow = player || world?.squad_cycle?.players?.[playerId] || null;
+  const lifecycleStatus = text(playerRow?.lifecycle_status || 'active').toLowerCase();
+  if (lifecycleStatus !== 'active' || playerRow?.active_circulation === false) {
+    return Object.freeze({ registered: false, status: 'inactive', youth_exempt: false });
+  }
+
   const contract = playerRow?.contract_id ? world?.squad_cycle?.contracts?.[playerRow.contract_id] || null : null;
   if (isYouthRegistrationExempt(playerRow, contract)) {
     return Object.freeze({ registered: true, status: 'youth_exempt', youth_exempt: true });

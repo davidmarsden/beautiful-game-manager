@@ -53,9 +53,18 @@ function selectedPlayerIds(instruction = {}) {
   return [...(instruction.starting_xi || []), ...(instruction.bench || [])].map(text).filter(Boolean);
 }
 
-function availabilityCalendarForClub(world, clubId) {
-  const division = (world.competition?.divisions || []).find((row) => (row.club_ids || []).includes(text(clubId)));
-  return division ? world.matchday_cycle?.runtimes?.[division.division_id]?.state?.availability || null : null;
+function availabilityCalendarForPlayer(world, clubId, playerId) {
+  const selectedClubId = text(clubId);
+  const selectedPlayerId = text(playerId);
+  const division = (world.competition?.divisions || []).find((row) => (row.club_ids || []).includes(selectedClubId));
+  const local = division ? world.matchday_cycle?.runtimes?.[division.division_id]?.state?.availability || null : null;
+  if (local?.players && Object.prototype.hasOwnProperty.call(local.players, selectedPlayerId)) return local;
+
+  for (const runtime of Object.values(world.matchday_cycle?.runtimes || {})) {
+    const calendar = runtime?.state?.availability || null;
+    if (calendar?.players && Object.prototype.hasOwnProperty.call(calendar.players, selectedPlayerId)) return calendar;
+  }
+  return null;
 }
 
 export function validateManagerSelectionEligibility(world, clubId, instruction = {}) {
@@ -68,7 +77,6 @@ export function validateManagerSelectionEligibility(world, clubId, instruction =
 
   const owned = new Set((club.player_ids || []).map(text));
   const playerMap = world.squad_cycle?.players || {};
-  const availabilityCalendar = availabilityCalendarForClub(world, selectedClubId);
   const matchday = Number(world.matchday_cycle?.current_matchday || 1);
   const invalid = [];
   const reasons = [];
@@ -90,7 +98,8 @@ export function validateManagerSelectionEligibility(world, clubId, instruction =
       reasons.push(`${playerId} is not active`);
       continue;
     }
-    if (availabilityCalendar?.players) {
+    const availabilityCalendar = availabilityCalendarForPlayer(world, selectedClubId, playerId);
+    if (availabilityCalendar) {
       const availability = availabilityForPlayer(availabilityCalendar, playerId, matchday);
       if (!availability.available) {
         invalid.push(playerId);
