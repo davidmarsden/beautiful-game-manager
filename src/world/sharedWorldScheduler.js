@@ -277,7 +277,7 @@ export function executeScheduledTurn(worldInput, plan) {
   if (world.matchday_cycle) alignCanonicalFixtureKickoffs(world, { currentMatchday: current.matchday, currentTurnAt: plan.scheduled_for, nextTurnAt: plan.next_turn_at, weekdaysUtc: cadence.weekdays_utc, hourUtc: cadence.hour_utc });
   const advance = advancePersistentMatchday(world, { instructionsByClub: executionInstructions, instructionSourcesByClub: plan.instruction_sources_by_club });
   if (!advance.accepted) throw new Error('Scheduled matchday advance was rejected');
-  if (advance.world.matchday_cycle && plan.next_turn_at) alignCanonicalFixtureKickoffs(advance.world, { currentMatchday: advance.world.matchday_cycle.current_matchday, currentTurnAt: plan.next_turn_at, nextTurnAt: plan.next_turn_at, weekdaysUtc: cadence.weekdays_utc, hourUtc: cadence.hour_utc });
+  if (advance.world.matchday_cycle && plan.next_turn_at) alignCanonicalFixtureKickoffs(advance.world, { currentMatchday: advance.world.matchday_cycle.current_matchday, currentTurnAt: plan.next_turn_at, weekdaysUtc: cadence.weekdays_utc, hourUtc: cadence.hour_utc });
   advance.world.shared_turn_history ||= [];
   advance.world.shared_turn_history.push({
     version: SHARED_WORLD_SCHEDULER_VERSION,
