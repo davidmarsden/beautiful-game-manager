@@ -41,8 +41,14 @@ const serviceRest = (path, options = {}) => requestSupabase(path, {
   ...(isJwt(SUPABASE_SERVICE_ROLE_KEY) ? { token: SUPABASE_SERVICE_ROLE_KEY } : {})
 });
 
-function filterCurrentMessages(rows, fixtureRows, canonicalCreatedAt) {
-  const fixtureIds = new Set((fixtureRows || []).map((fixture) => String(fixture.id)));
+function canonicalFixtureIds(fragment) {
+  return new Set(Object.values(fragment?.matchday_cycle?.runtimes || {})
+    .flatMap((runtime) => runtime?.fixtures || [])
+    .map((fixture) => String(fixture?.fixture_id || ''))
+    .filter(Boolean));
+}
+
+function filterCurrentMessages(rows, fixtureIds, canonicalCreatedAt) {
   const createdAt = Date.parse(canonicalCreatedAt || 0);
   return (rows || []).filter((message) => {
     if (message.related_fixture_id) return fixtureIds.has(String(message.related_fixture_id));
@@ -73,16 +79,19 @@ export default async (request) => {
       const appointment = appointments[0];
       if (!appointment) return json({ messages: [], unread_count: 0 });
 
-      const [rawMessages, canonicalRows, fixtureRows] = await Promise.all([
+      const [rawMessages, canonicalRows] = await Promise.all([
         rest(`/rest/v1/manager_messages?recipient_manager_id=eq.${encodeURIComponent(manager.id)}&select=id,message_type,subject,body,priority,created_at,read_at,related_fixture_id&order=created_at.desc&limit=100`, token),
-        serviceRest(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(appointment.world_id)}&select=created_at&limit=1`),
-        serviceRest(`/rest/v1/fixtures?world_id=eq.${encodeURIComponent(appointment.world_id)}&select=id`)
+        serviceRest(`/rest/v1/canonical_world_saves?world_id=eq.${encodeURIComponent(appointment.world_id)}&select=save_checksum,created_at&limit=1`)
       ]);
 
       const canonical = canonicalRows[0];
       if (!canonical) return json({ error: `Canonical world ${appointment.world_id} has not been initialized`, code: 'canonical_world_not_initialized' }, 409);
 
-      const messages = filterCurrentMessages(rawMessages, fixtureRows, canonical.created_at);
+      const cacheRows = await serviceRest(`/rest/v1/manager_portal_fragment_cache?world_id=eq.${encodeURIComponent(appointment.world_id)}&club_id=eq.${encodeURIComponent(appointment.club_id)}&source_checksum=eq.${encodeURIComponent(canonical.save_checksum)}&select=source_checksum,fragment&limit=1`);
+      const cache = cacheRows[0];
+      if (!cache?.fragment) return json({ error: 'Canonical portal fragment is not ready yet', code: 'canonical_portal_fragment_not_ready' }, 503);
+
+      const messages = filterCurrentMessages(rawMessages, canonicalFixtureIds(cache.fragment), canonical.created_at);
       return json({
         messages,
         unread_count: messages.filter((message) => !message.read_at).length
