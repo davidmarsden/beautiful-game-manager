@@ -57,7 +57,7 @@ function renderMessages(messages) {
 async function loadInbox() {
   const active = await ensureSession();
   if (!active) return;
-  const response = await fetch('/api/bootstrap', {
+  const response = await fetch('/api/inbox', {
     headers: { authorization: `Bearer ${active.access_token}` },
     cache: 'no-store'
   });
