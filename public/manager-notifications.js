@@ -39,7 +39,7 @@ function ensureDialog() {
   dialog.innerHTML = `
     <div class="manager-notifications-card">
       <header><div><small>MANAGER INBOX</small><h2>Notifications</h2></div><button type="button" class="manager-notifications-close" aria-label="Close">×</button></header>
-      <div class="manager-notifications-tabs"><button type="button" data-tab="notifications" class="active">Notifications</button><button type="button" data-tab="reports">My reports</button></div>
+      <div class="manager-notifications-tabs"><button type="button" data-tab="notifications" class="active">Notifications</button><button type="button" data-tab="reports">My reports</button><button type="button" data-tab="settings">Settings</button></div>
       <div class="manager-notifications-content"></div>
     </div>`;
   dialog.querySelector('.manager-notifications-close').addEventListener('click', () => dialog.close());
@@ -155,12 +155,67 @@ function renderReports(root) {
   root.append(list);
 }
 
+function renderSettings(root) {
+  const preferences = notificationData?.delivery_preferences || {};
+  const form = document.createElement('form');
+  form.className = 'manager-notification-settings';
+  form.innerHTML = `
+    <h3>Email notifications</h3>
+    <p>In-app notifications always stay on. Email is optional and only applies to new activity after you save these settings.</p>
+    <label>Delivery
+      <select name="email_frequency">
+        <option value="off">Off</option>
+        <option value="instant">As activity happens</option>
+        <option value="daily">Daily digest</option>
+      </select>
+    </label>
+    <fieldset>
+      <legend>Email me about</legend>
+      <label><input type="checkbox" name="email_transfers"> Transfers — offers, counter-offers and outcomes</label>
+      <label><input type="checkbox" name="email_social"> News — comments and direct replies</label>
+      <label><input type="checkbox" name="email_system"> Game & system — rewards, reports and future game alerts</label>
+    </fieldset>
+    <p class="manager-notification-settings-note">Daily digests are currently sent after 08:00 UTC. Browser push will use these same categories in a later update.</p>
+    <button type="submit">Save notification settings</button>
+    <p class="manager-notification-settings-status" aria-live="polite"></p>`;
+  const frequency = form.elements.email_frequency;
+  frequency.value = ['instant', 'daily'].includes(preferences.email_frequency) ? preferences.email_frequency : 'off';
+  form.elements.email_transfers.checked = preferences.email_transfers !== false;
+  form.elements.email_social.checked = preferences.email_social !== false;
+  form.elements.email_system.checked = preferences.email_system === true;
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const status = form.querySelector('.manager-notification-settings-status');
+    const submit = form.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    status.textContent = 'Saving…';
+    const saved = await mutate({
+      action: 'update-delivery-preferences',
+      email_frequency: frequency.value,
+      email_transfers: form.elements.email_transfers.checked,
+      email_social: form.elements.email_social.checked,
+      email_system: form.elements.email_system.checked
+    });
+    if (!saved) {
+      status.textContent = 'Could not save settings just now. Please try again.';
+      submit.disabled = false;
+      return;
+    }
+    await refresh(false, false);
+    status.textContent = frequency.value === 'off' ? 'Email notifications are off.' : 'Email notification settings saved.';
+    submit.disabled = false;
+  });
+  root.append(form);
+}
+
 function render(tab = 'notifications') {
   const root = ensureDialog().querySelector('.manager-notifications-content');
   root.replaceChildren();
   delete root.dataset.notificationRefreshError;
   if (!notificationData) { root.innerHTML = '<p class="manager-notifications-empty">Loading notifications…</p>'; return; }
-  if (tab === 'reports') renderReports(root); else renderNotifications(root);
+  if (tab === 'reports') renderReports(root);
+  else if (tab === 'settings') renderSettings(root);
+  else renderNotifications(root);
 }
 
 function renderRefreshError() {
