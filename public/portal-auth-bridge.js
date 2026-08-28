@@ -2,6 +2,7 @@
   const upstreamFetch = window.fetch.bind(window);
   const MAX_SECONDARY_CONCURRENCY = 2;
   const queue = [];
+  const authRefreshes = new Map();
   let activeSecondary = 0;
   let bootstrapState = 'waiting';
   let bootstrapInFlight = null;
@@ -9,19 +10,33 @@
 
   window.tbgPortalAuthorization = window.tbgPortalAuthorization || '';
 
-  const requestDetails = (args) => {
+  const requestDetails = async (args) => {
     const input = args[0];
     const init = args[1] || {};
     const requestUrl = typeof input === 'string' ? input : input?.url;
     const url = requestUrl ? new URL(requestUrl, window.location.href) : null;
     const headers = new Headers(input instanceof Request ? input.headers : undefined);
     if (init.headers) new Headers(init.headers).forEach((value, key) => headers.set(key, value));
+
+    let body = init.body;
+    let bodyComparable = typeof body === 'string';
+    if (body === undefined && input instanceof Request) {
+      try {
+        body = await input.clone().text();
+        bodyComparable = true;
+      } catch {
+        body = undefined;
+        bodyComparable = false;
+      }
+    }
+
     return {
       url,
       authorization: headers.get('authorization') || '',
       priority: String(headers.get('x-tbg-priority') || '').trim().toLowerCase(),
       method: String(init.method || (input instanceof Request ? input.method : 'GET')).toUpperCase(),
-      body: init.body
+      body,
+      bodyComparable
     };
   };
 
@@ -125,9 +140,28 @@
     return response.clone();
   };
 
+  const coordinatedAuthRefresh = async (args, details) => {
+    if (!details.bodyComparable) return upstreamFetch(...args);
+    const key = `${details.url.origin}|${String(details.body)}`;
+    if (!authRefreshes.has(key)) {
+      const refresh = upstreamFetch(...args).finally(() => authRefreshes.delete(key));
+      authRefreshes.set(key, refresh);
+    }
+    const response = await authRefreshes.get(key);
+    return response.clone();
+  };
+
   window.fetch = async (...args) => {
-    const details = requestDetails(args);
+    const details = await requestDetails(args);
     if (details.authorization) window.tbgPortalAuthorization = details.authorization;
+
+    const authRefreshRequest = Boolean(
+      details.url
+      && details.method === 'POST'
+      && details.url.pathname.endsWith('/auth/v1/token')
+      && details.url.searchParams.get('grant_type') === 'refresh_token'
+    );
+    if (authRefreshRequest) return coordinatedAuthRefresh(args, details);
 
     const protectedPortalRequest = Boolean(
       details.url
