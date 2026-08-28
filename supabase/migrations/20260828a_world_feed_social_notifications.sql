@@ -150,7 +150,6 @@ declare
   club_id_value text;
   item_row public.world_feed_items;
   parent_row public.world_feed_comments;
-  parent_manager_name text;
   comment_row public.world_feed_comments;
   normalized_body text;
   action_url_value text;
@@ -177,10 +176,8 @@ begin
   if item_row.id is null then raise exception 'Feed item is unavailable'; end if;
 
   if p_parent_comment_id is not null then
-    select comment.*, profile.display_name
-      into parent_row, parent_manager_name
+    select comment into parent_row
     from public.world_feed_comments comment
-    join public.manager_profiles profile on profile.id = comment.manager_id
     where comment.id = p_parent_comment_id
       and comment.feed_item_id = p_feed_item_id
       and comment.hidden_at is null
