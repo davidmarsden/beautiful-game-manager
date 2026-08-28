@@ -159,7 +159,7 @@ begin
     raise exception 'Comment must be between 1 and 2000 characters';
   end if;
 
-  select profile.*, appointment.club_id into manager_row, club_id_value
+  select profile, appointment.club_id into manager_row, club_id_value
   from public.manager_profiles profile
   join public.manager_appointments appointment
     on appointment.manager_id = profile.id
