@@ -1,7 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
 const $ = (id) => document.getElementById(id);
-let client;
 let bootstrapState;
 let presets = [];
 let previousSheets = [];
@@ -11,21 +8,14 @@ let activeRestoredSheet = null;
 let applyingSheet = false;
 let releaseRestoreListeners = null;
 
-async function auth() {
-  if (!client) {
-    const response = await fetch('/api/auth-config', { cache: 'no-store' });
-    const config = await response.json();
-    client = createClient(config.supabase_url, config.supabase_anon_key, { auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
-  }
-  const { data, error } = await client.auth.getSession();
-  if (error) throw error;
-  return data.session;
+async function authorization() {
+  if (!window.tbgPortalAuth?.waitForAuthorization) throw new Error('Portal authentication bridge is unavailable');
+  return window.tbgPortalAuth.waitForAuthorization();
 }
 
 async function api(path, options = {}) {
-  const active = await auth();
-  if (!active) throw new Error('Authentication required');
-  const response = await fetch(path, { ...options, headers: { authorization: `Bearer ${active.access_token}`, ...(options.headers || {}) } });
+  const bearer = await authorization();
+  const response = await fetch(path, { ...options, headers: { authorization: bearer, ...(options.headers || {}) } });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error || 'Request failed');
   return body;
@@ -292,9 +282,8 @@ async function carryForward() {
 }
 
 async function initialise() {
-  const active = await auth();
-  if (!active) return;
-  const response = await fetch('/api/bootstrap', { headers: { authorization: `Bearer ${active.access_token}` }, cache: 'no-store' });
+  const bearer = await authorization();
+  const response = await fetch('/api/bootstrap', { headers: { authorization: bearer }, cache: 'no-store' });
   bootstrapState = await response.json();
   if (!response.ok || !bootstrapState?.club) return;
   installControls();
