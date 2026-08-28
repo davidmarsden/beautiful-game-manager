@@ -22,9 +22,13 @@ function absoluteActionUrl(actionUrl) {
   catch { return base; }
 }
 
+function isDigest(items) {
+  return items[0]?.email_frequency === 'daily';
+}
+
 function renderEmail(items) {
-  const digest = items.length > 1;
-  const subject = digest ? `Your TBG update · ${items.length} notifications` : `[TBG] ${items[0]?.title || 'Manager notification'}`;
+  const digest = isDigest(items);
+  const subject = digest ? `Your TBG update · ${items.length} notification${items.length === 1 ? '' : 's'}` : `[TBG] ${items[0]?.title || 'Manager notification'}`;
   const textRows = items.map((item) => `${item.title}\n${item.body || ''}\n${absoluteActionUrl(item.action_url)}`).join('\n\n');
   const text = `${digest ? 'Here’s what happened in The Beautiful Game:' : 'Something happened in The Beautiful Game:'}\n\n${textRows}\n\nChange email delivery in Manager Portal → Notifications → Settings.`;
   const rows = items.map((item) => `<tr><td style="padding:16px 0;border-top:1px solid #ead6df"><strong style="display:block;font-size:16px;line-height:22px;color:#321824">${escapeHtml(item.title)}</strong><p style="margin:6px 0 12px;font-size:14px;line-height:22px;color:#5d4650">${escapeHtml(item.body || '')}</p><a href="${escapeHtml(absoluteActionUrl(item.action_url))}" style="font-size:14px;line-height:20px;color:#7f1748;font-weight:bold;text-decoration:none">Open in Manager Portal →</a></td></tr>`).join('');
@@ -49,7 +53,7 @@ async function sendEmail(email, items) {
       html: message.html,
       tags: [
         { name: 'type', value: 'manager_notification' },
-        { name: 'frequency', value: items.length > 1 ? 'daily' : 'instant' }
+        { name: 'frequency', value: isDigest(items) ? 'daily' : 'instant' }
       ]
     })
   });
@@ -63,7 +67,7 @@ function deliveryGroups(rows) {
   const daily = new Map();
   for (const row of Array.isArray(rows) ? rows : []) {
     if (row.email_frequency === 'daily') {
-      const key = `${row.manager_id}|${row.email || ''}`;
+      const key = `${row.manager_id}|${row.world_id || ''}|${row.email || ''}`;
       if (!daily.has(key)) daily.set(key, []);
       daily.get(key).push(row);
     } else {
