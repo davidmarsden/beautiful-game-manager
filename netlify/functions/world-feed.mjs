@@ -100,10 +100,28 @@ async function currentFeed(userId, worldId) {
   return feed;
 }
 
+async function requestedFeedItem(userId, worldId, itemId) {
+  if (!itemId) return null;
+  return rpc('get_manager_world_feed_item_for_user', {
+    p_user_id: userId,
+    p_world_id: worldId,
+    p_feed_item_id: itemId
+  });
+}
+
+async function currentFeedWithTarget(userId, worldId, itemId) {
+  const feed = await currentFeed(userId, worldId);
+  if (!itemId || (feed?.items || []).some((candidate) => String(candidate.id) === String(itemId))) return feed;
+  const target = await requestedFeedItem(userId, worldId, itemId);
+  if (target?.id) {
+    feed.items = [target, ...(feed.items || [])];
+  }
+  return feed;
+}
+
 async function bestEffortFeedItem(userId, worldId, itemId) {
   try {
-    const feed = await currentFeed(userId, worldId);
-    return (feed?.items || []).find((candidate) => String(candidate.id) === String(itemId)) || null;
+    return await requestedFeedItem(userId, worldId, itemId);
   } catch {
     return null;
   }
@@ -120,7 +138,8 @@ export default async (request) => {
     if (request.method === 'GET') {
       // Reads must stay fast: system projection reconciliation and social metrics
       // are explicit background actions rather than prerequisites for first paint.
-      return json(await currentFeed(user.id, appointment.world_id));
+      const requestedItemId = new URL(request.url).searchParams.get('feed_item');
+      return json(await currentFeedWithTarget(user.id, appointment.world_id, requestedItemId));
     }
 
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -154,7 +173,8 @@ export default async (request) => {
         p_user_id: user.id,
         p_world_id: appointment.world_id,
         p_feed_item_id: payload.feed_item_id,
-        p_body: payload.body
+        p_body: payload.body,
+        p_parent_comment_id: payload.parent_comment_id || null
       });
       const item = await bestEffortFeedItem(user.id, appointment.world_id, payload.feed_item_id);
       return json({ ...result, item }, 201);
@@ -183,7 +203,7 @@ export default async (request) => {
     const status = /Session|Authentication/.test(message) ? 401
       : /appointment|profile/i.test(message) ? 409
       : /Administrator|only hide your own/i.test(message) ? 403
-      : /between 1|unavailable|not found/i.test(message) ? 400
+      : /between 1|unavailable|not found|reply target/i.test(message) ? 400
       : 503;
     return json({ error: message }, status);
   }
