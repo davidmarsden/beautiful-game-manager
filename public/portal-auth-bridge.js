@@ -3,12 +3,53 @@
   const MAX_SECONDARY_CONCURRENCY = 2;
   const queue = [];
   const authRefreshes = new Map();
+  const authorizationWaiters = new Set();
   let activeSecondary = 0;
   let bootstrapState = 'waiting';
   let bootstrapInFlight = null;
   let requestSequence = 0;
 
   window.tbgPortalAuthorization = window.tbgPortalAuthorization || '';
+
+  const currentAuthorization = () => String(window.tbgPortalAuthorization || '').trim();
+
+  const publishAuthorization = (authorization) => {
+    const normalized = String(authorization || '').trim();
+    if (!normalized || normalized === currentAuthorization()) return normalized;
+    window.tbgPortalAuthorization = normalized;
+    authorizationWaiters.forEach((resolve) => resolve(normalized));
+    authorizationWaiters.clear();
+    window.dispatchEvent(new CustomEvent('tbg:portal-authorization', { detail: { authorization: normalized } }));
+    return normalized;
+  };
+
+  const waitForAuthorization = (timeoutMs = 10_000) => {
+    const current = currentAuthorization();
+    if (current) return Promise.resolve(current);
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (callback, value) => {
+        if (settled) return;
+        settled = true;
+        authorizationWaiters.delete(onAuthorization);
+        clearTimeout(timer);
+        callback(value);
+      };
+      const onAuthorization = (authorization) => finish(resolve, authorization);
+      const timer = window.setTimeout(
+        () => finish(reject, new Error('Portal authorization was not available in time.')),
+        Math.max(0, Number(timeoutMs) || 0)
+      );
+      authorizationWaiters.add(onAuthorization);
+      const racedCurrent = currentAuthorization();
+      if (racedCurrent) onAuthorization(racedCurrent);
+    });
+  };
+
+  window.tbgPortalAuth = Object.freeze({
+    authorization: currentAuthorization,
+    waitForAuthorization
+  });
 
   const requestDetails = async (args) => {
     const input = args[0];
@@ -53,9 +94,6 @@
   const requestPriority = (details) => {
     if (['interactive', 'normal', 'background'].includes(details.priority)) return details.priority;
 
-    // The World Feed's first-paint GET is user-facing and should not sit behind
-    // portal background work. Projection sync and social metrics are explicitly
-    // best-effort/background actions and should yield to interactive requests.
     if (details?.url?.pathname === '/api/world-feed') {
       if (details.method === 'GET') return 'interactive';
       if (['sync', 'activity'].includes(worldFeedAction(details))) return 'background';
@@ -140,11 +178,30 @@
     return response.clone();
   };
 
+  const publishRefreshAuthorization = async (response) => {
+    if (!response?.ok) return;
+    try {
+      const payload = await response.clone().json();
+      if (payload?.access_token) publishAuthorization(`Bearer ${payload.access_token}`);
+    } catch {
+      // Auth refresh still succeeds even if an unexpected response body cannot be inspected.
+    }
+  };
+
   const coordinatedAuthRefresh = async (args, details) => {
-    if (!details.bodyComparable) return upstreamFetch(...args);
+    if (!details.bodyComparable) {
+      const response = await upstreamFetch(...args);
+      await publishRefreshAuthorization(response);
+      return response;
+    }
     const key = `${details.url.origin}|${String(details.body)}`;
     if (!authRefreshes.has(key)) {
-      const refresh = upstreamFetch(...args).finally(() => authRefreshes.delete(key));
+      const refresh = upstreamFetch(...args)
+        .then(async (response) => {
+          await publishRefreshAuthorization(response);
+          return response;
+        })
+        .finally(() => authRefreshes.delete(key));
       authRefreshes.set(key, refresh);
     }
     const response = await authRefreshes.get(key);
@@ -153,7 +210,6 @@
 
   window.fetch = async (...args) => {
     const details = await requestDetails(args);
-    if (details.authorization) window.tbgPortalAuthorization = details.authorization;
 
     const authRefreshRequest = Boolean(
       details.url
@@ -162,6 +218,8 @@
       && details.url.searchParams.get('grant_type') === 'refresh_token'
     );
     if (authRefreshRequest) return coordinatedAuthRefresh(args, details);
+
+    if (details.authorization) publishAuthorization(details.authorization);
 
     const protectedPortalRequest = Boolean(
       details.url

@@ -1,24 +1,10 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
 const $ = (id) => document.getElementById(id);
-let client;
-let session;
 let latestMessages = [];
 let decorating = false;
 
-async function ensureSession() {
-  if (!client) {
-    const response = await fetch('/api/auth-config', { cache: 'no-store' });
-    const config = await response.json();
-    if (!response.ok || !config.configured) throw new Error(config.error || 'Supabase is not configured');
-    client = createClient(config.supabase_url, config.supabase_anon_key, {
-      auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: false, detectSessionInUrl: false }
-    });
-  }
-  const { data, error } = await client.auth.getSession();
-  if (error) throw error;
-  session = data.session;
-  return session;
+async function authorization() {
+  if (!window.tbgPortalAuth?.waitForAuthorization) throw new Error('Portal authentication bridge is unavailable');
+  return window.tbgPortalAuth.waitForAuthorization();
 }
 
 function setBadge(count) {
@@ -55,10 +41,9 @@ function renderMessages(messages) {
 }
 
 async function loadInbox() {
-  const active = await ensureSession();
-  if (!active) return;
+  const bearer = await authorization();
   const response = await fetch('/api/inbox', {
-    headers: { authorization: `Bearer ${active.access_token}` },
+    headers: { authorization: bearer },
     cache: 'no-store'
   });
   const body = await response.json();
@@ -67,15 +52,14 @@ async function loadInbox() {
 }
 
 async function markRead(payload, button) {
-  const active = await ensureSession();
-  if (!active) throw new Error('Authentication required');
+  const bearer = await authorization();
   if (button) button.disabled = true;
 
   const response = await fetch('/api/inbox', {
     method: 'PATCH',
     headers: {
       'content-type': 'application/json',
-      authorization: `Bearer ${active.access_token}`
+      authorization: bearer
     },
     body: JSON.stringify(payload)
   });
