@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const migration = fs.readFileSync(new URL('../supabase/migrations/20260828c_transfer_notifications.sql', import.meta.url), 'utf8');
+const history = fs.readFileSync(new URL('../public/transfer-history.js', import.meta.url), 'utf8');
 
 test('authoritative transfer events feed manager notifications', () => {
   assert.match(migration, /after insert on public\.transfer_deal_events/);
@@ -25,9 +26,14 @@ test('accepted rejected and completed transfer outcomes are notified', () => {
   assert.match(migration, /new\.event_type = 'settlement_completed'[\s\S]*or participant\.manager_id <> new\.manager_id/);
 });
 
-test('transfer notifications deep-link to the relevant deal', () => {
+test('transfer notifications deep-link to the relevant live or historical deal', () => {
   assert.match(migration, /\?view=transfers&deal=/);
   assert.match(migration, /new\.deal_id::text/);
+  assert.match(history, /new URLSearchParams\(window\.location\.search\)\.get\('deal'\)/);
+  assert.match(history, /\[data-first-class-deal=/);
+  assert.match(history, /data-transfer-history-deal=/);
+  assert.match(history, /scrollIntoView\(\{ behavior: 'smooth', block: 'center' \}\)/);
+  assert.match(history, /target\.style\.outline = '2px solid currentColor'/);
 });
 
 test('notification trigger helper is not browser executable', () => {
