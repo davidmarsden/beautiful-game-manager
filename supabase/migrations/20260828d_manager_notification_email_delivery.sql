@@ -1,7 +1,7 @@
 begin;
 
 create table if not exists public.manager_notification_preferences (
-  manager_id uuid primary key references public.manager_profiles(id) on delete cascade,
+  manager_id uuid not null references public.manager_profiles(id) on delete cascade,
   world_id text not null references public.worlds(id) on delete cascade,
   email_frequency text not null default 'off' check (email_frequency in ('off', 'instant', 'daily')),
   email_transfers boolean not null default true,
@@ -9,7 +9,8 @@ create table if not exists public.manager_notification_preferences (
   email_system boolean not null default false,
   daily_digest_hour_utc smallint not null default 8 check (daily_digest_hour_utc between 0 and 23),
   email_start_at timestamptz,
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  primary key (manager_id, world_id)
 );
 
 alter table public.manager_notification_preferences enable row level security;
@@ -134,8 +135,7 @@ begin
     case when frequency_value = 'off' then null else now() end,
     now()
   )
-  on conflict (manager_id) do update set
-    world_id = excluded.world_id,
+  on conflict (manager_id, world_id) do update set
     email_frequency = excluded.email_frequency,
     email_transfers = excluded.email_transfers,
     email_social = excluded.email_social,
@@ -219,6 +219,7 @@ begin
   select coalesce(jsonb_agg(jsonb_build_object(
     'notification_id', notification.id,
     'manager_id', notification.manager_id,
+    'world_id', notification.world_id,
     'email', auth_user.email,
     'email_frequency', preference.email_frequency,
     'notification_type', notification.notification_type,
@@ -231,7 +232,9 @@ begin
   into result_value
   from claimed
   join public.manager_notifications notification on notification.id = claimed.notification_id
-  join public.manager_notification_preferences preference on preference.manager_id = notification.manager_id
+  join public.manager_notification_preferences preference
+    on preference.manager_id = notification.manager_id
+   and preference.world_id = notification.world_id
   join public.manager_profiles profile on profile.id = notification.manager_id
   left join auth.users auth_user on auth_user.id = profile.user_id;
 
