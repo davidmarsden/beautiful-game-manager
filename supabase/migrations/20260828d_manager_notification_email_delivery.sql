@@ -202,14 +202,13 @@ begin
     insert into public.manager_notification_email_deliveries(
       notification_id, manager_id, status, claim_token, claimed_at, attempts, created_at, updated_at
     )
-    select notification.id, notification.manager_id, 'sending', p_claim_token, now(), 1, now(), now()
+    select notification.id, notification.manager_id, 'sending', p_claim_token, now(), 0, now(), now()
     from public.manager_notifications notification
     join candidates on candidates.id = notification.id
     on conflict (notification_id) do update set
       status = 'sending',
       claim_token = excluded.claim_token,
       claimed_at = excluded.claimed_at,
-      attempts = public.manager_notification_email_deliveries.attempts + 1,
       updated_at = now()
     where public.manager_notification_email_deliveries.status in ('failed', 'sending')
       and public.manager_notification_email_deliveries.attempts < 3
@@ -242,6 +241,30 @@ begin
 end;
 $$;
 
+create or replace function public.start_manager_notification_email_deliveries(
+  p_claim_token uuid,
+  p_notification_ids uuid[]
+) returns integer
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  affected integer;
+begin
+  update public.manager_notification_email_deliveries delivery
+  set attempts = delivery.attempts + 1,
+      attempted_at = now(),
+      updated_at = now()
+  where delivery.claim_token = p_claim_token
+    and delivery.notification_id = any(coalesce(p_notification_ids, '{}'::uuid[]))
+    and delivery.status = 'sending'
+    and delivery.attempts < 3;
+  get diagnostics affected = row_count;
+  return affected;
+end;
+$$;
+
 create or replace function public.finish_manager_notification_email_deliveries(
   p_claim_token uuid,
   p_notification_ids uuid[],
@@ -257,7 +280,6 @@ declare
 begin
   update public.manager_notification_email_deliveries delivery
   set status = case when trim(coalesce(p_error, '')) = '' then 'sent' else 'failed' end,
-      attempted_at = now(),
       sent_at = case when trim(coalesce(p_error, '')) = '' then now() else delivery.sent_at end,
       resend_message_id = case when trim(coalesce(p_error, '')) = '' then p_message_id else delivery.resend_message_id end,
       last_error = nullif(left(trim(coalesce(p_error, '')), 1000), ''),
@@ -278,6 +300,8 @@ revoke all on function public.update_manager_notification_preferences_for_user(u
 grant execute on function public.update_manager_notification_preferences_for_user(uuid,text,text,boolean,boolean,boolean) to service_role;
 revoke all on function public.claim_manager_notification_email_deliveries(uuid,integer) from public, anon, authenticated;
 grant execute on function public.claim_manager_notification_email_deliveries(uuid,integer) to service_role;
+revoke all on function public.start_manager_notification_email_deliveries(uuid,uuid[]) from public, anon, authenticated;
+grant execute on function public.start_manager_notification_email_deliveries(uuid,uuid[]) to service_role;
 revoke all on function public.finish_manager_notification_email_deliveries(uuid,uuid[],text,text) from public, anon, authenticated;
 grant execute on function public.finish_manager_notification_email_deliveries(uuid,uuid[],text,text) to service_role;
 
