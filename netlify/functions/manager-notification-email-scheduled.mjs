@@ -84,6 +84,10 @@ export default async () => {
   for (const items of deliveryGroups(claimed)) {
     const notificationIds = items.map((item) => item.notification_id);
     try {
+      await rpc('start_manager_notification_email_deliveries', {
+        p_claim_token: claimToken,
+        p_notification_ids: notificationIds
+      });
       const messageId = await sendEmail(items[0]?.email, items);
       await rpc('finish_manager_notification_email_deliveries', {
         p_claim_token: claimToken,
