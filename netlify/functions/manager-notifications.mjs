@@ -38,10 +38,28 @@ export default async (request) => {
     const user = await userFor(token);
 
     if (request.method === 'GET') {
-      return json(await rpc('get_manager_notifications_for_user', { p_user_id: user.id, p_world_id: WORLD_ID }));
+      const [notifications, preferences] = await Promise.all([
+        rpc('get_manager_notifications_for_user', { p_user_id: user.id, p_world_id: WORLD_ID }),
+        rpc('get_manager_notification_preferences_for_user', { p_user_id: user.id, p_world_id: WORLD_ID })
+          .catch(() => ({ email_frequency: 'off', email_transfers: true, email_social: true, email_system: false, daily_digest_hour_utc: 8 }))
+      ]);
+      return json({ ...notifications, delivery_preferences: preferences });
     }
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
     const body = await request.json().catch(() => ({}));
+
+    if (body.action === 'update-delivery-preferences') {
+      const result = await rpc('update_manager_notification_preferences_for_user', {
+        p_user_id: user.id,
+        p_world_id: WORLD_ID,
+        p_email_frequency: String(body.email_frequency || 'off'),
+        p_email_transfers: body.email_transfers !== false,
+        p_email_social: body.email_social !== false,
+        p_email_system: body.email_system === true
+      });
+      return json({ ok: true, delivery_preferences: result });
+    }
+
     if (body.action !== 'mark-read' && body.action !== 'mark-all-read') return json({ error: 'Unknown action' }, 400);
     const result = await rpc('mark_manager_notification_read_for_user', {
       p_user_id: user.id,
