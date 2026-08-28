@@ -2,6 +2,7 @@
   const upstreamFetch = window.fetch.bind(window);
   const MAX_SECONDARY_CONCURRENCY = 2;
   const queue = [];
+  const authRefreshes = new Map();
   let activeSecondary = 0;
   let bootstrapState = 'waiting';
   let bootstrapInFlight = null;
@@ -125,9 +126,27 @@
     return response.clone();
   };
 
+  const coordinatedAuthRefresh = async (args, details) => {
+    const key = `${details.url.origin}|${String(details.body || '')}`;
+    if (!authRefreshes.has(key)) {
+      const refresh = upstreamFetch(...args).finally(() => authRefreshes.delete(key));
+      authRefreshes.set(key, refresh);
+    }
+    const response = await authRefreshes.get(key);
+    return response.clone();
+  };
+
   window.fetch = async (...args) => {
     const details = requestDetails(args);
     if (details.authorization) window.tbgPortalAuthorization = details.authorization;
+
+    const authRefreshRequest = Boolean(
+      details.url
+      && details.method === 'POST'
+      && details.url.pathname.endsWith('/auth/v1/token')
+      && details.url.searchParams.get('grant_type') === 'refresh_token'
+    );
+    if (authRefreshRequest) return coordinatedAuthRefresh(args, details);
 
     const protectedPortalRequest = Boolean(
       details.url
