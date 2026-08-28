@@ -15,16 +15,18 @@ test('News comments support first-class direct replies', () => {
   assert.match(feed, /world-feed-reply-action/);
 });
 
-test('News comment writer assigns the manager profile as one composite row', () => {
-  assert.match(migration, /select profile, appointment\.club_id into manager_row, club_id_value/);
+test('News comment writer uses scalar manager assignment valid in PL/pgSQL', () => {
+  assert.match(migration, /select profile\.id, profile\.display_name, appointment\.club_id\s+into manager_id_value, manager_display_name, club_id_value/);
+  assert.doesNotMatch(migration, /select profile, appointment\.club_id into manager_row, club_id_value/);
   assert.doesNotMatch(migration, /select profile\.\*, appointment\.club_id into manager_row/);
+  assert.match(migration, /values\(p_feed_item_id, manager_id_value, club_id_value/);
 });
 
 test('News social notifications distinguish post comments from direct replies', () => {
   assert.match(migration, /'news_post_comment'/);
   assert.match(migration, /'news_comment_reply'/);
-  assert.match(migration, /item_row\.actor_manager_id <> manager_row\.id/);
-  assert.match(migration, /parent_row\.manager_id <> manager_row\.id/);
+  assert.match(migration, /item_row\.actor_manager_id <> manager_id_value/);
+  assert.match(migration, /parent_row\.manager_id <> manager_id_value/);
   assert.match(migration, /item_row\.actor_manager_id <> parent_row\.manager_id/);
   assert.match(migration, /on conflict\(manager_id, dedupe_key\) do nothing/g);
 });
