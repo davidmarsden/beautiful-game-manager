@@ -9,7 +9,8 @@ test('World Feed GET does not block on system projection reconciliation', () => 
   const getBlockStart = endpoint.indexOf("if (request.method === 'GET')");
   const postBlockStart = endpoint.indexOf("if (request.method !== 'POST')", getBlockStart);
   const getBlock = endpoint.slice(getBlockStart, postBlockStart);
-  assert.ok(getBlock.includes('currentFeed(user.id, appointment.world_id)'));
+  assert.ok(getBlock.includes('currentFeedWithTarget(user.id, appointment.world_id, requestedItemId)'));
+  assert.ok(endpoint.includes('const feed = await currentFeed(userId, worldId);'));
   assert.equal(getBlock.includes('sync_world_feed_system_items'), false);
   assert.ok(endpoint.includes("if (action === 'sync')"));
   assert.ok(endpoint.includes("rpc('sync_world_feed_system_items'"));
