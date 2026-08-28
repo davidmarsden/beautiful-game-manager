@@ -61,7 +61,11 @@ async function sendFeedAction(payload) {
 }
 
 async function fetchFeedData(token) {
-  const response = await fetch('/api/world-feed', { headers: { authorization: `Bearer ${token}` } });
+  const requestedItemId = new URLSearchParams(window.location.search).get('feed_item');
+  const path = requestedItemId
+    ? `/api/world-feed?feed_item=${encodeURIComponent(requestedItemId)}`
+    : '/api/world-feed';
+  const response = await fetch(path, { headers: { authorization: `Bearer ${token}` } });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || 'Could not load World Feed');
   return data;
@@ -103,9 +107,14 @@ function focusRequestedConversation() {
   if (!itemId) return;
   const card = host()?.querySelector(`[data-feed-item-id="${CSS.escape(itemId)}"]`);
   if (!card) return;
-  const target = commentId
+  let target = commentId
     ? card.querySelector(`[data-comment-id="${CSS.escape(commentId)}"]`) || card
     : card;
+  if (commentId && target !== card && target.hidden) {
+    const toggle = card.querySelector('.world-feed-comments-toggle[aria-expanded="false"]');
+    toggle?.click();
+    target = card.querySelector(`[data-comment-id="${CSS.escape(commentId)}"]`) || card;
+  }
   target.classList.add('world-feed-notification-target');
   target.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
