@@ -1,35 +1,17 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
 const $ = (id) => document.getElementById(id);
-let client;
-let currentSession;
 let latestState;
 let countdownTimer;
 let teamFormObserver;
 let applyingSubmission = false;
 
-async function config() {
-  const response = await fetch('/api/auth-config', { cache: 'no-store' });
-  const body = await response.json();
-  if (!response.ok || !body.configured) throw new Error(body.error || 'Supabase is not configured');
-  return body;
-}
-
-async function session() {
-  if (!client) {
-    const cfg = await config();
-    client = createClient(cfg.supabase_url, cfg.supabase_anon_key, { auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
-  }
-  const { data, error } = await client.auth.getSession();
-  if (error) throw error;
-  currentSession = data.session;
-  return currentSession;
+async function authorization() {
+  if (!window.tbgPortalAuth?.waitForAuthorization) throw new Error('Portal authentication bridge is unavailable');
+  return window.tbgPortalAuth.waitForAuthorization();
 }
 
 async function bootstrap() {
-  const active = await session();
-  if (!active) return null;
-  const response = await fetch('/api/bootstrap', { headers: { authorization: `Bearer ${active.access_token}` }, cache: 'no-store' });
+  const bearer = await authorization();
+  const response = await fetch('/api/bootstrap', { headers: { authorization: bearer }, cache: 'no-store' });
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || 'Could not load manager state');
   latestState = body;
@@ -208,10 +190,10 @@ $('onboardingForm')?.addEventListener('submit', async (event) => {
   status.className = '';
   status.textContent = 'Saving manager profile…';
   try {
-    const active = await session();
+    const bearer = await authorization();
     const response = await fetch('/api/profile', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${active.access_token}` },
+      headers: { 'content-type': 'application/json', authorization: bearer },
       body: JSON.stringify({ display_name: $('onboardingName').value, country: $('onboardingCountry').value, timezone: $('onboardingTimezone').value, favourite_club: $('onboardingFavouriteClub').value })
     });
     const body = await response.json();
