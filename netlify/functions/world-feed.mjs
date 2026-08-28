@@ -100,10 +100,28 @@ async function currentFeed(userId, worldId) {
   return feed;
 }
 
+async function requestedFeedItem(userId, worldId, itemId) {
+  if (!itemId) return null;
+  return rpc('get_manager_world_feed_item_for_user', {
+    p_user_id: userId,
+    p_world_id: worldId,
+    p_feed_item_id: itemId
+  });
+}
+
+async function currentFeedWithTarget(userId, worldId, itemId) {
+  const feed = await currentFeed(userId, worldId);
+  if (!itemId || (feed?.items || []).some((candidate) => String(candidate.id) === String(itemId))) return feed;
+  const target = await requestedFeedItem(userId, worldId, itemId);
+  if (target?.id) {
+    feed.items = [target, ...(feed.items || [])];
+  }
+  return feed;
+}
+
 async function bestEffortFeedItem(userId, worldId, itemId) {
   try {
-    const feed = await currentFeed(userId, worldId);
-    return (feed?.items || []).find((candidate) => String(candidate.id) === String(itemId)) || null;
+    return await requestedFeedItem(userId, worldId, itemId);
   } catch {
     return null;
   }
@@ -120,7 +138,8 @@ export default async (request) => {
     if (request.method === 'GET') {
       // Reads must stay fast: system projection reconciliation and social metrics
       // are explicit background actions rather than prerequisites for first paint.
-      return json(await currentFeed(user.id, appointment.world_id));
+      const requestedItemId = new URL(request.url).searchParams.get('feed_item');
+      return json(await currentFeedWithTarget(user.id, appointment.world_id, requestedItemId));
     }
 
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
