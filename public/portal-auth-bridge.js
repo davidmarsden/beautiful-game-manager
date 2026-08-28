@@ -94,9 +94,6 @@
   const requestPriority = (details) => {
     if (['interactive', 'normal', 'background'].includes(details.priority)) return details.priority;
 
-    // The World Feed's first-paint GET is user-facing and should not sit behind
-    // portal background work. Projection sync and social metrics are explicitly
-    // best-effort/background actions and should yield to interactive requests.
     if (details?.url?.pathname === '/api/world-feed') {
       if (details.method === 'GET') return 'interactive';
       if (['sync', 'activity'].includes(worldFeedAction(details))) return 'background';
@@ -213,7 +210,6 @@
 
   window.fetch = async (...args) => {
     const details = await requestDetails(args);
-    if (details.authorization) publishAuthorization(details.authorization);
 
     const authRefreshRequest = Boolean(
       details.url
@@ -222,6 +218,8 @@
       && details.url.searchParams.get('grant_type') === 'refresh_token'
     );
     if (authRefreshRequest) return coordinatedAuthRefresh(args, details);
+
+    if (details.authorization) publishAuthorization(details.authorization);
 
     const protectedPortalRequest = Boolean(
       details.url
