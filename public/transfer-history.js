@@ -23,6 +23,27 @@ function storedAccessToken() {
   return '';
 }
 
+function requestedDealId() {
+  return new URLSearchParams(window.location.search).get('deal') || '';
+}
+
+function focusRequestedDeal() {
+  const dealId = requestedDealId();
+  if (!dealId) return false;
+  const selectorId = window.CSS?.escape ? window.CSS.escape(dealId) : dealId.replace(/(["\\])/g, '\\$1');
+  const target = document.querySelector(`[data-first-class-deal="${selectorId}"], [data-transfer-history-deal="${selectorId}"]`);
+  if (!target || target.dataset.notificationTargetFocused === 'true') return Boolean(target);
+  target.dataset.notificationTargetFocused = 'true';
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  target.style.outline = '2px solid currentColor';
+  target.style.outlineOffset = '3px';
+  window.setTimeout(() => {
+    target.style.outline = '';
+    target.style.outlineOffset = '';
+  }, 4000);
+  return true;
+}
+
 function historyHost() {
   const grid = document.querySelector('#transferNegotiationWorkspace .transfer-negotiation-grid');
   if (!grid) return null;
@@ -75,7 +96,7 @@ function renderPackageDeal(row, status) {
     <small>${escapeHtml(leg.contract_years || 3)}-season contract</small>
   </div>`).join('');
   const cash = cashLegs.map((leg) => `<div class="transfer-history-cash"><strong>Cash</strong><span>${escapeHtml(leg.from_club_name || leg.from_club_id)} → ${escapeHtml(leg.to_club_name || leg.to_club_id)} · ${formatMoney(leg.amount)}</span></div>`).join('');
-  return `<article class="incoming-transfer-offer transfer-history-row transfer-history-package">
+  return `<article class="incoming-transfer-offer transfer-history-row transfer-history-package" data-transfer-history-deal="${escapeHtml(row.deal_id || '')}">
     <div>
       <strong>${playerLegs.length > 1 ? `${playerLegs.length}-player deal` : escapeHtml(playerLegs[0]?.player_name || row.player_name || row.player_id)}</strong>
       <small>Revision ${escapeHtml(row.revision_no || 1)} · ${escapeHtml(formatDate(row.terminal_at || row.updated_at))}</small>
@@ -88,7 +109,7 @@ function renderPackageDeal(row, status) {
 
 function renderLegacyRow(row, status) {
   const direction = row.direction === 'incoming' ? `From ${row.counterpart_club_name || row.counterpart_club_id}` : `To ${row.counterpart_club_name || row.counterpart_club_id}`;
-  return `<article class="incoming-transfer-offer transfer-history-row">
+  return `<article class="incoming-transfer-offer transfer-history-row" data-transfer-history-deal="${escapeHtml(row.deal_id || '')}">
     <div>
       <strong>${escapeHtml(row.player_name || row.player_id)}</strong>
       <span>${escapeHtml(direction)} · ${formatMoney(row.fee || 0)}</span>
@@ -104,17 +125,20 @@ function renderHistory(rows) {
   if (!host) return;
   if (!rows.length) {
     host.innerHTML = '<p>No completed or closed first-class transfers yet.</p>';
+    focusRequestedDeal();
     return;
   }
   host.innerHTML = groupHistory(rows).map((row) => {
     const status = statusPresentation(row);
     return row.package_deal ? renderPackageDeal(row, status) : renderLegacyRow(row, status);
   }).join('');
+  focusRequestedDeal();
 }
 
 async function loadHistory({ force = false } = {}) {
   const host = historyHost();
   if (!host) return;
+  if (focusRequestedDeal()) return;
   if (!force && Date.now() - lastLoadedAt < TTL) return;
   if (loading) return loading;
   loading = (async () => {
@@ -137,6 +161,7 @@ async function loadHistory({ force = false } = {}) {
 
 function maybeMount(force = false) {
   if (!historyHost()) return;
+  if (focusRequestedDeal()) return;
   loadHistory({ force });
 }
 
