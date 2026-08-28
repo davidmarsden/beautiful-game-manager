@@ -154,7 +154,8 @@ export default async (request) => {
         p_user_id: user.id,
         p_world_id: appointment.world_id,
         p_feed_item_id: payload.feed_item_id,
-        p_body: payload.body
+        p_body: payload.body,
+        p_parent_comment_id: payload.parent_comment_id || null
       });
       const item = await bestEffortFeedItem(user.id, appointment.world_id, payload.feed_item_id);
       return json({ ...result, item }, 201);
@@ -183,7 +184,7 @@ export default async (request) => {
     const status = /Session|Authentication/.test(message) ? 401
       : /appointment|profile/i.test(message) ? 409
       : /Administrator|only hide your own/i.test(message) ? 403
-      : /between 1|unavailable|not found/i.test(message) ? 400
+      : /between 1|unavailable|not found|reply target/i.test(message) ? 400
       : 503;
     return json({ error: message }, status);
   }
