@@ -74,15 +74,40 @@ function hasActiveFeedDraft() {
     .some((field) => field === document.activeElement || field.value.trim() !== '');
 }
 
-function commentNode(comment) {
-  const row = el('article', 'world-feed-comment');
+function commentNode(comment, commentById, onReply) {
+  const row = el('article', `world-feed-comment${comment.parent_comment_id ? ' world-feed-comment-reply' : ''}`);
+  row.dataset.commentId = String(comment.id || '');
   const meta = el('div', 'world-feed-comment-meta');
   const identityText = comment.club_name ? `${comment.manager_name || 'Manager'} · ${comment.club_name}` : (comment.manager_name || 'Manager');
   const identity = el('strong', '', identityText);
   if (comment.manager_id) identity.dataset.managerProfileId = String(comment.manager_id);
   meta.append(identity, el('time', '', timeLabel(comment.created_at)));
+  if (comment.id) {
+    const reply = el('button', 'world-feed-reply-action', 'Reply');
+    reply.type = 'button';
+    reply.addEventListener('click', () => onReply(comment));
+    meta.append(reply);
+  }
+  if (comment.parent_comment_id) {
+    const parent = commentById.get(String(comment.parent_comment_id));
+    row.append(el('small', 'world-feed-reply-context', `Reply to ${parent?.manager_name || 'manager'}`));
+  }
   row.append(meta, el('p', '', comment.body || ''));
   return row;
+}
+
+function focusRequestedConversation() {
+  const params = new URLSearchParams(window.location.search);
+  const itemId = params.get('feed_item');
+  const commentId = params.get('comment');
+  if (!itemId) return;
+  const card = host()?.querySelector(`[data-feed-item-id="${CSS.escape(itemId)}"]`);
+  if (!card) return;
+  const target = commentId
+    ? card.querySelector(`[data-comment-id="${CSS.escape(commentId)}"]`) || card
+    : card;
+  target.classList.add('world-feed-notification-target');
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function firstUnpinnedCard(list) {
@@ -106,6 +131,7 @@ function replaceFeedItem(item) {
     else list.append(node);
   }
   feedLoadedAt = Date.now();
+  queueMicrotask(focusRequestedConversation);
   return true;
 }
 
@@ -196,9 +222,9 @@ function itemNode(item) {
 
   const comments = el('section', 'world-feed-comments');
   const rows = Array.isArray(item.comments) ? item.comments : [];
+  const commentById = new Map(rows.map((comment) => [String(comment.id || ''), comment]));
   const heading = el('div', 'world-feed-comments-heading', `${rows.length} ${rows.length === 1 ? 'comment' : 'comments'}`);
   comments.append(heading);
-  rows.forEach((comment) => comments.append(commentNode(comment)));
 
   const form = el('form', 'world-feed-comment-form');
   const input = document.createElement('textarea');
@@ -210,19 +236,48 @@ function itemNode(item) {
   const button = el('button', '', 'Comment');
   button.type = 'submit';
   const status = el('span', 'world-feed-inline-status');
-  form.append(input, button, status);
+  const cancelReply = el('button', 'world-feed-reply-cancel', 'Cancel reply');
+  cancelReply.type = 'button';
+  cancelReply.hidden = true;
+  const clearReplyTarget = () => {
+    delete input.dataset.parentCommentId;
+    input.placeholder = 'Comment as your manager…';
+    cancelReply.hidden = true;
+    if (status.dataset.replyStatus === 'true') status.textContent = '';
+    delete status.dataset.replyStatus;
+  };
+  const selectReplyTarget = (comment) => {
+    input.dataset.parentCommentId = String(comment.id || '');
+    input.placeholder = `Reply to ${comment.manager_name || 'manager'}…`;
+    status.textContent = `Replying to ${comment.manager_name || 'manager'}`;
+    status.dataset.replyStatus = 'true';
+    cancelReply.hidden = false;
+    input.focus();
+  };
+  cancelReply.addEventListener('click', clearReplyTarget);
+
+  rows.forEach((comment) => comments.append(commentNode(comment, commentById, selectReplyTarget)));
+
+  form.append(input, button, cancelReply, status);
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const message = input.value.trim();
     if (!message) return;
     button.disabled = true;
     status.textContent = 'Posting…';
+    delete status.dataset.replyStatus;
     try {
-      const result = await sendFeedAction({ action: 'comment', feed_item_id: item.id, body: message });
+      const result = await sendFeedAction({
+        action: 'comment',
+        feed_item_id: item.id,
+        body: message,
+        parent_comment_id: input.dataset.parentCommentId || null
+      });
       input.value = '';
+      clearReplyTarget();
       status.textContent = '';
       if (!replaceFeedItem(result.item)) await loadWorldFeed({ force: true });
-      document.dispatchEvent(new CustomEvent('tbg:world-feed-mutation-succeeded', { detail: { action: 'comment', feed_item_id: item.id } }));
+      document.dispatchEvent(new CustomEvent('tbg:world-feed-mutation-succeeded', { detail: { action: 'comment', feed_item_id: item.id, comment_id: result?.id || '' } }));
     } catch (error) {
       status.textContent = error.message;
     } finally {
@@ -288,6 +343,7 @@ function renderFeed(data) {
   else items.forEach((item) => list.append(itemNode(item)));
   shell.append(list);
   root.append(shell);
+  queueMicrotask(focusRequestedConversation);
 }
 
 async function refreshSystemProjection() {
@@ -319,6 +375,7 @@ async function loadWorldFeed({ force = false } = {}) {
   const alreadyRendered = Boolean(root.querySelector('.world-feed-shell'));
   if (!force && Date.now() - feedLoadedAt < FEED_TTL) {
     void refreshSystemProjection();
+    queueMicrotask(focusRequestedConversation);
     return;
   }
   if (feedLoading) return feedLoading;
