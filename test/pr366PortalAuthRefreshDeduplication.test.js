@@ -11,3 +11,11 @@ test('portal auth bridge deduplicates concurrent refresh-token requests', () => 
   assert.match(bridge, /authRefreshes\.get\(key\)/);
   assert.match(bridge, /response\.clone\(\)/);
 });
+
+test('refresh dedupe compares Request-object bodies and bypasses incomparable bodies', () => {
+  assert.match(bridge, /input instanceof Request/);
+  assert.match(bridge, /input\.clone\(\)\.text\(\)/);
+  assert.match(bridge, /bodyComparable/);
+  assert.match(bridge, /if \(!details\.bodyComparable\) return upstreamFetch\(\.\.\.args\)/);
+  assert.match(bridge, /const key = `\$\{details\.url\.origin\}\|\$\{String\(details\.body\)\}`/);
+});
