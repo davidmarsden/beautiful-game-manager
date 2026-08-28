@@ -146,7 +146,8 @@ security definer
 set search_path = pg_catalog, public
 as $$
 declare
-  manager_row public.manager_profiles;
+  manager_id_value uuid;
+  manager_display_name text;
   club_id_value text;
   item_row public.world_feed_items;
   parent_row public.world_feed_comments;
@@ -159,7 +160,8 @@ begin
     raise exception 'Comment must be between 1 and 2000 characters';
   end if;
 
-  select profile, appointment.club_id into manager_row, club_id_value
+  select profile.id, profile.display_name, appointment.club_id
+    into manager_id_value, manager_display_name, club_id_value
   from public.manager_profiles profile
   join public.manager_appointments appointment
     on appointment.manager_id = profile.id
@@ -167,7 +169,7 @@ begin
    and appointment.status = 'active'
   where profile.user_id = p_user_id
   limit 1;
-  if manager_row.id is null then raise exception 'No active manager appointment for this user and world'; end if;
+  if manager_id_value is null then raise exception 'No active manager appointment for this user and world'; end if;
 
   select * into item_row
   from public.world_feed_items
@@ -186,14 +188,14 @@ begin
   end if;
 
   insert into public.world_feed_comments(feed_item_id, manager_id, club_id, body, parent_comment_id)
-  values(p_feed_item_id, manager_row.id, club_id_value, normalized_body, p_parent_comment_id)
+  values(p_feed_item_id, manager_id_value, club_id_value, normalized_body, p_parent_comment_id)
   returning * into comment_row;
 
   action_url_value := '/?view=feed&feed_item=' || p_feed_item_id::text || '&comment=' || comment_row.id::text;
 
   -- A direct reply is the more specific event. If the replied-to manager also
   -- owns the post, send one reply notification rather than two notifications.
-  if parent_row.id is not null and parent_row.manager_id <> manager_row.id then
+  if parent_row.id is not null and parent_row.manager_id <> manager_id_value then
     insert into public.manager_notifications(
       world_id, manager_id, notification_type, notification_class, title, body,
       action_url, source_type, source_id, dedupe_key, created_at
@@ -203,7 +205,7 @@ begin
       'news_comment_reply',
       'info',
       'New reply to your comment',
-      manager_row.display_name || ' replied to your comment on News.',
+      manager_display_name || ' replied to your comment on News.',
       action_url_value,
       'world_feed_comment',
       comment_row.id::text,
@@ -214,7 +216,7 @@ begin
 
   if item_row.item_type = 'manager_post'
      and item_row.actor_manager_id is not null
-     and item_row.actor_manager_id <> manager_row.id
+     and item_row.actor_manager_id <> manager_id_value
      and (parent_row.id is null or item_row.actor_manager_id <> parent_row.manager_id) then
     insert into public.manager_notifications(
       world_id, manager_id, notification_type, notification_class, title, body,
@@ -225,7 +227,7 @@ begin
       'news_post_comment',
       'info',
       'New comment on your News post',
-      manager_row.display_name || ' commented on your News post.',
+      manager_display_name || ' commented on your News post.',
       action_url_value,
       'world_feed_comment',
       comment_row.id::text,
