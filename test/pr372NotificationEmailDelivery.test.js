@@ -37,6 +37,7 @@ test('manager notification API reads and updates delivery preferences', () => {
 
 test('scheduled email worker claims deliveries and uses Resend', () => {
   assert.match(scheduled, /claim_manager_notification_email_deliveries/);
+  assert.match(scheduled, /start_manager_notification_email_deliveries/);
   assert.match(scheduled, /finish_manager_notification_email_deliveries/);
   assert.match(scheduled, /https:\/\/api\.resend\.com\/emails/);
   assert.match(scheduled, /RESEND_API_KEY/);
@@ -50,6 +51,14 @@ test('daily delivery groups manager notifications into a digest even for one ite
   assert.match(scheduled, /Your TBG update/);
 });
 
+test('stale claims do not consume retry attempts before delivery starts', () => {
+  assert.match(migration, /select notification\.id, notification\.manager_id, 'sending', p_claim_token, now\(\), 0, now\(\), now\(\)/);
+  assert.doesNotMatch(migration, /attempts = public\.manager_notification_email_deliveries\.attempts \+ 1/);
+  assert.match(migration, /create or replace function public\.start_manager_notification_email_deliveries/);
+  assert.match(migration, /set attempts = delivery\.attempts \+ 1,/);
+  assert.match(scheduled, /start_manager_notification_email_deliveries[\s\S]*sendEmail/);
+});
+
 test('email delivery ledger uses bounded retry and browser roles cannot access privileged helpers', () => {
   assert.match(migration, /delivery\.attempts < 3/);
   assert.match(migration, /interval '15 minutes'/);
@@ -57,5 +66,6 @@ test('email delivery ledger uses bounded retry and browser roles cannot access p
   assert.match(migration, /revoke all on table public\.manager_notification_preferences from public, anon, authenticated/);
   assert.match(migration, /revoke all on table public\.manager_notification_email_deliveries from public, anon, authenticated/);
   assert.match(migration, /revoke all on function public\.claim_manager_notification_email_deliveries\(uuid,integer\) from public, anon, authenticated/);
+  assert.match(migration, /revoke all on function public\.start_manager_notification_email_deliveries\(uuid,uuid\[\]\) from public, anon, authenticated/);
   assert.match(migration, /revoke all on function public\.finish_manager_notification_email_deliveries\(uuid,uuid\[\],text,text\) from public, anon, authenticated/);
 });
