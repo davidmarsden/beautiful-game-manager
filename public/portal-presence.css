@@ -51,21 +51,21 @@
 .portal-tabs-scroll-shell.portal-tabs-can-left::before,
 .portal-tabs-scroll-shell.portal-tabs-can-right::after{opacity:1}
 
-.manager-directory-list-row{
+#managersView .manager-directory-list-row{
   grid-template-columns:minmax(0,1.35fr) minmax(70px,.45fr) minmax(110px,.55fr) auto;
 }
-.manager-directory-last-active{display:grid;gap:.1rem;min-width:0}
-.manager-directory-last-active small{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--tbg-colour-muted,#58685c)}
-.manager-directory-last-active strong{font-size:.84rem;color:#237227;white-space:nowrap}
-.manager-directory-activity-summary{margin-left:auto;font-size:.82rem;font-weight:700;color:var(--tbg-brazil-blue,#193375)}
+#managersView .manager-directory-last-active{display:grid;gap:.1rem;min-width:0}
+#managersView .manager-directory-last-active small{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--tbg-colour-muted,#58685c)}
+#managersView .manager-directory-last-active strong{font-size:.84rem;color:#237227;white-space:nowrap}
+#managersView .manager-directory-activity-summary{margin-left:auto;font-size:.82rem;font-weight:700;color:var(--tbg-brazil-blue,#193375)}
 
 @media(max-width:700px){
   .portal-tabs-scroll-button{width:1.9rem;height:1.9rem}
-  .manager-directory-summary{flex-wrap:wrap}
-  .manager-directory-activity-summary{width:100%;margin-left:0}
-  .manager-directory-list-row{grid-template-columns:minmax(0,1fr) auto;gap:.45rem .75rem}
-  .manager-directory-identity{grid-column:1}
-  .manager-directory-club{grid-column:1}
-  .manager-directory-last-active{grid-column:1;display:flex;align-items:baseline;gap:.4rem}
-  .manager-directory-open{grid-column:2;grid-row:1/4;align-self:center}
+  #managersView .manager-directory-summary{flex-wrap:wrap}
+  #managersView .manager-directory-activity-summary{width:100%;margin-left:0}
+  #managersView .manager-directory-list-row{grid-template-columns:minmax(0,1fr) auto;gap:.45rem .75rem}
+  #managersView .manager-directory-identity{grid-column:1}
+  #managersView .manager-directory-club{grid-column:1}
+  #managersView .manager-directory-last-active{grid-column:1;display:flex;align-items:baseline;gap:.4rem}
+  #managersView .manager-directory-open{grid-column:2;grid-row:1/4;align-self:center}
 }
