@@ -5,7 +5,9 @@ import './portal-presence.js';
 
 let loadedAt = 0;
 let loading = null;
+let renderedData = null;
 const TTL = 60_000;
+const RELATIVE_ACTIVITY_REFRESH = 60_000;
 
 function authToken() {
   const bridged = String(window.tbgPortalAuthorization || '').trim();
@@ -54,6 +56,7 @@ function activityMarkup(value) {
 function render(data) {
   const root = host();
   if (!root) return;
+  renderedData = data;
   const directory = Array.isArray(data.directory) ? data.directory : [];
   const hasSelf = Boolean(data.manager_name || data.club_name);
   const selfRow = hasSelf ? `
@@ -92,6 +95,12 @@ function render(data) {
   </section>`;
 }
 
+function refreshRelativeActivity() {
+  const root = host();
+  if (!root || root.hidden || !renderedData || !root.querySelector('.manager-directory-shell')) return;
+  render(renderedData);
+}
+
 async function loadDirectory({ force = false } = {}) {
   const root = host();
   if (!root) return;
@@ -127,7 +136,8 @@ document.addEventListener('click', (event) => {
 document.addEventListener('tbg:view-changed', (event) => {
   if (event.detail?.view === 'managers') void loadDirectory();
 });
-window.addEventListener('tbg:portal-rendered', () => { loadedAt = 0; });
+window.addEventListener('tbg:portal-rendered', () => { loadedAt = 0; renderedData = null; });
 window.addEventListener('tbg:world-feed-mutation-succeeded', () => { loadedAt = 0; });
+window.setInterval(refreshRelativeActivity, RELATIVE_ACTIVITY_REFRESH);
 
-export { lastActiveLabel, loadDirectory };
+export { lastActiveLabel, loadDirectory, refreshRelativeActivity };
