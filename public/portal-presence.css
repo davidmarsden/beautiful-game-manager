@@ -1,0 +1,71 @@
+.portal-tabs-scroll-shell{
+  position:relative;
+  min-width:0;
+}
+
+.portal-tabs-scroll-shell .tabs{
+  scrollbar-width:none;
+  -ms-overflow-style:none;
+  scroll-behavior:smooth;
+}
+
+.portal-tabs-scroll-shell .tabs::-webkit-scrollbar{display:none}
+
+.portal-tabs-scroll-button{
+  position:absolute;
+  top:50%;
+  z-index:6;
+  width:2rem;
+  height:2rem;
+  margin:0;
+  padding:0;
+  transform:translateY(-50%);
+  border:2px solid var(--tbg-colour-cream,#f8f7e8);
+  border-radius:999px;
+  background:var(--tbg-brazil-blue,#193375);
+  color:#fff;
+  box-shadow:0 1px 5px rgba(0,0,0,.28);
+  font:800 1.65rem/1 system-ui,sans-serif;
+  cursor:pointer;
+}
+
+.portal-tabs-scroll-button[hidden]{display:none!important}
+.portal-tabs-scroll-left{left:.3rem}
+.portal-tabs-scroll-right{right:.3rem}
+.portal-tabs-scroll-button:focus-visible{outline:3px solid var(--tbg-brazil-yellow,#FFDC02);outline-offset:2px}
+
+.portal-tabs-scroll-shell::before,
+.portal-tabs-scroll-shell::after{
+  content:"";
+  position:absolute;
+  top:0;
+  bottom:0;
+  z-index:5;
+  width:3rem;
+  pointer-events:none;
+  opacity:0;
+  transition:opacity .15s ease;
+}
+.portal-tabs-scroll-shell::before{left:0;background:linear-gradient(90deg,rgba(25,51,117,.92),rgba(25,51,117,0))}
+.portal-tabs-scroll-shell::after{right:0;background:linear-gradient(270deg,rgba(25,51,117,.92),rgba(25,51,117,0))}
+.portal-tabs-scroll-shell.portal-tabs-can-left::before,
+.portal-tabs-scroll-shell.portal-tabs-can-right::after{opacity:1}
+
+#managersView .manager-directory-list-row{
+  grid-template-columns:minmax(0,1.35fr) minmax(70px,.45fr) minmax(110px,.55fr) auto;
+}
+#managersView .manager-directory-last-active{display:grid;gap:.1rem;min-width:0}
+#managersView .manager-directory-last-active small{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--tbg-colour-muted,#58685c)}
+#managersView .manager-directory-last-active strong{font-size:.84rem;color:#237227;white-space:nowrap}
+#managersView .manager-directory-activity-summary{margin-left:auto;font-size:.82rem;font-weight:700;color:var(--tbg-brazil-blue,#193375)}
+
+@media(max-width:700px){
+  .portal-tabs-scroll-button{width:1.9rem;height:1.9rem}
+  #managersView .manager-directory-summary{flex-wrap:wrap}
+  #managersView .manager-directory-activity-summary{width:100%;margin-left:0}
+  #managersView .manager-directory-list-row{grid-template-columns:minmax(0,1fr) auto;gap:.45rem .75rem}
+  #managersView .manager-directory-identity{grid-column:1}
+  #managersView .manager-directory-club{grid-column:1}
+  #managersView .manager-directory-last-active{grid-column:1;display:flex;align-items:baseline;gap:.4rem}
+  #managersView .manager-directory-open{grid-column:2;grid-row:1/4;align-self:center}
+}

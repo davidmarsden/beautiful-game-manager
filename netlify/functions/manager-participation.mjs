@@ -51,6 +51,21 @@ async function activeContext(userId) {
   return { managerId: profiles[0].id, worldId: appointments[0].world_id };
 }
 
+async function touchActivity(managerId, worldId) {
+  const now = new Date().toISOString();
+  await serviceSupabase('/rest/v1/manager_world_activity?on_conflict=manager_id,world_id', {
+    method: 'POST',
+    headers: { prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({ manager_id: managerId, world_id: worldId, last_active_at: now })
+  });
+  return now;
+}
+
+async function lastActiveFor(managerId, worldId) {
+  const rows = await serviceSupabase(`/rest/v1/manager_world_activity?manager_id=eq.${encodeURIComponent(managerId)}&world_id=eq.${encodeURIComponent(worldId)}&select=last_active_at&limit=1`);
+  return rows[0]?.last_active_at || null;
+}
+
 async function clubNamesForWorld(userId, worldId) {
   try {
     const result = await serviceSupabase('/rest/v1/rpc/get_manager_transfer_directory_for_user', {
@@ -69,18 +84,21 @@ async function managerDirectory(worldId, selfId, userId) {
   const ids = [...new Set(appointments.map((row) => row.manager_id).filter(Boolean))];
   if (!ids.length) return [];
   const idFilter = ids.map((id) => String(id).replaceAll(',', '')).join(',');
-  const [profiles, clubNames] = await Promise.all([
+  const [profiles, clubNames, activity] = await Promise.all([
     serviceSupabase(`/rest/v1/manager_profiles?id=in.(${idFilter})&select=id,display_name`),
-    clubNamesForWorld(userId, worldId)
+    clubNamesForWorld(userId, worldId),
+    serviceSupabase(`/rest/v1/manager_world_activity?world_id=eq.${encodeURIComponent(worldId)}&manager_id=in.(${idFilter})&select=manager_id,last_active_at`)
   ]);
   const names = new Map(profiles.map((profile) => [String(profile.id), profile.display_name]));
+  const activeTimes = new Map(activity.map((row) => [String(row.manager_id), row.last_active_at]));
   return appointments
     .filter((row) => String(row.manager_id) !== String(selfId))
     .map((row) => ({
       manager_id: row.manager_id,
       manager_name: names.get(String(row.manager_id)) || 'Manager',
       club_id: row.club_id,
-      club_name: clubNames.get(String(row.club_id)) || row.club_id
+      club_name: clubNames.get(String(row.club_id)) || row.club_id,
+      last_active_at: activeTimes.get(String(row.manager_id)) || null
     }))
     .sort((a, b) => String(a.manager_name).localeCompare(String(b.manager_name)));
 }
@@ -134,6 +152,7 @@ export default async (request) => {
 
     if (request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
+      if (body.action === 'touch-activity') return json({ last_active_at: await touchActivity(context.managerId, context.worldId) });
       if (body.action !== 'save-contact') return json({ error: 'Unknown action' }, 400);
       return json({ contact: await saveContact(context.managerId, body) });
     }
@@ -152,6 +171,7 @@ export default async (request) => {
     result.pins = [...(Array.isArray(result.pins) ? result.pins : []), ...(Array.isArray(hunter?.pins) ? hunter.pins : [])];
     if (isSelf && hunter?.private_detail) result.bug_hunter = hunter.private_detail;
     result.contact = await contactFor(targetId, isSelf);
+    result.last_active_at = await lastActiveFor(targetId, context.worldId);
     if (isSelf) result.directory = await managerDirectory(context.worldId, context.managerId, user.id);
     return json(result);
   } catch (error) {
