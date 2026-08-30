@@ -1,6 +1,7 @@
 import { openManagerParticipation } from './manager-participation.js';
 import './portal-followup.js';
 import './inbox-polish.js';
+import './portal-presence.js';
 
 let loadedAt = 0;
 let loading = null;
