@@ -18,6 +18,14 @@ test('manager activity is world-scoped and exposed through the manager directory
   assert.ok(directory.includes('in 3 days'));
 });
 
+test('relative manager activity labels refresh while the Managers view stays open', () => {
+  assert.ok(directory.includes('const RELATIVE_ACTIVITY_REFRESH = 60_000'));
+  assert.ok(directory.includes('function refreshRelativeActivity()'));
+  assert.ok(directory.includes("root.querySelector('.manager-directory-shell')"));
+  assert.ok(directory.includes('render(renderedData)'));
+  assert.ok(directory.includes('window.setInterval(refreshRelativeActivity, RELATIVE_ACTIVITY_REFRESH)'));
+});
+
 test('portal activity is throttled rather than writing on every interaction', () => {
   assert.ok(presence.includes('const ACTIVITY_INTERVAL = 5 * 60_000'));
   assert.ok(presence.includes("body: JSON.stringify({ action: 'touch-activity' })"));
