@@ -13,7 +13,7 @@ test('portal boot guard loads before module scripts and exposes recovery actions
   assert.ok(guardIndex < moduleIndex, 'boot recovery must execute before portal modules');
 });
 
-test('portal boot guard shows loading immediately and only escalates after a delayed unhealthy boot', async () => {
+test('portal boot guard keeps a slow but healthy startup alive and exposes useful timing', async () => {
   const guard = await read('public/portal-boot-recovery.js');
   assert.match(guard, /window\.addEventListener\('error'/);
   assert.match(guard, /window\.addEventListener\('unhandledrejection'/);
@@ -26,9 +26,16 @@ test('portal boot guard shows loading immediately and only escalates after a del
   assert.match(guard, /function showLoading\(\)/);
   assert.match(guard, /data-recovery-source="boot_loading"/);
   assert.match(guard, /Loading manager portal…/);
-  assert.match(guard, /\['boot_loading', 'boot_watchdog'\]\.includes/);
-  assert.match(guard, /waitingOnly = !recovery \|\| recovery\.dataset\.recoverySource === 'boot_loading'/);
-  assert.match(guard, /within 30 seconds/);
+  assert.match(guard, /This is taking longer than usual/);
+  assert.match(guard, /please leave this page open/);
+  assert.match(guard, /window\.tbgPortalStartupTiming/);
+  assert.match(guard, /session_refresh/);
+  assert.match(guard, /auth_user/);
+  assert.match(guard, /bootstrap/);
+  assert.match(guard, /tbg_portal_startup_timing/);
+  assert.match(guard, /console\.info\('TBG portal startup timing'/);
+  assert.doesNotMatch(guard, /within 30 seconds/);
+  assert.doesNotMatch(guard, /boot_watchdog/);
   assert.match(guard, /\}, 30000\)/);
   assert.match(guard, /window\.tbgDismissPortalRecovery = clear/);
   assert.match(guard, /Retry portal/);
