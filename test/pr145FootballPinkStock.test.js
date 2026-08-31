@@ -29,9 +29,11 @@ test("Football Pink stock retains its historical pink surface definitions", asyn
 
 test("current visual foundation remaps legacy surface variables away from pink", async () => {
   const css = await read("public/design-1982.css");
-  assert.match(css, /--tbg-colour-paper:#9fc785/);
-  assert.match(css, /--tbg-colour-paper-light:#dceccd/);
-  assert.match(css, /--tbg-colour-workspace:#b8d69f/);
-  assert.match(css, /--tbg-surface-card:#fff/);
-  assert.match(css, /--tbg-surface-table:#fff/);
+  assert.match(css, /--tbg-colour-paper:#267945/);
+  assert.match(css, /--tbg-colour-paper-strong:#164b2a/);
+  assert.match(css, /--tbg-colour-paper-light:#dbe8d5/);
+  assert.match(css, /--tbg-colour-workspace:#dbe8d5/);
+  assert.match(css, /--tbg-surface-card:#eef3eb/);
+  assert.match(css, /--tbg-surface-table:#f4f6ef/);
+  assert.doesNotMatch(css, /#e7a8b6|#f2c7d0|#efbcc7|#f5d7dd|#f3d2d8/);
 });
