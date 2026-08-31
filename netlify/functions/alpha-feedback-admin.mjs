@@ -105,6 +105,24 @@ async function adminContext(userId) {
   return context;
 }
 
+async function awardExternalBug(userId, payload) {
+  const result = await rpc('admin_award_external_bug_credit', {
+    p_admin_user_id: userId,
+    p_world_id: WORLD_ID,
+    p_manager_id: clean(payload.manager_id),
+    p_severity: clean(payload.severity),
+    p_reason: clean(payload.reason),
+    p_source_channel: clean(payload.source_channel) || 'other'
+  });
+  if (!result?.ok) {
+    const status = result?.code === 'admin_required' ? 403
+      : result?.code === 'manager_not_active_in_world' ? 404
+      : 400;
+    throw Object.assign(new Error(result?.code || 'Could not award Bug Hunter credit'), { status });
+  }
+  return result;
+}
+
 async function updateReport(userId, payload, githubIssueUrl = null) {
   const result = await rpc('admin_update_alpha_feedback_report', {
     p_admin_user_id: userId,
@@ -165,6 +183,7 @@ export default async (request) => {
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
     const payload = await request.json().catch(() => ({}));
+    if (payload.action === 'award-external-bug') return json(await awardExternalBug(user.id, payload));
     if (payload.action !== 'promote') return json(await updateReport(user.id, payload));
 
     if (!GITHUB_TOKEN) return json({ error: 'GitHub promotion is not configured (missing GITHUB_TOKEN)' }, 503);
