@@ -261,6 +261,59 @@ tbody tr:hover:not(.position-separator){background:#f1e7cb}
 .error,.fatal-error{color:var(--tbg-red)}
 .fatal-error{border-color:var(--tbg-red);background:#fff8f5}
 
+/* Visual-review pass: keep the football cues, lose the retro-theme wash. */
+html{background:#e8e4d8}
+body{
+  background:
+    linear-gradient(rgba(255,255,255,.34),rgba(255,255,255,.34)),
+    #e8e4d8;
+}
+body::before{opacity:.055}
+
+/* Tables should read like print, not a wall of highlighter. */
+th{background:#e6e0d2}
+th.active-sort{background:#d8c89e}
+tbody tr:nth-child(even):not(.position-separator){background:#fcfaf4}
+tbody tr:hover:not(.position-separator){background:#f1ead7}
+.position-separator td{
+  background:#eee6c9;
+  color:var(--tbg-navy-deep);
+  border-top:2px solid var(--tbg-navy);
+  border-bottom:1px solid #d5c79e;
+}
+
+/* Team selection belongs to the same editorial system; the pitch stays vivid. */
+.formation-board-shell{gap:16px}
+.pitch-panel,.squad-tray-panel{
+  background:#f6f1e5;
+  border:1px solid var(--tbg-rule);
+  box-shadow:0 4px 14px rgba(23,33,42,.08);
+}
+.pitch-panel{border-top:4px solid var(--tbg-navy)}
+.squad-tray-panel{border-top:4px solid var(--tbg-accent)}
+.pitch-toolbar,.squad-tray-panel h3{
+  color:var(--tbg-ink);
+  font-family:var(--tbg-display);
+}
+.pitch-help,.squad-tray-panel small{color:var(--tbg-muted)}
+.tray-player{
+  background:var(--tbg-surface);
+  border:1px solid var(--tbg-rule);
+}
+.tray-player.selected,.bench-slot.selected{outline-color:var(--tbg-accent)}
+.bench-slot{
+  background:var(--tbg-surface);
+  border-color:#aa9f87;
+}
+.bench-slot.empty:after{color:var(--tbg-muted)}
+.board-actions button{
+  background:var(--tbg-navy);
+  color:var(--tbg-paper);
+  border:1px solid var(--tbg-navy-deep);
+  border-radius:0;
+}
+.board-actions button:hover{background:var(--tbg-navy-deep)}
+
 @media(max-width:900px){
   .club-strip{grid-template-columns:80px 1fr}
 }
