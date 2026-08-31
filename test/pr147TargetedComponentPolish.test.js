@@ -4,12 +4,14 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("targeted polish loads after the final Football Pink stock layer", async () => {
+test("targeted polish loads before the final Brazil design foundation", async () => {
   const html = await read("public/index.html");
   const stock = html.indexOf('./football-pink-stock.css');
   const polish = html.indexOf('./targeted-component-polish.css');
-  assert.ok(stock >= 0, "Football Pink stock layer should remain loaded");
-  assert.ok(polish > stock, "targeted overrides must load after the rollback-safe stock layer");
+  const foundation = html.indexOf('./design-1982.css');
+  assert.equal(stock, -1, "Football Pink stock layer must not load in the manager portal");
+  assert.ok(polish >= 0, "targeted component polish should remain loaded");
+  assert.ok(foundation > polish, "Brazil design foundation must remain the final portal art-direction layer");
 });
 
 test("tactics surfaces move to pink stock while pitch and tactical slots keep contrast", async () => {
