@@ -14,7 +14,9 @@ test('authenticated portal paints a full-height TBG backdrop without loading leg
   assert.match(index, /<link rel="stylesheet" href="\.\/auth-fix\.css">/);
   assert.doesNotMatch(index, /<link rel="stylesheet" href="\.\/football-pink-stock\.css">/);
   assert.match(index, /<link rel="stylesheet" href="\.\/design-1982\.css">/);
-  assert.match(foundationCss, /html\{background:#246b3b\}/);
+  assert.match(foundationCss, /--tbg-green-deep:#164b2a/);
+  assert.match(foundationCss, /html\{background:var\(--tbg-green-deep\)\}/);
+  assert.match(foundationCss, /repeating-linear-gradient\(90deg,#205f36/);
 
   assert.match(authCss, /#portal:not\(\[hidden\]\)\s*\{/);
   assert.match(authCss, /#portal:not\(\[hidden\]\)[\s\S]*min-height:\s*100vh/);
