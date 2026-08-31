@@ -32,14 +32,14 @@ test('visual foundation defines shared Brazil-era palette and typography tokens'
   assert.match(css, /select:focus-visible/);
 });
 
-test('visual foundation uses a contained classic game canvas without sacrificing phone width', async () => {
+test('visual foundation uses a visibly contained classic game canvas without sacrificing phone width', async () => {
   const css = await read('public/design-1982.css');
-  assert.match(css, /--tbg-canvas:1180px/);
-  assert.match(css, /\.shell\{[\s\S]*width:min\(calc\(100% - 40px\),var\(--tbg-canvas\)\)/);
-  assert.match(css, /@media\(max-width:1000px\)[\s\S]*\.shell\{width:94vw\}/);
+  assert.match(css, /--tbg-canvas:1040px/);
+  assert.match(css, /\.shell\{[\s\S]*width:min\(calc\(100% - 72px\),var\(--tbg-canvas\)\)/);
+  assert.match(css, /@media\(max-width:1100px\)[\s\S]*\.shell\{width:88vw\}/);
   assert.match(css, /@media\(max-width:700px\)[\s\S]*\.shell\{width:100%;padding-inline:8px\}/);
-  assert.match(css, /\.dashboard-grid\{[\s\S]*gap:8px/);
-  assert.match(css, /\.panel\{[\s\S]*min-height:128px/);
+  assert.match(css, /\.dashboard-grid\{[\s\S]*gap:0/);
+  assert.match(css, /\.panel\{[\s\S]*min-height:96px/);
 });
 
 test('visual foundation removes generic rounded app chrome from core portal surfaces', async () => {
@@ -47,7 +47,7 @@ test('visual foundation removes generic rounded app chrome from core portal surf
   assert.match(css, /--tbg-radius:2px/);
   assert.match(css, /\.world-pill\{[\s\S]*border-radius:0/);
   assert.match(css, /\.tabs button\.active\{[\s\S]*var\(--tbg-accent\)/);
-  assert.match(css, /\.panel\{[\s\S]*border-top:3px solid var\(--tbg-navy\)/);
+  assert.match(css, /\.dashboard-grid\{[\s\S]*border-top:3px solid var\(--tbg-navy\)/);
   assert.match(css, /th\{[\s\S]*font-family:var\(--tbg-display\)/);
 });
 
