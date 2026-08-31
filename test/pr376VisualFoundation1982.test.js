@@ -19,28 +19,43 @@ test('legacy runtime themes do not override the 1982 foundation after portal sta
   assert.match(community, /manager-contact\.css/);
 });
 
-test('visual foundation defines shared paper ink navy accent and typography tokens', async () => {
+test('visual foundation defines shared Brazil-era palette and typography tokens', async () => {
   const css = await read('public/design-1982.css');
-  for (const token of ['--tbg-paper','--tbg-surface','--tbg-ink','--tbg-navy','--tbg-accent','--tbg-rule','--tbg-display','--tbg-ui','--tbg-mono']) {
+  for (const token of ['--tbg-paper','--tbg-surface','--tbg-ink','--tbg-navy','--tbg-accent','--tbg-rule','--tbg-display','--tbg-ui','--tbg-mono','--tbg-canvas']) {
     assert.match(css, new RegExp(token.replaceAll('-', '\\-')));
   }
+  assert.match(css, /--tbg-paper:#dceccd/);
+  assert.match(css, /--tbg-accent:#ffdc02/);
+  assert.match(css, /html\{background:#9fc785\}/);
   assert.match(css, /button:focus-visible/);
   assert.match(css, /input:focus-visible/);
   assert.match(css, /select:focus-visible/);
 });
 
+test('visual foundation uses a contained classic game canvas without sacrificing phone width', async () => {
+  const css = await read('public/design-1982.css');
+  assert.match(css, /--tbg-canvas:1180px/);
+  assert.match(css, /\.shell\{[\s\S]*width:min\(calc\(100% - 40px\),var\(--tbg-canvas\)\)/);
+  assert.match(css, /@media\(max-width:1000px\)[\s\S]*\.shell\{width:94vw\}/);
+  assert.match(css, /@media\(max-width:700px\)[\s\S]*\.shell\{width:100%;padding-inline:8px\}/);
+  assert.match(css, /\.dashboard-grid\{[\s\S]*gap:8px/);
+  assert.match(css, /\.panel\{[\s\S]*min-height:128px/);
+});
+
 test('visual foundation removes generic rounded app chrome from core portal surfaces', async () => {
   const css = await read('public/design-1982.css');
   assert.match(css, /--tbg-radius:2px/);
-  assert.match(css, /\.world-pill[\s\S]*border-radius:0/);
-  assert.match(css, /\.tabs button\.active[\s\S]*var\(--tbg-accent\)/);
-  assert.match(css, /\.panel[\s\S]*border-top:4px solid var\(--tbg-navy\)/);
-  assert.match(css, /th[\s\S]*font-family:var\(--tbg-display\)/);
+  assert.match(css, /\.world-pill\{[\s\S]*border-radius:0/);
+  assert.match(css, /\.tabs button\.active\{[\s\S]*var\(--tbg-accent\)/);
+  assert.match(css, /\.panel\{[\s\S]*border-top:3px solid var\(--tbg-navy\)/);
+  assert.match(css, /th\{[\s\S]*font-family:var\(--tbg-display\)/);
 });
 
 test('design principle is documented as modern interaction with period football art direction', async () => {
   const doc = await read('docs/ui-design-principles.md');
   assert.match(doc, /2026 interaction design, 1982 football soul/);
+  assert.match(doc, /classic game-screen composition/i);
+  assert.match(doc, /Brazil palette remains part of TBG's identity/i);
   assert.match(doc, /should not behave like a retro website/i);
   assert.match(doc, /Avoid costume retro/);
   assert.match(doc, /website built in 1998/);
