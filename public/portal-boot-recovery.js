@@ -69,9 +69,18 @@
     return data;
   }
 
+  function finalizeStartup() {
+    if (portalRenderedAt !== null) return;
+    portalRenderedAt = performance.now();
+    pendingRequests.clear();
+    const data = persistSnapshot();
+    console.info('TBG portal startup timing', data);
+  }
+
   window.tbgPortalStartupTiming = Object.freeze({ snapshot });
 
   window.fetch = async (...args) => {
+    if (portalRenderedAt !== null) return originalFetch(...args);
     const stage = requestStage(args[0], args[1] || {});
     if (!stage) return originalFetch(...args);
 
@@ -157,6 +166,10 @@
     return completed.join(' · ');
   }
 
+  function setTextIfChanged(node, value) {
+    if (node && node.textContent !== value) node.textContent = value;
+  }
+
   function refreshLoadingCopy() {
     const recovery = document.getElementById('portalBootRecovery');
     if (!recovery || recovery.dataset.recoverySource !== 'boot_loading') return;
@@ -167,16 +180,18 @@
     const message = recovery.querySelector('[data-boot-message]');
     const diagnostics = recovery.querySelector('[data-boot-diagnostics]');
 
-    if (heading && elapsedSeconds >= 5) heading.textContent = `${stageLabel(pending?.stage)}…`;
+    if (heading && elapsedSeconds >= 5) setTextIfChanged(heading, `${stageLabel(pending?.stage)}…`);
     if (message) {
-      message.textContent = elapsedSeconds >= 15
+      setTextIfChanged(message, elapsedSeconds >= 15
         ? 'This is taking longer than usual. TBG is still waiting for a secure response; please leave this page open.'
-        : 'Loading your club and the current world state.';
+        : 'Loading your club and the current world state.');
     }
     if (diagnostics) {
       const detail = loadingDiagnostics();
-      diagnostics.textContent = elapsedSeconds >= 5 && detail ? `${detail} · ${elapsedSeconds}s total` : '';
-      diagnostics.hidden = !diagnostics.textContent;
+      const nextText = elapsedSeconds >= 5 && detail ? `${detail} · ${elapsedSeconds}s total` : '';
+      setTextIfChanged(diagnostics, nextText);
+      const shouldHide = !nextText;
+      if (diagnostics.hidden !== shouldHide) diagnostics.hidden = shouldHide;
     }
   }
 
@@ -199,13 +214,16 @@
     return Boolean(element && !element.hidden && getComputedStyle(element).display !== 'none' && getComputedStyle(element).visibility !== 'hidden');
   }
 
-  function usablePortalScreen() {
+  function portalOutcomeVisible() {
     return [
-      document.getElementById('authGate'),
       document.getElementById('clubPortal'),
       document.getElementById('unassignedState'),
       document.getElementById('onboardingState')
     ].some(visible);
+  }
+
+  function usablePortalScreen() {
+    return visible(document.getElementById('authGate')) || portalOutcomeVisible();
   }
 
   function inspectPortal() {
@@ -216,6 +234,7 @@
     }
     const recovery = document.getElementById('portalBootRecovery');
     if (usablePortalScreen()) {
+      if (portalOutcomeVisible()) finalizeStartup();
       if (!recovery || recovery.dataset.recoverySource === 'boot_loading') clear();
       return;
     }
@@ -237,11 +256,7 @@
   });
 
   window.addEventListener('tbg:portal-rendered', () => {
-    if (portalRenderedAt === null) {
-      portalRenderedAt = performance.now();
-      const data = persistSnapshot();
-      console.info('TBG portal startup timing', data);
-    }
+    finalizeStartup();
     inspectPortal();
   });
 
