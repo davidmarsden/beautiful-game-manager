@@ -57,3 +57,11 @@ test('alpha admin UI can award an external Bug Hunter credit with manager, impac
   assert.match(js, /Bug Hunter credit awarded/);
   assert.match(js, /external_admin_award/);
 });
+
+test('award success is preserved even if the admin list refresh fails', async () => {
+  const js = await read('public/alpha-feedback-admin.js');
+  assert.match(js, /let result;try\{result=await api\(/);
+  assert.match(js, /const success=`Bug Hunter credit awarded/);
+  assert.match(js, /The award is saved, but the list could not refresh/);
+  assert.match(js, /try\{await load\(\);\$\('feedbackAdminStatus'\)\.textContent=success;\}catch/);
+});
