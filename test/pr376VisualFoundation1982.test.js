@@ -11,7 +11,7 @@ test('1982 visual foundation loads after existing component styles', async () =>
   assert.ok(foundation > polish, 'visual foundation must load after existing component styles so it can set the final art direction');
 });
 
-test('legacy runtime themes do not override the 1982 foundation after portal startup', async () => {
+test('legacy runtime themes and Football Pink do not override the final foundation', async () => {
   const community = await read('public/community-card.js');
   const html = await read('public/index.html');
   assert.doesNotMatch(community, /tbg-green-stock\.css/);
@@ -21,38 +21,37 @@ test('legacy runtime themes do not override the 1982 foundation after portal sta
   assert.match(community, /manager-contact\.css/);
 });
 
-test('visual foundation defines shared Brazil-era palette and typography tokens', async () => {
+test('visual foundation defines two greens two blues and restrained highlight tokens', async () => {
   const css = await read('public/design-1982.css');
-  for (const token of ['--tbg-paper','--tbg-surface','--tbg-ink','--tbg-navy','--tbg-accent','--tbg-rule','--tbg-display','--tbg-ui','--tbg-mono','--tbg-canvas']) {
+  for (const token of ['--tbg-green-deep','--tbg-green','--tbg-green-mid','--tbg-navy-deep','--tbg-navy','--tbg-blue','--tbg-accent','--tbg-surface','--tbg-canvas']) {
     assert.match(css, new RegExp(token.replaceAll('-', '\\-')));
   }
-  assert.match(css, /--tbg-paper:#dceccd/);
+  assert.match(css, /--tbg-green-deep:#164b2a/);
+  assert.match(css, /--tbg-green:#267945/);
+  assert.match(css, /--tbg-navy-deep:#102330/);
+  assert.match(css, /--tbg-blue:#2d6fa3/);
   assert.match(css, /--tbg-accent:#ffdc02/);
-  assert.match(css, /--tbg-colour-paper:#9fc785/);
-  assert.match(css, /repeating-linear-gradient\(90deg,#2c733d/);
-  assert.match(css, /button:focus-visible/);
-  assert.match(css, /input:focus-visible/);
-  assert.match(css, /select:focus-visible/);
+  assert.match(css, /repeating-linear-gradient\(90deg,#205f36/);
 });
 
-test('visual foundation uses a strongly contained classic game canvas without sacrificing phone width', async () => {
+test('visual foundation uses a compact tablet canvas without sacrificing phone width', async () => {
   const css = await read('public/design-1982.css');
-  assert.match(css, /--tbg-canvas:960px/);
-  assert.match(css, /\.shell\{[\s\S]*width:min\(calc\(100% - 120px\),var\(--tbg-canvas\)\)/);
-  assert.match(css, /@media\(max-width:1100px\)[\s\S]*\.shell\{width:82vw\}/);
-  assert.match(css, /@media\(max-width:700px\)[\s\S]*\.shell\{width:100%;padding-inline:8px\}/);
-  assert.match(css, /\.dashboard-grid\{[\s\S]*gap:0/);
-  assert.match(css, /\.panel\{[\s\S]*min-height:82px/);
+  assert.match(css, /--tbg-canvas:920px/);
+  assert.match(css, /\.shell\{[\s\S]*width:min\(calc\(100% - 150px\),var\(--tbg-canvas\)\)/);
+  assert.match(css, /@media\(max-width:1100px\)[\s\S]*\.shell\{width:78vw\}/);
+  assert.match(css, /@media\(max-width:700px\)[\s\S]*\.shell\{width:100%;padding-inline:7px\}/);
+  assert.match(css, /\.panel\{[\s\S]*min-height:70px/);
+  assert.match(css, /body\{[\s\S]*font-size:14px/);
 });
 
-test('visual foundation removes generic rounded app chrome from core portal surfaces', async () => {
+test('visual foundation uses blue and green for structure and white yellow as highlights', async () => {
   const css = await read('public/design-1982.css');
-  assert.match(css, /--tbg-radius:2px/);
-  assert.match(css, /\.world-pill\{[\s\S]*border-radius:0/);
-  assert.match(css, /\.tabs button\.active\{[\s\S]*var\(--tbg-accent\)/);
-  assert.match(css, /\.dashboard-grid\{[\s\S]*border-top:3px solid var\(--tbg-navy\)/);
-  assert.match(css, /\.inbox-message\{[\s\S]*border-radius:0!important/);
-  assert.match(css, /th\{[\s\S]*font-family:var\(--tbg-display\)/);
+  assert.match(css, /\.club-nav\{[\s\S]*background:#214f70/);
+  assert.match(css, /\.tabs\{[\s\S]*background:var\(--tbg-navy-deep\)/);
+  assert.match(css, /\.tabs button\.active\{[\s\S]*background:var\(--tbg-accent\)/);
+  assert.match(css, /\.workspace\{[\s\S]*background:#eef3eb/);
+  assert.match(css, /\.position-separator td\{[\s\S]*background:#fff1a8/);
+  assert.match(css, /\.inbox-message\{[\s\S]*border-left:3px solid var\(--tbg-blue\)/);
 });
 
 test('design principle is documented as modern interaction with period football art direction', async () => {
