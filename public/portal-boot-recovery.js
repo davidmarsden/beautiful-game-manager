@@ -3,8 +3,122 @@
     '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
   }[char]));
 
+  const startupStartedAt = performance.now();
+  const trackedRequests = [];
+  const pendingRequests = new Map();
+  let requestSequence = 0;
+  let portalRenderedAt = null;
+  let loadingTicker = null;
+
+  const originalFetch = window.fetch.bind(window);
+
+  function requestStage(input, init = {}) {
+    const requestUrl = typeof input === 'string' ? input : input?.url;
+    if (!requestUrl) return '';
+    let url;
+    try {
+      url = new URL(requestUrl, window.location.href);
+    } catch {
+      return '';
+    }
+
+    if (url.origin === window.location.origin && url.pathname === '/api/auth-config') return 'auth_config';
+    if (url.origin === window.location.origin && url.pathname === '/api/bootstrap') return 'bootstrap';
+    if (url.pathname.endsWith('/auth/v1/user')) return 'auth_user';
+    if (url.pathname.endsWith('/auth/v1/token')) {
+      const grantType = url.searchParams.get('grant_type');
+      if (grantType === 'refresh_token') return 'session_refresh';
+      return 'sign_in_exchange';
+    }
+    return '';
+  }
+
+  function stageLabel(stage) {
+    return ({
+      auth_config: 'Connecting to TBG services',
+      sign_in_exchange: 'Completing secure sign-in',
+      session_refresh: 'Restoring secure session',
+      auth_user: 'Checking manager session',
+      bootstrap: 'Loading club and world'
+    })[stage] || 'Preparing manager portal';
+  }
+
+  function snapshot() {
+    const now = performance.now();
+    return {
+      elapsed_ms: Math.round((portalRenderedAt ?? now) - startupStartedAt),
+      rendered: portalRenderedAt !== null,
+      pending: [...pendingRequests.values()].map((entry) => ({
+        stage: entry.stage,
+        elapsed_ms: Math.round(now - entry.startedAt)
+      })),
+      requests: trackedRequests.map(({ stage, durationMs, status, ok }) => ({
+        stage,
+        duration_ms: Math.round(durationMs),
+        status,
+        ok
+      }))
+    };
+  }
+
+  function persistSnapshot() {
+    const data = snapshot();
+    try {
+      sessionStorage.setItem('tbg_portal_startup_timing', JSON.stringify(data));
+    } catch {}
+    return data;
+  }
+
+  function finalizeStartup() {
+    if (portalRenderedAt !== null) return;
+    portalRenderedAt = performance.now();
+    pendingRequests.clear();
+    const data = persistSnapshot();
+    console.info('TBG portal startup timing', data);
+  }
+
+  window.tbgPortalStartupTiming = Object.freeze({ snapshot });
+
+  window.fetch = async (...args) => {
+    if (portalRenderedAt !== null) return originalFetch(...args);
+    const stage = requestStage(args[0], args[1] || {});
+    if (!stage) return originalFetch(...args);
+
+    const id = ++requestSequence;
+    const startedAt = performance.now();
+    pendingRequests.set(id, { id, stage, startedAt });
+    refreshLoadingCopy();
+
+    try {
+      const response = await originalFetch(...args);
+      trackedRequests.push({
+        stage,
+        durationMs: performance.now() - startedAt,
+        status: response.status,
+        ok: response.ok
+      });
+      return response;
+    } catch (error) {
+      trackedRequests.push({
+        stage,
+        durationMs: performance.now() - startedAt,
+        status: 0,
+        ok: false
+      });
+      throw error;
+    } finally {
+      pendingRequests.delete(id);
+      persistSnapshot();
+      refreshLoadingCopy();
+    }
+  };
+
   function clear() {
     document.getElementById('portalBootRecovery')?.remove();
+    if (loadingTicker) {
+      clearInterval(loadingTicker);
+      loadingTicker = null;
+    }
   }
 
   function show(message, source = 'portal_boot') {
@@ -44,29 +158,72 @@
     });
   }
 
+  function loadingDiagnostics() {
+    const timing = snapshot();
+    const pending = timing.pending[0];
+    if (pending) return `${stageLabel(pending.stage)} · ${Math.max(1, Math.round(pending.elapsed_ms / 1000))}s`;
+    const completed = timing.requests.slice(-3).map((entry) => `${stageLabel(entry.stage)} ${Math.max(0.1, entry.duration_ms / 1000).toFixed(1)}s`);
+    return completed.join(' · ');
+  }
+
+  function setTextIfChanged(node, value) {
+    if (node && node.textContent !== value) node.textContent = value;
+  }
+
+  function refreshLoadingCopy() {
+    const recovery = document.getElementById('portalBootRecovery');
+    if (!recovery || recovery.dataset.recoverySource !== 'boot_loading') return;
+
+    const elapsedSeconds = Math.max(0, Math.round((performance.now() - startupStartedAt) / 1000));
+    const pending = snapshot().pending[0];
+    const heading = recovery.querySelector('[data-boot-heading]');
+    const message = recovery.querySelector('[data-boot-message]');
+    const diagnostics = recovery.querySelector('[data-boot-diagnostics]');
+
+    if (heading && elapsedSeconds >= 5) setTextIfChanged(heading, `${stageLabel(pending?.stage)}…`);
+    if (message) {
+      setTextIfChanged(message, elapsedSeconds >= 15
+        ? 'This is taking longer than usual. TBG is still waiting for a secure response; please leave this page open.'
+        : 'Loading your club and the current world state.');
+    }
+    if (diagnostics) {
+      const detail = loadingDiagnostics();
+      const nextText = elapsedSeconds >= 5 && detail ? `${detail} · ${elapsedSeconds}s total` : '';
+      setTextIfChanged(diagnostics, nextText);
+      const shouldHide = !nextText;
+      if (diagnostics.hidden !== shouldHide) diagnostics.hidden = shouldHide;
+    }
+  }
+
   function showLoading() {
     if (document.getElementById('portalBootRecovery')) return;
     document.body.insertAdjacentHTML('beforeend', `
       <section id="portalBootRecovery" data-recovery-source="boot_loading" role="status" aria-live="polite" style="position:fixed;inset:0;z-index:2147483647;background:#f7f3ea;color:#1f1f1f;display:grid;place-items:center;padding:24px;font-family:system-ui,sans-serif;">
         <div style="width:min(520px,100%);background:#fff;border:1px solid #d8d0c0;border-radius:14px;padding:24px;box-shadow:0 18px 60px rgba(0,0,0,.18);">
           <p style="margin:0 0 8px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">The Beautiful Game</p>
-          <h1 style="margin:0 0 12px;font-size:1.6rem;">Loading manager portal…</h1>
-          <p style="margin:0;line-height:1.5;">Fetching your club and the current canonical turn. This can take a little longer after a fresh deployment.</p>
+          <h1 data-boot-heading style="margin:0 0 12px;font-size:1.6rem;">Loading manager portal…</h1>
+          <p data-boot-message style="margin:0;line-height:1.5;">Loading your club and the current world state.</p>
+          <small data-boot-diagnostics hidden style="display:block;margin-top:12px;opacity:.68;line-height:1.45;"></small>
         </div>
       </section>`);
+    refreshLoadingCopy();
+    if (!loadingTicker) loadingTicker = setInterval(refreshLoadingCopy, 1000);
   }
 
   function visible(element) {
     return Boolean(element && !element.hidden && getComputedStyle(element).display !== 'none' && getComputedStyle(element).visibility !== 'hidden');
   }
 
-  function usablePortalScreen() {
+  function portalOutcomeVisible() {
     return [
-      document.getElementById('authGate'),
       document.getElementById('clubPortal'),
       document.getElementById('unassignedState'),
       document.getElementById('onboardingState')
     ].some(visible);
+  }
+
+  function usablePortalScreen() {
+    return visible(document.getElementById('authGate')) || portalOutcomeVisible();
   }
 
   function inspectPortal() {
@@ -76,12 +233,13 @@
       return;
     }
     const recovery = document.getElementById('portalBootRecovery');
-    const dismissibleSource = ['boot_loading', 'boot_watchdog'].includes(recovery?.dataset.recoverySource);
     if (usablePortalScreen()) {
-      if (!recovery || dismissibleSource) clear();
+      if (portalOutcomeVisible()) finalizeStartup();
+      if (!recovery || recovery.dataset.recoverySource === 'boot_loading') clear();
       return;
     }
     if (!recovery) showLoading();
+    refreshLoadingCopy();
   }
 
   window.tbgShowPortalRecovery = show;
@@ -95,6 +253,11 @@
   window.addEventListener('unhandledrejection', (event) => {
     const reason = event.reason;
     show(reason?.stack || reason?.message || reason, 'unhandled_rejection');
+  });
+
+  window.addEventListener('tbg:portal-rendered', () => {
+    finalizeStartup();
+    inspectPortal();
   });
 
   window.addEventListener('DOMContentLoaded', () => {
@@ -112,11 +275,6 @@
 
   window.setTimeout(() => {
     inspectPortal();
-    const recovery = document.getElementById('portalBootRecovery');
-    const fatal = document.querySelector('#portal .fatal-error');
-    const waitingOnly = !recovery || recovery.dataset.recoverySource === 'boot_loading';
-    if (!usablePortalScreen() && waitingOnly && !fatal?.textContent?.trim()) {
-      show('The manager portal has not produced a sign-in, club, onboarding or unassigned screen within 30 seconds. Bootstrap may still be pending or may have failed.', 'boot_watchdog');
-    }
+    refreshLoadingCopy();
   }, 30000);
 })();
