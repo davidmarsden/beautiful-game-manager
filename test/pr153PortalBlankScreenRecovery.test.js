@@ -21,7 +21,8 @@ test('portal boot guard keeps a slow but healthy startup alive and exposes usefu
   assert.match(guard, /new MutationObserver\(inspectPortal\)/);
   assert.match(guard, /attributes: true/);
   assert.match(guard, /attributeFilter: \['hidden', 'class', 'style'\]/);
-  assert.match(guard, /function usablePortalScreen\(\)[\s\S]*document\.getElementById\('clubPortal'\)[\s\S]*document\.getElementById\('unassignedState'\)[\s\S]*\.some\(visible\)/);
+  assert.match(guard, /function portalOutcomeVisible\(\)[\s\S]*document\.getElementById\('clubPortal'\)[\s\S]*document\.getElementById\('unassignedState'\)[\s\S]*document\.getElementById\('onboardingState'\)[\s\S]*\.some\(visible\)/);
+  assert.match(guard, /function usablePortalScreen\(\)[\s\S]*document\.getElementById\('authGate'\)[\s\S]*portalOutcomeVisible\(\)/);
   assert.doesNotMatch(guard, /function usablePortalScreen\(\)[\s\S]*document\.getElementById\('portal'\)/);
   assert.match(guard, /function showLoading\(\)/);
   assert.match(guard, /data-recovery-source="boot_loading"/);
@@ -42,6 +43,17 @@ test('portal boot guard keeps a slow but healthy startup alive and exposes usefu
   assert.match(guard, /Open World/);
   assert.match(guard, /Clear session and sign out/);
   assert.match(guard, /Your canonical world has not been changed by this screen/);
+});
+
+test('startup telemetry stops after the first usable portal outcome and does not self-trigger the observer', async () => {
+  const guard = await read('public/portal-boot-recovery.js');
+  assert.match(guard, /if \(portalRenderedAt !== null\) return originalFetch\(\.\.\.args\)/);
+  assert.match(guard, /function finalizeStartup\(\)/);
+  assert.match(guard, /pendingRequests\.clear\(\)/);
+  assert.match(guard, /if \(portalOutcomeVisible\(\)\) finalizeStartup\(\)/);
+  assert.match(guard, /function setTextIfChanged\(node, value\)/);
+  assert.match(guard, /node\.textContent !== value/);
+  assert.match(guard, /diagnostics\.hidden !== shouldHide/);
 });
 
 test('Open World recovery route is honoured by portal navigation', async () => {
