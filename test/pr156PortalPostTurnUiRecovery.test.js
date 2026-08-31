@@ -4,24 +4,24 @@ import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('boot watchdog requires a rendered portal state rather than the empty shell', async () => {
+test('boot recovery requires a rendered portal outcome rather than the empty shell', async () => {
   const recovery = await read('public/portal-boot-recovery.js');
-  assert.match(recovery, /function usablePortalScreen\(\)/);
-  assert.match(recovery, /document\.getElementById\('authGate'\)/);
+  assert.match(recovery, /function portalOutcomeVisible\(\)/);
   assert.match(recovery, /document\.getElementById\('clubPortal'\)/);
   assert.match(recovery, /document\.getElementById\('unassignedState'\)/);
   assert.match(recovery, /document\.getElementById\('onboardingState'\)/);
+  assert.match(recovery, /function usablePortalScreen\(\)[\s\S]*document\.getElementById\('authGate'\)[\s\S]*portalOutcomeVisible\(\)/);
   assert.doesNotMatch(recovery, /document\.getElementById\('portal'\),/);
-  assert.match(recovery, /!usablePortalScreen\(\) && waitingOnly && !fatal\?\.textContent\?\.trim\(\)/);
 });
 
-test('boot watchdog preserves explicit errors while replacing only its temporary loading state', async () => {
+test('slow boot remains informational while explicit bootstrap errors still escalate', async () => {
   const recovery = await read('public/portal-boot-recovery.js');
-  assert.match(recovery, /inspectPortal\(\);[\s\S]*const recovery = document\.getElementById\('portalBootRecovery'\)/);
   assert.match(recovery, /const fatal = document\.querySelector\('#portal \.fatal-error'\)/);
-  assert.match(recovery, /recovery\.dataset\.recoverySource === 'boot_loading'/);
-  assert.match(recovery, /!fatal\?\.textContent\?\.trim\(\)/);
   assert.match(recovery, /show\(fatal\.textContent\.trim\(\), 'bootstrap_error'\)/);
+  assert.match(recovery, /if \(!recovery\) showLoading\(\)/);
+  assert.match(recovery, /window\.setTimeout\(\(\) => \{[\s\S]*inspectPortal\(\);[\s\S]*refreshLoadingCopy\(\);[\s\S]*\}, 30000\)/);
+  assert.doesNotMatch(recovery, /waitingOnly/);
+  assert.doesNotMatch(recovery, /boot_watchdog/);
 });
 
 test('hiding the authenticated sign-in gate immediately exposes the loading state', async () => {
@@ -32,7 +32,7 @@ test('hiding the authenticated sign-in gate immediately exposes the loading stat
   const inspectIndex = recovery.indexOf('function inspectPortal()');
   const showLoadingIndex = recovery.indexOf('if (!recovery) showLoading();', inspectIndex);
   const timeoutIndex = recovery.indexOf('window.setTimeout', inspectIndex);
-  assert.ok(showLoadingIndex > inspectIndex && showLoadingIndex < timeoutIndex, 'mutation inspection must show loading before the 30-second watchdog');
+  assert.ok(showLoadingIndex > inspectIndex && showLoadingIndex < timeoutIndex, 'mutation inspection must show loading before the passive 30-second check');
 });
 
 test('shared-world requests reuse and prime the portal authorization bridge', async () => {
