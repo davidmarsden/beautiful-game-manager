@@ -4,16 +4,16 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("portal loads the Football Pink stock refinement last", async () => {
+test("Football Pink stock remains archived but is not loaded by the manager portal", async () => {
   const html = await read("public/index.html");
-  const profileIndex = html.indexOf("./player-profile.css");
-  const pinkIndex = html.indexOf("./football-pink-stock.css");
+  const css = await read("public/football-pink-stock.css");
 
-  assert.ok(profileIndex >= 0, "player profile stylesheet missing");
-  assert.ok(pinkIndex > profileIndex, "Football Pink refinement must load after the shared theme");
+  assert.ok(css.includes("--tbg-colour-paper: #e7a8b6"), "legacy Football Pink stylesheet should remain available for history/reference");
+  assert.doesNotMatch(html, /football-pink-stock\.css/, "manager portal must not load the obsolete Football Pink theme");
+  assert.match(html, /design-1982\.css/, "replacement visual foundation missing");
 });
 
-test("Football Pink stock uses pink paper rather than near-white surfaces", async () => {
+test("Football Pink stock retains its historical pink surface definitions", async () => {
   const css = await read("public/football-pink-stock.css");
 
   for (const token of [
@@ -25,23 +25,13 @@ test("Football Pink stock uses pink paper rather than near-white surfaces", asyn
   ]) {
     assert.ok(css.includes(token), `missing ${token}`);
   }
-
-  assert.doesNotMatch(css, /#fffaf0|#fff\b|rgba\(255,\s*255,\s*255,\s*\.[3-9]/i);
 });
 
-test("portal cards tables and inbox all receive pink stock surfaces", async () => {
-  const css = await read("public/football-pink-stock.css");
-
-  assert.match(css, /\.portal-overview article,[\s\S]*\.portal-card,[\s\S]*background: var\(--tbg-surface-card\)/);
-  assert.match(css, /table,[\s\S]*\.tbg-table[\s\S]*background: var\(--tbg-surface-table\)/);
-  assert.match(css, /\.inbox-message[\s\S]*background: #f3d6dc/);
-  assert.match(css, /tbody tr:nth-child\(even\)/);
-});
-
-test("mobile sticky cells keep opaque interaction and managed-club states", async () => {
-  const css = await read("public/football-pink-stock.css");
-
-  assert.match(css, /td:first-child,[\s\S]*\.tbg-table td:first-child[\s\S]*background: var\(--tbg-surface-table\)/);
-  assert.match(css, /tbody tr:hover td:first-child/);
-  assert.match(css, /tbody tr\.managed-club-row td:first-child[\s\S]*background: #fff0a8/);
+test("current visual foundation remaps legacy surface variables away from pink", async () => {
+  const css = await read("public/design-1982.css");
+  assert.match(css, /--tbg-colour-paper:#9fc785/);
+  assert.match(css, /--tbg-colour-paper-light:#dceccd/);
+  assert.match(css, /--tbg-colour-workspace:#b8d69f/);
+  assert.match(css, /--tbg-surface-card:#fff/);
+  assert.match(css, /--tbg-surface-table:#fff/);
 });
