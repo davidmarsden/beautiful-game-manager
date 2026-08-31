@@ -11,6 +11,14 @@ test('1982 visual foundation loads after existing component styles', async () =>
   assert.ok(foundation > polish, 'visual foundation must load after existing component styles so it can set the final art direction');
 });
 
+test('legacy runtime themes do not override the 1982 foundation after portal startup', async () => {
+  const community = await read('public/community-card.js');
+  assert.doesNotMatch(community, /tbg-green-stock\.css/);
+  assert.doesNotMatch(community, /tbg-brazil-polish\.css/);
+  assert.match(community, /community-card\.css/);
+  assert.match(community, /manager-contact\.css/);
+});
+
 test('visual foundation defines shared paper ink navy accent and typography tokens', async () => {
   const css = await read('public/design-1982.css');
   for (const token of ['--tbg-paper','--tbg-surface','--tbg-ink','--tbg-navy','--tbg-accent','--tbg-rule','--tbg-display','--tbg-ui','--tbg-mono']) {
