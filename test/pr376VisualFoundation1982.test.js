@@ -13,8 +13,10 @@ test('1982 visual foundation loads after existing component styles', async () =>
 
 test('legacy runtime themes do not override the 1982 foundation after portal startup', async () => {
   const community = await read('public/community-card.js');
+  const html = await read('public/index.html');
   assert.doesNotMatch(community, /tbg-green-stock\.css/);
   assert.doesNotMatch(community, /tbg-brazil-polish\.css/);
+  assert.doesNotMatch(html, /football-pink-stock\.css/);
   assert.match(community, /community-card\.css/);
   assert.match(community, /manager-contact\.css/);
 });
@@ -26,20 +28,21 @@ test('visual foundation defines shared Brazil-era palette and typography tokens'
   }
   assert.match(css, /--tbg-paper:#dceccd/);
   assert.match(css, /--tbg-accent:#ffdc02/);
-  assert.match(css, /html\{background:#9fc785\}/);
+  assert.match(css, /--tbg-colour-paper:#9fc785/);
+  assert.match(css, /repeating-linear-gradient\(90deg,#2c733d/);
   assert.match(css, /button:focus-visible/);
   assert.match(css, /input:focus-visible/);
   assert.match(css, /select:focus-visible/);
 });
 
-test('visual foundation uses a visibly contained classic game canvas without sacrificing phone width', async () => {
+test('visual foundation uses a strongly contained classic game canvas without sacrificing phone width', async () => {
   const css = await read('public/design-1982.css');
-  assert.match(css, /--tbg-canvas:1040px/);
-  assert.match(css, /\.shell\{[\s\S]*width:min\(calc\(100% - 72px\),var\(--tbg-canvas\)\)/);
-  assert.match(css, /@media\(max-width:1100px\)[\s\S]*\.shell\{width:88vw\}/);
+  assert.match(css, /--tbg-canvas:960px/);
+  assert.match(css, /\.shell\{[\s\S]*width:min\(calc\(100% - 120px\),var\(--tbg-canvas\)\)/);
+  assert.match(css, /@media\(max-width:1100px\)[\s\S]*\.shell\{width:82vw\}/);
   assert.match(css, /@media\(max-width:700px\)[\s\S]*\.shell\{width:100%;padding-inline:8px\}/);
   assert.match(css, /\.dashboard-grid\{[\s\S]*gap:0/);
-  assert.match(css, /\.panel\{[\s\S]*min-height:96px/);
+  assert.match(css, /\.panel\{[\s\S]*min-height:82px/);
 });
 
 test('visual foundation removes generic rounded app chrome from core portal surfaces', async () => {
@@ -48,6 +51,7 @@ test('visual foundation removes generic rounded app chrome from core portal surf
   assert.match(css, /\.world-pill\{[\s\S]*border-radius:0/);
   assert.match(css, /\.tabs button\.active\{[\s\S]*var\(--tbg-accent\)/);
   assert.match(css, /\.dashboard-grid\{[\s\S]*border-top:3px solid var\(--tbg-navy\)/);
+  assert.match(css, /\.inbox-message\{[\s\S]*border-radius:0!important/);
   assert.match(css, /th\{[\s\S]*font-family:var\(--tbg-display\)/);
 });
 
