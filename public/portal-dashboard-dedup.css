@@ -1,3 +1,5 @@
+@import url('./portal-contrast-fixes.css');
+
 /* PR #376 dashboard information hierarchy.
  * Presentation-only: the compact masthead/summary already carries these routine facts,
  * so hide the secondary overview and routine action/status row without touching render or startup code.
