@@ -6,3 +6,10 @@
 #portal #dashboardView > .portal-layout {
   display: none !important;
 }
+
+/* The retained Club Status contract nodes are repurposed visually as Registered / Owned.
+ * Keep the third dt/dd pair in the DOM for compatibility, but do not display it. */
+#portal .dashboard-grid > .panel:nth-child(4) dl > dt:nth-of-type(3),
+#portal .dashboard-grid > .panel:nth-child(4) dl > dd:nth-of-type(3) {
+  display: none !important;
+}
