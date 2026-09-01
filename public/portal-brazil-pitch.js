@@ -1,4 +1,4 @@
-const layers = ['./portal-brazil-pitch.css', './portal-final-polish.css'];
+const layers = ['./portal-brazil-pitch.css', './portal-final-polish.css', './portal-dashboard-dedup.css'];
 
 const CLUB_COLOURS = new Map([
   ['real madrid', { primary:'#f5f5f5', secondary:'#243b7a', accent:'#d4af37', ink:'#102330' }],
