@@ -27,6 +27,8 @@ const CLUB_COLOURS = new Map([
   ['fenerbahçe', { primary:'#ffed00', secondary:'#002d72', accent:'#ffffff', ink:'#111111' }]
 ]);
 
+let latestPortalData = null;
+
 function promoteBrazilPitchStyles() {
   for (const href of layers) {
     const fileName = href.split('/').pop();
@@ -77,14 +79,98 @@ function applyClubIdentity() {
   crest.setAttribute('aria-label', `${clubName} club colours`);
 }
 
-function applyPortalArtDirection() {
+function divisionLabel(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '—';
+  const match = raw.match(/(?:division[-\s]*|d)?(\d+)/i);
+  return match ? `D${match[1]}` : raw.toUpperCase();
+}
+
+function isYouth(player) {
+  if (player?.youth_eligible_at_season_start !== undefined) return Boolean(player.youth_eligible_at_season_start);
+  return (Number(player?.season_start_age ?? player?.age) || 99) <= 21;
+}
+
+function isLoanedOut(player) {
+  return Boolean(player?.loaned_out || String(player?.loan_status || '').toLowerCase() === 'loaned_out');
+}
+
+function registeredSeniorCount(squad = []) {
+  return squad.filter((player) => !isYouth(player)
+    && !isLoanedOut(player)
+    && player?.registered !== false
+    && String(player?.registration_status || '').toLowerCase() !== 'unregistered').length;
+}
+
+function standingsRow(data) {
+  const rows = data?.standings || data?.competition?.standings || data?.league_table || [];
+  const clubId = String(data?.club?.tbg_club_id || data?.club?.club_id || data?.club?.id || '');
+  return rows.find((row) => String(row?.club_id || row?.tbg_club_id || row?.id || '') === clubId) || null;
+}
+
+function simplifyDashboard(data) {
+  if (!data?.club) return;
+
+  const division = divisionLabel(data.club.division_id);
+  const clubMeta = document.getElementById('clubMeta');
+  if (clubMeta) clubMeta.textContent = division;
+
+  const fixtureMeta = document.getElementById('fixtureMeta');
+  if (fixtureMeta && /^division\s*\d+$/i.test(fixtureMeta.textContent.trim())) {
+    fixtureMeta.textContent = divisionLabel(fixtureMeta.textContent);
+  }
+
+  const overview = document.getElementById('portalOverview');
+  const legacyLayout = document.querySelector('#dashboardView > .portal-layout');
+  if (overview) {
+    overview.hidden = true;
+    overview.setAttribute('aria-hidden', 'true');
+  }
+  if (legacyLayout) {
+    legacyLayout.hidden = true;
+    legacyLayout.setAttribute('aria-hidden', 'true');
+  }
+
+  const panels = document.querySelectorAll('#portal .dashboard-grid > .panel');
+  const leaguePanel = panels[0];
+  const squadPanel = panels[3];
+  const row = standingsRow(data);
+  const position = row?.position ?? data.club.table_position ?? '—';
+  const points = row?.points ?? data.club.points ?? '—';
+  const owned = Array.isArray(data.squad) ? data.squad.length : 0;
+  const registered = registeredSeniorCount(data.squad || []);
+
+  if (leaguePanel) {
+    const heading = leaguePanel.querySelector('h2');
+    const value = leaguePanel.querySelector('#worldName');
+    const detail = leaguePanel.querySelector('#worldStatus');
+    if (heading) heading.textContent = 'League';
+    if (value) value.textContent = position === '—' ? '—' : `${position}${Number(position) === 1 ? 'st' : Number(position) === 2 ? 'nd' : Number(position) === 3 ? 'rd' : 'th'}`;
+    if (detail) {
+      detail.hidden = false;
+      detail.textContent = points === '—' ? 'Points unavailable' : `${points} pts`;
+    }
+  }
+
+  if (squadPanel) {
+    const heading = squadPanel.querySelector('h2');
+    const list = squadPanel.querySelector('dl');
+    if (heading) heading.textContent = 'Squad';
+    if (list) list.innerHTML = `<dt>Registered</dt><dd>${registered}</dd><dt>Owned</dt><dd>${owned}</dd>`;
+  }
+}
+
+function applyPortalArtDirection(data = latestPortalData) {
+  if (data?.club) latestPortalData = data;
   promoteBrazilPitchStyles();
   compactFixtureMasthead();
   applyClubIdentity();
+  if (latestPortalData) simplifyDashboard(latestPortalData);
 }
 
 applyPortalArtDirection();
-window.addEventListener('tbg:portal-rendered', applyPortalArtDirection);
-document.addEventListener('tbg:view-changed', applyPortalArtDirection);
+window.addEventListener('tbg:portal-rendered', (event) => applyPortalArtDirection(event.detail));
+window.addEventListener('tbg:portal-refreshed', (event) => applyPortalArtDirection(event.detail));
+document.addEventListener('tbg:view-changed', () => applyPortalArtDirection());
 
-export { CLUB_COLOURS, promoteBrazilPitchStyles, compactFixtureMasthead, applyClubIdentity };
+export { CLUB_COLOURS, promoteBrazilPitchStyles, compactFixtureMasthead, applyClubIdentity, divisionLabel, simplifyDashboard };
