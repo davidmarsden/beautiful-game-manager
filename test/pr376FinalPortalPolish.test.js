@@ -12,7 +12,7 @@ test('final portal polish loads after the Brazil pitch shell', async () => {
   assert.ok(polish > pitch);
 });
 
-test('final polish fixes the feedback action and simplifies the masthead zones', async () => {
+test('final polish fixes the feedback action and keeps the masthead visually continuous', async () => {
   const css = await read('public/portal-final-polish.css');
   assert.match(css, /\.alpha-feedback-button/);
   assert.match(css, /background:#2d6fa3!important/);
@@ -22,6 +22,25 @@ test('final polish fixes the feedback action and simplifies the masthead zones',
   assert.match(css, /#portal \.dashboard-grid[\s\S]*border-bottom:0!important/);
   assert.match(css, /#portal \.tabs[\s\S]*background:#173f50!important/);
   assert.match(css, /#portal \.tabs button\.active[\s\S]*background:#ffdc02!important/);
+});
+
+test('next fixture moves into the club masthead and the supporting strip becomes three-up', async () => {
+  const [loader, css] = await Promise.all([
+    read('public/portal-brazil-pitch.js'),
+    read('public/portal-final-polish.css')
+  ]);
+
+  assert.match(loader, /function compactFixtureMasthead\(\)/);
+  assert.match(loader, /\.club-strip \.next-fixture/);
+  assert.match(loader, /\.dashboard-grid \.panel:nth-child\(3\)/);
+  assert.match(loader, /masthead-team-action/);
+  assert.match(loader, /fixture-panel-retired/);
+  assert.match(loader, /fixture-summary-three-up/);
+
+  assert.match(css, /#portal \.club-strip[\s\S]*grid-template-columns:64px minmax\(0,1fr\) minmax\(360px,\.9fr\)!important/);
+  assert.match(css, /#portal \.club-strip \.next-fixture[\s\S]*grid-template-areas:/);
+  assert.match(css, /#portal \.dashboard-grid[\s\S]*grid-template-columns:1\.15fr 1fr \.85fr!important/);
+  assert.match(css, /fixture-summary-three-up>\.panel:nth-child\(3\)[\s\S]*display:none!important/);
 });
 
 test('portal canvas is wider on desktop and tablet while phones stay full width', async () => {
