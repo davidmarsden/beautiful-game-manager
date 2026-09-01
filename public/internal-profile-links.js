@@ -1,3 +1,4 @@
+import './portal-brazil-pitch.js';
 import './transfer-feedback-placement.js';
 import './transfer-grace-pending-fix.js';
 import './transfer-history.js';

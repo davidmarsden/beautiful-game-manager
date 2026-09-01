@@ -1,0 +1,77 @@
+/* PR #376 targeted contrast fixes. Presentation-only; no behaviour changes. */
+
+/* Inbox actions */
+#portal #dashboardView #markAllInboxRead,
+#portal #dashboardView .mark-message-read{
+  background:#193375!important;
+  color:#fff!important;
+  border-color:#2d6fa3!important;
+}
+#portal #dashboardView #markAllInboxRead:disabled,
+#portal #dashboardView .mark-message-read:disabled{
+  background:#697b86!important;
+  color:#fff!important;
+  opacity:.72!important;
+}
+
+/* News/community actions */
+#portal #feedView .tbg-community-link,
+#portal #feedView .world-feed-composer button,
+#portal #feedView .world-feed-comment-form button{
+  background:#193375!important;
+  color:#fff!important;
+  border-color:#2d6fa3!important;
+}
+#portal #feedView .tbg-community-link:hover,
+#portal #feedView .tbg-community-link:focus-visible,
+#portal #feedView .world-feed-composer button:hover,
+#portal #feedView .world-feed-composer button:focus-visible,
+#portal #feedView .world-feed-comment-form button:hover,
+#portal #feedView .world-feed-comment-form button:focus-visible{
+  background:#2d6fa3!important;
+  color:#fff!important;
+}
+
+/* Team-sheet actions */
+#portal #tacticsView #loadPreviousMatch,
+#portal #tacticsView #loadPreset,
+#portal #tacticsView #savePreset,
+#portal #tacticsView #updatePreset{
+  background:#193375!important;
+  color:#fff!important;
+  border-color:#2d6fa3!important;
+}
+#portal #tacticsView #deletePreset{
+  background:#7e1f2c!important;
+  color:#fff!important;
+  border-color:#9b2931!important;
+}
+#portal #tacticsView #loadPreviousMatch:disabled,
+#portal #tacticsView #loadPreset:disabled,
+#portal #tacticsView #savePreset:disabled,
+#portal #tacticsView #updatePreset:disabled,
+#portal #tacticsView #deletePreset:disabled{
+  color:#fff!important;
+  opacity:.62!important;
+}
+
+/* Fitness metrics sit on dark player tokens; keep both values and labels bright. */
+#portal #tacticsView .fitness-metrics,
+#portal #tacticsView .fitness-metrics strong,
+#portal #tacticsView .fitness-metrics small,
+#portal #tacticsView .fitness-current{
+  color:#fff!important;
+}
+#portal #tacticsView .fitness-metrics small{opacity:1!important}
+
+/* Competition form pills: white letters on green/amber/red pills. */
+#portal #competitionsView .form-dot,
+#portal #competitionsView .form-dot.win,
+#portal #competitionsView .form-dot.draw,
+#portal #competitionsView .form-dot.loss,
+#portal #competitionsView .result-pill,
+#portal #competitionsView .result-pill.win,
+#portal #competitionsView .result-pill.draw,
+#portal #competitionsView .result-pill.loss{
+  color:#fff!important;
+}

@@ -30,39 +30,56 @@
 #dashboardView .mark-all-read,
 #dashboardView .mark-message-read{background:var(--tbg-brazil-blue,#193375)!important}
 
-/* News / World Feed */
-#feedView .world-feed-shell{max-width:none}
+/* News / World Feed: dark Brazil structure, pale surfaces only inside comments and inputs. */
+#feedView{background:#102330!important;color:#eef3eb!important}
+#feedView .world-feed-shell{max-width:none;background:#102330!important}
 #feedView .world-feed-heading{
-  padding:.9rem 1rem;
-  background:var(--tbg-colour-cream,#f8f7e8);
-  border:1px solid rgba(25,51,117,.28);
-  border-top:3px solid var(--tbg-brazil-blue,#193375);
+  padding:.7rem .8rem;
+  background:#193375!important;
+  border:1px solid #2d6fa3!important;
+  border-top:3px solid #267945!important;
 }
-#feedView .world-feed-heading h2{color:var(--tbg-brazil-blue,#193375)}
+#feedView .world-feed-heading h2{color:#fff!important}
+#feedView .world-feed-heading p{color:#c4d7cc!important}
 #feedView .world-feed-live{
-  background:rgba(255,220,2,.2)!important;
-  border-color:#c5a900!important;
-  color:#5b4c00!important;
+  background:#267945!important;
+  border-color:#68a97b!important;
+  color:#fff!important;
 }
 #feedView .world-feed-composer,
 #feedView .world-feed-item,
 #feedView .world-feed-social-activity{
-  background:#fff!important;
-  border-color:rgba(25,51,117,.2)!important;
-  border-radius:10px!important;
+  background:#214f70!important;
+  border-color:#2d6fa3!important;
+  border-radius:2px!important;
   box-shadow:none!important;
 }
-#feedView .world-feed-composer{border-left:4px solid var(--tbg-brazil-blue,#193375)!important}
-#feedView .world-feed-item{border-left-width:4px!important}
+#feedView .world-feed-composer{background:#102f42!important;border-left:4px solid #267945!important}
+#feedView .world-feed-social-activity{background:#164b2a!important;border-color:#267945!important}
+#feedView .world-feed-item{border-left-width:4px!important;color:#eef3eb!important}
 #feedView .world-feed-item h3,
-#feedView .world-feed-identity{color:var(--tbg-brazil-blue,#193375)!important}
+#feedView .world-feed-identity{color:#fff!important}
+#feedView .world-feed-body{color:#edf3ed!important}
+#feedView .world-feed-item-top,
+#feedView .world-feed-comments-heading{color:#c5d7d0!important}
 #feedView .world-feed-type,
 #feedView .world-feed-pin-badge{
-  background:rgba(255,220,2,.18)!important;
+  background:#ffdc02!important;
   border-color:#c5a900!important;
-  color:#5b4c00!important;
+  color:#102330!important;
 }
-#feedView .world-feed-comment{background:var(--tbg-colour-cream,#f8f7e8)!important;border-color:rgba(25,51,117,.16)!important}
+#feedView .world-feed-pin-badge{background:#267945!important;border-color:#68a97b!important;color:#fff!important}
+#feedView .world-feed-pin-action,
+#feedView .world-feed-composer button,
+#feedView .world-feed-comment-form button{background:#193375!important;border-color:#2d6fa3!important;color:#fff!important;border-radius:1px!important}
+#feedView .world-feed-composer textarea,
+#feedView .world-feed-comment-form textarea{background:#e8eee4!important;border-color:#6d8c78!important;color:#17212a!important;border-radius:1px!important}
+#feedView .world-feed-comment{background:#e5ece1!important;border-color:#7e9984!important;color:#17212a!important;border-radius:1px!important}
+#feedView .world-feed-comments{border-top-color:#5d8198!important}
+#feedView .world-feed-comments-toggle{color:#fff!important}
+#feedView .world-feed-activity-metric{background:#205f36!important;border-color:#6aa779!important;color:#fff!important}
+#feedView .world-feed-manager-activity{border-top-color:#4d7c5c!important}
+#feedView .world-feed-manager-activity summary{color:#fff!important}
 
 /* Squad: keep this page dense and table-led, but give it the same structural grammar. */
 #squadView .panel,

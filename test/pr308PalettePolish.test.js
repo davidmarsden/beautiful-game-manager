@@ -5,10 +5,10 @@ import test from 'node:test';
 const css = fs.readFileSync(new URL('../public/tbg-brazil-polish.css', import.meta.url), 'utf8');
 const community = fs.readFileSync(new URL('../public/community-card.js', import.meta.url), 'utf8');
 
-test('TBG paper green is deliberately deeper than the first Brazil pass', () => {
+test('legacy Brazil palette remains available but is no longer runtime-loaded', () => {
   assert.ok(css.includes('--tbg-colour-paper:#9fc785'));
   assert.ok(css.includes('--tbg-colour-workspace:#b8d69f'));
-  assert.ok(community.includes("loadStylesheet('tbg-brazil-polish.css')"));
+  assert.ok(!community.includes("loadStylesheet('tbg-brazil-polish.css')"));
 });
 
 test('World Feed comments and controls no longer inherit Football Pink', () => {

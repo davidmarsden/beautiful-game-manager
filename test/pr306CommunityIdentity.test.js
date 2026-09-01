@@ -45,11 +45,11 @@ test('community card retries when the async World Feed shell is inserted', () =>
   assert.ok(community.includes('observer.observe(document.documentElement'));
 });
 
-test('TBG gets its own green identity layer while retaining existing layout', () => {
+test('legacy green identity stylesheet remains available but is no longer runtime-loaded', () => {
   assert.ok(green.includes('--tbg-colour-paper:#b8d69f'));
   assert.ok(green.includes('--tbg-green-deep:#183a28'));
   assert.ok(green.includes('.tabs'));
-  assert.ok(community.includes("loadStylesheet('tbg-green-stock.css')"));
+  assert.ok(!community.includes("loadStylesheet('tbg-green-stock.css')"));
 });
 
 test('player updates governance copy is simplified for managers', () => {
