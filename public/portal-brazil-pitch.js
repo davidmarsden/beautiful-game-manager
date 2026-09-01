@@ -13,8 +13,29 @@ function promoteBrazilPitchStyles() {
   }
 }
 
-promoteBrazilPitchStyles();
-window.addEventListener('tbg:portal-rendered', promoteBrazilPitchStyles);
-document.addEventListener('tbg:view-changed', promoteBrazilPitchStyles);
+function compactFixtureMasthead() {
+  const masthead = document.querySelector('#portal .club-strip .next-fixture');
+  const fixturePanel = document.querySelector('#portal .dashboard-grid .panel:nth-child(3)');
+  if (!masthead || !fixturePanel) return;
 
-export { promoteBrazilPitchStyles };
+  const teamButton = fixturePanel.querySelector('button[data-view="tactics"]');
+  if (teamButton && !masthead.contains(teamButton)) {
+    teamButton.classList.add('masthead-team-action');
+    masthead.append(teamButton);
+  }
+
+  fixturePanel.setAttribute('aria-hidden', 'true');
+  fixturePanel.classList.add('fixture-panel-retired');
+  document.querySelector('#portal .dashboard-grid')?.classList.add('fixture-summary-three-up');
+}
+
+function applyPortalArtDirection() {
+  promoteBrazilPitchStyles();
+  compactFixtureMasthead();
+}
+
+applyPortalArtDirection();
+window.addEventListener('tbg:portal-rendered', applyPortalArtDirection);
+document.addEventListener('tbg:view-changed', applyPortalArtDirection);
+
+export { promoteBrazilPitchStyles, compactFixtureMasthead };
