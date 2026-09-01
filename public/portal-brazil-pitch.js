@@ -77,14 +77,30 @@ function applyClubIdentity() {
   crest.setAttribute('aria-label', `${clubName} club colours`);
 }
 
+function dismissCompletedStartupOverlay() {
+  const snapshot = window.tbgPortalStartupTiming?.snapshot?.();
+  if (!snapshot?.rendered) return;
+  window.tbgDismissPortalRecovery?.();
+}
+
 function applyPortalArtDirection() {
   promoteBrazilPitchStyles();
   compactFixtureMasthead();
   applyClubIdentity();
+  dismissCompletedStartupOverlay();
 }
 
 applyPortalArtDirection();
-window.addEventListener('tbg:portal-rendered', applyPortalArtDirection);
+window.addEventListener('tbg:portal-rendered', () => {
+  applyPortalArtDirection();
+  dismissCompletedStartupOverlay();
+});
 document.addEventListener('tbg:view-changed', applyPortalArtDirection);
 
-export { CLUB_COLOURS, promoteBrazilPitchStyles, compactFixtureMasthead, applyClubIdentity };
+export {
+  CLUB_COLOURS,
+  promoteBrazilPitchStyles,
+  compactFixtureMasthead,
+  applyClubIdentity,
+  dismissCompletedStartupOverlay
+};
