@@ -88,3 +88,15 @@ test('News returns to lighter readable Brazil work surfaces', async () => {
   assert.match(css, /world-feed-item:nth-child\(3n\)[\s\S]*background:#d4e0e5!important/);
   assert.doesNotMatch(css.toLowerCase(), /#f8dfe8|#f5cfdd|#fcebf1|#f8dce7|#f6d5e2|#f9e3eb|#f2b9ce|#d986a8|#bd6488/);
 });
+
+test('targeted contrast layer keeps portal actions and result pills readable', async () => {
+  const [dedup, contrast] = await Promise.all([
+    read('public/portal-dashboard-dedup.css'),
+    read('public/portal-contrast-fixes.css')
+  ]);
+  assert.match(dedup, /@import url\('\.\/portal-contrast-fixes\.css'\)/);
+  for (const selector of ['#markAllInboxRead', '.tbg-community-link', '.world-feed-composer button', '#loadPreviousMatch', '#updatePreset', '#deletePreset', '.fitness-metrics', '.form-dot']) {
+    assert.match(contrast, new RegExp(selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+  assert.match(contrast, /#competitionsView \.form-dot[\s\S]*color:#fff!important/);
+});
