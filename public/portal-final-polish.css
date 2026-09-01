@@ -1,0 +1,132 @@
+/* Surgical finishing pass for PR #376.
+ * Simplify the masthead into three visual zones, fix the alpha feedback action,
+ * and bring News back into the lighter Brazil working-surface system.
+ */
+
+/* 1. Header action: alpha feedback belongs to the Brazil system, not the retired pink one. */
+#portal .alpha-feedback-button{
+  background:#2d6fa3!important;
+  color:#fff!important;
+  border:1px solid #ffdc02!important;
+  border-radius:2px!important;
+  box-shadow:none!important;
+  min-height:34px!important;
+  padding:.45rem .85rem!important;
+  font-weight:800!important;
+}
+#portal .alpha-feedback-button:hover,
+#portal .alpha-feedback-button:focus-visible{
+  background:#193375!important;
+  color:#fff!important;
+  border-color:#ffdc02!important;
+}
+
+/* 2. Three-zone masthead.
+ * Zone A: global navy header.
+ * Zone B: one continuous light-green guide + club masthead.
+ * Zone C: one continuous dark football strip for world status + page nav.
+ */
+#portal .club-nav{
+  margin:0!important;
+  background:#a8ca83!important;
+  border:0!important;
+  border-bottom:1px solid rgba(22,75,42,.35)!important;
+  box-shadow:none!important;
+}
+#portal .club-nav a{
+  color:#17364a!important;
+  background:transparent!important;
+  border-right:0!important;
+  text-decoration:underline!important;
+  text-underline-offset:2px!important;
+}
+#portal .club-nav a:hover,
+#portal .club-nav a:focus-visible{background:rgba(255,255,255,.16)!important;color:#102330!important}
+
+#portal .club-strip{
+  margin-top:0!important;
+  background:linear-gradient(90deg,#d5e2cf,#c8d8cf)!important;
+  border-top:0!important;
+  border-left:0!important;
+  border-right:0!important;
+  border-bottom:1px solid #557666!important;
+  box-shadow:none!important;
+}
+
+#portal .dashboard-grid{
+  margin-top:0!important;
+  border-top:0!important;
+  border-left:0!important;
+  border-right:0!important;
+  border-bottom:1px solid rgba(255,220,2,.55)!important;
+  background:linear-gradient(90deg,#1a5a39 0%,#20515b 50%,#214f70 100%)!important;
+}
+#portal .tabs{
+  margin-top:0!important;
+  border-top:0!important;
+  background:#102330!important;
+  box-shadow:none!important;
+}
+
+/* 3. News: retain editorial identity without turning the whole page into night mode. */
+#portal #feedView{
+  background:#9fc785!important;
+  color:#17212a!important;
+}
+#portal #feedView .world-feed-heading{
+  background:#214f70!important;
+  color:#fff!important;
+  border-top-color:#ffdc02!important;
+}
+#portal #feedView .world-feed-composer{
+  background:#dce5d8!important;
+  color:#17212a!important;
+  border-color:#668275!important;
+}
+#portal #feedView .world-feed-category-tab{
+  background:#dce5d8!important;
+  color:#17212a!important;
+  border-color:#668275!important;
+}
+#portal #feedView .world-feed-category-tab *,
+#portal #feedView .world-feed-category-tab strong,
+#portal #feedView .world-feed-category-tab small{color:#193375!important}
+#portal #feedView .world-feed-category-tab[aria-pressed="true"]{
+  background:#ffdc02!important;
+  color:#102330!important;
+  border-color:#193375!important;
+}
+#portal #feedView .world-feed-category-tab[aria-pressed="true"] *{color:#102330!important}
+
+#portal #feedView .world-feed-item{
+  background:#e7ece4!important;
+  color:#17212a!important;
+  border-color:#668275!important;
+  border-left-color:#2d6fa3!important;
+}
+#portal #feedView .world-feed-item:nth-child(3n+2){
+  background:#dce5d8!important;
+  border-color:#668275!important;
+  border-left-color:#267945!important;
+}
+#portal #feedView .world-feed-item:nth-child(3n){
+  background:#d4e0e5!important;
+  border-color:#668275!important;
+  border-left-color:#193375!important;
+}
+#portal #feedView .world-feed-item h3,
+#portal #feedView .world-feed-identity,
+#portal #feedView .world-feed-body,
+#portal #feedView .world-feed-item-top,
+#portal #feedView .world-feed-item a{color:#193375!important}
+#portal #feedView .world-feed-body{color:#27352e!important}
+#portal #feedView .world-feed-item time,
+#portal #feedView .world-feed-item small{color:#526159!important}
+#portal #feedView .world-feed-comment{background:#f0f3ed!important;color:#17212a!important}
+#portal #feedView .world-feed-social-activity{background:#d0dfcb!important;color:#17212a!important}
+#portal #feedView .world-feed-activity-metric{background:#214f70!important;color:#fff!important}
+
+@media(max-width:700px){
+  #portal .alpha-feedback-button{min-height:32px!important;padding:.38rem .62rem!important}
+  #portal .club-nav{overflow-x:auto!important}
+}
