@@ -18,9 +18,17 @@ test('final polish fixes the feedback action and simplifies the masthead zones',
   assert.match(css, /background:#2d6fa3!important/);
   assert.match(css, /border:1px solid #ffdc02!important/);
   assert.match(css, /#portal \.club-nav[\s\S]*background:#a8ca83!important/);
-  assert.match(css, /#portal \.club-strip[\s\S]*margin-top:0!important/);
-  assert.match(css, /#portal \.dashboard-grid[\s\S]*margin-top:0!important/);
-  assert.match(css, /#portal \.tabs[\s\S]*background:#102330!important/);
+  assert.match(css, /#portal \.club-strip[\s\S]*background:#a8ca83!important/);
+  assert.match(css, /#portal \.dashboard-grid[\s\S]*border-bottom:0!important/);
+  assert.match(css, /#portal \.tabs[\s\S]*background:#173f50!important/);
+  assert.match(css, /#portal \.tabs button\.active[\s\S]*background:#ffdc02!important/);
+});
+
+test('portal canvas is wider on desktop and tablet while phones stay full width', async () => {
+  const css = await read('public/portal-final-polish.css');
+  assert.match(css, /--tbg-canvas:1060px/);
+  assert.match(css, /@media\(max-width:1100px\) and \(min-width:701px\)[\s\S]*#portal \.shell\{width:90vw!important;max-width:1060px!important\}/);
+  assert.match(css, /@media\(max-width:700px\)[\s\S]*#portal \.shell\{width:100%!important;max-width:none!important\}/);
 });
 
 test('News returns to lighter readable Brazil work surfaces', async () => {
