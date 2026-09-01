@@ -1,6 +1,6 @@
 /* Surgical finishing pass for PR #376.
  * Keep the wider Brazil canvas, reduce repeated fixture chrome,
- * and bring News into the lighter working-surface system.
+ * align the masthead, and add restrained club identity through club colours.
  */
 
 :root{--tbg-canvas:1060px}
@@ -23,7 +23,7 @@
   border-color:#ffdc02!important;
 }
 
-/* Masthead: use the generous club row for the next fixture instead of repeating it below. */
+/* Masthead: one light club row, with the next fixture using the centre/right space. */
 #portal .club-nav{
   margin:0!important;
   background:#a8ca83!important;
@@ -41,27 +41,47 @@
 #portal .club-nav a:focus-visible{background:rgba(255,255,255,.16)!important;color:#102330!important}
 
 #portal .club-strip{
-  grid-template-columns:64px minmax(0,1fr) minmax(360px,.9fr)!important;
-  gap:14px!important;
+  position:relative!important;
+  grid-template-columns:64px minmax(250px,.95fr) minmax(430px,1.05fr)!important;
+  gap:16px!important;
+  align-items:center!important;
   margin-top:0!important;
-  padding:10px 12px!important;
+  padding:13px 14px 11px!important;
   background:#a8ca83!important;
   border:0!important;
   border-top:1px solid rgba(22,75,42,.16)!important;
   box-shadow:none!important;
+  overflow:hidden!important;
 }
+#portal .club-strip.club-colours-active::before{
+  content:"";
+  position:absolute;
+  inset:0 0 auto 0;
+  height:4px;
+  background:linear-gradient(90deg,var(--club-primary) 0 34%,var(--club-secondary) 34% 67%,var(--club-accent) 67% 100%);
+}
+#portal .club-strip.club-colours-active .crest{
+  background:var(--club-primary)!important;
+  color:var(--club-ink)!important;
+  border:3px solid var(--club-secondary)!important;
+  box-shadow:0 0 0 1px var(--club-accent)!important;
+}
+#portal .club-strip.club-colours-active .club-title{border-left:4px solid var(--club-primary);padding-left:10px}
+#portal .club-strip.club-colours-active .club-title h1{text-decoration-color:var(--club-secondary)}
+
 #portal .club-strip .next-fixture{
   display:grid!important;
-  grid-template-columns:minmax(115px,.7fr) minmax(170px,1.3fr) auto!important;
+  grid-template-columns:95px minmax(180px,1fr) auto!important;
   grid-template-areas:
     "label opponent action"
     "label meta action"
     "label deadline action"!important;
-  column-gap:12px!important;
+  column-gap:14px!important;
   row-gap:1px!important;
   align-items:center!important;
+  justify-self:stretch!important;
   min-width:0!important;
-  padding-left:14px!important;
+  padding-left:18px!important;
   border-left:1px solid rgba(16,35,48,.28)!important;
 }
 #portal .club-strip .next-fixture>span{grid-area:label!important;align-self:start!important}
@@ -73,7 +93,7 @@
   grid-area:action!important;
   align-self:center!important;
   min-height:30px!important;
-  padding:6px 10px!important;
+  padding:6px 11px!important;
   margin:0!important;
   background:#193375!important;
   color:#fff!important;
@@ -84,26 +104,54 @@
 }
 #portal .club-strip .masthead-team-action:hover{background:#2d6fa3!important}
 
-/* Supporting strip: World | Last Fixture | Club Status. The next fixture panel is retired, not duplicated. */
+/* Supporting strip: SMW-like light information row, World | Last Fixture | Club Status. */
 #portal .dashboard-grid{
-  grid-template-columns:1.15fr 1fr .85fr!important;
+  grid-template-columns:1fr 1.35fr 1fr!important;
+  gap:0!important;
   margin-top:0!important;
-  border-top:0!important;
-  border-left:0!important;
-  border-right:0!important;
-  border-bottom:0!important;
-  background:linear-gradient(90deg,#1a5a39 0%,#20515b 58%,#214f70 100%)!important;
+  border:0!important;
+  border-top:1px solid #698772!important;
+  border-bottom:1px solid #698772!important;
+  background:#dce5d8!important;
+  color:#17212a!important;
 }
 #portal .dashboard-grid.fixture-summary-three-up>.panel:nth-child(3),
 #portal .dashboard-grid>.panel.fixture-panel-retired{display:none!important}
-#portal .dashboard-grid>.panel{min-height:76px!important;padding:7px 10px!important}
-#portal .dashboard-grid>.panel:nth-child(2){border-right:1px solid rgba(235,244,237,.18)!important}
+#portal .dashboard-grid>.panel{
+  min-height:100px!important;
+  padding:10px 14px!important;
+  background:#e7ece4!important;
+  color:#17212a!important;
+  border:0!important;
+  border-right:1px solid #95a899!important;
+  display:flex!important;
+  flex-direction:column!important;
+  justify-content:flex-start!important;
+}
+#portal .dashboard-grid>.panel:nth-child(2){background:#eef2eb!important;align-items:stretch!important}
 #portal .dashboard-grid>.panel:last-child{border-right:0!important}
-#portal .dashboard-grid .last-result-card{min-height:0!important;padding:0!important}
+#portal .dashboard-grid>.panel *,
+#portal .dashboard-grid>.panel a{color:#17212a!important}
+#portal .dashboard-grid>.panel h2{
+  color:#102330!important;
+  border-bottom:2px solid #6f8c78!important;
+  margin:0 0 7px!important;
+  padding:0 0 5px!important;
+}
+#portal .dashboard-grid>.panel .big{color:#102330!important}
+#portal .dashboard-grid .last-result-card{
+  min-height:0!important;
+  padding:0!important;
+  margin:auto 0!important;
+  align-self:stretch!important;
+}
+#portal .dashboard-grid .last-result-card *,
+#portal .dashboard-grid .match-ready-card *,
+#portal .dashboard-grid .match-ready *{color:#fff!important}
 
 #portal .tabs{
   margin-top:0!important;
-  border-top:1px solid rgba(235,244,237,.18)!important;
+  border-top:0!important;
   border-bottom:0!important;
   background:#173f50!important;
   box-shadow:none!important;
@@ -177,21 +225,22 @@
 @media(max-width:1100px) and (min-width:701px){
   #portal .shell{width:90vw!important;max-width:1060px!important}
   #portal .topbar{padding-left:5vw!important;padding-right:5vw!important}
-  #portal .club-strip{grid-template-columns:58px minmax(0,1fr) minmax(315px,.9fr)!important}
-  #portal .club-strip .next-fixture{grid-template-columns:minmax(90px,.6fr) minmax(145px,1fr) auto!important;column-gap:8px!important}
+  #portal .club-strip{grid-template-columns:58px minmax(200px,.9fr) minmax(360px,1.1fr)!important;gap:10px!important}
+  #portal .club-strip .next-fixture{grid-template-columns:82px minmax(145px,1fr) auto!important;column-gap:8px!important;padding-left:10px!important}
 }
 
 @media(max-width:760px){
   #portal .club-strip{grid-template-columns:54px 1fr!important}
   #portal .club-strip .next-fixture{
     grid-column:1/-1!important;
-    grid-template-columns:90px minmax(0,1fr) auto!important;
+    grid-template-columns:78px minmax(0,1fr) auto!important;
     border-left:0!important;
     border-top:1px solid rgba(16,35,48,.22)!important;
     padding:7px 0 0!important;
   }
-  #portal .dashboard-grid{grid-template-columns:1fr 1fr!important}
-  #portal .dashboard-grid>.panel:last-child{grid-column:1/-1!important;border-top:1px solid rgba(235,244,237,.18)!important}
+  #portal .dashboard-grid{grid-template-columns:1fr!important}
+  #portal .dashboard-grid>.panel{min-height:0!important;border-right:0!important;border-bottom:1px solid #95a899!important}
+  #portal .dashboard-grid>.panel:last-child{border-bottom:0!important}
 }
 
 @media(max-width:700px){
