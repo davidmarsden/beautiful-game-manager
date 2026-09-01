@@ -63,6 +63,16 @@ test('club masthead uses curated club colours without replacing the Brazil shell
   assert.match(css, /\.club-strip\.club-colours-active \.crest[\s\S]*background:var\(--club-primary\)!important/);
 });
 
+test('successful bootstrap cannot leave the PR 376 loading curtain over the portal', async () => {
+  const loader = await read('public/portal-brazil-pitch.js');
+  assert.match(loader, /function dismissCompletedStartupOverlay\(\)/);
+  assert.match(loader, /tbgPortalStartupTiming\?\.snapshot\?\.\(\)/);
+  assert.match(loader, /snapshot\?\.rendered/);
+  assert.match(loader, /tbgDismissPortalRecovery\?\.\(\)/);
+  assert.match(loader, /window\.addEventListener\('tbg:portal-rendered'/);
+  assert.match(loader, /dismissCompletedStartupOverlay\(\)/);
+});
+
 test('portal canvas is wider on desktop and tablet while phones stay full width', async () => {
   const css = await read('public/portal-final-polish.css');
   assert.match(css, /--tbg-canvas:1060px/);
@@ -78,5 +88,3 @@ test('News returns to lighter readable Brazil work surfaces', async () => {
   assert.match(css, /world-feed-item:nth-child\(3n\)[\s\S]*background:#d4e0e5!important/);
   assert.doesNotMatch(css.toLowerCase(), /#f8dfe8|#f5cfdd|#fcebf1|#f8dce7|#f6d5e2|#f9e3eb|#f2b9ce|#d986a8|#bd6488/);
 });
-
-// Runtime-neutral touch: force Netlify to rebuild deploy-preview-376 from the restored known-good head.
