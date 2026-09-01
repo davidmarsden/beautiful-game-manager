@@ -19,12 +19,11 @@ test('final polish fixes the feedback action and keeps the masthead visually con
   assert.match(css, /border:1px solid #ffdc02!important/);
   assert.match(css, /#portal \.club-nav[\s\S]*background:#a8ca83!important/);
   assert.match(css, /#portal \.club-strip[\s\S]*background:#a8ca83!important/);
-  assert.match(css, /#portal \.dashboard-grid[\s\S]*border-bottom:0!important/);
   assert.match(css, /#portal \.tabs[\s\S]*background:#173f50!important/);
   assert.match(css, /#portal \.tabs button\.active[\s\S]*background:#ffdc02!important/);
 });
 
-test('next fixture moves into the club masthead and the supporting strip becomes three-up', async () => {
+test('next fixture moves into the club masthead and the supporting strip becomes light three-up', async () => {
   const [loader, css] = await Promise.all([
     read('public/portal-brazil-pitch.js'),
     read('public/portal-final-polish.css')
@@ -37,10 +36,31 @@ test('next fixture moves into the club masthead and the supporting strip becomes
   assert.match(loader, /fixture-panel-retired/);
   assert.match(loader, /fixture-summary-three-up/);
 
-  assert.match(css, /#portal \.club-strip[\s\S]*grid-template-columns:64px minmax\(0,1fr\) minmax\(360px,\.9fr\)!important/);
+  assert.match(css, /#portal \.club-strip[\s\S]*grid-template-columns:64px minmax\(250px,\.95fr\) minmax\(430px,1\.05fr\)!important/);
   assert.match(css, /#portal \.club-strip \.next-fixture[\s\S]*grid-template-areas:/);
-  assert.match(css, /#portal \.dashboard-grid[\s\S]*grid-template-columns:1\.15fr 1fr \.85fr!important/);
+  assert.match(css, /#portal \.dashboard-grid[\s\S]*grid-template-columns:1fr 1\.35fr 1fr!important/);
+  assert.match(css, /#portal \.dashboard-grid[\s\S]*background:#dce5d8!important/);
+  assert.match(css, /#portal \.dashboard-grid>\.panel[\s\S]*background:#e7ece4!important/);
   assert.match(css, /fixture-summary-three-up>\.panel:nth-child\(3\)[\s\S]*display:none!important/);
+});
+
+test('club masthead uses curated club colours without replacing the Brazil shell', async () => {
+  const [loader, css] = await Promise.all([
+    read('public/portal-brazil-pitch.js'),
+    read('public/portal-final-polish.css')
+  ]);
+
+  assert.match(loader, /const CLUB_COLOURS = new Map/);
+  for (const club of ['real madrid','chelsea fc','manchester united','fc barcelona','juventus fc','fenerbahce']) {
+    assert.match(loader, new RegExp(club.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+  assert.match(loader, /function applyClubIdentity\(\)/);
+  assert.match(loader, /--club-primary/);
+  assert.match(loader, /--club-secondary/);
+  assert.match(loader, /--club-accent/);
+  assert.match(css, /\.club-strip\.club-colours-active::before/);
+  assert.match(css, /linear-gradient\(90deg,var\(--club-primary\)/);
+  assert.match(css, /\.club-strip\.club-colours-active \.crest[\s\S]*background:var\(--club-primary\)!important/);
 });
 
 test('portal canvas is wider on desktop and tablet while phones stay full width', async () => {
