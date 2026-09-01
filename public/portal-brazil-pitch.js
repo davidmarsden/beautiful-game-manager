@@ -1,13 +1,16 @@
-const href = './portal-brazil-pitch.css';
+const layers = ['./portal-brazil-pitch.css', './portal-final-polish.css'];
 
 function promoteBrazilPitchStyles() {
-  let link = document.querySelector('link[href$="portal-brazil-pitch.css"]');
-  if (!link) {
-    link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = href;
+  for (const href of layers) {
+    const fileName = href.split('/').pop();
+    let link = document.querySelector(`link[href$="${fileName}"]`);
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+    }
+    document.head.append(link);
   }
-  document.head.append(link);
 }
 
 promoteBrazilPitchStyles();
