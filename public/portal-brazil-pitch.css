@@ -1,178 +1,209 @@
 /* Final portal-wide Brazil art-direction layer.
- * One football world: dark pitch frame, blue/green structure, pale content only where readability needs it,
- * yellow reserved for active/highlight states. Loaded last at runtime by portal-brazil-pitch.js.
+ * Dark football-pitch world outside; lighter Brazil-green game canvas inside.
+ * Navy/blue are structural, pale surfaces are for dense reading, yellow is emphasis only.
+ * Loaded last at runtime by portal-brazil-pitch.js so legacy feature CSS cannot undo contrast.
  */
 :root{
-  --tbg-pitch-deep:#0b321d;
-  --tbg-pitch-dark:#124428;
-  --tbg-pitch-mid:#185433;
+  --tbg-pitch-deep:#071f13;
+  --tbg-pitch-dark:#0d3821;
+  --tbg-pitch-mid:#14502f;
+  --tbg-pitch-line:rgba(225,239,224,.08);
   --tbg-brazil-navy:#102330;
   --tbg-brazil-blue:#193375;
   --tbg-brazil-sky:#2d6fa3;
   --tbg-brazil-green:#267945;
-  --tbg-brazil-green-soft:#c7d8c4;
-  --tbg-brazil-blue-soft:#c8d7df;
+  --tbg-brazil-green-mid:#6f9d64;
+  --tbg-canvas-green:#9fc785;
+  --tbg-canvas-green-alt:#8db974;
   --tbg-brazil-yellow:#ffdc02;
-  --tbg-work:#dce5d8;
-  --tbg-work-alt:#d0ddd0;
-  --tbg-work-blue:#d1dde2;
-  --tbg-line:#6d8b79;
+  --tbg-work:#e7ece4;
+  --tbg-work-alt:#dce5d8;
+  --tbg-work-blue:#d4e0e5;
+  --tbg-ink:#17212a;
+  --tbg-muted:#53635a;
+  --tbg-line:#66806f;
 }
 
 html{background:var(--tbg-pitch-deep)!important}
 body{
   background-color:var(--tbg-pitch-deep)!important;
   background-image:
-    radial-gradient(circle at 50% 50%, transparent 0 82px, rgba(235,245,232,.055) 83px 85px, transparent 86px),
-    linear-gradient(90deg, transparent 0 calc(50% - 1px), rgba(235,245,232,.045) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
-    linear-gradient(rgba(2,18,10,.26),rgba(2,18,10,.26)),
-    repeating-linear-gradient(90deg,var(--tbg-pitch-dark) 0,var(--tbg-pitch-dark) 88px,var(--tbg-pitch-mid) 88px,var(--tbg-pitch-mid) 176px)!important;
+    radial-gradient(circle at 50% 50%,transparent 0 112px,var(--tbg-pitch-line) 113px 115px,transparent 116px),
+    linear-gradient(90deg,transparent 0 calc(50% - 1px),var(--tbg-pitch-line) calc(50% - 1px) calc(50% + 1px),transparent calc(50% + 1px)),
+    linear-gradient(rgba(0,12,6,.28),rgba(0,12,6,.28)),
+    repeating-linear-gradient(90deg,var(--tbg-pitch-dark) 0,var(--tbg-pitch-dark) 96px,var(--tbg-pitch-mid) 96px,var(--tbg-pitch-mid) 192px)!important;
   background-attachment:fixed!important;
-  background-position:center center!important;
+  background-position:center!important;
+  color:var(--tbg-ink)!important;
 }
-#portal{min-height:100vh}
-#portal .shell{filter:none}
+#portal{min-height:100vh;background:transparent!important}
+#portal .shell{
+  background:linear-gradient(180deg,var(--tbg-canvas-green) 0,var(--tbg-canvas-green-alt) 100%)!important;
+  box-shadow:0 0 0 1px rgba(5,28,16,.32),0 12px 32px rgba(0,12,6,.34)!important;
+  padding-bottom:18px!important;
+}
 
-/* Global chrome: green/blue should dominate the frame. */
-#portal .topbar{background:var(--tbg-brazil-navy)!important;border-bottom-color:var(--tbg-brazil-yellow)!important}
+/* Global chrome */
+#portal .topbar{background:var(--tbg-brazil-navy)!important;color:#fff!important;border-bottom-color:var(--tbg-brazil-yellow)!important}
+#portal .topbar *,#portal .topbar a{color:#fff!important}
 #portal .club-strip{
-  background:linear-gradient(90deg,#d9e3d4 0,#c8d7cf 100%)!important;
+  background:linear-gradient(90deg,#dce7d7,#c9d8ce)!important;
+  color:var(--tbg-ink)!important;
   border-color:#557666!important;
-  box-shadow:0 4px 14px rgba(0,15,8,.34)!important;
+  box-shadow:none!important;
 }
+#portal .club-strip h1,#portal .club-strip strong,#portal .club-strip a{color:#102330!important}
+#portal .club-strip p,#portal .club-strip small,#portal .club-strip span{color:#405249!important}
 #portal .dashboard-grid{
-  background:linear-gradient(90deg,#1b5434,#214f70)!important;
+  background:linear-gradient(90deg,#1c5d3a,#214f70)!important;
   border-color:#0c2e25!important;
   border-top-color:var(--tbg-brazil-sky)!important;
-  color:#f3f6ef!important;
+  color:#fff!important;
 }
-#portal .dashboard-grid .panel{background:transparent!important;border-color:rgba(222,237,224,.18)!important;color:#f3f6ef!important}
-#portal .dashboard-grid .panel h2,
-#portal .dashboard-grid .panel .big,
-#portal .dashboard-grid .panel dt,
-#portal .dashboard-grid .panel dd,
-#portal .dashboard-grid .panel .opponent,
-#portal .dashboard-grid .panel .placeholder{color:#f3f6ef!important}
-#portal .dashboard-grid .panel h2{border-bottom-color:rgba(222,237,224,.22)!important}
-#portal .dashboard-grid .submission-summary{background:#183d55!important;border-color:#2d6fa3!important;color:#fff!important}
-#portal .workspace{background:var(--tbg-brazil-navy)!important;border-color:#092032!important;box-shadow:0 8px 22px rgba(0,14,8,.34)!important}
+#portal .dashboard-grid .panel{background:transparent!important;border-color:rgba(235,244,237,.20)!important;color:#fff!important}
+#portal .dashboard-grid .panel *,#portal .dashboard-grid .panel a{color:#fff!important}
+#portal .dashboard-grid .panel h2{border-bottom-color:rgba(235,244,237,.24)!important}
+#portal .dashboard-grid .submission-summary{background:#dbe5d8!important;color:#17212a!important;border-color:#6d8877!important}
+#portal .dashboard-grid .submission-summary *{color:#17212a!important}
+#portal .workspace{background:var(--tbg-canvas-green)!important;border-color:#466d55!important;box-shadow:none!important}
 #portal .tabs{background:var(--tbg-brazil-navy)!important;border-bottom-color:var(--tbg-brazil-yellow)!important}
-#portal .tabs button{background:transparent!important;color:#f5f7f1!important;border-color:#29485b!important}
+#portal .tabs button{background:transparent!important;color:#fff!important;border-color:#29485b!important}
 #portal .tabs button:hover:not(.active){background:var(--tbg-brazil-sky)!important}
 #portal .tabs button.active{background:var(--tbg-brazil-yellow)!important;color:#102330!important}
-#portal .view{background:linear-gradient(180deg,#18364b 0,#102f27 100%)!important;color:#eef4ec!important}
-#portal .view>h2,
-#portal .view>h3,
-#portal .section-heading h2,
-#portal .section-heading h3{color:#f4f6ef!important}
-#portal .view>p,
-#portal .section-heading p{color:#c8d5cf!important}
+#portal .view{
+  background:var(--tbg-canvas-green)!important;
+  color:var(--tbg-ink)!important;
+}
+#portal .view>h2,#portal .view>h3,#portal .section-heading h2,#portal .section-heading h3{color:#102330!important}
+#portal .view>p,#portal .section-heading p,#portal .view small{color:#46574e!important}
+#portal a{color:#163b73!important}
+#portal a:hover{color:#0f6596!important}
 
-/* Common content surfaces: muted, not brilliant white. */
-#portal input,#portal select,#portal textarea{background:#e7ece4!important;color:#17212a!important;border-color:#708779!important}
-#portal input:focus,#portal select:focus,#portal textarea:focus{background:#f0f3ed!important}
-#portal .table-wrap{background:var(--tbg-work)!important;border-color:#486a59!important}
+/* Readable working surfaces */
+#portal input,#portal select,#portal textarea{background:#eef2eb!important;color:#17212a!important;border-color:#657d6e!important}
+#portal input::placeholder,#portal textarea::placeholder{color:#66736c!important;opacity:1!important}
+#portal input:focus,#portal select:focus,#portal textarea:focus{background:#f7f8f4!important;color:#17212a!important}
+#portal label{color:#17212a!important}
+#portal .table-wrap{background:var(--tbg-work)!important;border-color:#4f6f5d!important}
 #portal table,#portal .tbg-table{background:var(--tbg-work)!important;color:#17212a!important}
 #portal table th,#portal .tbg-table th{background:#214f70!important;color:#fff!important;border-color:#42657a!important}
 #portal table tbody tr,#portal .tbg-table tbody tr{background:var(--tbg-work)!important;color:#17212a!important}
 #portal table tbody tr:nth-child(even):not(.position-separator),#portal .tbg-table tbody tr:nth-child(even):not(.position-separator){background:var(--tbg-work-alt)!important}
 #portal table tbody tr:hover:not(.position-separator),#portal .tbg-table tbody tr:hover:not(.position-separator){background:var(--tbg-work-blue)!important}
-#portal .position-separator td{background:#d5ca72!important;color:#102330!important;border-color:#907e16!important}
+#portal table td,#portal .tbg-table td{color:#17212a!important}
+#portal .position-separator td{background:#d8cc78!important;color:#102330!important;border-color:#907e16!important}
 
-/* Inbox: blue cards on a dark workspace, with yellow only for attention. */
+/* Dashboard / Inbox: light messages, dark structural strips. */
+#portal #dashboardView{color:#17212a!important}
+#portal #dashboardView #portalOverview>article,#portal #dashboardView .portal-layout>.portal-card{
+  background:#d4e2cf!important;color:#17212a!important;border-color:#5d8069!important;border-top-color:#2d6fa3!important;box-shadow:none!important
+}
+#portal #dashboardView #portalOverview>article *,#portal #dashboardView .portal-layout>.portal-card *{color:#17212a!important}
+#portal #dashboardView .portal-alert,#portal #dashboardView .season-progress-shell{background:#edf1e9!important;color:#17212a!important;border-color:#718878!important}
 #portal #dashboardView .inbox-heading{background:#214f70!important;border-color:#2d6fa3!important;border-top-color:var(--tbg-brazil-yellow)!important;color:#fff!important}
-#portal #dashboardView .inbox-heading h2{color:#fff!important}
-#portal #dashboardView #inboxList{background:#102f27!important;border-color:#315e4b!important;border-top-color:#2d6fa3!important}
-#portal #dashboardView .inbox-message{background:#183d55!important;color:#edf3ef!important;border-color:#2f5c70!important;border-left-color:var(--tbg-brazil-sky)!important}
-#portal #dashboardView .inbox-message:nth-child(even){background:#164b3b!important}
+#portal #dashboardView .inbox-heading *{color:#fff!important}
+#portal #dashboardView #inboxList{background:#6f9d64!important;border-color:#4c7658!important;border-top-color:#2d6fa3!important}
+#portal #dashboardView .inbox-message{background:#e7ece4!important;color:#17212a!important;border-color:#84988a!important;border-left-color:var(--tbg-brazil-sky)!important}
+#portal #dashboardView .inbox-message:nth-child(even){background:#dce5d8!important}
 #portal #dashboardView .inbox-message.unread{border-left-color:var(--tbg-brazil-yellow)!important;box-shadow:inset 3px 0 var(--tbg-brazil-yellow)!important}
-#portal #dashboardView .inbox-message strong,
-#portal #dashboardView .message-heading strong,
-#portal #dashboardView .inbox-message a{color:#fff!important}
-#portal #dashboardView .inbox-message p,
-#portal #dashboardView .inbox-message small,
-#portal #dashboardView .inbox-message time,
-#portal #dashboardView .inbox-message span{color:#c8d8d2!important}
-#portal #dashboardView #portalOverview>article,
-#portal #dashboardView .portal-layout>.portal-card{background:#1b5434!important;color:#f2f6f0!important;border-color:#377252!important;border-top-color:#2d6fa3!important}
-#portal #dashboardView #portalOverview>article span,
-#portal #dashboardView #portalOverview>article strong,
-#portal #dashboardView .portal-layout>.portal-card h3{color:#fff!important}
-#portal #dashboardView .portal-alert,#portal #dashboardView .season-progress-shell{background:#d4dfd0!important;color:#17212a!important;border-color:#718878!important}
+#portal #dashboardView .inbox-message strong,#portal #dashboardView .message-heading strong,#portal #dashboardView .inbox-message a{color:#193375!important}
+#portal #dashboardView .inbox-message p,#portal #dashboardView .inbox-message small,#portal #dashboardView .inbox-message time,#portal #dashboardView .inbox-message span{color:#3f4c45!important}
+#portal #dashboardView .badge{color:#32453b!important}
 
-/* News: keep the successful dark treatment, but introduce green/blue rhythm. */
+/* News: keep the successful darker editorial cards but force reliable contrast. */
+#portal #feedView{color:#17212a!important}
 #portal #feedView .world-feed-heading{background:#214f70!important;color:#fff!important;border-color:#2d6fa3!important;border-top-color:var(--tbg-brazil-yellow)!important}
-#portal #feedView .world-feed-heading h2,#portal #feedView .world-feed-heading p{color:#fff!important}
-#portal #feedView .world-feed-composer{background:#164b3b!important;border-color:#2d6fa3!important;color:#fff!important}
+#portal #feedView .world-feed-heading *{color:#fff!important}
+#portal #feedView .world-feed-composer{background:#d5e2d0!important;border-color:#557b63!important;color:#17212a!important}
+#portal #feedView .world-feed-composer *{color:#17212a!important}
 #portal #feedView .world-feed-category-tab{background:#183d55!important;color:#fff!important;border-color:#315f78!important}
-#portal #feedView .world-feed-category-tab strong,#portal #feedView .world-feed-category-tab small{color:#eef4f1!important}
+#portal #feedView .world-feed-category-tab *{color:#fff!important}
 #portal #feedView .world-feed-category-tab[aria-pressed="true"]{background:var(--tbg-brazil-yellow)!important;color:#102330!important;border-color:#102330!important}
-#portal #feedView .world-feed-category-tab[aria-pressed="true"] strong,#portal #feedView .world-feed-category-tab[aria-pressed="true"] small{color:#102330!important}
+#portal #feedView .world-feed-category-tab[aria-pressed="true"] *{color:#102330!important}
 #portal #feedView .world-feed-list{background:transparent!important}
-#portal #feedView .world-feed-item{background:#173e56!important;color:#edf3ef!important;border-color:#2e5f77!important}
-#portal #feedView .world-feed-item:nth-child(3n+2){background:#164b3b!important;border-color:#39765a!important}
-#portal #feedView .world-feed-item:nth-child(3n){background:#1b4654!important}
-#portal #feedView .world-feed-item h3,#portal #feedView .world-feed-identity,#portal #feedView .world-feed-body,#portal #feedView .world-feed-item-top{color:#edf3ef!important}
-#portal #feedView .world-feed-item time,#portal #feedView .world-feed-item small{color:#c3d2ce!important}
-#portal #feedView .world-feed-comment{background:#d8e1d4!important;color:#17212a!important;border-color:#748b7a!important}
-#portal #feedView .world-feed-comment p,#portal #feedView .world-feed-comment-meta{color:#26342f!important}
-#portal #feedView .world-feed-social-activity{background:#123c2a!important;color:#eef4ef!important;border-color:#39765a!important}
-#portal #feedView .world-feed-social-activity small,#portal #feedView .world-feed-social-activity span{color:#c5d5cd!important}
+#portal #feedView .world-feed-item{background:#173e56!important;color:#f4f7f4!important;border-color:#2e5f77!important}
+#portal #feedView .world-feed-item:nth-child(3n+2){background:#195039!important;border-color:#39765a!important}
+#portal #feedView .world-feed-item:nth-child(3n){background:#1d5264!important}
+#portal #feedView .world-feed-item h3,#portal #feedView .world-feed-identity,#portal #feedView .world-feed-body,#portal #feedView .world-feed-item-top,#portal #feedView .world-feed-item a{color:#f4f7f4!important}
+#portal #feedView .world-feed-item time,#portal #feedView .world-feed-item small{color:#d1ddd7!important}
+#portal #feedView .world-feed-comment{background:#e7ece4!important;color:#17212a!important;border-color:#748b7a!important}
+#portal #feedView .world-feed-comment *{color:#26342f!important}
+#portal #feedView .world-feed-social-activity{background:#d0dfcb!important;color:#17212a!important;border-color:#60806a!important}
+#portal #feedView .world-feed-social-activity *{color:#24342b!important}
 #portal #feedView .world-feed-activity-metric{background:#214f70!important;color:#fff!important;border-color:#3e6d89!important}
+#portal #feedView .world-feed-activity-metric *{color:#fff!important}
 
-/* Squad: the page frame is dark; dense table remains muted for scanning. */
+/* Squad: canvas green around a muted, high-contrast table. */
+#portal #squadView{color:#17212a!important}
 #portal #squadView .squad-summary{border-color:#527463!important}
-#portal #squadView .squad-summary>div,#portal #squadView .depth-card{background:#164b3b!important;color:#fff!important;border-color:#39765a!important}
-#portal #squadView .squad-summary span,#portal #squadView .squad-summary strong,#portal #squadView .depth-card span,#portal #squadView .depth-card strong{color:#fff!important}
-#portal #squadView .contract-watch,#portal #squadView .portal-card,#portal #squadView .panel{background:#173e56!important;color:#eef4ef!important;border-color:#2d6fa3!important}
-#portal #squadView .contract-watch strong,#portal #squadView .portal-card h3,#portal #squadView .panel h3{color:#fff!important}
+#portal #squadView .squad-summary>div,#portal #squadView .depth-card{background:#d4e2cf!important;color:#17212a!important;border-color:#63806b!important}
+#portal #squadView .squad-summary *,#portal #squadView .depth-card *{color:#17212a!important}
+#portal #squadView .contract-watch,#portal #squadView .portal-card,#portal #squadView .panel{background:#dce5d8!important;color:#17212a!important;border-color:#668275!important}
+#portal #squadView .contract-watch *,#portal #squadView .portal-card *,#portal #squadView .panel *{color:#17212a!important}
+#portal #squadView .player-link{color:#193375!important}
 
-/* Team: surrounding UI recedes so the pitch stays the brightest green. */
-#portal #tacticsView form{color:#eef4ef!important}
-#portal #tacticsView .current-submission,#portal #tacticsView .team-presets-panel,#portal #tacticsView .team-sheet-panel{background:#173e56!important;color:#eef4ef!important;border-color:#2d6fa3!important}
-#portal #tacticsView .pitch-panel,#portal #tacticsView .squad-tray-panel{background:#123c2a!important;color:#eef4ef!important;border-color:#39765a!important}
-#portal #tacticsView .pitch-toolbar,#portal #tacticsView .squad-tray-panel h3,#portal #tacticsView .pitch-help,#portal #tacticsView .squad-tray-panel small{color:#eef4ef!important}
+/* Team: lighter controls; pitch remains the darkest/most vivid green feature. */
+#portal #tacticsView{color:#17212a!important}
+#portal #tacticsView form,#portal #tacticsView form label{color:#17212a!important}
+#portal #tacticsView .current-submission,#portal #tacticsView .team-presets-panel,#portal #tacticsView .team-sheet-panel{background:#dce5d8!important;color:#17212a!important;border-color:#668275!important}
+#portal #tacticsView .current-submission *,#portal #tacticsView .team-presets-panel *,#portal #tacticsView .team-sheet-panel *{color:#17212a!important}
+#portal #tacticsView .pitch-panel,#portal #tacticsView .squad-tray-panel{background:#164b32!important;color:#f4f7f4!important;border-color:#39765a!important}
+#portal #tacticsView .pitch-toolbar,#portal #tacticsView .squad-tray-panel h3,#portal #tacticsView .pitch-help,#portal #tacticsView .squad-tray-panel small{color:#f4f7f4!important}
 #portal #tacticsView .tray-player,#portal #tacticsView .bench-slot{background:#183d55!important;color:#fff!important;border-color:#2d6fa3!important}
+#portal #tacticsView .tray-player *,#portal #tacticsView .bench-slot *{color:#fff!important}
 
-/* Fixtures / competition: dark frame, compact muted rows, no pale/pink blocks. */
-#portal #scheduleView .schedule-shell,#portal #scheduleView .portal-card,#portal #scheduleView .fixture-card{background:#173e56!important;color:#eef4ef!important;border-color:#2d6fa3!important}
-#portal #scheduleView table tbody tr{background:#d7e1d3!important}
-#portal #scheduleView table tbody tr:nth-child(even){background:#cad8ce!important}
-#portal #competitionsView .competition-card,#portal #competitionsView .division-round-card,#portal #competitionsView .competition-round-header,#portal #competitionsView .round-navigation,#portal #competitionsView .division-round-list,#portal #competitionsView .season-archive-summary{background:#173e56!important;color:#eef4ef!important;border-color:#2d6fa3!important}
-#portal #competitionsView .competition-card h2,#portal #competitionsView .division-round-card h2,#portal #competitionsView .competition-meta{color:#eef4ef!important}
-#portal #competitionsView .division-round-fixture{background:#d4dfd0!important;color:#17212a!important;border-color:#708779!important}
-#portal #competitionsView .division-round-fixture:nth-child(even){background:#c8d8d2!important}
+/* Fixtures / competitions: readable tables with navy structure. */
+#portal #scheduleView,#portal #competitionsView{color:#17212a!important}
+#portal #scheduleView .schedule-shell,#portal #scheduleView .portal-card,#portal #scheduleView .fixture-card,
+#portal #competitionsView .competition-card,#portal #competitionsView .division-round-card,#portal #competitionsView .competition-round-header,#portal #competitionsView .round-navigation,#portal #competitionsView .division-round-list,#portal #competitionsView .season-archive-summary{
+  background:#dce5d8!important;color:#17212a!important;border-color:#668275!important;box-shadow:none!important
+}
+#portal #scheduleView .schedule-shell *,#portal #scheduleView .portal-card *,#portal #scheduleView .fixture-card *,
+#portal #competitionsView .competition-card *,#portal #competitionsView .division-round-card *,#portal #competitionsView .competition-round-header *,#portal #competitionsView .round-navigation *,#portal #competitionsView .division-round-list *,#portal #competitionsView .season-archive-summary *{color:#17212a!important}
+#portal #scheduleView table tbody tr{background:#e7ece4!important}
+#portal #scheduleView table tbody tr:nth-child(even){background:#d9e3d6!important}
+#portal #competitionsView .division-round-fixture{background:#e7ece4!important;color:#17212a!important;border-color:#708779!important}
+#portal #competitionsView .division-round-fixture:nth-child(even){background:#d9e3d6!important}
 #portal #competitionsView .division-round-fixture.managed-fixture{background:#d8c962!important;color:#102330!important}
 
-/* Transfers, Updates, Finances, History, Managers and World share the same blue/green grammar. */
+/* Transfers / Updates / Finances / History / Managers / World: light working areas, navy headers. */
+#portal #transfersView,#portal #updatesView,#portal #financeView,#portal #historyView,#portal #managersView,#portal #worldView{color:#17212a!important}
 #portal #transfersView .open-market-shell,#portal #transfersView .open-market-card,#portal #transfersView .open-market-external-note,
 #portal #updatesView .player-updates-hero,#portal #updatesView .player-updates-section,
 #portal #financeView .finance-shell,#portal #financeView .finance-card,#portal #financeView .finance-detail-card,
 #portal #historyView .portal-card,#portal #historyView .history-club-panel,#portal #historyView .season-archive,
 #portal #managersView .manager-directory-shell,#portal #managersView .manager-directory-list,
 #portal #worldView .world-control-summary article,#portal #worldView .world-control-card,#portal #worldView .world-transfer-card,#portal #worldView .request-history,#portal #worldView .world-history-block{
-  background:#173e56!important;
-  color:#edf3ef!important;
-  border-color:#2d6fa3!important;
-  box-shadow:none!important;
+  background:#e1e9de!important;color:#17212a!important;border-color:#668275!important;box-shadow:none!important
 }
-#portal #updatesView .player-update-card,#portal #financeView .finance-detail-row,#portal #managersView .manager-directory-list-row,#portal #worldView .world-control-row{
-  background:#d4dfd0!important;
-  color:#17212a!important;
-  border-color:#718878!important;
-}
-#portal #updatesView .player-update-card:nth-child(even),#portal #managersView .manager-directory-list-row:nth-child(even){background:#c8d8d2!important}
-#portal #transfersView h2,#portal #transfersView h3,#portal #updatesView h2,#portal #updatesView h3,#portal #financeView h2,#portal #financeView h3,#portal #historyView h2,#portal #historyView h3,#portal #managersView h2,#portal #managersView h3,#portal #worldView h2,#portal #worldView h3{color:#fff!important}
+#portal #transfersView .open-market-shell *,#portal #transfersView .open-market-card *,#portal #transfersView .open-market-external-note *,
+#portal #updatesView .player-updates-hero *,#portal #updatesView .player-updates-section *,
+#portal #financeView .finance-shell *,#portal #financeView .finance-card *,#portal #financeView .finance-detail-card *,
+#portal #historyView .portal-card *,#portal #historyView .history-club-panel *,#portal #historyView .season-archive *,
+#portal #managersView .manager-directory-shell *,#portal #managersView .manager-directory-list *,
+#portal #worldView .world-control-summary article *,#portal #worldView .world-control-card *,#portal #worldView .world-transfer-card *,#portal #worldView .request-history *,#portal #worldView .world-history-block *{color:#17212a!important}
+#portal #transfersView h2,#portal #transfersView h3,#portal #updatesView h2,#portal #updatesView h3,#portal #financeView h2,#portal #financeView h3,#portal #historyView h2,#portal #historyView h3,#portal #managersView h2,#portal #managersView h3,#portal #worldView h2,#portal #worldView h3{color:#102330!important}
+#portal #updatesView .player-update-card,#portal #financeView .finance-detail-row,#portal #managersView .manager-directory-list-row,#portal #worldView .world-control-row{background:#edf1e9!important;color:#17212a!important;border-color:#718878!important}
+#portal #updatesView .player-update-card:nth-child(even),#portal #managersView .manager-directory-list-row:nth-child(even){background:#dce5d8!important}
 #portal #transfersView .open-market-status,#portal #transfersView .open-market-badge,#portal #updatesView .player-updates-pill{background:#214f70!important;color:#fff!important;border-color:#2d6fa3!important}
+#portal #transfersView .open-market-status *,#portal #transfersView .open-market-badge *,#portal #updatesView .player-updates-pill *{color:#fff!important}
 
-/* Buttons: blue by default, yellow for active/primary attention only. */
-#portal .submit,#portal .panel button,#portal .world-control-actions button,#portal .open-market-actions button{background:#193375!important;color:#fff!important;border-color:#0f2544!important}
-#portal .submit:hover,#portal .panel button:hover,#portal .world-control-actions button:hover,#portal .open-market-actions button:hover{background:#2d6fa3!important}
+/* Common section headings inside light working cards. */
+#portal .portal-card>h2,#portal .portal-card>h3,#portal .competition-card>h2,#portal .competition-card>h3,#portal .finance-card>h2,#portal .finance-card>h3{color:#102330!important}
+
+/* Buttons: navy actions, yellow only for active/attention. */
+#portal .submit,#portal .panel button,#portal .world-control-actions button,#portal .open-market-actions button,#portal button.primary{background:#193375!important;color:#fff!important;border-color:#0f2544!important}
+#portal .submit:hover,#portal .panel button:hover,#portal .world-control-actions button:hover,#portal .open-market-actions button:hover,#portal button.primary:hover{background:#2d6fa3!important;color:#fff!important}
+#portal button[disabled]{opacity:.58!important}
 
 @media(max-width:1100px){
-  body{background-image:linear-gradient(rgba(2,18,10,.24),rgba(2,18,10,.24)),repeating-linear-gradient(90deg,var(--tbg-pitch-dark) 0,var(--tbg-pitch-dark) 70px,var(--tbg-pitch-mid) 70px,var(--tbg-pitch-mid) 140px)!important}
+  body{
+    background-image:
+      linear-gradient(rgba(0,12,6,.28),rgba(0,12,6,.28)),
+      repeating-linear-gradient(90deg,var(--tbg-pitch-dark) 0,var(--tbg-pitch-dark) 72px,var(--tbg-pitch-mid) 72px,var(--tbg-pitch-mid) 144px)!important;
+  }
 }
 @media(max-width:700px){
   body{background:var(--tbg-pitch-deep)!important}
-  #portal .view{background:#102f27!important}
+  #portal .shell{background:var(--tbg-canvas-green)!important;box-shadow:none!important}
 }
