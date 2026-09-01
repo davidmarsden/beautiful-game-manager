@@ -78,3 +78,5 @@ test('News returns to lighter readable Brazil work surfaces', async () => {
   assert.match(css, /world-feed-item:nth-child\(3n\)[\s\S]*background:#d4e0e5!important/);
   assert.doesNotMatch(css.toLowerCase(), /#f8dfe8|#f5cfdd|#fcebf1|#f8dce7|#f6d5e2|#f9e3eb|#f2b9ce|#d986a8|#bd6488/);
 });
+
+// Runtime-neutral touch: force Netlify to rebuild deploy-preview-376 from the restored known-good head.
