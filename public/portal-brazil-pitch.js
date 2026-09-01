@@ -77,6 +77,74 @@ function applyClubIdentity() {
   crest.setAttribute('aria-label', `${clubName} club colours`);
 }
 
+function divisionLabel(value) {
+  const raw = String(value ?? '').trim();
+  const match = raw.match(/(?:division[-\s]*|d)?(\d+)/i);
+  return match ? `D${match[1]}` : (raw || '—');
+}
+
+function ordinal(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return '—';
+  const mod100 = number % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${number}th`;
+  if (number % 10 === 1) return `${number}st`;
+  if (number % 10 === 2) return `${number}nd`;
+  if (number % 10 === 3) return `${number}rd`;
+  return `${number}th`;
+}
+
+function registeredSeniorCount(squad = []) {
+  return squad.filter((player) => {
+    const registration = String(player?.squad_registration || player?.registration_group || player?.squad_status || '').toLowerCase();
+    const youth = ['youth', 'youth_only', 'academy'].includes(registration)
+      || (player?.youth_eligible_at_season_start !== undefined
+        ? Boolean(player.youth_eligible_at_season_start)
+        : (Number(player?.season_start_age ?? player?.age) || 99) <= 21);
+    const loanedOut = Boolean(player?.loaned_out || String(player?.loan_status || '').toLowerCase() === 'loaned_out');
+    const unregistered = player?.registered === false || String(player?.registration_status || '').toLowerCase() === 'unregistered';
+    return !youth && !loanedOut && !unregistered;
+  }).length;
+}
+
+function applyDashboardDisplay(data) {
+  if (!data?.club) return;
+  const panels = document.querySelectorAll('#portal .dashboard-grid > .panel');
+  if (panels.length < 4) return;
+
+  const clubId = String(data.club.tbg_club_id || data.club.club_id || data.club.id || '');
+  const standings = data.standings || data.competition?.standings || data.league_table || [];
+  const row = standings.find((entry) => String(entry.club_id || entry.tbg_club_id || entry.id || '') === clubId);
+  const position = row?.position ?? data.club.table_position ?? null;
+  const points = row?.points ?? null;
+  const squad = Array.isArray(data.squad) ? data.squad : [];
+
+  const leaguePanel = panels[0];
+  const leagueHeading = leaguePanel.querySelector('h2');
+  if (leagueHeading) leagueHeading.textContent = 'League';
+  const leagueValue = document.getElementById('worldName');
+  if (leagueValue) leagueValue.textContent = ordinal(position);
+  const leagueDetail = document.getElementById('worldStatus');
+  if (leagueDetail) {
+    leagueDetail.hidden = false;
+    leagueDetail.textContent = points == null ? 'Points unavailable' : `${points} pts`;
+  }
+
+  const squadPanel = panels[3];
+  const squadHeading = squadPanel.querySelector('h2');
+  if (squadHeading) squadHeading.textContent = 'Squad';
+  const labels = squadPanel.querySelectorAll('dt');
+  if (labels[0]) labels[0].textContent = 'Registered';
+  if (labels[1]) labels[1].textContent = 'Owned';
+  const registered = document.getElementById('division');
+  if (registered) registered.textContent = registeredSeniorCount(squad);
+  const owned = document.getElementById('rank');
+  if (owned) owned.textContent = squad.length;
+
+  const clubMeta = document.getElementById('clubMeta');
+  if (clubMeta) clubMeta.textContent = divisionLabel(data.club.division_id);
+}
+
 function dismissCompletedStartupOverlay() {
   const snapshot = window.tbgPortalStartupTiming?.snapshot?.();
   if (!snapshot?.rendered) return;
@@ -91,9 +159,10 @@ function applyPortalArtDirection() {
 }
 
 applyPortalArtDirection();
-window.addEventListener('tbg:portal-rendered', () => {
+window.addEventListener('tbg:portal-rendered', (event) => {
   applyPortalArtDirection();
   dismissCompletedStartupOverlay();
+  window.requestAnimationFrame(() => applyDashboardDisplay(event.detail));
 });
 document.addEventListener('tbg:view-changed', applyPortalArtDirection);
 
@@ -102,5 +171,9 @@ export {
   promoteBrazilPitchStyles,
   compactFixtureMasthead,
   applyClubIdentity,
+  divisionLabel,
+  ordinal,
+  registeredSeniorCount,
+  applyDashboardDisplay,
   dismissCompletedStartupOverlay
 };
