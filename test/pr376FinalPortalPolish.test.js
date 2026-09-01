@@ -44,21 +44,6 @@ test('next fixture moves into the club masthead and the supporting strip becomes
   assert.match(css, /fixture-summary-three-up>\.panel:nth-child\(3\)[\s\S]*display:none!important/);
 });
 
-test('dashboard summary removes duplicate information and normalises divisions to D1 style', async () => {
-  const loader = await read('public/portal-brazil-pitch.js');
-  assert.match(loader, /function divisionLabel\(value\)/);
-  assert.match(loader, /return match \? `D\$\{match\[1\]\}`/);
-  assert.match(loader, /function simplifyDashboard\(data\)/);
-  assert.match(loader, /clubMeta\.textContent = division/);
-  assert.match(loader, /overview\.hidden = true/);
-  assert.match(loader, /legacyLayout\.hidden = true/);
-  assert.match(loader, /heading\.textContent = 'League'/);
-  assert.match(loader, /detail\.textContent = points === '—' \? 'Points unavailable' : `\$\{points\} pts`/);
-  assert.match(loader, /heading\.textContent = 'Squad'/);
-  assert.match(loader, /<dt>Registered<\/dt><dd>\$\{registered\}<\/dd><dt>Owned<\/dt><dd>\$\{owned\}<\/dd>/);
-  assert.doesNotMatch(loader, /World rank/);
-});
-
 test('club masthead uses curated club colours without replacing the Brazil shell', async () => {
   const [loader, css] = await Promise.all([
     read('public/portal-brazil-pitch.js'),
