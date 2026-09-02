@@ -263,9 +263,19 @@
     color: var(--tbg-navy-deep) !important;
   }
 
-  #standingsTable tbody td:nth-child(1),
-  #standingsTable tbody td:nth-child(2) {
-    background: inherit;
+  #standingsTable tbody tr:nth-child(odd) td:nth-child(1),
+  #standingsTable tbody tr:nth-child(odd) td:nth-child(2) {
+    background: #f4f6ef !important;
+  }
+
+  #standingsTable tbody tr:nth-child(even) td:nth-child(1),
+  #standingsTable tbody tr:nth-child(even) td:nth-child(2) {
+    background: #e9efe6 !important;
+  }
+
+  #standingsTable tbody tr.managed-club-row td:nth-child(1),
+  #standingsTable tbody tr.managed-club-row td:nth-child(2) {
+    background: #fff0a8 !important;
   }
 
   #standingsTable th:nth-child(10),
