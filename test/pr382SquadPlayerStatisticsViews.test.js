@@ -77,14 +77,23 @@ test('statistics renders its own placeholder rows immediately on first selection
   assert.match(inspected, /status\('Loading persisted season statistics…'\);\s*render\(\);\s*try \{\s*await loadStatistics\(players,/s);
 });
 
-test('squad displays round ratings, fitness and match ratings to whole numbers', () => {
+test('squad keeps ability and fitness as whole numbers but performance ratings at one decimal place', () => {
   const manager = read('../public/squad-player-statistics.js');
   const inspected = read('../public/squad-view.js');
   for (const source of [manager, inspected]) {
     assert.match(source, /const wholeNumber =/);
     assert.match(source, /Math\.round\(number\)\.toLocaleString\('en-GB'\)/);
-    assert.doesNotMatch(source, /toFixed\([12]\)/);
+    assert.match(source, /const performanceRating =/);
+    assert.match(source, /number\.toFixed\(1\)/);
+    assert.match(source, /performanceRating\(stats\.average_match_rating\)/);
+    assert.match(source, /performanceRating\(row\.rating\)/);
   }
+});
+
+test('player profile shows average match performance to one decimal place', () => {
+  const profile = read('../public/player-profile.js');
+  assert.match(profile, /average_match_rating\)\.toFixed\(1\)/);
+  assert.doesNotMatch(profile, /average_match_rating\)\.toFixed\(2\)/);
 });
 
 test('ability view reuses governed rating history rather than inventing a second rating source', () => {
