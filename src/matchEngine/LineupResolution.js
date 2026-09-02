@@ -20,6 +20,20 @@ const ROLE_ADJACENT = Object.freeze({
   wing: new Set(['wide_mid', 'am', 'st', 'wing_back']),
   st: new Set(['am', 'wing'])
 });
+const ASSIST_ROLE_WEIGHT = Object.freeze({
+  am: 1.35, wing: 1.30, wide_mid: 1.18, cm: 1.12, st: 1.00,
+  wing_back: 0.88, fb: 0.82, dm: 0.78, cb: 0.58, unknown: 0.72
+});
+const ASSISTED_OPEN_PLAY_SHARE = 0.74;
+
+function stableUnit(value) {
+  let hash = 2166136261;
+  for (const character of String(value)) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 4294967296;
+}
 
 function deepFreeze(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
@@ -271,6 +285,17 @@ function playerRoles(quality = {}) {
   return roles;
 }
 
+function playerQuality(quality = {}) {
+  const rows = { home: new Map(), away: new Map() };
+  for (const side of ['home', 'away']) {
+    for (const player of [...(quality?.[side]?.starters || []), ...(quality?.[side]?.bench?.players || [])]) {
+      const playerId = text(player.player_id);
+      if (playerId) rows[side].set(playerId, number(player.effective_quality, 50));
+    }
+  }
+  return rows;
+}
+
 function actorEligible(event, role) {
   if (!role || role === 'unknown') return true;
   if (event.type === 'injury' || event.type === 'substitution') return true;
@@ -323,6 +348,63 @@ function reassignInvalidActors(events, lineupBySide, quality) {
   });
 }
 
+function weightedAssistCandidate(side, scorerId, active, roles, qualities, eventId, fixtureNamespace) {
+  const candidates = [...active[side]]
+    .filter((playerId) => playerId !== scorerId && roles[side].get(playerId) !== 'gk')
+    .map((playerId) => {
+      const role = roles[side].get(playerId) || 'unknown';
+      const roleWeight = ASSIST_ROLE_WEIGHT[role] || ASSIST_ROLE_WEIGHT.unknown;
+      return { playerId, weight: Math.max(1, qualities[side].get(playerId) || 50) * roleWeight };
+    })
+    .sort((left, right) => left.playerId.localeCompare(right.playerId));
+  if (!candidates.length) return null;
+  const total = candidates.reduce((sum, row) => sum + row.weight, 0);
+  const target = stableUnit(`${fixtureNamespace}:${eventId}:assist-player`) * total;
+  let cursor = 0;
+  for (const candidate of candidates) {
+    cursor += candidate.weight;
+    if (target <= cursor) return candidate.playerId;
+  }
+  return candidates[candidates.length - 1].playerId;
+}
+
+function attributeGoalAssists(events, lineupBySide, quality, fixtureNamespace) {
+  const active = { home: new Set(lineupBySide.home.starting_xi), away: new Set(lineupBySide.away.starting_xi) };
+  const roles = playerRoles(quality);
+  const qualities = playerQuality(quality);
+  const yellows = { home: new Map(), away: new Map() };
+
+  return orderEvents(events.map((event) => ({ ...event }))).map((event) => {
+    const side = event.side;
+    if (!active[side]) return event;
+    if (event.type === 'substitution') {
+      active[side].delete(text(event.player_out_id));
+      active[side].add(text(event.player_in_id));
+      return event;
+    }
+
+    let updated = event;
+    const assistableGoal = event.type === 'goal'
+      && event.subtype !== 'penalty_goal'
+      && event.own_goal !== true
+      && event.player_id
+      && stableUnit(`${fixtureNamespace}:${event.event_id}:assist-awarded`) < ASSISTED_OPEN_PLAY_SHARE;
+    if (assistableGoal) {
+      const assisterId = weightedAssistCandidate(side, text(event.player_id), active, roles, qualities, event.event_id, fixtureNamespace);
+      if (assisterId) updated = { ...event, assist_player_id: assisterId, assist_source: 'causal_active_teammate' };
+    }
+
+    if (updated.type === 'yellow_card' && updated.player_id) {
+      const playerId = text(updated.player_id);
+      const count = (yellows[side].get(playerId) || 0) + 1;
+      yellows[side].set(playerId, count);
+      if (count >= 2) active[side].delete(playerId);
+    }
+    if (updated.type === 'red_card' && updated.player_id) active[side].delete(text(updated.player_id));
+    return updated;
+  });
+}
+
 export function resolveLineupEvents(eventGeneration, contract = {}, quality = {}) {
   const baseEvents = (eventGeneration?.provisional_event_stream || []).map((event) => ({ ...event }));
   if (!contract?.teams || !quality?.home || !quality?.away) return deepFreeze({ events: orderEvents(baseEvents), lineups: null });
@@ -337,7 +419,9 @@ export function resolveLineupEvents(eventGeneration, contract = {}, quality = {}
     away: applyLineupTimeline('away', combined, away.initial, away.bench)
   };
   const reassigned = reassignInvalidActors(combined, preliminary, quality);
-  const events = reconcileGeneratedSubstitutions(reassigned, { home, away });
+  const fixtureNamespace = text(eventGeneration?.seed_commitment) || 'unseeded-fixture';
+  const assisted = attributeGoalAssists(reassigned, preliminary, quality, fixtureNamespace);
+  const events = reconcileGeneratedSubstitutions(assisted, { home, away });
   const lineups = deepFreeze({
     home: applyLineupTimeline('home', events, home.initial, home.bench),
     away: applyLineupTimeline('away', events, away.initial, away.bench)
