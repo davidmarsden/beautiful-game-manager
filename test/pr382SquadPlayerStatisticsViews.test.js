@@ -18,6 +18,15 @@ test('manager squad adds SMW-style multi-view player data without replacing the 
   assert.match(source, /data-tbg-player-id/);
 });
 
+test('alternate squad views intercept legacy header sorting before app.js can redraw General rows', () => {
+  const source = read('../public/squad-player-statistics.js');
+  assert.match(source, /getElementById\('squadTable'\)\?\.addEventListener\('click'/);
+  assert.match(source, /currentView\(\) === 'general'/);
+  assert.match(source, /event\.target\.closest\('th'\)/);
+  assert.match(source, /event\.stopImmediatePropagation\(\)/);
+  assert.match(source, /}, true\);/);
+});
+
 test('statistics view reads persisted canonical match statistics through one authenticated batch request', () => {
   const source = read('../public/squad-player-statistics.js');
   const endpoint = read('../netlify/functions/squad-player-stats.mjs');
@@ -33,6 +42,16 @@ test('statistics view reads persisted canonical match statistics through one aut
   assert.match(endpoint, /ids\.length > 50/);
   assert.match(endpoint, /get_player_profile_performance_stats_for_user/);
   assert.match(endpoint, /Object\.fromEntries\(entries\)/);
+});
+
+test('statistics failures stay visibly unavailable instead of being converted into zero totals', () => {
+  const source = read('../public/squad-player-statistics.js');
+  assert.match(source, /let statisticsError = null/);
+  assert.match(source, /statisticsError = error/);
+  assert.match(source, /throw error/);
+  assert.match(source, /Season statistics unavailable/);
+  assert.match(source, /if \(!stats\) return .*<td>—<\/td>/s);
+  assert.doesNotMatch(source, /Could not load squad statistics'[\s\S]{0,120}return \{\}/);
 });
 
 test('ability view reuses governed rating history rather than inventing a second rating source', () => {
