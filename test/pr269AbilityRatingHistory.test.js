@@ -53,7 +53,7 @@ test('read-only squad renders publish a lifecycle event so Ability badges decora
   const squadView = await read('public/squad-view.js');
   const enhancer = await read('public/rating-history-enhancements.js');
   assert.match(squadView, /tbg:read-only-squad-rendered/);
-  assert.match(squadView, /detail: \{ root, players: rows \}/);
+  assert.match(squadView, /detail:\s*\{[^}]*\broot\b[^}]*\bplayers:\s*rows\b[^}]*\}/);
   assert.match(squadView, /data-tbg-player-id=/);
   assert.match(enhancer, /addEventListener\('tbg:read-only-squad-rendered'/);
   assert.match(enhancer, /detail\.root instanceof Element/);

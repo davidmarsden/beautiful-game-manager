@@ -60,7 +60,7 @@ function metric(label, value, extraClass = '') {
 function emptyState(title, body) { return `<div class="tbg-profile-empty"><strong>${escapeHtml(title)}</strong><p>${escapeHtml(body)}</p></div>`; }
 
 function statisticsPanel(stats = {}) {
-  const average = stats.average_match_rating == null ? '—' : Number(stats.average_match_rating).toFixed(2);
+  const average = stats.average_match_rating == null ? '—' : Number(stats.average_match_rating).toFixed(1);
   return `<div class="tbg-profile-grid">${metric('Appearances', stats.appearances ?? 0)}${metric('Goals', stats.goals ?? 0)}${metric('Assists', stats.assists ?? 0)}${metric('Average rating', average)}</div>`;
 }
 
