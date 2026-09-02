@@ -27,8 +27,8 @@ const quality = {
   }
 };
 
-function generated(events) {
-  return { provisional_event_stream: events };
+function generated(events, seedCommitment = 'assist-test-fixture') {
+  return { provisional_event_stream: events, seed_commitment: seedCommitment };
 }
 
 test('open-play goals deterministically attribute assists to active attacking teammates', () => {
@@ -49,13 +49,38 @@ test('open-play goals deterministically attribute assists to active attacking te
 
   assert.ok(assisted.length > 0, 'the model should produce assisted goals rather than a permanent zero-assist world');
   assert.ok(assisted.length < goals.length, 'some open-play goals should remain unassisted');
-  assert.deepEqual(first.events, second.events, 'same events and players must reproduce the same assist attribution');
+  assert.deepEqual(first.events, second.events, 'same fixture seed, events and players must reproduce the same assist attribution');
   for (const goal of assisted) {
     assert.notEqual(goal.assist_player_id, goal.player_id, 'a scorer cannot assist their own goal');
     assert.notEqual(goal.assist_player_id, 'h-gk', 'goalkeepers are excluded from the normal assist pool');
     assert.ok(['h-cm', 'h-am', 'h-wing'].includes(goal.assist_player_id));
     assert.equal(goal.assist_source, 'causal_active_teammate');
   }
+});
+
+test('assist draws are namespaced by fixture seed commitment', () => {
+  const repeatedIds = Array.from({ length: 60 }, (_, index) => ({
+    event_id: `sequence-home-chance-${index + 1}-20-goal`,
+    minute: 1 + index,
+    side: 'home',
+    type: 'goal',
+    subtype: 'open_play_goal',
+    player_id: 'h-st',
+    provisional: true
+  }));
+
+  const fixtureA = resolveLineupEvents(generated(repeatedIds, 'fixture-seed-a'), contract, quality);
+  const fixtureB = resolveLineupEvents(generated(repeatedIds, 'fixture-seed-b'), contract, quality);
+  const signature = (result) => result.events
+    .filter((event) => event.type === 'goal')
+    .map((event) => `${event.event_id}:${event.assist_player_id || '-'}`);
+
+  assert.notDeepEqual(signature(fixtureA), signature(fixtureB), 'the same causal goal IDs in different fixtures must not reuse the same assist draws');
+  assert.deepEqual(
+    signature(fixtureA),
+    signature(resolveLineupEvents(generated(repeatedIds, 'fixture-seed-a'), contract, quality)),
+    'fixture-specific assist attribution must remain reproducible'
+  );
 });
 
 test('penalties and own goals never invent assists', () => {
