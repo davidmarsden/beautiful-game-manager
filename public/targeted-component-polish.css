@@ -214,3 +214,94 @@
   #competitionsView .division-round-fixture:nth-child(even) { background: #dfead9; }
   #competitionsView .division-round-fixture.managed-fixture { background: #fff0a8; }
 }
+
+/* Portrait standings: retain every statistic, but use a deliberately compact
+ * table rather than shrinking the desktop presentation indiscriminately. */
+@media (max-width: 700px) {
+  #competitionsView .competition-card {
+    padding-inline: .35rem;
+  }
+
+  #competitionsView .competition-card > .table-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden !important;
+  }
+
+  #standingsTable {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+  }
+
+  #standingsTable th,
+  #standingsTable td {
+    box-sizing: border-box;
+    padding: .44rem .14rem !important;
+    font-size: .64rem !important;
+    line-height: 1.05;
+    text-align: center;
+    vertical-align: middle;
+  }
+
+  #standingsTable th:nth-child(1),
+  #standingsTable td:nth-child(1) { width: 5.5%; }
+
+  #standingsTable th:nth-child(2),
+  #standingsTable td:nth-child(2) {
+    width: 29.5%;
+    min-width: 0 !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
+    padding-left: .25rem !important;
+  }
+
+  #standingsTable td:nth-child(2) .portal-club-link {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #standingsTable th:nth-child(n+3):nth-child(-n+6),
+  #standingsTable td:nth-child(n+3):nth-child(-n+6) { width: 4.8%; }
+
+  #standingsTable th:nth-child(n+7):nth-child(-n+9),
+  #standingsTable td:nth-child(n+7):nth-child(-n+9) { width: 5.3%; }
+
+  #standingsTable th:nth-child(10),
+  #standingsTable td:nth-child(10) {
+    width: 6.4%;
+    font-weight: 900 !important;
+  }
+
+  #standingsTable th:nth-child(11),
+  #standingsTable td:nth-child(11) { width: 24%; }
+
+  /* A td must remain a table-cell in a fixed table. The base .form-cell flex
+   * declaration was what made Pts and Form visually collide in portrait. */
+  #standingsTable td.form-cell {
+    display: table-cell !important;
+    min-width: 0 !important;
+    white-space: nowrap;
+    text-align: center;
+  }
+
+  #standingsTable .form-dot {
+    display: inline-grid !important;
+    place-items: center;
+    width: .84rem !important;
+    height: .84rem !important;
+    min-width: .84rem !important;
+    margin: 0 .02rem;
+    font-size: .47rem !important;
+    line-height: .84rem;
+    vertical-align: middle;
+  }
+
+  #standingsTable thead th {
+    white-space: nowrap;
+    letter-spacing: .015em;
+  }
+}
