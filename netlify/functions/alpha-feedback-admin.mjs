@@ -105,20 +105,23 @@ async function adminContext(userId) {
   return context;
 }
 
-async function awardExternalBug(userId, payload) {
-  const result = await rpc('admin_award_external_bug_credit', {
+async function awardExternalContribution(userId, payload) {
+  const contributionType = clean(payload.contribution_type) || 'other';
+  const result = await rpc('admin_award_external_tester_credit', {
     p_admin_user_id: userId,
     p_world_id: WORLD_ID,
     p_manager_id: clean(payload.manager_id),
-    p_severity: clean(payload.severity),
+    p_contribution_type: contributionType,
     p_reason: clean(payload.reason),
-    p_source_channel: clean(payload.source_channel) || 'other'
+    p_source_channel: clean(payload.source_channel) || 'other',
+    p_points: Number(payload.points) || 1,
+    p_severity: clean(payload.severity) || null
   });
   if (!result?.ok) {
     const status = result?.code === 'admin_required' ? 403
       : result?.code === 'manager_not_active_in_world' ? 404
       : 400;
-    throw Object.assign(new Error(result?.code || 'Could not award Bug Hunter credit'), { status });
+    throw Object.assign(new Error(result?.code || 'Could not award tester credit'), { status });
   }
   return result;
 }
@@ -183,7 +186,8 @@ export default async (request) => {
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
     const payload = await request.json().catch(() => ({}));
-    if (payload.action === 'award-external-bug') return json(await awardExternalBug(user.id, payload));
+    if (payload.action === 'award-external-contribution') return json(await awardExternalContribution(user.id, payload));
+    if (payload.action === 'award-external-bug') return json(await awardExternalContribution(user.id, { ...payload, contribution_type: 'bug' }));
     if (payload.action !== 'promote') return json(await updateReport(user.id, payload));
 
     if (!GITHUB_TOKEN) return json({ error: 'GitHub promotion is not configured (missing GITHUB_TOKEN)' }, 503);
