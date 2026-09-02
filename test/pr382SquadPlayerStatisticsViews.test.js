@@ -18,11 +18,27 @@ test('manager squad adds SMW-style multi-view player data without replacing the 
   assert.match(source, /data-tbg-player-id/);
 });
 
+test('every column in every alternate squad view is sortable with the General-view arrow interaction', () => {
+  const source = read('../public/squad-player-statistics.js');
+  assert.match(source, /\['Apps', 'stats_apps'\]/);
+  assert.match(source, /\['Last 5', 'stats_recent'\]/);
+  assert.match(source, /\['Squad status', 'squad_status'\]/);
+  assert.match(source, /\['Previous', 'ability_previous'\]/);
+  assert.match(source, /\['History', 'ability_history'\]/);
+  assert.match(source, /\['Transfer', 'transfer_state'\]/);
+  assert.match(source, /\['Loan', 'loan_state'\]/);
+  assert.match(source, /header\.dataset\.sort = sortKey/);
+  assert.match(source, /header\.dataset\.arrow = state && sortKey === state\.key/);
+  assert.match(source, /function sortValue\(player, key\)/);
+  assert.match(source, /function sortPlayers\(rows, viewName\)/);
+  assert.match(source, /state\.dir = state\.dir === 'asc' \? 'desc' : 'asc'/);
+});
+
 test('alternate squad views intercept legacy header sorting before app.js can redraw General rows', () => {
   const source = read('../public/squad-player-statistics.js');
   assert.match(source, /getElementById\('squadTable'\)\?\.addEventListener\('click'/);
   assert.match(source, /currentView\(\) === 'general'/);
-  assert.match(source, /event\.target\.closest\('th'\)/);
+  assert.match(source, /event\.target\.closest\('th\[data-sort\]'\)/);
   assert.match(source, /event\.stopImmediatePropagation\(\)/);
   assert.match(source, /}, true\);/);
 });
