@@ -61,6 +61,13 @@ test('alpha admin UI awards bug, feature, UX, data and other tester contribution
   assert.match(js, /critical · 8 points/);
 });
 
+test('legacy external Bug Hunter awards keep their bug label without contribution_type context', async () => {
+  const js = await read('public/alpha-feedback-admin.js');
+  assert.match(js, /context\.source==='external_admin_award'&&fallbackKind==='bug'\?'bug':''/);
+  assert.match(js, /contributionLabel\(r\.client_context,r\.kind\)/);
+  assert.match(js, /contextBlock\(r\.client_context,r\.kind\)/);
+});
+
 test('bug-specific pins ignore non-bug tester contributions while Alpha Pioneer recognises either', async () => {
   const migration = await read('supabase/migrations/20260902_tester_contribution_credits.sql');
   assert.match(migration, /contribution_type='bug'/);
