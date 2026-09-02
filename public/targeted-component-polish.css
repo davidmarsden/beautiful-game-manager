@@ -215,8 +215,8 @@
   #competitionsView .division-round-fixture.managed-fixture { background: #fff0a8; }
 }
 
-/* Standings on phones: keep every column visible in portrait rather than
- * forcing a sideways swipe. Landscape and desktop retain the roomier layout. */
+/* Portrait standings: retain every statistic, but use a deliberately compact
+ * table rather than shrinking the desktop presentation indiscriminately. */
 @media (max-width: 700px) {
   #competitionsView .competition-card {
     padding-inline: .35rem;
@@ -236,20 +236,25 @@
 
   #standingsTable th,
   #standingsTable td {
-    padding: .42rem .10rem !important;
-    font-size: .61rem !important;
+    box-sizing: border-box;
+    padding: .44rem .14rem !important;
+    font-size: .64rem !important;
     line-height: 1.05;
+    text-align: center;
+    vertical-align: middle;
   }
 
   #standingsTable th:nth-child(1),
-  #standingsTable td:nth-child(1) { width: 6%; }
+  #standingsTable td:nth-child(1) { width: 5.5%; }
 
   #standingsTable th:nth-child(2),
   #standingsTable td:nth-child(2) {
-    width: 31%;
+    width: 29.5%;
     min-width: 0 !important;
     overflow: hidden;
     text-overflow: ellipsis;
+    text-align: left;
+    padding-left: .25rem !important;
   }
 
   #standingsTable td:nth-child(2) .portal-club-link {
@@ -259,42 +264,44 @@
     white-space: nowrap;
   }
 
-  #standingsTable th:nth-child(3),
-  #standingsTable td:nth-child(3),
-  #standingsTable th:nth-child(4),
-  #standingsTable td:nth-child(4),
-  #standingsTable th:nth-child(5),
-  #standingsTable td:nth-child(5),
-  #standingsTable th:nth-child(6),
-  #standingsTable td:nth-child(6) { width: 5%; }
+  #standingsTable th:nth-child(n+3):nth-child(-n+6),
+  #standingsTable td:nth-child(n+3):nth-child(-n+6) { width: 4.8%; }
 
-  #standingsTable th:nth-child(7),
-  #standingsTable td:nth-child(7),
-  #standingsTable th:nth-child(8),
-  #standingsTable td:nth-child(8),
-  #standingsTable th:nth-child(9),
-  #standingsTable td:nth-child(9) { width: 6%; }
+  #standingsTable th:nth-child(n+7):nth-child(-n+9),
+  #standingsTable td:nth-child(n+7):nth-child(-n+9) { width: 5.3%; }
 
   #standingsTable th:nth-child(10),
   #standingsTable td:nth-child(10) {
-    width: 7%;
+    width: 6.4%;
     font-weight: 900 !important;
   }
 
   #standingsTable th:nth-child(11),
-  #standingsTable td:nth-child(11) { width: 26%; }
+  #standingsTable td:nth-child(11) { width: 24%; }
 
-  #standingsTable .form-cell {
+  /* A td must remain a table-cell in a fixed table. The base .form-cell flex
+   * declaration was what made Pts and Form visually collide in portrait. */
+  #standingsTable td.form-cell {
+    display: table-cell !important;
     min-width: 0 !important;
-    gap: 1px !important;
-    justify-content: center;
+    white-space: nowrap;
+    text-align: center;
   }
 
   #standingsTable .form-dot {
-    width: .82rem !important;
-    height: .82rem !important;
-    min-width: .82rem !important;
-    font-size: .46rem !important;
-    line-height: .82rem;
+    display: inline-grid !important;
+    place-items: center;
+    width: .84rem !important;
+    height: .84rem !important;
+    min-width: .84rem !important;
+    margin: 0 .02rem;
+    font-size: .47rem !important;
+    line-height: .84rem;
+    vertical-align: middle;
+  }
+
+  #standingsTable thead th {
+    white-space: nowrap;
+    letter-spacing: .015em;
   }
 }
