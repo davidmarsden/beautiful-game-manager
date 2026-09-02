@@ -10,29 +10,32 @@ const POSITION_ALIASES = new Map([
   ['ss', 'Second Striker'], ['second striker', 'Second Striker'], ['cf', 'Centre-Forward'], ['st', 'Centre-Forward'], ['centre-forward', 'Centre-Forward'], ['center-forward', 'Centre-Forward'], ['striker', 'Centre-Forward']
 ]);
 
+const COMMON_HEADERS = [
+  ['#', 'squad_number'], ['Player', 'display_name'], ['Position', 'specific_position'], ['Age', 'age'], ['TBG', 'underlying_ability_rating']
+];
+
 const VIEWS = {
   general: {
     label: 'General',
-    headers: [
-      ['#', 'squad_number'], ['Player', 'display_name'], ['Position', 'specific_position'], ['Age', 'age'], ['TBG', 'underlying_ability_rating'],
+    headers: [...COMMON_HEADERS,
       ['Fitness', 'fitness'], ['Morale', 'morale'], ['Availability', 'injury_status'], ['Contract', 'contract_expiry'], ['Status', 'transfer_listed']
     ]
   },
   statistics: {
     label: 'Statistics',
-    headers: [['#'], ['Player'], ['Position'], ['Age'], ['TBG'], ['Apps'], ['Goals'], ['Assists'], ['AvP'], ['Last 5']]
+    headers: [...COMMON_HEADERS, ['Apps', 'stats_apps'], ['Goals', 'stats_goals'], ['Assists', 'stats_assists'], ['AvP', 'stats_avp'], ['Last 5', 'stats_recent']]
   },
   physical: {
     label: 'Physical',
-    headers: [['#'], ['Player'], ['Position'], ['Age'], ['TBG'], ['Fitness'], ['Morale'], ['Availability'], ['Squad status'], ['Contract']]
+    headers: [...COMMON_HEADERS, ['Fitness', 'fitness'], ['Morale', 'morale'], ['Availability', 'injury_status'], ['Squad status', 'squad_status'], ['Contract', 'contract_expiry']]
   },
   ability: {
     label: 'Ability',
-    headers: [['#'], ['Player'], ['Position'], ['Age'], ['TBG'], ['Previous'], ['Change'], ['Published'], ['Latest state'], ['History']]
+    headers: [...COMMON_HEADERS, ['Previous', 'ability_previous'], ['Change', 'ability_delta'], ['Published', 'ability_published'], ['Latest state', 'ability_state'], ['History', 'ability_history']]
   },
   contracts: {
     label: 'Contracts',
-    headers: [['#'], ['Player'], ['Position'], ['Age'], ['TBG'], ['Contract'], ['Transfer'], ['Loan'], ['Availability'], ['Squad status']]
+    headers: [...COMMON_HEADERS, ['Contract', 'contract_expiry'], ['Transfer', 'transfer_state'], ['Loan', 'loan_state'], ['Availability', 'injury_status'], ['Squad status', 'squad_status']]
   }
 };
 
@@ -44,6 +47,12 @@ let abilityPromise = null;
 let abilityByPlayer = {};
 let installed = false;
 let renderTicket = 0;
+const alternateSort = {
+  statistics: { key: 'position_order', dir: 'asc' },
+  physical: { key: 'position_order', dir: 'asc' },
+  ability: { key: 'position_order', dir: 'asc' },
+  contracts: { key: 'position_order', dir: 'asc' }
+};
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]));
@@ -99,12 +108,19 @@ function formatDate(value) {
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
+function contractValue(player) { return player.contract_expiry || player.contract_end_at || player.contract?.end_at || null; }
+function availabilityValue(player) { return player.injury_status || player.availability || 'Available'; }
+function transferValue(player) { return player.transfer_listed ? 'Transfer listed' : 'Not listed'; }
+function loanValue(player) {
+  if (isLoanedOut(player)) return player.loan_club_name ? `At ${player.loan_club_name}` : 'Loaned out';
+  return player.loan_listed ? 'Loan listed' : 'Not listed';
+}
 function statusBadge(player) {
   const labels = [];
   if (player.transfer_listed) labels.push('Listed');
   if (player.loan_listed) labels.push('Loan list');
   if (isLoanedOut(player)) labels.push(player.loan_club_name ? `Loaned · ${player.loan_club_name}` : 'Loaned');
-  return labels.length ? escapeHtml(labels.join(' · ')) : 'Squad player';
+  return labels.length ? labels.join(' · ') : 'Squad player';
 }
 
 function currentView() { return document.getElementById('squadDataView')?.value || 'general'; }
@@ -122,7 +138,70 @@ function filteredPlayers() {
   if (availability === 'injured') rows = rows.filter((player) => !isAvailable(player));
   if (availability === 'listed') rows = rows.filter((player) => player.transfer_listed);
   if (availability === 'loan') rows = rows.filter((player) => player.loan_listed);
-  return rows.sort((a, b) => positionIndex(a) - positionIndex(b) || Number(rating(b) || -1) - Number(rating(a) || -1) || playerName(a).localeCompare(playerName(b)));
+  return rows;
+}
+
+function recentAverage(player) {
+  const recent = statisticsByPlayer[playerId(player)]?.recent_ratings;
+  if (!Array.isArray(recent) || !recent.length) return null;
+  const values = recent.map((row) => Number(row.rating)).filter(Number.isFinite);
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+}
+
+function sortValue(player, key) {
+  const stats = statisticsByPlayer[playerId(player)] || null;
+  const ability = abilityByPlayer[playerId(player)] || {};
+  const change = ability.latest_change || null;
+  if (key === 'position_order') return positionIndex(player);
+  if (key === 'squad_number') return Number(player.squad_number);
+  if (key === 'display_name') return playerName(player);
+  if (key === 'specific_position') return positionIndex(player);
+  if (key === 'age') return Number(player.age);
+  if (key === 'underlying_ability_rating') return Number(rating(player));
+  if (key === 'fitness') return Number(player.fitness ?? 100);
+  if (key === 'morale') return Number.isFinite(Number(player.morale)) ? Number(player.morale) : String(player.morale || 'Good');
+  if (key === 'injury_status') return availabilityValue(player);
+  if (key === 'contract_expiry') return contractValue(player) ? new Date(contractValue(player)).getTime() : null;
+  if (key === 'squad_status') return statusBadge(player);
+  if (key === 'transfer_state') return transferValue(player);
+  if (key === 'loan_state') return loanValue(player);
+  if (key === 'stats_apps') return stats?.appearances ?? null;
+  if (key === 'stats_goals') return stats?.goals ?? null;
+  if (key === 'stats_assists') return stats?.assists ?? null;
+  if (key === 'stats_avp') return stats?.average_match_rating ?? null;
+  if (key === 'stats_recent') return recentAverage(player);
+  if (key === 'ability_previous') return change?.before ?? null;
+  if (key === 'ability_delta') return change?.delta ?? null;
+  if (key === 'ability_published') return change ? new Date(change.published_at || change.slot).getTime() : null;
+  if (key === 'ability_state') return change?.after ?? rating(player);
+  if (key === 'ability_history') return Array.isArray(ability.history) ? ability.history.length : 0;
+  return player[key] ?? null;
+}
+
+function compareValues(a, b, dir) {
+  const aMissing = a == null || (typeof a === 'number' && !Number.isFinite(a));
+  const bMissing = b == null || (typeof b === 'number' && !Number.isFinite(b));
+  if (aMissing || bMissing) {
+    if (aMissing && bMissing) return 0;
+    return aMissing ? 1 : -1;
+  }
+  const result = (typeof a === 'number' && typeof b === 'number')
+    ? a - b
+    : String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+  return dir === 'asc' ? result : -result;
+}
+
+function sortPlayers(rows, viewName) {
+  const state = alternateSort[viewName] || { key: 'position_order', dir: 'asc' };
+  return [...rows].sort((a, b) => {
+    const result = compareValues(sortValue(a, state.key), sortValue(b, state.key), state.dir);
+    if (result) return result;
+    if (state.key !== 'underlying_ability_rating') {
+      const ratingResult = compareValues(Number(rating(a)), Number(rating(b)), 'desc');
+      if (ratingResult) return ratingResult;
+    }
+    return playerName(a).localeCompare(playerName(b), undefined, { sensitivity: 'base' });
+  });
 }
 
 function updateHeaders(viewName) {
@@ -130,12 +209,13 @@ function updateHeaders(viewName) {
   const headers = table?.querySelectorAll('thead th');
   const definition = VIEWS[viewName] || VIEWS.general;
   if (!headers || headers.length !== definition.headers.length) return;
+  const state = alternateSort[viewName];
   headers.forEach((header, index) => {
     const [label, sortKey] = definition.headers[index];
     header.textContent = label;
-    header.classList.remove('active-sort');
-    delete header.dataset.arrow;
-    if (viewName === 'general' && sortKey) header.dataset.sort = sortKey;
+    header.classList.toggle('active-sort', Boolean(state && sortKey === state.key));
+    header.dataset.arrow = state && sortKey === state.key ? (state.dir === 'asc' ? '▲' : '▼') : '';
+    if (sortKey) header.dataset.sort = sortKey;
     else delete header.dataset.sort;
   });
   table.classList.toggle('squad-data-view-active', viewName !== 'general');
@@ -156,8 +236,7 @@ function statisticsCells(player) {
 }
 
 function physicalCells(player) {
-  const availability = player.injury_status || player.availability || 'Available';
-  return `${baseCells(player)}<td>${escapeHtml(player.fitness ?? 100)}%</td><td>${escapeHtml(player.morale ?? 'Good')}</td><td>${escapeHtml(availability)}</td><td>${escapeHtml(statusBadge(player))}</td><td>${formatDate(player.contract_expiry || player.contract_end_at || player.contract?.end_at)}</td>`;
+  return `${baseCells(player)}<td>${escapeHtml(player.fitness ?? 100)}%</td><td>${escapeHtml(player.morale ?? 'Good')}</td><td>${escapeHtml(availabilityValue(player))}</td><td>${escapeHtml(statusBadge(player))}</td><td>${formatDate(contractValue(player))}</td>`;
 }
 
 function abilityCells(player) {
@@ -173,10 +252,7 @@ function abilityCells(player) {
 }
 
 function contractCells(player) {
-  const availability = player.injury_status || player.availability || 'Available';
-  const transfer = player.transfer_listed ? 'Transfer listed' : 'Not listed';
-  const loan = isLoanedOut(player) ? (player.loan_club_name ? `At ${player.loan_club_name}` : 'Loaned out') : player.loan_listed ? 'Loan listed' : 'Not listed';
-  return `${baseCells(player)}<td>${formatDate(player.contract_expiry || player.contract_end_at || player.contract?.end_at)}</td><td>${escapeHtml(transfer)}</td><td>${escapeHtml(loan)}</td><td>${escapeHtml(availability)}</td><td>${escapeHtml(statusBadge(player))}</td>`;
+  return `${baseCells(player)}<td>${formatDate(contractValue(player))}</td><td>${escapeHtml(transferValue(player))}</td><td>${escapeHtml(loanValue(player))}</td><td>${escapeHtml(availabilityValue(player))}</td><td>${escapeHtml(statusBadge(player))}</td>`;
 }
 
 function rowFor(player, viewName) {
@@ -188,13 +264,15 @@ function rowFor(player, viewName) {
 }
 
 function renderRows(viewName) {
-  const rows = filteredPlayers();
+  const rows = sortPlayers(filteredPlayers(), viewName);
   const body = document.getElementById('squadRows');
   if (!body) return;
+  const sortKey = alternateSort[viewName]?.key;
+  const grouped = sortKey === 'position_order' || sortKey === 'specific_position';
   let previous = '';
   const html = rows.map((player) => {
     const group = position(player);
-    const separator = group !== previous ? `<tr class="position-separator"><td colspan="10">${escapeHtml(group)}</td></tr>` : '';
+    const separator = grouped && group !== previous ? `<tr class="position-separator"><td colspan="10">${escapeHtml(group)}</td></tr>` : '';
     previous = group;
     return separator + rowFor(player, viewName);
   }).join('');
@@ -277,23 +355,20 @@ async function renderSelectedView() {
     statusMessage('Loading squad data…');
     return;
   }
+  let loadFailed = false;
   if (viewName === 'statistics') {
     statusMessage('Loading persisted season statistics…');
-    try {
-      await loadStatistics();
-    } catch (error) {
-      if (ticket !== renderTicket || currentView() !== viewName) return;
-      renderRows(viewName);
-      statusMessage(`Season statistics unavailable · ${error.message || 'Could not load persisted match data.'}`);
-      return;
-    }
+    try { await loadStatistics(); } catch { loadFailed = true; }
   } else if (viewName === 'ability') {
     statusMessage('Loading governed Ability history…');
     await loadAbility();
   }
   if (ticket !== renderTicket || currentView() !== viewName) return;
-  statusMessage(statisticsError && viewName === 'statistics' ? `Season statistics unavailable · ${statisticsError.message}` : '');
+  updateHeaders(viewName);
   renderRows(viewName);
+  if (viewName === 'statistics' && (loadFailed || statisticsError)) {
+    statusMessage(`Season statistics unavailable${statisticsError?.message ? ` · ${statisticsError.message}` : ''}`);
+  } else statusMessage('');
 }
 
 function install() {
@@ -320,9 +395,21 @@ function install() {
     });
   });
   document.getElementById('squadTable')?.addEventListener('click', (event) => {
-    if (currentView() === 'general' || !event.target.closest('th')) return;
+    if (currentView() === 'general') return;
+    const header = event.target.closest('th[data-sort]');
+    if (!header) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    const viewName = currentView();
+    const key = header.dataset.sort;
+    const state = alternateSort[viewName];
+    if (!state || !key) return;
+    if (state.key === key) state.dir = state.dir === 'asc' ? 'desc' : 'asc';
+    else {
+      state.key = key;
+      state.dir = ['display_name', 'specific_position', 'injury_status', 'squad_status', 'transfer_state', 'loan_state'].includes(key) ? 'asc' : 'desc';
+    }
+    renderSelectedView().catch(() => {});
   }, true);
 }
 
