@@ -215,71 +215,86 @@
   #competitionsView .division-round-fixture.managed-fixture { background: #fff0a8; }
 }
 
-/* Mobile/tablet standings: preserve the complete statistical table and make
- * horizontal touch scrolling explicit. Pos and Club stay pinned while the
- * manager swipes across the remaining columns. */
-@media (max-width: 1200px) {
+/* Standings on phones: keep every column visible in portrait rather than
+ * forcing a sideways swipe. Landscape and desktop retain the roomier layout. */
+@media (max-width: 700px) {
+  #competitionsView .competition-card {
+    padding-inline: .35rem;
+  }
+
   #competitionsView .competition-card > .table-wrap {
+    width: 100%;
     max-width: 100%;
-    overflow-x: auto !important;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior-inline: contain;
-    touch-action: pan-x pan-y;
+    overflow: hidden !important;
   }
 
   #standingsTable {
-    width: max-content !important;
-    min-width: 760px !important;
-    table-layout: auto !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
   }
 
   #standingsTable th,
   #standingsTable td {
-    padding-inline: .42rem;
+    padding: .42rem .10rem !important;
+    font-size: .61rem !important;
+    line-height: 1.05;
   }
 
   #standingsTable th:nth-child(1),
-  #standingsTable td:nth-child(1) {
-    position: sticky;
-    left: 0;
-    z-index: 3;
-    min-width: 3rem;
-  }
+  #standingsTable td:nth-child(1) { width: 6%; }
 
   #standingsTable th:nth-child(2),
   #standingsTable td:nth-child(2) {
-    position: sticky;
-    left: 3rem;
-    z-index: 2;
-    min-width: 11rem;
-    max-width: 13rem;
+    width: 31%;
+    min-width: 0 !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  #standingsTable thead th:nth-child(1),
-  #standingsTable thead th:nth-child(2) {
-    z-index: 5;
-    background: #dbe8d5 !important;
-    color: var(--tbg-navy-deep) !important;
+  #standingsTable td:nth-child(2) .portal-club-link {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  #standingsTable tbody tr:nth-child(odd) td:nth-child(1),
-  #standingsTable tbody tr:nth-child(odd) td:nth-child(2) {
-    background: #f4f6ef !important;
-  }
+  #standingsTable th:nth-child(3),
+  #standingsTable td:nth-child(3),
+  #standingsTable th:nth-child(4),
+  #standingsTable td:nth-child(4),
+  #standingsTable th:nth-child(5),
+  #standingsTable td:nth-child(5),
+  #standingsTable th:nth-child(6),
+  #standingsTable td:nth-child(6) { width: 5%; }
 
-  #standingsTable tbody tr:nth-child(even) td:nth-child(1),
-  #standingsTable tbody tr:nth-child(even) td:nth-child(2) {
-    background: #e9efe6 !important;
-  }
-
-  #standingsTable tbody tr.managed-club-row td:nth-child(1),
-  #standingsTable tbody tr.managed-club-row td:nth-child(2) {
-    background: #fff0a8 !important;
-  }
+  #standingsTable th:nth-child(7),
+  #standingsTable td:nth-child(7),
+  #standingsTable th:nth-child(8),
+  #standingsTable td:nth-child(8),
+  #standingsTable th:nth-child(9),
+  #standingsTable td:nth-child(9) { width: 6%; }
 
   #standingsTable th:nth-child(10),
   #standingsTable td:nth-child(10) {
-    font-weight: 900;
+    width: 7%;
+    font-weight: 900 !important;
+  }
+
+  #standingsTable th:nth-child(11),
+  #standingsTable td:nth-child(11) { width: 26%; }
+
+  #standingsTable .form-cell {
+    min-width: 0 !important;
+    gap: 1px !important;
+    justify-content: center;
+  }
+
+  #standingsTable .form-dot {
+    width: .82rem !important;
+    height: .82rem !important;
+    min-width: .82rem !important;
+    font-size: .46rem !important;
+    line-height: .82rem;
   }
 }
