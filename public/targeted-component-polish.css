@@ -259,8 +259,8 @@
   #standingsTable thead th:nth-child(1),
   #standingsTable thead th:nth-child(2) {
     z-index: 5;
-    background: #243f54 !important;
-    color: #fff !important;
+    background: #dbe8d5 !important;
+    color: var(--tbg-navy-deep) !important;
   }
 
   #standingsTable tbody td:nth-child(1),
