@@ -1,0 +1,11 @@
+.squad-data-view-control { min-width: 9.5rem; }
+.squad-data-view-control select { font-weight: 700; }
+.squad-data-view-status { margin: -.45rem 0 .8rem; font-size: .82rem; color: var(--muted, #5f6874); }
+#squadTable.squad-data-view-active thead th { cursor: default; }
+#squadTable.squad-data-view-active thead th::after { content: none !important; }
+#squadTable .squad-recent-form { white-space: nowrap; font-variant-numeric: tabular-nums; }
+#squadTable .ability-delta { font-weight: 800; }
+@media (max-width: 760px) {
+  .squad-data-view-control { min-width: 7.5rem; }
+  #squadTable .squad-recent-form { white-space: normal; min-width: 7.5rem; }
+}
