@@ -22,7 +22,7 @@ async function getClient() {
         auth: {
           flowType: 'pkce',
           persistSession: true,
-          autoRefreshToken: true,
+          autoRefreshToken: false,
           detectSessionInUrl: false
         }
       });
