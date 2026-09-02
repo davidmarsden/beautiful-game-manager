@@ -77,3 +77,19 @@ test('ability view reuses governed rating history rather than inventing a second
   assert.match(source, /record\.history/);
   assert.doesNotMatch(source, /Math\.random/);
 });
+
+test('read-only club inspection exposes the same five data views and sortable columns for other teams', () => {
+  const source = read('../public/squad-view.js');
+  assert.match(source, /general:\s*\{/);
+  assert.match(source, /statistics:\s*\{/);
+  assert.match(source, /physical:\s*\{/);
+  assert.match(source, /ability:\s*\{/);
+  assert.match(source, /contracts:\s*\{/);
+  assert.match(source, /Display<select data-squad-data-view>/);
+  assert.match(source, /fetch\('\/api\/squad-player-stats'/);
+  assert.match(source, /fetch\('\/api\/player-rating-history'/);
+  assert.match(source, /data-sort="\$\{key\}"/);
+  assert.match(source, /compareValues\(sortValue\(a, sort\.key\)/);
+  assert.match(source, /Season statistics unavailable/);
+  assert.match(source, /tbg:read-only-squad-rendered/);
+});
