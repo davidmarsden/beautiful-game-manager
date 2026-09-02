@@ -220,6 +220,7 @@
  * manager swipes across the remaining columns. */
 @media (max-width: 1200px) {
   #competitionsView .competition-card > .table-wrap {
+    position: relative;
     max-width: 100%;
     overflow-x: auto !important;
     overflow-y: hidden;
@@ -281,5 +282,21 @@
   #standingsTable th:nth-child(10),
   #standingsTable td:nth-child(10) {
     font-weight: 900;
+  }
+
+  #competitionsView .competition-card:first-child > .table-wrap::after {
+    content: "Swipe for full table →";
+    position: sticky;
+    left: calc(100% - 8.5rem);
+    bottom: 0;
+    display: block;
+    width: max-content;
+    margin: .35rem .35rem .35rem auto;
+    padding: .2rem .4rem;
+    background: rgba(238,243,235,.94);
+    color: var(--tbg-muted);
+    font-size: .66rem;
+    font-weight: 700;
+    pointer-events: none;
   }
 }
