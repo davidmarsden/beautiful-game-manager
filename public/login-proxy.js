@@ -52,6 +52,7 @@ loginForm?.addEventListener('submit', async (event) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
     setStatus('Signed in. Loading your manager portal…', 'ok');
+    window.location.reload();
   } catch (error) {
     setStatus(error?.message || 'Could not sign in', 'error');
   }
