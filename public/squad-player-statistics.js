@@ -58,6 +58,11 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]));
 }
 
+const wholeNumber = (value, fallback = '—') => {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.round(number).toLocaleString('en-GB') : fallback;
+};
+
 function accessToken() {
   for (let index = 0; index < localStorage.length; index += 1) {
     const key = localStorage.key(index);
@@ -222,31 +227,31 @@ function updateHeaders(viewName) {
 }
 
 function baseCells(player) {
-  return `<td>${escapeHtml(player.squad_number ?? '—')}</td><td>${playerLink(player)}</td><td>${escapeHtml(position(player))}</td><td>${escapeHtml(player.age ?? '—')}</td><td><strong>${escapeHtml(rating(player))}</strong></td>`;
+  return `<td>${escapeHtml(player.squad_number ?? '—')}</td><td>${playerLink(player)}</td><td>${escapeHtml(position(player))}</td><td>${wholeNumber(player.age)}</td><td><strong>${wholeNumber(rating(player))}</strong></td>`;
 }
 
 function statisticsCells(player) {
   const stats = statisticsByPlayer[playerId(player)];
   if (!stats) return `${baseCells(player)}<td>—</td><td>—</td><td>—</td><td>—</td><td class="squad-recent-form">—</td>`;
-  const average = stats.average_match_rating == null ? '—' : Number(stats.average_match_rating).toFixed(2);
+  const average = stats.average_match_rating == null ? '—' : wholeNumber(stats.average_match_rating);
   const recent = Array.isArray(stats.recent_ratings) && stats.recent_ratings.length
-    ? stats.recent_ratings.map((row) => Number(row.rating).toFixed(1)).join(' · ')
+    ? stats.recent_ratings.map((row) => wholeNumber(row.rating)).join(' · ')
     : '—';
-  return `${baseCells(player)}<td>${stats.appearances ?? 0}</td><td>${stats.goals ?? 0}</td><td>${stats.assists ?? 0}</td><td>${escapeHtml(average)}</td><td class="squad-recent-form">${escapeHtml(recent)}</td>`;
+  return `${baseCells(player)}<td>${wholeNumber(stats.appearances, '0')}</td><td>${wholeNumber(stats.goals, '0')}</td><td>${wholeNumber(stats.assists, '0')}</td><td>${escapeHtml(average)}</td><td class="squad-recent-form">${escapeHtml(recent)}</td>`;
 }
 
 function physicalCells(player) {
-  return `${baseCells(player)}<td>${escapeHtml(player.fitness ?? 100)}%</td><td>${escapeHtml(player.morale ?? 'Good')}</td><td>${escapeHtml(availabilityValue(player))}</td><td>${escapeHtml(statusBadge(player))}</td><td>${formatDate(contractValue(player))}</td>`;
+  return `${baseCells(player)}<td>${wholeNumber(player.fitness ?? 100)}%</td><td>${wholeNumber(player.morale, escapeHtml(player.morale ?? 'Good'))}</td><td>${escapeHtml(availabilityValue(player))}</td><td>${escapeHtml(statusBadge(player))}</td><td>${formatDate(contractValue(player))}</td>`;
 }
 
 function abilityCells(player) {
   const record = abilityByPlayer[playerId(player)] || {};
   const change = record.latest_change || null;
   const delta = Number(change?.delta);
-  const marker = !change ? '—' : delta > 0 ? `↑${Math.abs(delta)}` : delta < 0 ? `↓${Math.abs(delta)}` : '→0';
-  const previous = change?.before ?? '—';
+  const marker = !change ? '—' : delta > 0 ? `↑${wholeNumber(Math.abs(delta))}` : delta < 0 ? `↓${wholeNumber(Math.abs(delta))}` : '→0';
+  const previous = change?.before == null ? '—' : wholeNumber(change.before);
   const published = change ? formatDate(change.published_at || change.slot) : '—';
-  const state = change ? `${change.before ?? '—'} → ${change.after ?? rating(player)}` : 'No published change';
+  const state = change ? `${change.before == null ? '—' : wholeNumber(change.before)} → ${wholeNumber(change.after ?? rating(player))}` : 'No published change';
   const count = Array.isArray(record.history) ? record.history.length : 0;
   return `${baseCells(player)}<td>${escapeHtml(previous)}</td><td class="ability-delta">${escapeHtml(marker)}</td><td>${published}</td><td>${escapeHtml(state)}</td><td>${count ? `${count} update${count === 1 ? '' : 's'}` : '—'}</td>`;
 }
@@ -358,6 +363,7 @@ async function renderSelectedView() {
   let loadFailed = false;
   if (viewName === 'statistics') {
     statusMessage('Loading persisted season statistics…');
+    renderRows(viewName);
     try { await loadStatistics(); } catch { loadFailed = true; }
   } else if (viewName === 'ability') {
     statusMessage('Loading governed Ability history…');
