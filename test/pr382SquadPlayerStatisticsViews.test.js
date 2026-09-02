@@ -70,6 +70,23 @@ test('statistics failures stay visibly unavailable instead of being converted in
   assert.doesNotMatch(source, /Could not load squad statistics'[\s\S]{0,120}return \{\}/);
 });
 
+test('statistics renders its own placeholder rows immediately on first selection before async data arrives', () => {
+  const manager = read('../public/squad-player-statistics.js');
+  const inspected = read('../public/squad-view.js');
+  assert.match(manager, /statusMessage\('Loading persisted season statistics…'\);\s*renderRows\(viewName\);\s*try \{ await loadStatistics\(\);/s);
+  assert.match(inspected, /status\('Loading persisted season statistics…'\);\s*render\(\);\s*try \{\s*await loadStatistics\(players,/s);
+});
+
+test('squad displays round ratings, fitness and match ratings to whole numbers', () => {
+  const manager = read('../public/squad-player-statistics.js');
+  const inspected = read('../public/squad-view.js');
+  for (const source of [manager, inspected]) {
+    assert.match(source, /const wholeNumber =/);
+    assert.match(source, /Math\.round\(number\)\.toLocaleString\('en-GB'\)/);
+    assert.doesNotMatch(source, /toFixed\([12]\)/);
+  }
+});
+
 test('ability view reuses governed rating history rather than inventing a second rating source', () => {
   const source = read('../public/squad-player-statistics.js');
   assert.match(source, /fetch\('\/api\/player-rating-history'/);
