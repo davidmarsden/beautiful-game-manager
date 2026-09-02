@@ -269,7 +269,7 @@ export function mountReadOnlySquadView(root, club) {
   if (!root || !club) return;
   const players = Array.isArray(club.players) ? club.players : [];
   const summary = squadSummary(players, club.squad_rules || {});
-  const positions = [...new Set(players.map(canonicalPosition))].sort((a, b) => (POSITION_ORDER.indexOf(a) === -1 ? 999 : POSITION_ORDER.indexOf(b) === -1 ? -999 : POSITION_ORDER.indexOf(a) - POSITION_ORDER.indexOf(b)) || a.localeCompare(b));
+  const positions = [...new Set(players.map(canonicalPosition))].sort((a, b) => (POSITION_ORDER.indexOf(a) === -1 ? 999 : POSITION_ORDER.indexOf(a)) - (POSITION_ORDER.indexOf(b) === -1 ? 999 : POSITION_ORDER.indexOf(b)) || a.localeCompare(b));
   let sort = { key: 'position', dir: 'asc' };
   let statisticsUnavailable = false;
   let dataTicket = 0;
