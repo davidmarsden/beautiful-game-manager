@@ -214,3 +214,52 @@
   #competitionsView .division-round-fixture:nth-child(even) { background: #dfead9; }
   #competitionsView .division-round-fixture.managed-fixture { background: #fff0a8; }
 }
+
+/* Standings must never require horizontal scrolling on phone/tablet layouts.
+ * Keep Pos, Club, P and Pts; the full statistical table remains on desktop. */
+@media (max-width: 1200px) {
+  #standingsTable {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+  }
+
+  #standingsTable th:nth-child(4), #standingsTable td:nth-child(4),
+  #standingsTable th:nth-child(5), #standingsTable td:nth-child(5),
+  #standingsTable th:nth-child(6), #standingsTable td:nth-child(6),
+  #standingsTable th:nth-child(7), #standingsTable td:nth-child(7),
+  #standingsTable th:nth-child(8), #standingsTable td:nth-child(8),
+  #standingsTable th:nth-child(9), #standingsTable td:nth-child(9),
+  #standingsTable th:nth-child(11), #standingsTable td:nth-child(11) {
+    display: none !important;
+  }
+
+  #standingsTable th:nth-child(1), #standingsTable td:nth-child(1) {
+    width: 3rem !important;
+  }
+
+  #standingsTable th:nth-child(3), #standingsTable td:nth-child(3),
+  #standingsTable th:nth-child(10), #standingsTable td:nth-child(10) {
+    width: 3.5rem !important;
+    text-align: center !important;
+  }
+
+  #standingsTable th:nth-child(2), #standingsTable td:nth-child(2) {
+    width: auto !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  #standingsTable td:nth-child(2) .portal-club-link {
+    display: block !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  #standingsTable th:nth-child(10), #standingsTable td:nth-child(10) {
+    font-weight: 900 !important;
+  }
+}
