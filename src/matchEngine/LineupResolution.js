@@ -160,7 +160,7 @@ function buildSideSubstitutions(side, baseEvents, contract, quality) {
 
     const candidates = starters
       .filter((player) => active.has(player.player_id) && player.required_role !== 'gk')
-      .sort((left, right) => left.effective_quality - right.effective_quality || left.player_id.localeCompare(right.player.player_id));
+      .sort((left, right) => left.effective_quality - right.effective_quality || left.player_id.localeCompare(right.player_id));
     let playerOut = null;
     let replacement = null;
     for (const candidate of candidates) {
