@@ -39,6 +39,7 @@ const VIEWS = {
 let portalSnapshot = null;
 let statisticsPromise = null;
 let statisticsByPlayer = {};
+let statisticsError = null;
 let abilityPromise = null;
 let abilityByPlayer = {};
 let installed = false;
@@ -145,7 +146,8 @@ function baseCells(player) {
 }
 
 function statisticsCells(player) {
-  const stats = statisticsByPlayer[playerId(player)] || {};
+  const stats = statisticsByPlayer[playerId(player)];
+  if (!stats) return `${baseCells(player)}<td>—</td><td>—</td><td>—</td><td>—</td><td class="squad-recent-form">—</td>`;
   const average = stats.average_match_rating == null ? '—' : Number(stats.average_match_rating).toFixed(2);
   const recent = Array.isArray(stats.recent_ratings) && stats.recent_ratings.length
     ? stats.recent_ratings.map((row) => Number(row.rating).toFixed(1)).join(' · ')
@@ -206,7 +208,12 @@ async function loadStatistics() {
   if (statisticsPromise) return statisticsPromise;
   const token = accessToken();
   const ids = (portalSnapshot?.squad || []).map(playerId).filter(Boolean);
-  if (!token || !ids.length) return {};
+  if (!ids.length) return {};
+  if (!token) {
+    statisticsError = new Error('Sign in again to load persisted season statistics.');
+    throw statisticsError;
+  }
+  statisticsError = null;
   statisticsPromise = fetch('/api/squad-player-stats', {
     method: 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
@@ -216,11 +223,13 @@ async function loadStatistics() {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || `Squad statistics request failed (HTTP ${response.status})`);
     statisticsByPlayer = payload.players || {};
+    statisticsError = null;
     return statisticsByPlayer;
   }).catch((error) => {
     statisticsPromise = null;
+    statisticsError = error;
     console.warn('Could not load squad statistics', error);
-    return {};
+    throw error;
   });
   return statisticsPromise;
 }
@@ -270,13 +279,20 @@ async function renderSelectedView() {
   }
   if (viewName === 'statistics') {
     statusMessage('Loading persisted season statistics…');
-    await loadStatistics();
+    try {
+      await loadStatistics();
+    } catch (error) {
+      if (ticket !== renderTicket || currentView() !== viewName) return;
+      renderRows(viewName);
+      statusMessage(`Season statistics unavailable · ${error.message || 'Could not load persisted match data.'}`);
+      return;
+    }
   } else if (viewName === 'ability') {
     statusMessage('Loading governed Ability history…');
     await loadAbility();
   }
   if (ticket !== renderTicket || currentView() !== viewName) return;
-  statusMessage('');
+  statusMessage(statisticsError && viewName === 'statistics' ? `Season statistics unavailable · ${statisticsError.message}` : '');
   renderRows(viewName);
 }
 
@@ -303,6 +319,11 @@ function install() {
       requestAnimationFrame(() => renderSelectedView().catch(() => {}));
     });
   });
+  document.getElementById('squadTable')?.addEventListener('click', (event) => {
+    if (currentView() === 'general' || !event.target.closest('th')) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
 }
 
 window.addEventListener('tbg:portal-rendered', (event) => {
