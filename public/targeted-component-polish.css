@@ -215,51 +215,61 @@
   #competitionsView .division-round-fixture.managed-fixture { background: #fff0a8; }
 }
 
-/* Standings must never require horizontal scrolling on phone/tablet layouts.
- * Keep Pos, Club, P and Pts; the full statistical table remains on desktop. */
+/* Mobile/tablet standings: preserve the complete statistical table and make
+ * horizontal touch scrolling explicit. Pos and Club stay pinned while the
+ * manager swipes across the remaining columns. */
 @media (max-width: 1200px) {
+  #competitionsView .competition-card > .table-wrap {
+    max-width: 100%;
+    overflow-x: auto !important;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-inline: contain;
+    touch-action: pan-x pan-y;
+  }
+
   #standingsTable {
-    width: 100% !important;
-    min-width: 0 !important;
-    table-layout: fixed !important;
+    width: max-content !important;
+    min-width: 760px !important;
+    table-layout: auto !important;
   }
 
-  #standingsTable th:nth-child(4), #standingsTable td:nth-child(4),
-  #standingsTable th:nth-child(5), #standingsTable td:nth-child(5),
-  #standingsTable th:nth-child(6), #standingsTable td:nth-child(6),
-  #standingsTable th:nth-child(7), #standingsTable td:nth-child(7),
-  #standingsTable th:nth-child(8), #standingsTable td:nth-child(8),
-  #standingsTable th:nth-child(9), #standingsTable td:nth-child(9),
-  #standingsTable th:nth-child(11), #standingsTable td:nth-child(11) {
-    display: none !important;
+  #standingsTable th,
+  #standingsTable td {
+    padding-inline: .42rem;
   }
 
-  #standingsTable th:nth-child(1), #standingsTable td:nth-child(1) {
-    width: 3rem !important;
+  #standingsTable th:nth-child(1),
+  #standingsTable td:nth-child(1) {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    min-width: 3rem;
   }
 
-  #standingsTable th:nth-child(3), #standingsTable td:nth-child(3),
-  #standingsTable th:nth-child(10), #standingsTable td:nth-child(10) {
-    width: 3.5rem !important;
-    text-align: center !important;
+  #standingsTable th:nth-child(2),
+  #standingsTable td:nth-child(2) {
+    position: sticky;
+    left: 3rem;
+    z-index: 2;
+    min-width: 11rem;
+    max-width: 13rem;
   }
 
-  #standingsTable th:nth-child(2), #standingsTable td:nth-child(2) {
-    width: auto !important;
-    min-width: 0 !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
+  #standingsTable thead th:nth-child(1),
+  #standingsTable thead th:nth-child(2) {
+    z-index: 5;
+    background: #243f54 !important;
+    color: #fff !important;
   }
 
-  #standingsTable td:nth-child(2) .portal-club-link {
-    display: block !important;
-    min-width: 0 !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
+  #standingsTable tbody td:nth-child(1),
+  #standingsTable tbody td:nth-child(2) {
+    background: inherit;
   }
 
-  #standingsTable th:nth-child(10), #standingsTable td:nth-child(10) {
-    font-weight: 900 !important;
+  #standingsTable th:nth-child(10),
+  #standingsTable td:nth-child(10) {
+    font-weight: 900;
   }
 }
