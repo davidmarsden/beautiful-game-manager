@@ -77,7 +77,7 @@ test('statistics renders its own placeholder rows immediately on first selection
   assert.match(inspected, /status\('Loading persisted season statistics…'\);\s*render\(\);\s*try \{\s*await loadStatistics\(players,/s);
 });
 
-test('squad keeps ability and fitness as whole numbers but performance ratings at one decimal place', () => {
+test('squad keeps ability, fitness and Last 5 as whole numbers while AvP stays at one decimal place', () => {
   const manager = read('../public/squad-player-statistics.js');
   const inspected = read('../public/squad-view.js');
   for (const source of [manager, inspected]) {
@@ -86,7 +86,8 @@ test('squad keeps ability and fitness as whole numbers but performance ratings a
     assert.match(source, /const performanceRating =/);
     assert.match(source, /number\.toFixed\(1\)/);
     assert.match(source, /performanceRating\(stats\.average_match_rating\)/);
-    assert.match(source, /performanceRating\(row\.rating\)/);
+    assert.match(source, /recent_ratings[\s\S]{0,140}wholeNumber\(row\.rating\)/);
+    assert.doesNotMatch(source, /recent_ratings[\s\S]{0,140}performanceRating\(row\.rating\)/);
   }
 });
 
