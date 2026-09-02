@@ -49,6 +49,10 @@ export const isYouthPlayer = (player) => Boolean(player.youth_eligible_at_season
 export const isLoanedOutPlayer = (player) => Boolean(player.loaned_out || String(player.loan_status || '').toLowerCase() === 'loaned_out');
 
 const playerId = (player) => player.tbg_player_id || player.player_id || '';
+const wholeNumber = (value, fallback = '—') => {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.round(number).toLocaleString('en-GB') : fallback;
+};
 
 function accessToken() {
   for (let index = 0; index < localStorage.length; index += 1) {
@@ -96,7 +100,7 @@ function statusBadges(player) {
 function availabilityLabel(player) { return player.injury_status || player.availability || 'Available'; }
 function availabilityBadge(player) { return `<span class="badge ${isAvailable(player) ? 'fit' : 'injured'}">${escapeHtml(availabilityLabel(player))}</span>`; }
 function contractValue(player) { return player.contract_expiry || player.contract_end_at || player.contract?.end_at || ''; }
-function contractLabel(player) { return escapeHtml(contractValue(player) || 'Open-ended'); }
+function contractLabel(player) { return formatDate(contractValue(player), 'Open-ended'); }
 
 function playerNameMarkup(player) {
   const name = escapeHtml(playerName(player));
@@ -149,33 +153,33 @@ async function loadAbility() {
 }
 
 function generalCells(player) {
-  return `<td>${player.squad_number ?? '—'}</td><td>${playerNameMarkup(player)}</td><td>${escapeHtml(canonicalPosition(player))}</td><td>${player.age ?? '—'}</td><td><strong>${playerRating(player) ?? '—'}</strong></td><td>${player.fitness ?? 100}%</td><td>${escapeHtml(player.morale || 'Good')}</td><td>${availabilityBadge(player)}</td><td>${contractLabel(player)}</td><td>${statusBadges(player)}</td>`;
+  return `<td>${player.squad_number ?? '—'}</td><td>${playerNameMarkup(player)}</td><td>${escapeHtml(canonicalPosition(player))}</td><td>${wholeNumber(player.age)}</td><td><strong>${wholeNumber(playerRating(player))}</strong></td><td>${wholeNumber(player.fitness ?? 100)}%</td><td>${wholeNumber(player.morale, escapeHtml(player.morale || 'Good'))}</td><td>${availabilityBadge(player)}</td><td>${contractLabel(player)}</td><td>${statusBadges(player)}</td>`;
 }
 
 function baseCells(player) {
-  return `<td>${player.squad_number ?? '—'}</td><td>${playerNameMarkup(player)}</td><td>${escapeHtml(canonicalPosition(player))}</td><td>${player.age ?? '—'}</td><td><strong>${playerRating(player) ?? '—'}</strong></td>`;
+  return `<td>${player.squad_number ?? '—'}</td><td>${playerNameMarkup(player)}</td><td>${escapeHtml(canonicalPosition(player))}</td><td>${wholeNumber(player.age)}</td><td><strong>${wholeNumber(playerRating(player))}</strong></td>`;
 }
 
 function statisticsCells(player, statisticsUnavailable) {
   const stats = statisticsCache.get(playerId(player));
   if (!stats || statisticsUnavailable) return `${baseCells(player)}<td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>`;
-  const recent = Array.isArray(stats.recent_ratings) && stats.recent_ratings.length ? stats.recent_ratings.map((row) => Number(row.rating).toFixed(1)).join(' · ') : '—';
-  const average = stats.average_match_rating == null ? '—' : Number(stats.average_match_rating).toFixed(2);
-  return `${baseCells(player)}<td>${stats.appearances ?? 0}</td><td>${stats.goals ?? 0}</td><td>${stats.assists ?? 0}</td><td>${escapeHtml(average)}</td><td class="squad-recent-form">${escapeHtml(recent)}</td>`;
+  const recent = Array.isArray(stats.recent_ratings) && stats.recent_ratings.length ? stats.recent_ratings.map((row) => wholeNumber(row.rating)).join(' · ') : '—';
+  const average = stats.average_match_rating == null ? '—' : wholeNumber(stats.average_match_rating);
+  return `${baseCells(player)}<td>${wholeNumber(stats.appearances, '0')}</td><td>${wholeNumber(stats.goals, '0')}</td><td>${wholeNumber(stats.assists, '0')}</td><td>${escapeHtml(average)}</td><td class="squad-recent-form">${escapeHtml(recent)}</td>`;
 }
 
 function physicalCells(player) {
-  return `${baseCells(player)}<td>${player.fitness ?? 100}%</td><td>${escapeHtml(player.morale || 'Good')}</td><td>${availabilityBadge(player)}</td><td>${statusBadges(player)}</td><td>${contractLabel(player)}</td>`;
+  return `${baseCells(player)}<td>${wholeNumber(player.fitness ?? 100)}%</td><td>${wholeNumber(player.morale, escapeHtml(player.morale || 'Good'))}</td><td>${availabilityBadge(player)}</td><td>${statusBadges(player)}</td><td>${contractLabel(player)}</td>`;
 }
 
 function abilityCells(player) {
   const record = abilityByPlayer[playerId(player)] || {};
   const change = record.latest_change || null;
   const delta = Number(change?.delta);
-  const marker = !change ? '—' : delta > 0 ? `↑${Math.abs(delta)}` : delta < 0 ? `↓${Math.abs(delta)}` : '→0';
-  const previous = change?.before ?? '—';
+  const marker = !change ? '—' : delta > 0 ? `↑${wholeNumber(Math.abs(delta))}` : delta < 0 ? `↓${wholeNumber(Math.abs(delta))}` : '→0';
+  const previous = change?.before == null ? '—' : wholeNumber(change.before);
   const published = change ? formatDate(change.published_at || change.slot) : '—';
-  const state = change ? `${change.before ?? '—'} → ${change.after ?? playerRating(player) ?? '—'}` : 'No published change';
+  const state = change ? `${change.before == null ? '—' : wholeNumber(change.before)} → ${wholeNumber(change.after ?? playerRating(player))}` : 'No published change';
   const count = Array.isArray(record.history) ? record.history.length : 0;
   return `${baseCells(player)}<td>${escapeHtml(previous)}</td><td>${escapeHtml(marker)}</td><td>${published}</td><td>${escapeHtml(state)}</td><td>${count ? `${count} update${count === 1 ? '' : 's'}` : '—'}</td>`;
 }
@@ -243,7 +247,7 @@ function coverageCards(coverage = []) {
 }
 
 function contractWatchRows(contracts = []) {
-  return contracts.length ? contracts.slice(0, 8).map((row) => `<article class="contract-row"><div><strong>${escapeHtml(row.player_name)}</strong><small>${escapeHtml(row.position)}</small></div><div><strong>${row.days_remaining <= 0 ? 'Expired' : `${row.days_remaining} days`}</strong><small>${new Date(row.end_at).toLocaleDateString('en-GB')}</small></div></article>`).join('') : '<p class="portal-empty">No contracts expire in the next 12 months.</p>';
+  return contracts.length ? contracts.slice(0, 8).map((row) => `<article class="contract-row"><div><strong>${escapeHtml(row.player_name)}</strong><small>${escapeHtml(row.position)}</small></div><div><strong>${row.days_remaining <= 0 ? 'Expired' : `${wholeNumber(row.days_remaining)} days`}</strong><small>${new Date(row.end_at).toLocaleDateString('en-GB')}</small></div></article>`).join('') : '<p class="portal-empty">No contracts expire in the next 12 months.</p>';
 }
 
 export function squadSummary(players = [], rules = {}) {
@@ -328,6 +332,7 @@ export function mountReadOnlySquadView(root, club) {
     status('');
     if (dataView === 'statistics') {
       status('Loading persisted season statistics…');
+      render();
       try {
         await loadStatistics(players, club.world_id || club.worldId);
       } catch (error) {
