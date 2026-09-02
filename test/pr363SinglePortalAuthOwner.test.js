@@ -8,6 +8,8 @@ const authOwner = read('app.js');
 const bridge = read('portal-auth-bridge.js');
 const secondaryPortalClients = [
   'auth-entry.js',
+  'login-proxy.js',
+  'password-account.js',
   'phase2c2b.js',
   'functional-inbox.js',
   'team-presets.js',
@@ -21,6 +23,8 @@ const sharedBearerModules = [
 ].map((name) => [name, read(name)]);
 const persistedFallbackClients = [
   'auth-entry.js',
+  'login-proxy.js',
+  'password-account.js',
   'club-claiming.js',
   'alpha-feedback.js'
 ].map((name) => [name, read(name)]);
