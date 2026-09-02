@@ -167,7 +167,7 @@ function baseCells(player) {
 function statisticsCells(player, statisticsUnavailable) {
   const stats = statisticsCache.get(playerId(player));
   if (!stats || statisticsUnavailable) return `${baseCells(player)}<td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>`;
-  const recent = Array.isArray(stats.recent_ratings) && stats.recent_ratings.length ? stats.recent_ratings.map((row) => performanceRating(row.rating)).join(' · ') : '—';
+  const recent = Array.isArray(stats.recent_ratings) && stats.recent_ratings.length ? stats.recent_ratings.map((row) => wholeNumber(row.rating)).join(' · ') : '—';
   const average = stats.average_match_rating == null ? '—' : performanceRating(stats.average_match_rating);
   return `${baseCells(player)}<td>${wholeNumber(stats.appearances, '0')}</td><td>${wholeNumber(stats.goals, '0')}</td><td>${wholeNumber(stats.assists, '0')}</td><td>${escapeHtml(average)}</td><td class="squad-recent-form">${escapeHtml(recent)}</td>`;
 }
@@ -269,7 +269,7 @@ export function mountReadOnlySquadView(root, club) {
   if (!root || !club) return;
   const players = Array.isArray(club.players) ? club.players : [];
   const summary = squadSummary(players, club.squad_rules || {});
-  const positions = [...new Set(players.map(canonicalPosition))].sort((a, b) => (POSITION_ORDER.indexOf(a) === -1 ? 999 : POSITION_ORDER.indexOf(a)) - (POSITION_ORDER.indexOf(b) === -1 ? 999 : POSITION_ORDER.indexOf(b)) || a.localeCompare(b));
+  const positions = [...new Set(players.map(canonicalPosition))].sort((a, b) => (POSITION_ORDER.indexOf(a) === -1 ? 999 : POSITION_ORDER.indexOf(b) === -1 ? -999 : POSITION_ORDER.indexOf(a) - POSITION_ORDER.indexOf(b)) || a.localeCompare(b));
   let sort = { key: 'position', dir: 'asc' };
   let statisticsUnavailable = false;
   let dataTicket = 0;
