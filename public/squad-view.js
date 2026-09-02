@@ -53,6 +53,10 @@ const wholeNumber = (value, fallback = '—') => {
   const number = Number(value);
   return Number.isFinite(number) ? Math.round(number).toLocaleString('en-GB') : fallback;
 };
+const performanceRating = (value, fallback = '—') => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(1) : fallback;
+};
 
 function accessToken() {
   for (let index = 0; index < localStorage.length; index += 1) {
@@ -163,8 +167,8 @@ function baseCells(player) {
 function statisticsCells(player, statisticsUnavailable) {
   const stats = statisticsCache.get(playerId(player));
   if (!stats || statisticsUnavailable) return `${baseCells(player)}<td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>`;
-  const recent = Array.isArray(stats.recent_ratings) && stats.recent_ratings.length ? stats.recent_ratings.map((row) => wholeNumber(row.rating)).join(' · ') : '—';
-  const average = stats.average_match_rating == null ? '—' : wholeNumber(stats.average_match_rating);
+  const recent = Array.isArray(stats.recent_ratings) && stats.recent_ratings.length ? stats.recent_ratings.map((row) => performanceRating(row.rating)).join(' · ') : '—';
+  const average = stats.average_match_rating == null ? '—' : performanceRating(stats.average_match_rating);
   return `${baseCells(player)}<td>${wholeNumber(stats.appearances, '0')}</td><td>${wholeNumber(stats.goals, '0')}</td><td>${wholeNumber(stats.assists, '0')}</td><td>${escapeHtml(average)}</td><td class="squad-recent-form">${escapeHtml(recent)}</td>`;
 }
 
