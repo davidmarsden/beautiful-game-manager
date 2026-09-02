@@ -160,7 +160,7 @@ function buildSideSubstitutions(side, baseEvents, contract, quality) {
 
     const candidates = starters
       .filter((player) => active.has(player.player_id) && player.required_role !== 'gk')
-      .sort((left, right) => left.effective_quality - right.effective_quality || left.player_id.localeCompare(right.player_id));
+      .sort((left, right) => left.effective_quality - right.effective_quality || left.player_id.localeCompare(right.player.player_id));
     let playerOut = null;
     let replacement = null;
     for (const candidate of candidates) {
@@ -348,7 +348,7 @@ function reassignInvalidActors(events, lineupBySide, quality) {
   });
 }
 
-function weightedAssistCandidate(side, scorerId, active, roles, qualities, eventId) {
+function weightedAssistCandidate(side, scorerId, active, roles, qualities, eventId, fixtureNamespace) {
   const candidates = [...active[side]]
     .filter((playerId) => playerId !== scorerId && roles[side].get(playerId) !== 'gk')
     .map((playerId) => {
@@ -359,7 +359,7 @@ function weightedAssistCandidate(side, scorerId, active, roles, qualities, event
     .sort((left, right) => left.playerId.localeCompare(right.playerId));
   if (!candidates.length) return null;
   const total = candidates.reduce((sum, row) => sum + row.weight, 0);
-  const target = stableUnit(`${eventId}:assist-player`) * total;
+  const target = stableUnit(`${fixtureNamespace}:${eventId}:assist-player`) * total;
   let cursor = 0;
   for (const candidate of candidates) {
     cursor += candidate.weight;
@@ -368,7 +368,7 @@ function weightedAssistCandidate(side, scorerId, active, roles, qualities, event
   return candidates[candidates.length - 1].playerId;
 }
 
-function attributeGoalAssists(events, lineupBySide, quality) {
+function attributeGoalAssists(events, lineupBySide, quality, fixtureNamespace) {
   const active = { home: new Set(lineupBySide.home.starting_xi), away: new Set(lineupBySide.away.starting_xi) };
   const roles = playerRoles(quality);
   const qualities = playerQuality(quality);
@@ -388,9 +388,9 @@ function attributeGoalAssists(events, lineupBySide, quality) {
       && event.subtype !== 'penalty_goal'
       && event.own_goal !== true
       && event.player_id
-      && stableUnit(`${event.event_id}:assist-awarded`) < ASSISTED_OPEN_PLAY_SHARE;
+      && stableUnit(`${fixtureNamespace}:${event.event_id}:assist-awarded`) < ASSISTED_OPEN_PLAY_SHARE;
     if (assistableGoal) {
-      const assisterId = weightedAssistCandidate(side, text(event.player_id), active, roles, qualities, event.event_id);
+      const assisterId = weightedAssistCandidate(side, text(event.player_id), active, roles, qualities, event.event_id, fixtureNamespace);
       if (assisterId) updated = { ...event, assist_player_id: assisterId, assist_source: 'causal_active_teammate' };
     }
 
@@ -419,7 +419,8 @@ export function resolveLineupEvents(eventGeneration, contract = {}, quality = {}
     away: applyLineupTimeline('away', combined, away.initial, away.bench)
   };
   const reassigned = reassignInvalidActors(combined, preliminary, quality);
-  const assisted = attributeGoalAssists(reassigned, preliminary, quality);
+  const fixtureNamespace = text(eventGeneration?.seed_commitment) || 'unseeded-fixture';
+  const assisted = attributeGoalAssists(reassigned, preliminary, quality, fixtureNamespace);
   const events = reconcileGeneratedSubstitutions(assisted, { home, away });
   const lineups = deepFreeze({
     home: applyLineupTimeline('home', events, home.initial, home.bench),
