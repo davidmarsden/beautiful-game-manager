@@ -64,6 +64,33 @@ function statusLabel(report) {
   return report.status || 'Received';
 }
 
+function followInternalAction(actionUrl) {
+  if (!actionUrl) return false;
+  let url;
+  try { url = new URL(actionUrl, window.location.origin); } catch { return false; }
+  if (url.origin !== window.location.origin) return false;
+
+  if (url.pathname === '/alpha-updates.html') {
+    notificationDialog?.close();
+    document.getElementById('alphaUpdatesButton')?.click();
+    return true;
+  }
+
+  if (url.pathname === '/') {
+    history.pushState({}, document.title, `${url.pathname}${url.search}`);
+    notificationDialog?.close();
+    const view = String(url.searchParams.get('view') || '').trim();
+    if (view) {
+      const tab = [...document.querySelectorAll('[data-view]')].find((node) => node.dataset.view === view);
+      tab?.click();
+    }
+    window.dispatchEvent(new CustomEvent('tbg:notification-action', { detail: { url: `${url.pathname}${url.search}` } }));
+    return true;
+  }
+
+  return false;
+}
+
 function renderNotifications(root) {
   const notifications = notificationData?.notifications || [];
   const controls = document.createElement('div');
@@ -91,7 +118,9 @@ function renderNotifications(root) {
     row.querySelector('strong').textContent = item.title || 'Notification';
     row.querySelector('p').textContent = item.body || '';
     row.querySelector('small').textContent = relativeTime(item.created_at);
-    row.addEventListener('click', async () => {
+    row.addEventListener('click', async (event) => {
+      const internalHandled = item.action_url ? followInternalAction(item.action_url) : false;
+      if (internalHandled) event.preventDefault();
       if (item.read_at) return;
       if (item.action_url) {
         void mutate({ action: 'mark-read', notification_id: item.id });
