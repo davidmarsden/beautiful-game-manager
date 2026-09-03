@@ -76,18 +76,8 @@ function followInternalAction(actionUrl) {
     return true;
   }
 
-  if (url.pathname === '/') {
-    history.pushState({}, document.title, `${url.pathname}${url.search}`);
-    notificationDialog?.close();
-    const view = String(url.searchParams.get('view') || '').trim();
-    if (view) {
-      const tab = [...document.querySelectorAll('[data-view]')].find((node) => node.dataset.view === view);
-      tab?.click();
-    }
-    window.dispatchEvent(new CustomEvent('tbg:notification-action', { detail: { url: `${url.pathname}${url.search}` } }));
-    return true;
-  }
-
+  // Portal view links deliberately use normal browser navigation. That gives
+  // Transfers/News a fresh load and keeps Back/Forward history synchronized.
   return false;
 }
 
