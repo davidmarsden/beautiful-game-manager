@@ -47,6 +47,17 @@ function settlementLegs(due) {
   if (!players.length) throw new Error('Transfer settlement revision does not contain a player leg');
   const cash = legs.filter((leg) => leg?.leg_type === 'cash');
 
+  const meaningful = [
+    ...players,
+    ...cash.filter((leg) => (Number(leg?.amount || 0) || 0) > 0)
+  ].filter((leg) => leg?.from_club_id && leg?.to_club_id && leg.from_club_id !== leg.to_club_id);
+  const directions = new Set(meaningful.map((leg) => `${leg.from_club_id}->${leg.to_club_id}`));
+  const reciprocal = [...directions].some((direction) => {
+    const [fromClubId, toClubId] = direction.split('->');
+    return directions.has(`${toClubId}->${fromClubId}`);
+  });
+  if (!reciprocal) throw new Error('Transfer settlement requires reciprocal consideration');
+
   // Preserve existing straight-transfer event semantics. In a one-player deal the
   // opposite-direction cash leg is unambiguously that player's fee. In a multi-player
   // exchange cash is a deal-level adjustment and is deliberately not attributed to any
@@ -64,7 +75,7 @@ function settlementLegs(due) {
 }
 
 function deterministicSettlementError(error) {
-  return /Transfer window is closed|Unknown player|Unknown club|is not owned by|already belongs to|registration limit reached|first-team squad limit reached|youth squad limit reached|Registration is closed|Contract end must be after|Cannot save invalid world|Atomic exchange|Unsupported transfer settlement leg type|does not contain a player leg|insufficient cash|wage budget exceeded|Cash leg|Cash transfer requires/i.test(String(error?.message || error));
+  return /Transfer window is closed|Unknown player|Unknown club|is not owned by|already belongs to|registration limit reached|first-team squad limit reached|youth squad limit reached|Registration is closed|Contract end must be after|Cannot save invalid world|Atomic exchange|Unsupported transfer settlement leg type|does not contain a player leg|reciprocal consideration|insufficient cash|wage budget exceeded|Cash leg|Cash transfer requires/i.test(String(error?.message || error));
 }
 
 async function reconcileSettlement(dealId, replacementChecksum) {
