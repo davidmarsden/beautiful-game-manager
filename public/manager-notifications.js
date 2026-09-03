@@ -71,8 +71,10 @@ function followInternalAction(actionUrl) {
   if (url.origin !== window.location.origin) return false;
 
   if (url.pathname === '/alpha-updates.html') {
+    const button = document.getElementById('alphaUpdatesButton');
+    if (!button) return false;
     notificationDialog?.close();
-    document.getElementById('alphaUpdatesButton')?.click();
+    button.click();
     return true;
   }
 
