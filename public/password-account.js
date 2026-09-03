@@ -7,6 +7,19 @@ const closeButton = document.getElementById('passwordClose');
 const passwordInput = document.getElementById('newPassword');
 const confirmInput = document.getElementById('confirmPassword');
 const status = document.getElementById('passwordStatus');
+const authHelp = document.querySelector('.auth-help');
+const onboardingIntro = document.querySelector('#onboardingState > p');
+const passwordIntro = document.querySelector('#passwordForm > p');
+
+if (authHelp) {
+  authHelp.innerHTML = '<strong>First time here?</strong> Use the email link to sign in. That does not create a password. Once you are inside the Manager Portal, choose <strong>Password</strong> at the top, set one, and then use email + password for future sign-ins.';
+}
+if (onboardingIntro) {
+  onboardingIntro.textContent = 'Complete your manager profile, then choose Password at the top of the portal and save a password for future sign-ins.';
+}
+if (passwordIntro) {
+  passwordIntro.textContent = 'Set a password here after your first email-link sign-in. Saving it is what enables email + password sign-in on this or another computer.';
+}
 
 let clientPromise = null;
 
@@ -76,7 +89,7 @@ form?.addEventListener('submit', async (event) => {
     if (error) throw error;
     passwordInput.value = '';
     confirmInput.value = '';
-    setStatus('Password saved. You can now use it to sign in on another computer.', 'ok');
+    setStatus('Password saved. You can now sign in directly with your email and this password.', 'ok');
   } catch (error) {
     setStatus(error?.message || 'Could not save password', 'error');
   }
