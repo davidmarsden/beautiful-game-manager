@@ -28,6 +28,10 @@ test('publishing is bundled into one world-feed item and one manager notificatio
   assert.match(reviewFix,/on conflict\(manager_id, dedupe_key\) do nothing/i);
 });
 
+test('derived World Feed titles stay within the feed title constraint',()=>{
+  assert.match(reviewFix,/left\('Alpha update: ' \|\| trim\(p_title\), 160\)/i);
+});
+
 test('normal admin candidates exclude records already marked as duplicate',()=>{
   assert.match(draftIntegrity,/not ilike 'Duplicate of canonical report%'/i);
   assert.match(admin,/public_summary/);
@@ -64,8 +68,22 @@ test('composer serializes new-update writes before an update id exists',()=>{
 
 test('successful publish resets the composer even while the write guard is active',()=>{
   assert.match(admin,/function resetComposer\(\)/);
-  assert.match(admin,/if\(publish\)\{resetComposer\(\)/);
+  assert.match(admin,/if\(publish\)resetComposer\(\)/);
   assert.match(admin,/function clearDraft\(\)\{if\(writeInFlight\)return;resetComposer\(\);\}/);
+});
+
+test('committed mutations are applied locally before best-effort context refresh',()=>{
+  const mutationIndex=admin.indexOf("const result=await api({method:'POST'");
+  const localStateIndex=admin.indexOf("if(publish)resetComposer();else $('updateId').value=result.update_id",mutationIndex);
+  const refreshIndex=admin.indexOf('refreshAfterMutation(result,publish)',mutationIndex);
+  assert.ok(mutationIndex>=0&&localStateIndex>mutationIndex&&refreshIndex>localStateIndex);
+  assert.match(admin,/The change was saved, but the list could not refresh/);
+});
+
+test('candidate and payload summaries are explicitly capped at 1000 characters',()=>{
+  assert.match(admin,/const summaryText=\(v\)=>String\(v\?\?''\)\.slice\(0,1000\)/);
+  assert.match(admin,/function candidateSummary\(r\)\{return summaryText\(/);
+  assert.match(admin,/public_summary:summaryText\(row\.querySelector\('\.summary'\)\.value\.trim\(\)\)/);
 });
 
 test('complete published history stays visible so unread state can always be cleared',()=>{
