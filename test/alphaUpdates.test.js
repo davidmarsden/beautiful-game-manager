@@ -4,6 +4,7 @@ import fs from 'node:fs';
 
 const migration=fs.readFileSync('supabase/migrations/20260903d_alpha_updates.sql','utf8');
 const reviewFix=fs.readFileSync('supabase/migrations/20260903e_alpha_updates_review_fixes.sql','utf8');
+const draftIntegrity=fs.readFileSync('supabase/migrations/20260903f_alpha_updates_draft_integrity.sql','utf8');
 const playerEndpoint=fs.readFileSync('netlify/functions/alpha-updates.mjs','utf8');
 const adminEndpoint=fs.readFileSync('netlify/functions/alpha-updates-admin.mjs','utf8');
 const portal=fs.readFileSync('public/alpha-updates.js','utf8');
@@ -27,10 +28,17 @@ test('publishing is bundled into one world-feed item and one manager notificatio
   assert.match(reviewFix,/on conflict\(manager_id, dedupe_key\) do nothing/i);
 });
 
-test('admin candidates exclude records already marked as duplicate',()=>{
-  assert.match(migration,/not ilike 'Duplicate of canonical report%'/i);
+test('normal admin candidates exclude records already marked as duplicate',()=>{
+  assert.match(draftIntegrity,/not ilike 'Duplicate of canonical report%'/i);
   assert.match(admin,/public_summary/);
   assert.match(admin,/credit tester/);
+});
+
+test('saved drafts retain linked reports outside the normal candidate window',()=>{
+  assert.match(draftIntegrity,/draft_linked/i);
+  assert.match(draftIntegrity,/u\.status = 'draft'/i);
+  assert.match(draftIntegrity,/union\s+select id from draft_linked/i);
+  assert.match(draftIntegrity,/i\.report_id is not null/i);
 });
 
 test('admin can add curated items that do not originate in feedback reports',()=>{
@@ -45,6 +53,13 @@ test('draft publication is serialized and published updates cannot be reverted',
   assert.match(reviewFix,/published_updates_are_immutable/i);
   assert.match(reviewFix,/and status = 'draft'/i);
   assert.match(reviewFix,/draft_state_changed/i);
+});
+
+test('composer serializes new-update writes before an update id exists',()=>{
+  assert.match(admin,/writeInFlight/);
+  assert.match(admin,/if\(writeInFlight\)return/);
+  assert.match(admin,/\$\('save'\)\.disabled=busy/);
+  assert.match(admin,/\$\('publish'\)\.disabled=busy/);
 });
 
 test('complete published history stays visible so unread state can always be cleared',()=>{
