@@ -30,18 +30,31 @@ test('publishing is bundled into one world-feed item and one manager notificatio
   assert.match(publishIdempotency,/on conflict\(manager_id, dedupe_key\) do nothing/i);
 });
 
-test('fresh publication retries reuse a client-generated update id and do not rebroadcast',()=>{
+test('fresh publication retries reuse a client-generated update id and serialize before lookup',()=>{
   assert.match(admin,/function ensureUpdateId\(\)\{if\(!\$\('updateId'\)\.value\)\$\('updateId'\)\.value=crypto\.randomUUID\(\)/);
   assert.match(admin,/update_id:ensureUpdateId\(\)/);
   assert.match(publishIdempotency,/if p_update_id is null then[\s\S]*update_id_required/i);
-  assert.match(publishIdempotency,/if v_current_status = 'published' then[\s\S]*if p_publish then[\s\S]*idempotent_replay/i);
-  const replayIndex=publishIdempotency.indexOf("'idempotent_replay', true");
-  const broadcastIndex=publishIdempotency.indexOf('insert into public.world_feed_items');
-  assert.ok(replayIndex>=0&&broadcastIndex>replayIndex);
+  const advisoryIndex=publishIdempotency.indexOf('pg_advisory_xact_lock');
+  const lookupIndex=publishIdempotency.indexOf('from public.alpha_updates\n  where id = p_update_id');
+  assert.ok(advisoryIndex>=0&&lookupIndex>advisoryIndex);
 });
 
-test('derived World Feed titles stay within the feed title constraint',()=>{
+test('published replay succeeds only when the complete committed payload matches',()=>{
+  assert.match(publishIdempotency,/v_requested_items jsonb/);
+  assert.match(publishIdempotency,/v_existing_items jsonb/);
+  assert.match(publishIdempotency,/v_existing_items = v_requested_items/);
+  assert.match(publishIdempotency,/trim\(v_existing_title\) = trim\(p_title\)/);
+  assert.match(publishIdempotency,/coalesce\(trim\(v_existing_summary\), ''\) = coalesce\(trim\(p_summary\), ''\)/);
+  assert.match(publishIdempotency,/published_payload_conflict/);
+  const replayIndex=publishIdempotency.indexOf("'idempotent_replay', true");
+  const conflictIndex=publishIdempotency.indexOf("'published_payload_conflict'");
+  const broadcastIndex=publishIdempotency.indexOf('insert into public.world_feed_items');
+  assert.ok(replayIndex>=0&&conflictIndex>replayIndex&&broadcastIndex>conflictIndex);
+});
+
+test('derived broadcast titles stay within shared title constraints',()=>{
   assert.match(publishIdempotency,/left\('Alpha update: ' \|\| trim\(p_title\), 160\)/i);
+  assert.match(publishIdempotency,/left\('What''s New: ' \|\| trim\(p_title\), 160\)/i);
 });
 
 test('normal admin candidates exclude records already marked as duplicate',()=>{
