@@ -12,6 +12,8 @@ test('player profile uses the polished modal presentation', async () => {
   assert.match(profile, /aria-modal/);
   assert.match(profile, /Current TBG club/);
   assert.match(profile, /View in The Pink Final/);
+  assert.match(profile, /tpf-mark\.svg/);
+  assert.match(profile, /tbg-pink-final-mark/);
   assert.match(profile, /toLocaleDateString\('en-GB',[\s\S]*timeZone: 'UTC'/);
   assert.match(profile, /normalized\.includes\('unavailable'\)/);
   assert.match(profile, /const tone = negative \? 'bad' : positive \? 'good'/);
@@ -27,7 +29,8 @@ test('player profile uses the polished modal presentation', async () => {
   assert.match(css, /position:fixed/);
   assert.match(css, /tbg-player-rating span/);
   assert.match(css, /tbg-profile-close\{position:absolute/);
-  assert.match(css, /tbg-pink-final-link\{[\s\S]*padding:12px 14px/);
+  assert.match(css, /tbg-pink-final-link\{[\s\S]*padding:10px 12px/);
+  assert.match(css, /tbg-pink-final-mark\{[\s\S]*width:48px/);
   assert.match(css, /tbg-profile-grid/);
   assert.match(css, /@media\(max-width:760px\)/);
 });
