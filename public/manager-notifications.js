@@ -4,17 +4,9 @@ let pollTimer = null;
 let notificationsActive = false;
 let unassignedObserver = null;
 
-function authToken() {
-  for (let index = 0; index < localStorage.length; index += 1) {
-    const key = localStorage.key(index);
-    if (!key?.startsWith('sb-') || !key.endsWith('-auth-token')) continue;
-    try {
-      const stored = JSON.parse(localStorage.getItem(key));
-      const token = stored?.access_token || stored?.currentSession?.access_token;
-      if (token) return token;
-    } catch {}
-  }
-  return '';
+async function authorization() {
+  if (!window.tbgPortalAuth?.waitForAuthorization) throw new Error('Portal authentication bridge is unavailable');
+  return window.tbgPortalAuth.waitForAuthorization();
 }
 
 function ensureBell() {
@@ -227,12 +219,11 @@ function renderRefreshError() {
 }
 
 async function mutate(body) {
-  const token = authToken();
-  if (!token) return false;
   try {
+    const bearer = await authorization();
     const response = await fetch('/api/manager-notifications', {
       method: 'POST',
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      headers: { authorization: bearer, 'content-type': 'application/json' },
       body: JSON.stringify(body)
     });
     return response.ok;
@@ -243,10 +234,9 @@ async function mutate(body) {
 }
 
 async function refresh(forceRender = false, showError = false) {
-  const token = authToken();
-  if (!token) return false;
   try {
-    const response = await fetch('/api/manager-notifications', { headers: { authorization: `Bearer ${token}` } });
+    const bearer = await authorization();
+    const response = await fetch('/api/manager-notifications', { headers: { authorization: bearer }, cache: 'no-store' });
     if (!response.ok) {
       if (showError) renderRefreshError();
       return false;
