@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const migration=fs.readFileSync('supabase/migrations/20260903d_alpha_updates.sql','utf8');
+const reviewFix=fs.readFileSync('supabase/migrations/20260903e_alpha_updates_review_fixes.sql','utf8');
 const playerEndpoint=fs.readFileSync('netlify/functions/alpha-updates.mjs','utf8');
 const adminEndpoint=fs.readFileSync('netlify/functions/alpha-updates-admin.mjs','utf8');
 const portal=fs.readFileSync('public/alpha-updates.js','utf8');
@@ -13,17 +14,17 @@ const authEntry=fs.readFileSync('public/auth-entry.js','utf8');
 test('published Alpha Updates expose curated public summaries, not triage notes',()=>{
   assert.match(migration,/create table if not exists public\.alpha_updates/i);
   assert.match(migration,/public_summary text not null/i);
-  const playerRpc=migration.slice(migration.indexOf('create or replace function public.get_alpha_updates_for_user'),migration.indexOf('create or replace function public.mark_alpha_update_read_for_user'));
+  const playerRpc=reviewFix.slice(reviewFix.indexOf('create or replace function public.get_alpha_updates_for_user'),reviewFix.indexOf('create or replace function public.admin_save_alpha_update'));
   assert.doesNotMatch(playerRpc,/admin_note/i);
   assert.match(playerRpc,/attribution_name/i);
 });
 
 test('publishing is bundled into one world-feed item and one manager notification per update',()=>{
   assert.match(migration,/'alpha_update'::text/);
-  assert.match(migration,/source_key[^\n]*metadata|alpha_update:/i);
-  assert.match(migration,/insert into public\.manager_messages/i);
-  assert.match(migration,/insert into public\.manager_notifications/i);
-  assert.match(migration,/on conflict\(manager_id,dedupe_key\) do nothing/i);
+  assert.match(reviewFix,/alpha_update:/i);
+  assert.match(reviewFix,/insert into public\.manager_messages/i);
+  assert.match(reviewFix,/insert into public\.manager_notifications/i);
+  assert.match(reviewFix,/on conflict\(manager_id, dedupe_key\) do nothing/i);
 });
 
 test('admin candidates exclude records already marked as duplicate',()=>{
@@ -37,6 +38,19 @@ test('admin can add curated items that do not originate in feedback reports',()=
   assert.match(admin,/manualItems/);
   assert.match(admin,/report_id:null/);
   assert.match(adminEndpoint,/items\.length===0/);
+});
+
+test('draft publication is serialized and published updates cannot be reverted',()=>{
+  assert.match(reviewFix,/for update;/i);
+  assert.match(reviewFix,/published_updates_are_immutable/i);
+  assert.match(reviewFix,/and status = 'draft'/i);
+  assert.match(reviewFix,/draft_state_changed/i);
+});
+
+test('complete published history stays visible so unread state can always be cleared',()=>{
+  const playerRpc=reviewFix.slice(reviewFix.indexOf('create or replace function public.get_alpha_updates_for_user'),reviewFix.indexOf('create or replace function public.admin_save_alpha_update'));
+  assert.doesNotMatch(playerRpc,/limit\s+30/i);
+  assert.match(playerRpc,/unread_count/);
 });
 
 test('player and admin endpoints require authenticated Supabase sessions',()=>{
