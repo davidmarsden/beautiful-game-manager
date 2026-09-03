@@ -7,6 +7,7 @@ const playerEndpoint=fs.readFileSync('netlify/functions/alpha-updates.mjs','utf8
 const adminEndpoint=fs.readFileSync('netlify/functions/alpha-updates-admin.mjs','utf8');
 const portal=fs.readFileSync('public/alpha-updates.js','utf8');
 const admin=fs.readFileSync('public/alpha-updates-admin.js','utf8');
+const adminHtml=fs.readFileSync('public/alpha-updates-admin.html','utf8');
 const authEntry=fs.readFileSync('public/auth-entry.js','utf8');
 
 test('published Alpha Updates expose curated public summaries, not triage notes',()=>{
@@ -29,6 +30,13 @@ test('admin candidates exclude records already marked as duplicate',()=>{
   assert.match(migration,/not ilike 'Duplicate of canonical report%'/i);
   assert.match(admin,/public_summary/);
   assert.match(admin,/credit tester/);
+});
+
+test('admin can add curated items that do not originate in feedback reports',()=>{
+  assert.match(adminHtml,/Other changes/);
+  assert.match(admin,/manualItems/);
+  assert.match(admin,/report_id:null/);
+  assert.match(adminEndpoint,/items\.length===0/);
 });
 
 test('player and admin endpoints require authenticated Supabase sessions',()=>{
