@@ -5,6 +5,7 @@ import fs from 'node:fs';
 const migration=fs.readFileSync('supabase/migrations/20260903d_alpha_updates.sql','utf8');
 const reviewFix=fs.readFileSync('supabase/migrations/20260903e_alpha_updates_review_fixes.sql','utf8');
 const draftIntegrity=fs.readFileSync('supabase/migrations/20260903f_alpha_updates_draft_integrity.sql','utf8');
+const publishIdempotency=fs.readFileSync('supabase/migrations/20260903g_alpha_update_publish_idempotency.sql','utf8');
 const playerEndpoint=fs.readFileSync('netlify/functions/alpha-updates.mjs','utf8');
 const adminEndpoint=fs.readFileSync('netlify/functions/alpha-updates-admin.mjs','utf8');
 const portal=fs.readFileSync('public/alpha-updates.js','utf8');
@@ -23,14 +24,24 @@ test('published Alpha Updates expose curated public summaries, not triage notes'
 
 test('publishing is bundled into one world-feed item and one manager notification per update',()=>{
   assert.match(migration,/'alpha_update'::text/);
-  assert.match(reviewFix,/alpha_update:/i);
-  assert.match(reviewFix,/insert into public\.manager_messages/i);
-  assert.match(reviewFix,/insert into public\.manager_notifications/i);
-  assert.match(reviewFix,/on conflict\(manager_id, dedupe_key\) do nothing/i);
+  assert.match(publishIdempotency,/alpha_update:/i);
+  assert.match(publishIdempotency,/insert into public\.manager_messages/i);
+  assert.match(publishIdempotency,/insert into public\.manager_notifications/i);
+  assert.match(publishIdempotency,/on conflict\(manager_id, dedupe_key\) do nothing/i);
+});
+
+test('fresh publication retries reuse a client-generated update id and do not rebroadcast',()=>{
+  assert.match(admin,/function ensureUpdateId\(\)\{if\(!\$\('updateId'\)\.value\)\$\('updateId'\)\.value=crypto\.randomUUID\(\)/);
+  assert.match(admin,/update_id:ensureUpdateId\(\)/);
+  assert.match(publishIdempotency,/if p_update_id is null then[\s\S]*update_id_required/i);
+  assert.match(publishIdempotency,/if v_current_status = 'published' then[\s\S]*if p_publish then[\s\S]*idempotent_replay/i);
+  const replayIndex=publishIdempotency.indexOf("'idempotent_replay', true");
+  const broadcastIndex=publishIdempotency.indexOf('insert into public.world_feed_items');
+  assert.ok(replayIndex>=0&&broadcastIndex>replayIndex);
 });
 
 test('derived World Feed titles stay within the feed title constraint',()=>{
-  assert.match(reviewFix,/left\('Alpha update: ' \|\| trim\(p_title\), 160\)/i);
+  assert.match(publishIdempotency,/left\('Alpha update: ' \|\| trim\(p_title\), 160\)/i);
 });
 
 test('normal admin candidates exclude records already marked as duplicate',()=>{
@@ -54,10 +65,10 @@ test('admin can add curated items that do not originate in feedback reports',()=
 });
 
 test('draft publication is serialized and published updates cannot be reverted',()=>{
-  assert.match(reviewFix,/for update;/i);
-  assert.match(reviewFix,/published_updates_are_immutable/i);
-  assert.match(reviewFix,/and status = 'draft'/i);
-  assert.match(reviewFix,/draft_state_changed/i);
+  assert.match(publishIdempotency,/for update;/i);
+  assert.match(publishIdempotency,/published_updates_are_immutable/i);
+  assert.match(publishIdempotency,/and status = 'draft'/i);
+  assert.match(publishIdempotency,/draft_state_changed/i);
 });
 
 test('composer serializes writes and freezes every editable control while pending',()=>{
