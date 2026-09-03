@@ -7,6 +7,7 @@ const APIFY_TOKEN = process.env.APIFY_TOKEN || '';
 const APIFY_ACTOR = process.env.TBG_TRANSFERMARKT_APIFY_ACTOR || 'jungle_synthesizer/transfermarkt-global-football-player-scraper';
 const PLAYER_DATABASE_URL = process.env.TBG_PLAYER_DATABASE_URL || 'https://raw.githubusercontent.com/davidmarsden/beautiful-game-data/main/derived/player-database/player-database.json';
 const PLAYER_DATABASE_CACHE_MS = Math.max(5000, Number(process.env.TBG_PLAYER_DATABASE_CACHE_MS) || 30000);
+const MIN_EXTERNAL_ACQUISITION_FEE_EUR = 100_000;
 const isJwt = (value) => String(value || '').split('.').length === 3;
 let playerDatabasePromise = null;
 let playerDatabaseLoadedAt = 0;
@@ -88,10 +89,16 @@ function positionGroup(position = '') {
   return 'UNK';
 }
 
+function governedExternalAcquisitionFee(value) {
+  const marketValue = Math.max(0, Number(value) || 0);
+  return Math.max(MIN_EXTERNAL_ACQUISITION_FEE_EUR, marketValue);
+}
+
 function ratedExternalPlayer(row, tmId) {
   const rating = Number(row?.tbg_rating ?? row?.underlying_ability_rating ?? 0);
   if (!rating) return null;
-  const value = Math.max(0, Number(row.market_value_eur) || 0);
+  const marketValue = Math.max(0, Number(row.market_value_eur) || 0);
+  const acquisitionFee = governedExternalAcquisitionFee(marketValue);
   return {
     tbg_player_id: String(row.tbg_player_id || canonicalId(tmId)),
     transfermarkt_id: String(tmId),
@@ -102,7 +109,7 @@ function ratedExternalPlayer(row, tmId) {
     nationality: Array.isArray(row.nationality) ? row.nationality : String(row.nationality || '').split(';').map((value) => value.trim()).filter(Boolean),
     position: row.position || row.primary_position || '',
     position_group: row.position_group || positionGroup(row.position || row.primary_position),
-    market_value_eur: value,
+    market_value_eur: marketValue,
     tbg_rating: rating,
     underlying_ability_rating: rating,
     rating_band: row.rating_band || null,
@@ -110,7 +117,7 @@ function ratedExternalPlayer(row, tmId) {
     active_circulation: row.active_circulation !== false,
     assignment_status: 'external',
     acquisition_type: 'external_transfermarkt',
-    external_acquisition_fee_eur: value,
+    external_acquisition_fee_eur: acquisitionFee,
     real_world_club: row.current_club || '',
     current_club: row.current_club || '',
     source: row.source || 'beautiful-game-data/player-database'
@@ -338,6 +345,9 @@ export default async (request) => {
       if (!player) return json({ error: 'This external player does not yet have a governed TBG Ability rating', reason: 'rating_required' }, 409);
       if (/retired/i.test(String(player.status))) return json({ error: 'This player is retired and cannot be acquired' }, 409);
       await assertNotInWorld(current.appointment.world_id, player);
+      if (Number(player.external_acquisition_fee_eur) < MIN_EXTERNAL_ACQUISITION_FEE_EUR) {
+        return json({ error: 'External acquisition fee is below the governed minimum', reason: 'invalid_external_acquisition_fee' }, 409);
+      }
       const contractYears = Math.max(1, Math.min(5, Number(body.contract_years ?? body.contractYears ?? 3) || 3));
       const wage = normaliseNonNegativeInteger(body.wage, freeAgentOfferExpectation(player));
       const result = await submitFreeAgentOffer({
@@ -364,7 +374,7 @@ export default async (request) => {
   } catch (error) {
     const message = String(error?.message || 'External-market request failed');
     const status = /Session|Authentication/.test(message) ? 401
-      : /already registered|retired|rating/i.test(message) ? 409
+      : /already registered|retired|rating|acquisition fee/i.test(message) ? 409
         : /refreshing|not configured|unavailable|Apify/i.test(message) ? 503 : 500;
     return json({ error: message }, status);
   }
