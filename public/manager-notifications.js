@@ -64,6 +64,26 @@ function statusLabel(report) {
   return report.status || 'Received';
 }
 
+function followInternalAction(actionUrl) {
+  if (!actionUrl) return false;
+  let url;
+  try { url = new URL(actionUrl, window.location.origin); } catch { return false; }
+  if (url.origin !== window.location.origin) return false;
+
+  if (url.pathname === '/alpha-updates.html') {
+    const button = document.getElementById('alphaUpdatesButton');
+    if (!button) return false;
+    notificationDialog?.close();
+    button.click();
+    return true;
+  }
+
+  // View/deal/feed links deliberately fall through to their normal anchor
+  // navigation. A fresh page load avoids stale TTL-cached data and leaves
+  // browser Back/Forward behavior coherent.
+  return false;
+}
+
 function renderNotifications(root) {
   const notifications = notificationData?.notifications || [];
   const controls = document.createElement('div');
@@ -91,7 +111,9 @@ function renderNotifications(root) {
     row.querySelector('strong').textContent = item.title || 'Notification';
     row.querySelector('p').textContent = item.body || '';
     row.querySelector('small').textContent = relativeTime(item.created_at);
-    row.addEventListener('click', async () => {
+    row.addEventListener('click', async (event) => {
+      const internalHandled = item.action_url ? followInternalAction(item.action_url) : false;
+      if (internalHandled) event.preventDefault();
       if (item.read_at) return;
       if (item.action_url) {
         void mutate({ action: 'mark-read', notification_id: item.id });

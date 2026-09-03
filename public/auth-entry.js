@@ -6,6 +6,7 @@ const SAFE_CLUB_ID = /^[A-Za-z0-9._:-]{1,160}$/;
 const ALPHA_RULEBOOK_URL = './rulebook.html';
 const RATINGS_EXPLAINER_URL = './ratings.html';
 const ROAD_AHEAD_URL = './road-ahead.html';
+let callbackUrlCanBeCleared = false;
 
 function addAlphaGuideLinks() {
   const gateCard = document.querySelector('#authGate .auth-card');
@@ -121,8 +122,7 @@ function restoredPath() {
 
 async function completeAuthCallback() {
   const { code, accessToken, refreshToken, authError } = callbackDetails();
-  if (authError) throw new Error(authError);
-  if (!code && !accessToken) return false;
+  if (!code && !accessToken && !authError) return false;
 
   const config = await loadConfig();
   const client = createClient(config.supabase_url, config.supabase_anon_key, {
@@ -134,15 +134,29 @@ async function completeAuthCallback() {
     }
   });
 
+  if (authError) {
+    const { data } = await client.auth.getSession();
+    if (data.session?.access_token) {
+      callbackUrlCanBeCleared = true;
+      sessionStorage.removeItem("tbg_auth_callback_error");
+      history.replaceState({}, document.title, restoredPath());
+      return false;
+    }
+    callbackUrlCanBeCleared = true;
+    throw new Error(authError);
+  }
+
   if (code) {
     const { error } = await client.auth.exchangeCodeForSession(code);
     if (error) throw error;
+    callbackUrlCanBeCleared = true;
   } else {
     const { error } = await client.auth.setSession({
       access_token: accessToken,
       refresh_token: refreshToken || ""
     });
     if (error) throw error;
+    callbackUrlCanBeCleared = true;
   }
 
   const { data, error: sessionError } = await client.auth.getSession();
@@ -161,6 +175,7 @@ try {
 } catch (error) {
   const message = error?.message || "Could not complete sign-in.";
   sessionStorage.setItem("tbg_auth_callback_error", message);
+  if (callbackUrlCanBeCleared) history.replaceState({}, document.title, restoredPath());
   console.error("TBG authentication callback failed:", error);
 }
 

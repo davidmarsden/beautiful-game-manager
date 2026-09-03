@@ -108,7 +108,8 @@ test('external acquisition is gated on a governed rating and reuses competitive 
   assert.match(endpoint, /This external player does not yet have a governed TBG Ability rating/);
   assert.match(endpoint, /submitFreeAgentOffer\(/);
   assert.match(endpoint, /acquisition_type: 'external_transfermarkt'/);
-  assert.match(endpoint, /external_acquisition_fee_eur: value/);
+  assert.match(endpoint, /external_acquisition_fee_eur: acquisitionFee/);
+  assert.match(endpoint, /MIN_EXTERNAL_ACQUISITION_FEE_EUR = 100_000/);
   assert.match(endpoint, /expected_wage: freeAgentOfferExpectation\(player\)/);
 });
 
