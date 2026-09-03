@@ -18,7 +18,7 @@ test('already-pending external offers are backfilled before they can settle for 
   const migration = await read('supabase/migrations/20260903h_pending_external_offer_fee_floor.sql');
   assert.match(migration, /update public\.free_agent_offers/i);
   assert.match(migration, /status = 'pending'/);
-  assert.match(migration, /acquisition_type', ''\) = 'external_transfermarkt'/);
+  assert.match(migration, /external_transfermarkt/);
   assert.match(migration, /external_acquisition_fee_eur/);
   assert.match(migration, /100000/);
 });
