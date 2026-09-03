@@ -29,7 +29,7 @@ test('only safe modal-style notification actions are swallowed inside the portal
   assert.match(notifications, /url\.origin !== window\.location\.origin/);
   assert.match(notifications, /url\.pathname === '\/alpha-updates\.html'/);
   assert.match(notifications, /document\.getElementById\('alphaUpdatesButton'\)\?\.click\(\)/);
-  assert.match(notifications, /Portal view links deliberately use normal browser navigation/);
+  assert.match(notifications, /View\/deal\/feed links deliberately fall through to their normal anchor/);
   assert.doesNotMatch(notifications, /history\.pushState/);
   assert.doesNotMatch(notifications, /tbg:notification-action/);
   assert.match(notifications, /if \(internalHandled\) event\.preventDefault\(\)/);
