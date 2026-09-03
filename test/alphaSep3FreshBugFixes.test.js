@@ -14,9 +14,10 @@ test('external rated players never acquire for a zero or sub-threshold fee', asy
   assert.match(endpoint, /invalid_external_acquisition_fee/);
 });
 
-test('already-pending external offers are backfilled before they can settle for zero', async () => {
+test('pending external offers and in-flight acquisitions are backfilled before settlement/history can retain zero', async () => {
   const migration = await read('supabase/migrations/20260903h_pending_external_offer_fee_floor.sql');
   assert.match(migration, /update public\.free_agent_offers/i);
+  assert.match(migration, /update public\.player_acquisitions/i);
   assert.match(migration, /status = 'pending'/);
   assert.match(migration, /external_transfermarkt/);
   assert.match(migration, /external_acquisition_fee_eur/);
