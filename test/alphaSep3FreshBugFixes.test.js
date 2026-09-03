@@ -14,15 +14,24 @@ test('external rated players never acquire for a zero or sub-threshold fee', asy
   assert.match(endpoint, /invalid_external_acquisition_fee/);
 });
 
-test('internal notification actions stay in the signed-in portal instead of reloading it', async () => {
+test('already-pending external offers are backfilled before they can settle for zero', async () => {
+  const migration = await read('supabase/migrations/20260903h_pending_external_offer_fee_floor.sql');
+  assert.match(migration, /update public\.free_agent_offers/i);
+  assert.match(migration, /status = 'pending'/);
+  assert.match(migration, /acquisition_type', ''\) = 'external_transfermarkt'/);
+  assert.match(migration, /external_acquisition_fee_eur/);
+  assert.match(migration, /100000/);
+});
+
+test('only safe modal-style notification actions are swallowed inside the portal', async () => {
   const notifications = await read('public/manager-notifications.js');
   assert.match(notifications, /function followInternalAction\(actionUrl\)/);
   assert.match(notifications, /url\.origin !== window\.location\.origin/);
   assert.match(notifications, /url\.pathname === '\/alpha-updates\.html'/);
   assert.match(notifications, /document\.getElementById\('alphaUpdatesButton'\)\?\.click\(\)/);
-  assert.match(notifications, /url\.pathname === '\/'/);
-  assert.match(notifications, /document\.querySelectorAll\('\[data-view\]'\)/);
-  assert.match(notifications, /history\.pushState/);
+  assert.match(notifications, /Portal view links deliberately use normal browser navigation/);
+  assert.doesNotMatch(notifications, /history\.pushState/);
+  assert.doesNotMatch(notifications, /tbg:notification-action/);
   assert.match(notifications, /if \(internalHandled\) event\.preventDefault\(\)/);
 });
 
