@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-labelledby="title desc">
+  <title id="title">The Beautiful Game</title>
+  <desc id="desc">A retro green football pitch centre-circle mark.</desc>
+  <circle cx="60" cy="60" r="54" fill="#176b3a"/>
+  <circle cx="60" cy="60" r="45" fill="none" stroke="#f5edcf" stroke-width="5"/>
+  <path d="M60 15v90" stroke="#f5edcf" stroke-width="5"/>
+  <circle cx="60" cy="60" r="17" fill="#176b3a" stroke="#f5edcf" stroke-width="5"/>
+  <circle cx="60" cy="60" r="3.2" fill="#f5c400"/>
+</svg>
