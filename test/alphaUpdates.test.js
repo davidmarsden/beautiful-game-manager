@@ -60,11 +60,14 @@ test('draft publication is serialized and published updates cannot be reverted',
   assert.match(reviewFix,/draft_state_changed/i);
 });
 
-test('composer serializes new-update writes before an update id exists',()=>{
+test('composer serializes writes and freezes every editable control while pending',()=>{
   assert.match(admin,/writeInFlight/);
   assert.match(admin,/if\(writeInFlight\)return/);
-  assert.match(admin,/\$\('save'\)\.disabled=busy/);
-  assert.match(admin,/\$\('publish'\)\.disabled=busy/);
+  assert.match(adminHtml,/id="composer"[^>]*aria-busy="false"/);
+  assert.match(admin,/function freezeComposerControls\(busy\)/);
+  assert.match(admin,/composer\.querySelectorAll\('input,textarea,select,button'\)\.forEach\(control=>\{control\.disabled=busy;\}\)/);
+  assert.match(admin,/composer\.setAttribute\('aria-busy',String\(busy\)\)/);
+  assert.match(admin,/function setWriteBusy\(busy\)\{writeInFlight=busy;freezeComposerControls\(busy\);\}/);
 });
 
 test('successful publish resets the composer even while the write guard is active',()=>{
