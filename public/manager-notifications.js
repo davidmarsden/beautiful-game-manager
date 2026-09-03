@@ -76,8 +76,9 @@ function followInternalAction(actionUrl) {
     return true;
   }
 
-  // Portal view links deliberately use normal browser navigation. That gives
-  // Transfers/News a fresh load and keeps Back/Forward history synchronized.
+  // View/deal/feed links deliberately fall through to their normal anchor
+  // navigation. A fresh page load avoids stale TTL-cached data and leaves
+  // browser Back/Forward behavior coherent.
   return false;
 }
 
