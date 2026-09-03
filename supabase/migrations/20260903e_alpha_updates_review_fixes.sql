@@ -193,7 +193,7 @@ begin
     ) values (
       p_world_id,
       'alpha_update',
-      'Alpha update: ' || trim(p_title),
+      left('Alpha update: ' || trim(p_title), 160),
       coalesce(trim(p_summary), ''),
       'alpha_update:' || v_update_id::text,
       jsonb_build_object('alpha_update_id', v_update_id),
