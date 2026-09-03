@@ -8,6 +8,7 @@ const draftIntegrity=fs.readFileSync('supabase/migrations/20260903f_alpha_update
 const playerEndpoint=fs.readFileSync('netlify/functions/alpha-updates.mjs','utf8');
 const adminEndpoint=fs.readFileSync('netlify/functions/alpha-updates-admin.mjs','utf8');
 const portal=fs.readFileSync('public/alpha-updates.js','utf8');
+const portalCss=fs.readFileSync('public/alpha-updates.css','utf8');
 const admin=fs.readFileSync('public/alpha-updates-admin.js','utf8');
 const adminHtml=fs.readFileSync('public/alpha-updates-admin.html','utf8');
 const authEntry=fs.readFileSync('public/auth-entry.js','utf8');
@@ -104,4 +105,11 @@ test('manager portal loads What’s New with unread badge support',()=>{
   assert.match(portal,/What's New/);
   assert.match(portal,/unread_count/);
   assert.match(portal,/mark-read/);
+});
+
+test('What’s New is high-contrast and preview-safe before database rollout',()=>{
+  assert.match(portalCss,/\.alpha-updates-button\{[^}]*background:#2f6f9f!important[^}]*color:#fff!important[^}]*border-color:#f1d91f!important/s);
+  assert.match(portal,/function unavailableMessage\(error\)/);
+  assert.match(portal,/not active on this preview yet/);
+  assert.doesNotMatch(portal,/list\.innerHTML=`<p class="alpha-updates-empty">\$\{esc\(error\.message\)\}<\/p>`/);
 });
