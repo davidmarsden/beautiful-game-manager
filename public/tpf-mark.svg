@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-labelledby="title desc">
+  <title id="title">The Pink Final</title>
+  <desc id="desc">A folded pink newspaper mark with the initials TPF.</desc>
+  <path d="M18 8h67l17 17v87H18z" fill="#f3b4bd" stroke="#211313" stroke-width="5"/>
+  <path d="M85 8v20h17" fill="#ffd3d8" stroke="#211313" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M29 42h62M29 50h62" stroke="#211313" stroke-width="3"/>
+  <text x="60" y="82" text-anchor="middle" font-family="Impact,Haettenschweiler,Arial Narrow Bold,sans-serif" font-size="39" font-weight="900" fill="#211313">TPF</text>
+  <path d="M29 93h62M29 101h46" stroke="#211313" stroke-width="3"/>
+</svg>
