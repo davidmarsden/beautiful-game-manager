@@ -28,7 +28,9 @@ test('only safe modal-style notification actions are swallowed inside the portal
   assert.match(notifications, /function followInternalAction\(actionUrl\)/);
   assert.match(notifications, /url\.origin !== window\.location\.origin/);
   assert.match(notifications, /url\.pathname === '\/alpha-updates\.html'/);
-  assert.match(notifications, /document\.getElementById\('alphaUpdatesButton'\)\?\.click\(\)/);
+  assert.match(notifications, /const button = document\.getElementById\('alphaUpdatesButton'\)/);
+  assert.match(notifications, /if \(!button\) return false/);
+  assert.match(notifications, /button\.click\(\)/);
   assert.match(notifications, /View\/deal\/feed links deliberately fall through to their normal anchor/);
   assert.doesNotMatch(notifications, /history\.pushState/);
   assert.doesNotMatch(notifications, /tbg:notification-action/);
