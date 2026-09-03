@@ -121,8 +121,7 @@ function restoredPath() {
 
 async function completeAuthCallback() {
   const { code, accessToken, refreshToken, authError } = callbackDetails();
-  if (authError) throw new Error(authError);
-  if (!code && !accessToken) return false;
+  if (!code && !accessToken && !authError) return false;
 
   const config = await loadConfig();
   const client = createClient(config.supabase_url, config.supabase_anon_key, {
@@ -133,6 +132,16 @@ async function completeAuthCallback() {
       detectSessionInUrl: false
     }
   });
+
+  if (authError) {
+    const { data } = await client.auth.getSession();
+    if (data.session?.access_token) {
+      sessionStorage.removeItem("tbg_auth_callback_error");
+      history.replaceState({}, document.title, restoredPath());
+      return false;
+    }
+    throw new Error(authError);
+  }
 
   if (code) {
     const { error } = await client.auth.exchangeCodeForSession(code);
@@ -161,6 +170,7 @@ try {
 } catch (error) {
   const message = error?.message || "Could not complete sign-in.";
   sessionStorage.setItem("tbg_auth_callback_error", message);
+  history.replaceState({}, document.title, restoredPath());
   console.error("TBG authentication callback failed:", error);
 }
 
