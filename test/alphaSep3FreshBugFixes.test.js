@@ -42,8 +42,17 @@ test('stale access-denied callback fragments cannot poison an existing portal se
   const authEntry = await read('public/auth-entry.js');
   assert.match(authEntry, /if \(!code && !accessToken && !authError\) return false/);
   assert.match(authEntry, /if \(authError\) \{[\s\S]*client\.auth\.getSession\(\)/);
-  assert.match(authEntry, /if \(data\.session\?\.access_token\) \{[\s\S]*history\.replaceState\(\{\}, document\.title, restoredPath\(\)\)/);
+  assert.match(authEntry, /if \(data\.session\?\.access_token\) \{[\s\S]*callbackUrlCanBeCleared = true;[\s\S]*history\.replaceState\(\{\}, document\.title, restoredPath\(\)\)/);
+});
+
+test('retryable auth setup failures preserve callback credentials for reload', async () => {
+  const authEntry = await read('public/auth-entry.js');
+  assert.match(authEntry, /let callbackUrlCanBeCleared = false/);
+  assert.match(authEntry, /const config = await loadConfig\(\);/);
+  assert.match(authEntry, /exchangeCodeForSession\(code\)[\s\S]*if \(error\) throw error;[\s\S]*callbackUrlCanBeCleared = true/);
+  assert.match(authEntry, /setSession\([\s\S]*if \(error\) throw error;[\s\S]*callbackUrlCanBeCleared = true/);
   const catchBlock = authEntry.slice(authEntry.indexOf('try {\n  await completeAuthCallback();'));
   assert.match(catchBlock, /sessionStorage\.setItem\("tbg_auth_callback_error", message\)/);
-  assert.match(catchBlock, /history\.replaceState\(\{\}, document\.title, restoredPath\(\)\)/);
+  assert.match(catchBlock, /if \(callbackUrlCanBeCleared\) history\.replaceState\(\{\}, document\.title, restoredPath\(\)\)/);
+  assert.doesNotMatch(catchBlock, /sessionStorage\.setItem\("tbg_auth_callback_error", message\);\n\s*history\.replaceState/);
 });
