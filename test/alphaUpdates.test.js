@@ -62,6 +62,12 @@ test('composer serializes new-update writes before an update id exists',()=>{
   assert.match(admin,/\$\('publish'\)\.disabled=busy/);
 });
 
+test('successful publish resets the composer even while the write guard is active',()=>{
+  assert.match(admin,/function resetComposer\(\)/);
+  assert.match(admin,/if\(publish\)\{resetComposer\(\)/);
+  assert.match(admin,/function clearDraft\(\)\{if\(writeInFlight\)return;resetComposer\(\);\}/);
+});
+
 test('complete published history stays visible so unread state can always be cleared',()=>{
   const playerRpc=reviewFix.slice(reviewFix.indexOf('create or replace function public.get_alpha_updates_for_user'),reviewFix.indexOf('create or replace function public.admin_save_alpha_update'));
   assert.doesNotMatch(playerRpc,/limit\s+30/i);
