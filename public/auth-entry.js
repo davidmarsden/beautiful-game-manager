@@ -167,3 +167,4 @@ try {
 await import("./app.js");
 await import("./club-claiming.js");
 await import("./alpha-feedback.js");
+await import("./alpha-updates.js");
