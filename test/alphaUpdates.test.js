@@ -70,6 +70,10 @@ test('composer serializes writes and freezes every editable control while pendin
   assert.match(admin,/function setWriteBusy\(busy\)\{writeInFlight=busy;freezeComposerControls\(busy\);\}/);
 });
 
+test('resetting the composer clears staged manual-entry fields',()=>{
+  assert.match(admin,/function resetComposer\(\)\{[^}]*\$\('manualType'\)\.value='new';[^}]*\$\('manualSummary'\)\.value='';/);
+});
+
 test('successful publish resets the composer even while the write guard is active',()=>{
   assert.match(admin,/function resetComposer\(\)/);
   assert.match(admin,/if\(publish\)resetComposer\(\)/);
