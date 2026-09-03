@@ -1,9 +1,10 @@
 begin;
 
--- Fresh composers now allocate their Alpha Update UUID client-side before the
--- first write. Treat that UUID as the idempotency key: create it if absent,
--- update it while still a draft, and make a retry of an already-published ID a
--- no-op success so a lost HTTP response cannot broadcast the same update twice.
+-- Fresh composers allocate their Alpha Update UUID client-side before the first
+-- write. Treat that UUID as the idempotency identity. Serialize every operation
+-- on the identity before looking up the row so concurrent first writes cannot
+-- both observe a miss. An already-published UUID is an idempotent replay only
+-- when the complete player-facing payload matches the committed publication.
 create or replace function public.admin_save_alpha_update(
   p_admin_user_id uuid,
   p_world_id text,
@@ -25,6 +26,10 @@ declare
   v_status text;
   v_current_status text;
   v_existing_world_id text;
+  v_existing_title text;
+  v_existing_summary text;
+  v_existing_items jsonb;
+  v_requested_items jsonb;
 begin
   select * into v_admin
   from public.manager_profiles
@@ -47,8 +52,33 @@ begin
     return jsonb_build_object('ok', false, 'code', 'publish_requires_items');
   end if;
 
-  select world_id, status
-  into v_existing_world_id, v_current_status
+  -- Row locks cannot lock a missing row. Lock the UUID identity first so two
+  -- concurrent first writes are serialized before either lookup/insert path.
+  perform pg_advisory_xact_lock(hashtextextended(p_update_id::text, 0));
+
+  -- Canonicalize the requested item payload for replay equality. Database row
+  -- IDs/timestamps are deliberately excluded; only player-facing content,
+  -- attribution, report linkage and ordering participate in the comparison.
+  select coalesce(
+    jsonb_agg(c.item order by c.sort_order, c.item::text),
+    '[]'::jsonb
+  )
+  into v_requested_items
+  from (
+    select
+      coalesce((e.value->>'sort_order')::integer, 0) as sort_order,
+      jsonb_build_object(
+        'report_id', nullif(e.value->>'report_id', ''),
+        'item_type', e.value->>'item_type',
+        'public_summary', trim(coalesce(e.value->>'public_summary', '')),
+        'attribution_manager_id', nullif(e.value->>'attribution_manager_id', ''),
+        'sort_order', coalesce((e.value->>'sort_order')::integer, 0)
+      ) as item
+    from jsonb_array_elements(coalesce(p_items, '[]'::jsonb)) e(value)
+  ) c;
+
+  select world_id, status, title, summary
+  into v_existing_world_id, v_current_status, v_existing_title, v_existing_summary
   from public.alpha_updates
   where id = p_update_id
   for update;
@@ -59,8 +89,33 @@ begin
     end if;
 
     if v_current_status = 'published' then
-      if p_publish then
-        -- Idempotent retry after the original publication committed but its HTTP
+      if not p_publish then
+        return jsonb_build_object('ok', false, 'code', 'published_updates_are_immutable');
+      end if;
+
+      select coalesce(
+        jsonb_agg(c.item order by c.sort_order, c.item::text),
+        '[]'::jsonb
+      )
+      into v_existing_items
+      from (
+        select
+          i.sort_order,
+          jsonb_build_object(
+            'report_id', case when i.report_id is null then null else i.report_id::text end,
+            'item_type', i.item_type,
+            'public_summary', trim(i.public_summary),
+            'attribution_manager_id', case when i.attribution_manager_id is null then null else i.attribution_manager_id::text end,
+            'sort_order', i.sort_order
+          ) as item
+        from public.alpha_update_items i
+        where i.update_id = p_update_id
+      ) c;
+
+      if trim(v_existing_title) = trim(p_title)
+         and coalesce(trim(v_existing_summary), '') = coalesce(trim(p_summary), '')
+         and v_existing_items = v_requested_items then
+        -- Genuine retry after the original publication committed but its HTTP
         -- response was lost. Do not rewrite content or emit another broadcast.
         return jsonb_build_object(
           'ok', true,
@@ -69,7 +124,10 @@ begin
           'idempotent_replay', true
         );
       end if;
-      return jsonb_build_object('ok', false, 'code', 'published_updates_are_immutable');
+
+      -- Same UUID, different publication payload: this is a competing/stale
+      -- edit, not an idempotent retry. Never pretend those edits were saved.
+      return jsonb_build_object('ok', false, 'code', 'published_payload_conflict');
     end if;
 
     update public.alpha_updates
@@ -152,7 +210,7 @@ begin
       a.manager_id,
       a.club_id,
       'alpha_update',
-      'Alpha update: ' || trim(p_title),
+      left('Alpha update: ' || trim(p_title), 160),
       case
         when trim(coalesce(p_summary, '')) = ''
           then 'A new alpha update has been published. Open What''s New to see the changes.'
@@ -176,7 +234,7 @@ begin
       a.manager_id,
       'alpha_update',
       'info',
-      'What''s New: ' || trim(p_title),
+      left('What''s New: ' || trim(p_title), 160),
       'A new Alpha Update is available.',
       '/alpha-updates.html',
       'alpha_update',
