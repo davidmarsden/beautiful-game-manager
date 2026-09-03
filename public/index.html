@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>The Beautiful Game — Manager Portal</title>
+  <link rel="icon" href="./tbg-mark.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./styles.css">
   <link rel="stylesheet" href="./auth-fix.css">
   <link rel="stylesheet" href="./password-auth.css">
@@ -22,15 +23,16 @@
   <link rel="stylesheet" href="./player-profile.css">
   <link rel="stylesheet" href="./targeted-component-polish.css">
   <link rel="stylesheet" href="./design-1982.css">
+  <link rel="stylesheet" href="./brand.css">
   <script src="./safe-response-json.js"></script>
   <script src="./portal-boot-recovery.js"></script>
   <script src="./portal-auth-bridge.js"></script>
   <script src="./shared-world-auth-bridge.js"></script>
 </head>
 <body>
-  <section id="authGate" class="auth-gate"><div class="auth-card"><div class="auth-kicker">THE BEAUTIFUL GAME</div><h1>Manager sign in</h1><p>Sign in with the email address registered to your TBG manager account. Use a password on any browser, or ask us to email you a secure one-time login link.</p><form id="loginForm"><label>Email address<input id="loginEmail" type="email" autocomplete="email" required placeholder="manager@example.com"></label><label>Password<input id="loginPassword" type="password" autocomplete="current-password" minlength="8" placeholder="Your TBG password"></label><div class="auth-actions"><button id="passwordLoginButton" class="submit" type="submit">Sign in</button><button id="magicLinkButton" class="secondary-auth" type="button">Email me a login link</button></div><p class="auth-help">No password yet? Use the email link once, then choose <strong>Password</strong> after signing in to set one for future logins.</p><p id="loginStatus" aria-live="polite"></p></form></div></section>
+  <section id="authGate" class="auth-gate"><div class="auth-card"><div class="auth-kicker tbg-auth-brand"><span class="tbg-brand-lockup"><img src="./tbg-mark.svg" alt=""><span class="tbg-brand-copy"><span>THE BEAUTIFUL<br>GAME</span><small>One world. Real players. Human managers.</small></span></span></div><h1>Manager sign in</h1><p>Sign in with the email address registered to your TBG manager account. Use a password on any browser, or ask us to email you a secure one-time login link.</p><form id="loginForm"><label>Email address<input id="loginEmail" type="email" autocomplete="email" required placeholder="manager@example.com"></label><label>Password<input id="loginPassword" type="password" autocomplete="current-password" minlength="8" placeholder="Your TBG password"></label><div class="auth-actions"><button id="passwordLoginButton" class="submit" type="submit">Sign in</button><button id="magicLinkButton" class="secondary-auth" type="button">Email me a login link</button></div><p class="auth-help">No password yet? Use the email link once, then choose <strong>Password</strong> after signing in to set one for future logins.</p><p id="loginStatus" aria-live="polite"></p></form></div></section>
   <div id="portal" hidden>
-    <header class="topbar"><div class="brand">THE BEAUTIFUL GAME</div><div class="world-pill">ONE WORLD · SEASON 1</div><button class="manager-chip" id="managerChip" type="button">Manager</button><span id="inboxBadge" class="inbox-badge" hidden>0</span><button class="logout-button password-button" id="passwordButton" type="button">Password</button><button class="logout-button" id="logoutButton" type="button">Sign out</button></header>
+    <header class="topbar"><a class="brand tbg-brand-lockup" href="./" aria-label="The Beautiful Game — One world. Real players. Human managers."><img src="./tbg-mark.svg" alt=""><span class="tbg-brand-copy"><span>THE BEAUTIFUL<br>GAME</span><small>One world. Real players. Human managers.</small></span></a><div class="world-pill">ONE WORLD · SEASON 1</div><button class="manager-chip" id="managerChip" type="button">Manager</button><span id="inboxBadge" class="inbox-badge" hidden>0</span><button class="logout-button password-button" id="passwordButton" type="button">Password</button><button class="logout-button" id="logoutButton" type="button">Sign out</button></header>
     <main class="shell">
       <nav class="club-nav" id="clubNav"></nav>
       <section id="onboardingState" class="onboarding-state" hidden><span class="status-label">FIRST SIGN-IN</span><h1>Welcome to The Beautiful Game</h1><p>Confirm your manager profile before entering the world.</p><form id="onboardingForm"><label>Manager name<input id="onboardingName" maxlength="80" required></label><label>Nationality or country<input id="onboardingCountry" maxlength="80"></label><label>Time zone<input id="onboardingTimezone" value="Europe/London" required></label><label>Favourite club <small>(optional)</small><input id="onboardingFavouriteClub" maxlength="100"></label><button class="submit" type="submit">Complete profile</button><p id="onboardingStatus" aria-live="polite"></p></form></section>
