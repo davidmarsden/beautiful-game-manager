@@ -19,10 +19,25 @@ function installAlphaTeamStyles() {
       background: #fff1a8 !important;
       color: #17212a !important;
     }
-    #tacticsView .bench-slot .player-rating {
+    #tacticsView .bench-slot .player-token > .player-rating,
+    #tacticsView .bench-slot span.player-rating {
       background: var(--tbg-brazil-yellow, #ffdc02) !important;
       color: #17212a !important;
+      -webkit-text-fill-color: #17212a !important;
+      text-shadow: none !important;
       border-color: #786a00 !important;
+    }
+    #transfersView .open-market-actions [data-open-market-prepare-offer] {
+      background: var(--tbg-brazil-blue, #193375) !important;
+      color: #fff !important;
+      -webkit-text-fill-color: #fff !important;
+      border-color: var(--tbg-brazil-blue, #193375) !important;
+    }
+    #transfersView .open-market-actions [data-open-market-prepare-offer]:hover,
+    #transfersView .open-market-actions [data-open-market-prepare-offer]:focus-visible {
+      background: #24458e !important;
+      color: var(--tbg-brazil-yellow, #ffdc02) !important;
+      -webkit-text-fill-color: var(--tbg-brazil-yellow, #ffdc02) !important;
     }
     @media (min-width: 701px) and (max-width: 1100px) {
       #tacticsView .formation-board-shell {
