@@ -301,6 +301,7 @@
   }
 
   #standingsTable thead th {
+    color: #fff !important;
     white-space: nowrap;
     letter-spacing: .015em;
   }
