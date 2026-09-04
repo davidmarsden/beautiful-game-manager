@@ -97,6 +97,23 @@ async function managerOffers(current) {
   }).catch(() => []);
 }
 
+async function withdrawManagerOffer(current, offerId) {
+  const id = String(offerId || '').trim();
+  if (!id) throw new Error('Offer ID is required');
+  const now = new Date().toISOString();
+  const rows = await supabase(
+    `/rest/v1/free_agent_offers?id=eq.${encodeURIComponent(id)}&world_id=eq.${encodeURIComponent(current.appointment.world_id)}&club_id=eq.${encodeURIComponent(current.appointment.club_id)}&status=eq.pending`,
+    {
+      service: true,
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'withdrawn', decision_reason: 'manager_withdrew_offer', terminal_at: now, updated_at: now })
+    }
+  );
+  const offer = rows[0];
+  if (!offer) throw new Error('Offer is no longer pending or does not belong to your club');
+  return offer;
+}
+
 async function acquiredIds(worldId) {
   const rows = await supabase(`/rest/v1/player_acquisitions?world_id=eq.${encodeURIComponent(worldId)}&status=eq.completed&select=player_id,transfermarkt_id`, { service: true }).catch(() => []);
   return {
@@ -113,6 +130,16 @@ export default async (request) => {
     if (!token) return json({ error: 'Authentication required' }, 401);
     const current = await identity(token);
     await resolveDueFreeAgentOffers({ worldId: current.appointment.world_id, limit: 5 }).catch(() => []);
+
+    if (request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      const action = String(body.action || '').trim().toLowerCase();
+      if (action === 'withdraw') {
+        const offer = await withdrawManagerOffer(current, body.offer_id || body.offerId);
+        return json({ accepted: true, action: 'withdraw', offer, message: `Offer to ${offer.player_name || offer.player_id} withdrawn.` });
+      }
+    }
+
     const rows = await unsignedPlayerPool();
 
     if (request.method === 'GET') {
@@ -196,7 +223,9 @@ export default async (request) => {
     });
   } catch (error) {
     const message = String(error?.message || 'Free-agent request failed');
-    const status = /Session|Authentication/.test(message) ? 401 : /appointment|profile/.test(message) ? 409 : /Player universe unavailable/.test(message) ? 503 : 500;
+    const status = /Session|Authentication/.test(message) ? 401
+      : /appointment|profile|no longer pending|does not belong|Offer ID/.test(message) ? 409
+        : /Player universe unavailable/.test(message) ? 503 : 500;
     return json({ error: message }, status);
   }
 };
