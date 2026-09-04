@@ -10,6 +10,10 @@
     padding: 8px 5px;
   }
 
+  #competitionsView #standingsTable thead th {
+    color: #fff !important;
+  }
+
   /* On phones prioritise the league-at-a-glance columns: Pos, Club, P, GD, Pts, Form. */
   #standingsTable th:nth-child(4),
   #standingsTable td:nth-child(4),
@@ -31,6 +35,14 @@
   #standingsTable td:nth-child(2) {
     width: auto;
     white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  /* targeted-component-polish.css loads later and normally ellipsises club links. */
+  #competitionsView #standingsTable td:nth-child(2) .portal-club-link {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
     overflow-wrap: anywhere;
   }
 
