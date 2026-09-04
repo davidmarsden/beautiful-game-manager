@@ -18,9 +18,20 @@ test('team selection exposes the full available squad as reserves instead of hid
 
 test('substitute rating badges always use dark text on the Brazil yellow rating stock', async () => {
   const source = await read('public/alpha-team-ux-fixes.js');
-  assert.match(source, /#tacticsView \.bench-slot \.player-rating/);
+  assert.match(source, /#tacticsView \.bench-slot \.player-token > \.player-rating/);
   assert.match(source, /background: var\(--tbg-brazil-yellow, #ffdc02\) !important/);
   assert.match(source, /color: #17212a !important/);
+  assert.match(source, /-webkit-text-fill-color: #17212a !important/);
+  assert.match(source, /text-shadow: none !important/);
+});
+
+test('listed-player Make offer CTA has readable foreground on the dark blue action button', async () => {
+  const source = await read('public/alpha-team-ux-fixes.js');
+  assert.match(source, /#transfersView \.open-market-actions \[data-open-market-prepare-offer\]/);
+  assert.match(source, /background: var\(--tbg-brazil-blue, #193375\) !important/);
+  assert.match(source, /color: #fff !important/);
+  assert.match(source, /-webkit-text-fill-color: #fff !important/);
+  assert.match(source, /color: var\(--tbg-brazil-yellow, #ffdc02\) !important/);
 });
 
 test('squad List player shortcut waits for the core transfer refresh before choosing a player', async () => {
