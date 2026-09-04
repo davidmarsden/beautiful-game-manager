@@ -1,6 +1,7 @@
 const norm = (value) => String(value ?? '').trim();
 let pendingSnapshot = null;
 let restoreScheduled = false;
+let captainRestoreTimer = null;
 
 function orderedVisibleIds(zone) {
   const selector = zone === 'xi'
@@ -67,14 +68,29 @@ function restoreControls(snapshot) {
     pressing: snapshot.tactics.pressing,
     tempo: snapshot.tactics.tempo,
     width: snapshot.tactics.width,
-    defensiveLine: snapshot.tactics.defensiveLine,
-    captain: snapshot.captainId
+    defensiveLine: snapshot.tactics.defensiveLine
   };
   Object.entries(values).forEach(([id, value]) => {
     const control = document.getElementById(id);
     if (!control || !value) return;
     if ([...control.options || []].some((option) => norm(option.value) === value || norm(option.textContent) === value)) control.value = value;
   });
+}
+
+function restoreCaptain(snapshot) {
+  if (!snapshot?.captainId || pendingSnapshot !== snapshot) return;
+  const captain = document.getElementById('captain');
+  if (!captain) return;
+  const option = [...captain.options].find((item) => norm(item.value) === snapshot.captainId);
+  if (option) captain.value = snapshot.captainId;
+}
+
+function scheduleCaptainRestore(snapshot) {
+  clearTimeout(captainRestoreTimer);
+  captainRestoreTimer = setTimeout(() => {
+    if (pendingSnapshot !== snapshot) return;
+    requestAnimationFrame(() => restoreCaptain(snapshot));
+  }, 350);
 }
 
 function restoreSnapshot() {
@@ -88,7 +104,7 @@ function restoreSnapshot() {
     writeOrderedSelectors('bench', 'bench', snapshot.bench);
     restoreControls(snapshot);
     document.dispatchEvent(new CustomEvent('tbg:team-sheet-override', { detail: { source: 'save_failure_restore' } }));
-    requestAnimationFrame(() => restoreControls(snapshot));
+    scheduleCaptainRestore(snapshot);
   });
 }
 
@@ -103,11 +119,13 @@ function observeSubmissionStatus() {
 
 document.addEventListener('submit', (event) => {
   if (event.target?.id !== 'decisionForm') return;
+  clearTimeout(captainRestoreTimer);
   pendingSnapshot = captureSnapshot();
 }, true);
 
 window.addEventListener('tbg:team-submission-saved', (event) => {
   if (event.detail?.state?.current_submission && !event.detail?.refresh_error) {
+    clearTimeout(captainRestoreTimer);
     pendingSnapshot = null;
     return;
   }
