@@ -23,17 +23,18 @@ test('substitute rating badges always use dark text on the Brazil yellow rating 
   assert.match(source, /color: #17212a !important/);
 });
 
-test('squad List player shortcut reloads authoritative transfer directory instead of relying on a stale DOM retry', async () => {
+test('squad List player shortcut waits for the core transfer refresh before choosing a player', async () => {
   const source = await read('public/alpha-team-ux-fixes.js');
-  assert.match(source, /fetch\('\/api\/transfer-negotiations'/);
-  assert.match(source, /cache: 'no-store'/);
-  assert.match(source, /if \(data\.processing && attempt < 8\)/);
-  assert.match(source, /data\.directory\?\.players/);
-  assert.match(source, /player\.club_id\) === ownClubId/);
-  assert.match(source, /requestedPlayerId/);
+  assert.match(source, /TRANSFER_READY_PATTERN/);
+  assert.match(source, /existingStatus\.textContent = 'Preparing player…'/);
+  assert.match(source, /document\.querySelector\('\[data-view="transfers"\]'\)\?\.click\(\)/);
+  assert.match(source, /waitForTransferRefresh\(status\)/);
   assert.match(source, /action\.value = 'listing'/);
-  assert.match(source, /select\.innerHTML = ownPlayers\.map\(playerOption\)/);
+  assert.match(source, /requestedOption = \[\.\.\.select\.options\]\.find/);
+  assert.match(source, /select\.value = requestedPlayerId/);
+  assert.match(source, /norm\(select\.value\) !== requestedPlayerId/);
   assert.match(source, /event\.stopImmediatePropagation\(\)/);
+  assert.doesNotMatch(source, /fetch\('\/api\/transfer-negotiations'/);
 });
 
 test('team UX fixes are loaded by the normal manager portal module chain', async () => {
