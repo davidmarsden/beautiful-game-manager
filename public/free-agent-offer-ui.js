@@ -243,6 +243,13 @@ async function withdrawOpenMarketOffer(button) {
         externalButton.textContent = 'Make offer';
       });
     }
+    if (offer?.player_id) {
+      document.querySelectorAll('[data-sign-free-agent]').forEach((freeAgentButton) => {
+        if (String(freeAgentButton.dataset.signFreeAgent || '') !== String(offer.player_id)) return;
+        freeAgentButton.disabled = false;
+        freeAgentButton.textContent = 'Make offer';
+      });
+    }
     await refreshOffers();
   } catch (error) {
     if (message) message.textContent = error.message;
