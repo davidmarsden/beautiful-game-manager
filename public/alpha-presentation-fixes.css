@@ -1,0 +1,65 @@
+@media (max-width: 640px) {
+  #standingsTable {
+    table-layout: fixed;
+    width: 100%;
+    font-size: 12px;
+  }
+
+  #standingsTable th,
+  #standingsTable td {
+    padding: 8px 5px;
+  }
+
+  #competitionsView #standingsTable thead th {
+    color: #fff !important;
+  }
+
+  /* On phones prioritise the league-at-a-glance columns: Pos, Club, P, GD, Pts, Form. */
+  #standingsTable th:nth-child(4),
+  #standingsTable td:nth-child(4),
+  #standingsTable th:nth-child(5),
+  #standingsTable td:nth-child(5),
+  #standingsTable th:nth-child(6),
+  #standingsTable td:nth-child(6),
+  #standingsTable th:nth-child(7),
+  #standingsTable td:nth-child(7),
+  #standingsTable th:nth-child(8),
+  #standingsTable td:nth-child(8) {
+    display: none;
+  }
+
+  #standingsTable th:nth-child(1),
+  #standingsTable td:nth-child(1) { width: 34px; }
+
+  #standingsTable th:nth-child(2),
+  #standingsTable td:nth-child(2) {
+    width: auto;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  /* targeted-component-polish.css loads later and normally ellipsises club links. */
+  #competitionsView #standingsTable td:nth-child(2) .portal-club-link {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    overflow-wrap: anywhere;
+  }
+
+  #standingsTable th:nth-child(3),
+  #standingsTable td:nth-child(3),
+  #standingsTable th:nth-child(9),
+  #standingsTable td:nth-child(9),
+  #standingsTable th:nth-child(10),
+  #standingsTable td:nth-child(10) { width: 38px; }
+
+  #standingsTable th:nth-child(11),
+  #standingsTable td:nth-child(11) { width: 68px; }
+}
+
+/* Fast replay still processes every event; routine events are simply de-emphasised from the visible 5x feed. */
+#matchCentreModal[data-fast-replay="true"] .replay-feed .event-foul,
+#matchCentreModal[data-fast-replay="true"] .replay-feed .event-free-kick,
+#matchCentreModal[data-fast-replay="true"] .replay-feed .event-defensive-action {
+  display: none;
+}
