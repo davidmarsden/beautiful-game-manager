@@ -1,17 +1,5 @@
 const norm = (value) => String(value ?? '').trim();
-
-function accessToken() {
-  for (let index = 0; index < localStorage.length; index += 1) {
-    const key = localStorage.key(index);
-    if (!key?.startsWith('sb-') || !key.endsWith('-auth-token')) continue;
-    try {
-      const stored = JSON.parse(localStorage.getItem(key));
-      const token = stored?.access_token || stored?.currentSession?.access_token;
-      if (token) return token;
-    } catch {}
-  }
-  return '';
-}
+const TRANSFER_READY_PATTERN = /^\d+ incoming · \d+ outgoing · \d+ listed$/;
 
 function installAlphaTeamStyles() {
   if (document.getElementById('alphaTeamUxFixes')) return;
@@ -82,32 +70,7 @@ function improveReservesDiscovery() {
   }
 }
 
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
-}
-
-function playerOption(player) {
-  const label = [player.player_name || player.player_id, player.position, player.rating].filter((value) => value !== null && value !== undefined && value !== '').join(' · ');
-  return `<option value="${escapeHtml(player.player_id)}">${escapeHtml(label)}</option>`;
-}
-
-async function transferDirectory(attempt = 0) {
-  const token = accessToken();
-  if (!token) throw new Error('Sign in again to load your transfer players.');
-  const response = await fetch('/api/transfer-negotiations', {
-    headers: { authorization: `Bearer ${token}` },
-    cache: 'no-store'
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || `Could not load transfer players (HTTP ${response.status})`);
-  if (data.processing && attempt < 8) {
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    return transferDirectory(attempt + 1);
-  }
-  return data;
-}
-
-function waitForElement(id, attempts = 20) {
+function waitForElement(id, attempts = 80) {
   return new Promise((resolve) => {
     const check = (remaining) => {
       const element = document.getElementById(id);
@@ -118,33 +81,48 @@ function waitForElement(id, attempts = 20) {
   });
 }
 
+function waitForTransferRefresh(status, attempts = 160) {
+  return new Promise((resolve, reject) => {
+    const check = (remaining) => {
+      if (TRANSFER_READY_PATTERN.test(norm(status?.textContent))) return resolve();
+      if (remaining <= 0) return reject(new Error('Transfer players are still loading. Please try List player again.'));
+      setTimeout(() => check(remaining - 1), 50);
+    };
+    check(attempts);
+  });
+}
+
 async function prepareReliableTransferListing(playerId) {
   const requestedPlayerId = norm(playerId);
   if (!requestedPlayerId) return;
+
+  // Mark an already-mounted transfer workspace before navigation. The normal
+  // transfer controller replaces this marker only after its own refresh/render
+  // has completed, so this shortcut cannot race that render and lose selection.
+  const existingStatus = document.getElementById('transferNegotiationStatus');
+  if (existingStatus) existingStatus.textContent = 'Preparing player…';
   document.querySelector('[data-view="transfers"]')?.click();
 
-  const [action, select, data] = await Promise.all([
+  const [action, select, status] = await Promise.all([
     waitForElement('negotiationAction'),
     waitForElement('negotiationPlayer'),
-    transferDirectory()
+    waitForElement('transferNegotiationStatus')
   ]);
-  if (!action || !select) throw new Error('Transfer listing controls are still loading.');
-
-  const ownClubId = norm(data.club_id);
-  const ownPlayers = (data.directory?.players || []).filter((player) => norm(player.club_id) === ownClubId);
-  const requested = ownPlayers.find((player) => norm(player.player_id) === requestedPlayerId);
-  if (!requested) throw new Error('That player is not currently available in your transfer directory.');
+  if (!action || !select || !status) throw new Error('Transfer listing controls are still loading.');
+  await waitForTransferRefresh(status);
 
   action.value = 'listing';
   action.dispatchEvent(new Event('change', { bubbles: true }));
-  select.innerHTML = ownPlayers.map(playerOption).join('') || '<option value="">No players available</option>';
+  const requestedOption = [...select.options].find((option) => norm(option.value) === requestedPlayerId);
+  if (!requestedOption) throw new Error('That player is not currently available in your transfer directory.');
   select.value = requestedPlayerId;
+  if (norm(select.value) !== requestedPlayerId) throw new Error('Could not select that player for listing.');
   select.dispatchEvent(new Event('change', { bubbles: true }));
 
   document.querySelector('[data-transfer-section="my"]')?.click();
   document.querySelector('.transfer-negotiation-compose')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   const message = document.getElementById('transferNegotiationMessage');
-  if (message) message.textContent = `Ready to list ${requested.player_name || requestedPlayerId}. Set an asking fee and publish the listing.`;
+  if (message) message.textContent = `Ready to list ${requestedOption.textContent.split(' · ')[0] || requestedPlayerId}. Set an asking fee and publish the listing.`;
 }
 
 function listingError(error) {
