@@ -63,7 +63,18 @@ function offerReason(offer) {
   if (reason.startsWith('terms_below_expectation')) return 'The player felt the terms were not attractive enough.';
   if (reason.startsWith('player_chose_other_club')) return 'The player chose another club.';
   if (reason.startsWith('player_accepted_best_offer')) return 'The player chose this offer.';
+  if (reason === 'manager_withdrew_offer') return 'You withdrew this offer.';
   return reason.replaceAll('_', ' ');
+}
+
+function offerSourceLabel(offer) {
+  const type = String(offer.player_snapshot?.assignment_status || offer.player_snapshot?.acquisition_type || '').toLowerCase();
+  return type === 'external' || type.includes('external_transfermarkt') ? 'External player' : 'Free agent';
+}
+
+function pendingWithdrawButton(offer) {
+  if (offer.status !== 'pending') return '';
+  return `<button type="button" data-withdraw-open-market-offer="${offerEscape(offer.id)}" data-withdraw-open-market-tm-id="${offerEscape(offer.transfermarkt_id || '')}">Cancel offer</button>`;
 }
 
 function renderOfferPanel(offers = []) {
@@ -79,12 +90,13 @@ function renderOfferPanel(offers = []) {
     else panel.append(host);
   }
   const recent = offers.slice(0, 8);
-  const html = `<strong>Your free-agent offers</strong>${recent.length ? recent.map((offer) => `
+  const html = `<strong>Your open-market offers</strong>${recent.length ? recent.map((offer) => `
     <div style="margin-top:.55rem">
       <strong>${offerEscape(offer.player_name || offer.player_id)}</strong>
-      <small>${offerMoney(offer.wage)} / week · ${offerEscape(offer.contract_years)} season${Number(offer.contract_years) === 1 ? '' : 's'} · ${offerEscape(statusLabel(offer))}</small>
+      <small>${offerEscape(offerSourceLabel(offer))} · ${offerMoney(offer.wage)} / week · ${offerEscape(offer.contract_years)} season${Number(offer.contract_years) === 1 ? '' : 's'} · ${offerEscape(statusLabel(offer))}</small>
       ${offer.status !== 'pending' && offer.decision_reason ? `<small>${offerEscape(offerReason(offer))}</small>` : ''}
-    </div>`).join('') : '<p class="open-market-empty">No free-agent offers submitted yet.</p>'}`;
+      ${pendingWithdrawButton(offer)}
+    </div>`).join('') : '<p class="open-market-empty">No open-market offers submitted yet.</p>'}`;
   if (host.innerHTML !== html) host.innerHTML = html;
 }
 
@@ -96,8 +108,9 @@ function nativeOutgoingOfferCount(outgoing) {
 
 function restoreOutgoingEmptyState(outgoing) {
   if (!outgoing || nativeOutgoingOfferCount(outgoing)) return;
+  const hasOpenMarket = Boolean(outgoing.querySelector('[data-open-market-outgoing-summary]'));
   const hasEmptyState = Array.from(outgoing.children).some((child) => child.tagName === 'P' && (child.textContent || '').trim() === 'No active outgoing offers.');
-  if (!hasEmptyState) {
+  if (!hasOpenMarket && !hasEmptyState) {
     const empty = document.createElement('p');
     empty.textContent = 'No active outgoing offers.';
     outgoing.append(empty);
@@ -108,7 +121,13 @@ function renderPendingOffersInTransferSummary(offers = []) {
   const pending = offers.filter((offer) => offer.status === 'pending');
   const outgoing = document.getElementById('outgoingTransferOffers');
   if (outgoing) {
-    let host = outgoing.querySelector('[data-free-agent-outgoing-summary]');
+    let host = outgoing.querySelector('[data-open-market-outgoing-summary]');
+    const legacyHost = outgoing.querySelector('[data-free-agent-outgoing-summary]');
+    if (legacyHost && !host) {
+      legacyHost.dataset.openMarketOutgoingSummary = 'true';
+      delete legacyHost.dataset.freeAgentOutgoingSummary;
+      host = legacyHost;
+    }
     const emptyState = Array.from(outgoing.children).find((child) => child.tagName === 'P' && (child.textContent || '').trim() === 'No active outgoing offers.');
     if (!pending.length) {
       host?.remove();
@@ -117,14 +136,15 @@ function renderPendingOffersInTransferSummary(offers = []) {
       emptyState?.remove();
       if (!host) {
         host = document.createElement('div');
-        host.dataset.freeAgentOutgoingSummary = 'true';
+        host.dataset.openMarketOutgoingSummary = 'true';
         outgoing.append(host);
       }
       const html = pending.map((offer) => `
         <div class="transfer-free-agent-pending" style="margin-top:.55rem">
           <strong>${offerEscape(offer.player_name || offer.player_id)}</strong>
-          <small>Free agent · ${offerMoney(offer.wage)} / week · ${offerEscape(offer.contract_years)} season${Number(offer.contract_years) === 1 ? '' : 's'}</small>
+          <small>${offerEscape(offerSourceLabel(offer))} · ${offerMoney(offer.wage)} / week · ${offerEscape(offer.contract_years)} season${Number(offer.contract_years) === 1 ? '' : 's'}</small>
           <small>Awaiting player decision · ${offerEscape(formatDecision(offer.decision_at))}</small>
+          ${pendingWithdrawButton(offer)}
         </div>`).join('');
       if (host.innerHTML !== html) host.innerHTML = html;
     }
@@ -206,6 +226,39 @@ async function submitOffer(button) {
   }
 }
 
+async function withdrawOpenMarketOffer(button) {
+  const offerId = String(button.dataset.withdrawOpenMarketOffer || '').trim();
+  if (!offerId) return;
+  const offer = latestFreeAgentOffers.find((row) => String(row.id) === offerId);
+  const message = document.getElementById('openMarketMessage') || document.getElementById('transferNegotiationMessage');
+  button.disabled = true;
+  button.textContent = 'Cancelling…';
+  try {
+    const data = await api('/api/free-agents', { action: 'withdraw', offer_id: offerId });
+    if (message) message.textContent = data.message || `Offer to ${offer?.player_name || 'player'} withdrawn.`;
+    if (offer?.transfermarkt_id) {
+      document.querySelectorAll('[data-external-offer]').forEach((externalButton) => {
+        if (String(externalButton.dataset.tmId || '') !== String(offer.transfermarkt_id)) return;
+        externalButton.disabled = false;
+        externalButton.textContent = 'Make offer';
+      });
+    }
+    if (offer?.player_id) {
+      document.querySelectorAll('[data-sign-free-agent]').forEach((freeAgentButton) => {
+        if (String(freeAgentButton.dataset.signFreeAgent || '') !== String(offer.player_id)) return;
+        freeAgentButton.disabled = false;
+        freeAgentButton.textContent = 'Make offer';
+      });
+    }
+    await refreshOffers();
+  } catch (error) {
+    if (message) message.textContent = error.message;
+    button.disabled = false;
+    button.textContent = 'Cancel offer';
+    await refreshOffers();
+  }
+}
+
 function observeOutgoingTransferRenders() {
   if (!transfersActive()) {
     outgoingObserver?.disconnect();
@@ -233,6 +286,13 @@ function scheduleFreeAgentUi({ refresh = false, delay = 0 } = {}) {
 }
 
 document.addEventListener('click', (event) => {
+  const withdrawButton = event.target.closest('[data-withdraw-open-market-offer]');
+  if (withdrawButton) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    withdrawOpenMarketOffer(withdrawButton);
+    return;
+  }
   const button = event.target.closest('[data-sign-free-agent]');
   if (!button) return;
   event.preventDefault();
@@ -244,6 +304,10 @@ document.addEventListener('click', (event) => {
   if (event.target.closest('[data-open-market-tab="free-agents"], [data-free-agent-browse], [data-free-agent-search-form] button')) {
     scheduleFreeAgentUi({ refresh: true, delay: 50 });
   }
+});
+
+document.addEventListener('tbg:external-offer-submitted', () => {
+  scheduleFreeAgentUi({ refresh: true });
 });
 
 document.addEventListener('tbg:view-changed', (event) => {
