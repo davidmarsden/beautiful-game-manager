@@ -38,7 +38,9 @@ test('#396 preserves formation, captain and tactics alongside player selection',
 test('#396 restores captain only after delayed formation-board override import completes', async () => {
   const source = await read('public/team-selection-save-preservation.js');
   const overrideIndex = source.indexOf("document.dispatchEvent(new CustomEvent('tbg:team-sheet-override'");
-  const captainScheduleIndex = source.indexOf('scheduleCaptainRestore(snapshot)');
+  const captainScheduleIndex = overrideIndex >= 0
+    ? source.indexOf('scheduleCaptainRestore(snapshot)', overrideIndex)
+    : -1;
   assert.ok(overrideIndex >= 0 && captainScheduleIndex > overrideIndex);
   assert.match(source, /setTimeout\(\(\) => \{/);
   assert.match(source, /\}, 350\)/);
