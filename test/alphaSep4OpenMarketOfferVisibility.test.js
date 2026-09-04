@@ -36,6 +36,15 @@ test('all pending open-market offers are visible with weekly wage and cancellati
   assert.match(ui, /action: 'withdraw', offer_id: offerId/);
 });
 
+test('cancelling a visible free-agent offer immediately re-enables its offer button', async () => {
+  const ui = await read('public/free-agent-offer-ui.js');
+  assert.match(ui, /document\.querySelectorAll\('\[data-sign-free-agent\]'\)\.forEach/);
+  assert.match(ui, /freeAgentButton\.dataset\.signFreeAgent/);
+  assert.match(ui, /String\(offer\.player_id\)/);
+  assert.match(ui, /freeAgentButton\.disabled = false/);
+  assert.match(ui, /freeAgentButton\.textContent = 'Make offer'/);
+});
+
 test('external offer submission immediately refreshes the shared outgoing-offer summary', async () => {
   const externalUi = await read('public/external-market-ui.js');
   const offerUi = await read('public/free-agent-offer-ui.js');
