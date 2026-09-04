@@ -6,6 +6,7 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('mobile standings prioritise a complete high-contrast league-at-a-glance view', async () => {
   const css = await read('public/alpha-presentation-fixes.css');
+  const finalCascade = await read('public/targeted-component-polish.css');
   assert.match(css, /@media \(max-width: 640px\)/);
   assert.match(css, /#standingsTable/);
   for (const column of [4, 5, 6, 7, 8]) {
@@ -19,6 +20,8 @@ test('mobile standings prioritise a complete high-contrast league-at-a-glance vi
   assert.match(css, /#competitionsView #standingsTable td:nth-child\(2\) \.portal-club-link/);
   assert.match(css, /white-space: normal !important/);
   assert.match(css, /text-overflow: clip !important/);
+  assert.match(finalCascade, /#standingsTable thead th \{[\s\S]*color: #fff !important/,
+    'the later targeted polish layer must preserve white mobile standings headers');
 });
 
 test('5x replay filters only routine visible commentary without changing replay state', async () => {
