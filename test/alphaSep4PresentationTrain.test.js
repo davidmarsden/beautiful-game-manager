@@ -6,7 +6,9 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('mobile standings prioritise a complete high-contrast league-at-a-glance view', async () => {
   const css = await read('public/alpha-presentation-fixes.css');
-  const finalCascade = await read('public/targeted-component-polish.css');
+  const targetedPolish = await read('public/targeted-component-polish.css');
+  const brazil = await read('public/portal-brazil-pitch.css');
+  const runtimeLast = await read('public/portal-dashboard-dedup.css');
   assert.match(css, /@media \(max-width: 640px\)/);
   assert.match(css, /#standingsTable/);
   for (const column of [4, 5, 6, 7, 8]) {
@@ -20,8 +22,12 @@ test('mobile standings prioritise a complete high-contrast league-at-a-glance vi
   assert.match(css, /#competitionsView #standingsTable td:nth-child\(2\) \.portal-club-link/);
   assert.match(css, /white-space: normal !important/);
   assert.match(css, /text-overflow: clip !important/);
-  assert.match(finalCascade, /#standingsTable thead th \{[\s\S]*color: #fff !important/,
-    'the later targeted polish layer must preserve white mobile standings headers');
+  assert.match(targetedPolish, /#standingsTable thead th \{[\s\S]*color: #fff !important/,
+    'targeted polish should preserve white mobile standings headers');
+  assert.match(brazil, /#portal #competitionsView \.competition-card \*/,
+    'Brazil art direction has a broad descendant ink rule that can override table header contrast');
+  assert.match(runtimeLast, /#portal #competitionsView \.competition-card #standingsTable thead th \{[\s\S]*color: #fff !important;[\s\S]*-webkit-text-fill-color: #fff !important/,
+    'the runtime-last stylesheet must restore white standings header glyphs after the Brazil descendant rule');
 });
 
 test('5x replay filters only routine visible commentary without changing replay state', async () => {
