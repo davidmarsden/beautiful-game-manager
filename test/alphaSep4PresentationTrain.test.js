@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('mobile standings prioritise a complete league-at-a-glance view', async () => {
+test('mobile standings prioritise a complete high-contrast league-at-a-glance view', async () => {
   const css = await read('public/alpha-presentation-fixes.css');
   assert.match(css, /@media \(max-width: 640px\)/);
   assert.match(css, /#standingsTable/);
@@ -15,7 +15,10 @@ test('mobile standings prioritise a complete league-at-a-glance view', async () 
   assert.match(css, /#standingsTable th:nth-child\(9\)/);
   assert.match(css, /#standingsTable th:nth-child\(10\)/);
   assert.match(css, /#standingsTable th:nth-child\(11\)/);
-  assert.match(css, /white-space: normal/);
+  assert.match(css, /#competitionsView #standingsTable thead th[\s\S]*color: #fff !important/);
+  assert.match(css, /#competitionsView #standingsTable td:nth-child\(2\) \.portal-club-link/);
+  assert.match(css, /white-space: normal !important/);
+  assert.match(css, /text-overflow: clip !important/);
 });
 
 test('5x replay filters only routine visible commentary without changing replay state', async () => {
@@ -31,6 +34,15 @@ test('5x replay filters only routine visible commentary without changing replay 
   assert.doesNotMatch(css, /\.event-save[^\n]*display: none/);
   assert.doesNotMatch(css, /\.event-goal[^\n]*display: none/);
   assert.doesNotMatch(behaviour, /replayState/);
+});
+
+test('penalty award is prioritised before a same-minute penalty outcome', async () => {
+  const behaviour = await read('public/alpha-presentation-fixes.js');
+  assert.match(behaviour, /PENALTY_AWARD_PRIORITY = 110/);
+  assert.match(behaviour, /type !== 'penalty_awarded'/);
+  assert.match(behaviour, /priority: PENALTY_AWARD_PRIORITY/);
+  assert.match(behaviour, /requestPath\(args\[0\]\) !== '\/api\/match-centre'/);
+  assert.match(behaviour, /preservePenaltyCausality\(payload\)/);
 });
 
 test('presentation fixes load through existing late portal assets', async () => {
