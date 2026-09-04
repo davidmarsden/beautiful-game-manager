@@ -130,14 +130,12 @@ export default async (request) => {
     if (!token) return json({ error: 'Authentication required' }, 401);
     const current = await identity(token);
     await resolveDueFreeAgentOffers({ worldId: current.appointment.world_id, limit: 5 }).catch(() => []);
+    const body = request.method === 'POST' ? await request.json().catch(() => ({})) : {};
+    const action = String(body.action || '').trim().toLowerCase();
 
-    if (request.method === 'POST') {
-      const body = await request.json().catch(() => ({}));
-      const action = String(body.action || '').trim().toLowerCase();
-      if (action === 'withdraw') {
-        const offer = await withdrawManagerOffer(current, body.offer_id || body.offerId);
-        return json({ accepted: true, action: 'withdraw', offer, message: `Offer to ${offer.player_name || offer.player_id} withdrawn.` });
-      }
+    if (request.method === 'POST' && action === 'withdraw') {
+      const offer = await withdrawManagerOffer(current, body.offer_id || body.offerId);
+      return json({ accepted: true, action: 'withdraw', offer, message: `Offer to ${offer.player_name || offer.player_id} withdrawn.` });
     }
 
     const rows = await unsignedPlayerPool();
@@ -181,8 +179,6 @@ export default async (request) => {
       });
     }
 
-    const body = await request.json().catch(() => ({}));
-    const action = String(body.action || '').trim().toLowerCase();
     if (action !== 'offer') return json({ error: 'Free agents must receive a contract offer before they can sign' }, 400);
     const playerId = String(body.player_id || body.playerId || '').trim();
     const tmId = String(body.transfermarkt_id || body.transfermarktId || '').trim();
