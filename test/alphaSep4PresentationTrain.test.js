@@ -1,0 +1,41 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
+
+test('mobile standings prioritise a complete league-at-a-glance view', async () => {
+  const css = await read('public/alpha-presentation-fixes.css');
+  assert.match(css, /@media \(max-width: 640px\)/);
+  assert.match(css, /#standingsTable/);
+  for (const column of [4, 5, 6, 7, 8]) {
+    assert.match(css, new RegExp(`#standingsTable th:nth-child\\(${column}\\)`));
+  }
+  assert.match(css, /display: none/);
+  assert.match(css, /#standingsTable th:nth-child\(9\)/);
+  assert.match(css, /#standingsTable th:nth-child\(10\)/);
+  assert.match(css, /#standingsTable th:nth-child\(11\)/);
+  assert.match(css, /white-space: normal/);
+});
+
+test('5x replay filters only routine visible commentary without changing replay state', async () => {
+  const css = await read('public/alpha-presentation-fixes.css');
+  const behaviour = await read('public/alpha-presentation-fixes.js');
+  assert.match(behaviour, /FAST_REPLAY_INTERVAL = '180'/);
+  assert.match(behaviour, /modal\.dataset\.fastReplay = speed\?\.value === FAST_REPLAY_INTERVAL \? 'true' : 'false'/);
+  assert.match(css, /data-fast-replay="true"/);
+  assert.match(css, /\.event-foul/);
+  assert.match(css, /\.event-free-kick/);
+  assert.match(css, /\.event-defensive-action/);
+  assert.doesNotMatch(css, /\.event-chance[^\n]*display: none/);
+  assert.doesNotMatch(css, /\.event-save[^\n]*display: none/);
+  assert.doesNotMatch(css, /\.event-goal[^\n]*display: none/);
+  assert.doesNotMatch(behaviour, /replayState/);
+});
+
+test('presentation fixes load through existing late portal assets', async () => {
+  const cssLoader = await read('public/match-centre-player-links.css');
+  const jsLoader = await read('public/internal-profile-links.js');
+  assert.match(cssLoader, /@import url\('\.\/alpha-presentation-fixes\.css'\)/);
+  assert.match(jsLoader, /import '\.\/alpha-presentation-fixes\.js';/);
+});
