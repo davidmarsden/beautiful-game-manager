@@ -85,26 +85,33 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_now timestamptz := coalesce(new.published_at, now());
+  v_update public.alpha_updates%rowtype;
+  v_now timestamptz;
 begin
-  -- Constraint triggers covering INSERT and UPDATE also see unrelated edits.
-  -- Broadcast exactly once when a row first becomes published.
-  if new.status <> 'published' then
+  -- This is a deferred constraint trigger, so NEW/OLD describe the statement
+  -- that queued the trigger, not necessarily the row that exists at commit.
+  -- Re-read the authoritative row now and only deliver its current published
+  -- state. If the row was deleted or returned to draft in the same transaction,
+  -- there is nothing to broadcast.
+  select * into v_update
+  from public.alpha_updates
+  where id = new.id;
+
+  if not found or v_update.status <> 'published' then
     return null;
   end if;
-  if tg_op = 'UPDATE' and old.status = 'published' then
-    return null;
-  end if;
+
+  v_now := coalesce(v_update.published_at, now());
 
   insert into public.world_feed_items(
     world_id, item_type, title, body, source_key, metadata, created_at
   ) values (
-    new.world_id,
+    v_update.world_id,
     'alpha_update',
-    public.alpha_update_message_subject(new.title),
-    coalesce(trim(new.summary), ''),
-    'alpha_update:' || new.id::text,
-    jsonb_build_object('alpha_update_id', new.id),
+    public.alpha_update_message_subject(v_update.title),
+    coalesce(trim(v_update.summary), ''),
+    'alpha_update:' || v_update.id::text,
+    jsonb_build_object('alpha_update_id', v_update.id),
     v_now
   )
   on conflict(world_id, source_key) where source_key is not null do nothing;
@@ -117,18 +124,18 @@ begin
     a.manager_id,
     a.club_id,
     'alpha_update',
-    public.alpha_update_message_subject(new.title),
+    public.alpha_update_message_subject(v_update.title),
     case
-      when trim(coalesce(new.summary, '')) = ''
+      when trim(coalesce(v_update.summary, '')) = ''
         then 'A new alpha update has been published. Open What''s New to see the changes.'
-      else trim(new.summary)
+      else trim(v_update.summary)
     end,
     'normal',
-    jsonb_build_object('alpha_update_id', new.id, 'action_url', '/alpha-updates.html'),
+    jsonb_build_object('alpha_update_id', v_update.id, 'action_url', '/alpha-updates.html'),
     v_now
   from public.manager_appointments a
   join public.manager_profiles m on m.id = a.manager_id
-  where a.world_id = new.world_id
+  where a.world_id = v_update.world_id
     and a.status = 'active'
     and m.status = 'active'
   on conflict (recipient_manager_id, ((metadata->>'alpha_update_id')))
@@ -140,20 +147,20 @@ begin
     title, body, action_url, source_type, source_id, dedupe_key, created_at
   )
   select
-    new.world_id,
+    v_update.world_id,
     a.manager_id,
     'alpha_update',
     'info',
-    left('What''s New: ' || trim(new.title), 160),
+    left('What''s New: ' || trim(v_update.title), 160),
     'A new Alpha Update is available.',
     '/alpha-updates.html',
     'alpha_update',
-    new.id::text,
-    'alpha_update:' || new.id::text,
+    v_update.id::text,
+    'alpha_update:' || v_update.id::text,
     v_now
   from public.manager_appointments a
   join public.manager_profiles m on m.id = a.manager_id
-  where a.world_id = new.world_id
+  where a.world_id = v_update.world_id
     and a.status = 'active'
     and m.status = 'active'
   on conflict(manager_id, dedupe_key) do nothing;
@@ -166,6 +173,8 @@ $$;
 -- historical broadcast inside the RPC; by commit time those rows already exist
 -- and the unique/dedupe constraints make this trigger a no-op. A publication
 -- performed outside that RPC, however, now receives the exact same delivery.
+-- Multiple queued events for one update are also harmless because each event
+-- re-reads the same current row and all three delivery channels are idempotent.
 drop trigger if exists alpha_updates_deliver_on_publish on public.alpha_updates;
 create constraint trigger alpha_updates_deliver_on_publish
 after insert or update on public.alpha_updates
