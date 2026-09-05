@@ -9,7 +9,7 @@ import {
 } from './squadAvailability.js';
 import { buildDoubleRoundRobin } from './seasonSimulation.js';
 
-export const INCREMENTAL_SEASON_VERSION = 'tbg-incremental-season-v1.2';
+export const INCREMENTAL_SEASON_VERSION = 'tbg-incremental-season-v1.3';
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
 const round = (value, places = 4) => Number(Number(value).toFixed(places));
@@ -17,6 +17,7 @@ const text = (value) => String(value ?? '').trim();
 const unique = (values) => new Set(values).size === values.length;
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const SUPPORTED_FORMATIONS = new Set(['4-3-3-wide', '4-2-3-1', '4-4-2', '4-1-4-1', '3-5-2', '3-4-3', '5-3-2']);
+const ALLOWED_SCORE_STATES = new Set(['always', 'winning', 'drawing', 'losing']);
 const ALLOWED_TACTICS = Object.freeze({
   style: new Set(['possession', 'counter_transition', 'direct', 'high_press', 'low_block', 'balanced']),
   route_to_goal: new Set(['central', 'balanced', 'wide']),
@@ -127,6 +128,7 @@ function selectTeam(club, opponent, state, matchday, side) {
     formation: managerDecision.formation,
     starting_xi: [...managerDecision.starting_xi],
     bench: [...managerDecision.bench],
+    match_plans: [],
     previous_starting_xi: state.clubs[club.club_id].previous_starting_xi,
     tactical_familiarity: 80,
     cohesion: 75,
@@ -144,6 +146,27 @@ function contractState(state, teams) {
   })) };
 }
 
+function normalizeMatchPlans(plans = []) {
+  if (!Array.isArray(plans)) throw new Error('Human match plans must be an array');
+  if (plans.length > 5) throw new Error('Human match plans may contain at most five substitutions');
+  return plans.map((plan, index) => {
+    const minute = Math.trunc(Number(plan?.minute));
+    const playerOutId = text(plan?.player_out_id);
+    const playerInId = text(plan?.player_in_id);
+    const scoreState = text(plan?.score_state || 'always').toLowerCase();
+    if (!Number.isInteger(minute) || minute < 1 || minute > 90) throw new Error(`Human match plan ${index + 1} has an invalid minute`);
+    if (!playerOutId || !playerInId || playerOutId === playerInId) throw new Error(`Human match plan ${index + 1} has invalid player identities`);
+    if (!ALLOWED_SCORE_STATES.has(scoreState)) throw new Error(`Human match plan ${index + 1} has unsupported score state: ${scoreState}`);
+    return {
+      plan_id: text(plan?.plan_id) || `plan-${index + 1}`,
+      minute,
+      player_out_id: playerOutId,
+      player_in_id: playerInId,
+      score_state: scoreState
+    };
+  });
+}
+
 function normalizeInstruction(instruction = {}) {
   const formation = text(instruction.formation);
   if (formation && !SUPPORTED_FORMATIONS.has(formation)) throw new Error(`Unsupported human formation: ${formation}`);
@@ -153,7 +176,9 @@ function normalizeInstruction(instruction = {}) {
   return {
     formation: formation || null,
     tactics: { ...(instruction.tactics || {}) },
-    starting_xi: instruction.starting_xi ? instruction.starting_xi.map(text) : null
+    starting_xi: instruction.starting_xi ? instruction.starting_xi.map(text) : null,
+    bench: instruction.bench ? instruction.bench.map(text) : null,
+    match_plans: normalizeMatchPlans(instruction.match_plans || [])
   };
 }
 
@@ -212,6 +237,7 @@ function compactArchiveResult(row = {}) {
   const compactTeam = (team = {}) => ({
     starting_xi: [...(team.starting_xi || [])],
     bench: [...(team.bench || [])],
+    match_plans: clone(team.match_plans || []),
     instruction_source: clone(team.instruction_source || fallbackSource())
   });
   const compactLineup = (lineup = {}) => ({ players_used: [...(lineup.players_used || [])] });
@@ -255,12 +281,25 @@ function applySubmittedInstruction(team, instruction, club, matchState, availabi
     if (normalized.starting_xi.length !== 11 || !unique(normalized.starting_xi)) throw new Error('Human starting XI must contain exactly eleven unique players');
     const ineligible = normalized.starting_xi.filter((id) => !eligibleIds.includes(id));
     if (ineligible.length) throw new Error(`Human XI contains unavailable, ineligible or unregistered players: ${ineligible.join(', ')}`);
-    const pool = [...new Set([...team.starting_xi, ...team.bench, ...eligibleIds])];
     team.starting_xi = [...normalized.starting_xi];
+  }
+  if (normalized.bench) {
+    if (normalized.bench.length !== 7 || !unique(normalized.bench)) throw new Error('Human substitutes must contain exactly seven unique players');
+    if (!unique([...(normalized.starting_xi || team.starting_xi), ...normalized.bench])) throw new Error('Human matchday squad cannot contain duplicate players');
+    const ineligible = normalized.bench.filter((id) => !eligibleIds.includes(id));
+    if (ineligible.length) throw new Error(`Human bench contains unavailable, ineligible or unregistered players: ${ineligible.join(', ')}`);
+    team.bench = [...normalized.bench];
+  } else if (normalized.starting_xi) {
+    const pool = [...new Set([...team.starting_xi, ...team.bench, ...eligibleIds])];
     team.bench = pool.filter((id) => eligibleIds.includes(id) && !team.starting_xi.includes(id)).slice(0, 7);
-    for (const id of [...team.starting_xi, ...team.bench]) {
-      if (!matchState.players[id]) matchState.players[id] = { fitness: 100, sharpness: 100, morale: 50, unavailable_until_matchday: 0, suspension_until_matchday: 0 };
-    }
+  }
+  for (const plan of normalized.match_plans) {
+    if (!team.starting_xi.includes(plan.player_out_id)) throw new Error(`Human match plan player out is not in the starting XI: ${plan.player_out_id}`);
+    if (!team.bench.includes(plan.player_in_id)) throw new Error(`Human match plan player in is not on the bench: ${plan.player_in_id}`);
+  }
+  team.match_plans = clone(normalized.match_plans);
+  for (const id of [...team.starting_xi, ...team.bench]) {
+    if (!matchState.players[id]) matchState.players[id] = { fitness: 100, sharpness: 100, morale: 50, unavailable_until_matchday: 0, suspension_until_matchday: 0 };
   }
   if (normalized.formation) team.formation = normalized.formation;
   team.tactics = { ...team.tactics, ...normalized.tactics };
@@ -374,6 +413,8 @@ export function advanceIncrementalMatchday(runtime, {
         formation: teams[side].formation,
         tactics: { ...teams[side].tactics },
         starting_xi: [...teams[side].starting_xi],
+        bench: [...teams[side].bench],
+        match_plans: clone(teams[side].match_plans || []),
         instruction_source: clone(instructionSources[side])
       });
     }
@@ -409,8 +450,8 @@ export function advanceIncrementalMatchday(runtime, {
       ...clone(result),
       fixture: { ...fixture },
       teams: {
-        home: { starting_xi: [...teams.home.starting_xi], bench: [...teams.home.bench], formation: teams.home.formation, tactics: { ...teams.home.tactics }, manager_decision: { ...teams.home.manager_decision }, instruction_source: clone(instructionSources.home) },
-        away: { starting_xi: [...teams.away.starting_xi], bench: [...teams.away.bench], formation: teams.away.formation, tactics: { ...teams.away.tactics }, manager_decision: { ...teams.away.manager_decision }, instruction_source: clone(instructionSources.away) }
+        home: { starting_xi: [...teams.home.starting_xi], bench: [...teams.home.bench], match_plans: clone(teams.home.match_plans || []), formation: teams.home.formation, tactics: { ...teams.home.tactics }, manager_decision: { ...teams.home.manager_decision }, instruction_source: clone(instructionSources.home) },
+        away: { starting_xi: [...teams.away.starting_xi], bench: [...teams.away.bench], match_plans: clone(teams.away.match_plans || []), formation: teams.away.formation, tactics: { ...teams.away.tactics }, manager_decision: { ...teams.away.manager_decision }, instruction_source: clone(instructionSources.away) }
       },
       unavailable_before_selection: beforeSelection.unavailable,
       availability_changes: availabilityChanges

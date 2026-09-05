@@ -5,6 +5,7 @@ import { createLoanEligibilitySnapshot, findWorldFixture, ineligibleLoanPlayerId
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const ALLOWED_SCORE_STATES = new Set(['always', 'winning', 'drawing', 'losing']);
 
 const response = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 const bearer = (request) => {
@@ -38,6 +39,32 @@ const serverRest = (path, options = {}, label) => requestSupabase(path, {
   ...(isJwt(SUPABASE_SERVICE_ROLE_KEY) ? { bearer: SUPABASE_SERVICE_ROLE_KEY } : {}),
   label
 });
+
+function validateMatchPlans(payload = {}) {
+  const plans = payload.match_plans || [];
+  if (!Array.isArray(plans)) throw new Error('Preset substitutions must be an array');
+  if (plans.length > 5) throw new Error('A maximum of five preset substitutions may be saved');
+  const startingXi = new Set((payload.starting_xi || []).map(String));
+  const bench = new Set((payload.bench || []).map(String));
+  return plans.map((plan, index) => {
+    const minute = Math.trunc(Number(plan?.minute));
+    const playerOutId = String(plan?.player_out_id || '').trim();
+    const playerInId = String(plan?.player_in_id || '').trim();
+    const scoreState = String(plan?.score_state || 'always').trim().toLowerCase();
+    if (!Number.isInteger(minute) || minute < 1 || minute > 90) throw new Error(`Preset substitution ${index + 1} must use a minute between 1 and 90`);
+    if (!playerOutId || !playerInId || playerOutId === playerInId) throw new Error(`Preset substitution ${index + 1} has invalid player choices`);
+    if (!startingXi.has(playerOutId)) throw new Error(`Preset substitution ${index + 1}: player off must be in the starting XI`);
+    if (!bench.has(playerInId)) throw new Error(`Preset substitution ${index + 1}: player on must be on the submitted bench`);
+    if (!ALLOWED_SCORE_STATES.has(scoreState)) throw new Error(`Preset substitution ${index + 1} has an invalid score-state condition`);
+    return {
+      plan_id: String(plan?.plan_id || `plan-${index + 1}`),
+      minute,
+      player_out_id: playerOutId,
+      player_in_id: playerInId,
+      score_state: scoreState
+    };
+  });
+}
 
 export default async (request) => {
   if (request.method !== 'POST') return response({ error: 'Method not allowed' }, 405);
@@ -107,6 +134,7 @@ export default async (request) => {
       throw error;
     }
 
+    const matchPlans = validateMatchPlans(payload);
     const submittedAt = new Date().toISOString();
     const submission = buildManagerTurnSubmission(world, {
       managerId: manager.id,
@@ -121,6 +149,7 @@ export default async (request) => {
         captain_id: payload.captain_id,
         set_piece_takers: payload.set_piece_takers || {},
         tactics: payload.tactics || {},
+        match_plans: matchPlans,
         loan_eligibility_snapshot: loanEligibilitySnapshot
       }
     });
@@ -134,8 +163,8 @@ export default async (request) => {
 
     // The authoritative upsert is the success boundary. Inbox confirmation must never
     // delay or invalidate an already-persisted team selection.
-    return response({ ...payload, saved: true, canonical: true, submission: saved[0] || submissionRow, submission_version: submissionVersion, submitted_at: submission.submitted_at, matchday: submission.matchday, season_id: submission.season_id });
+    return response({ ...payload, match_plans: matchPlans, saved: true, canonical: true, submission: saved[0] || submissionRow, submission_version: submissionVersion, submitted_at: submission.submitted_at, matchday: submission.matchday, season_id: submission.season_id });
   } catch (error) {
-    return response({ error: error.message, validation_errors: error.validationErrors || [] }, error.validationErrors ? 400 : /deadline|Turn|canonical|fixture|world|fragment/i.test(error.message) ? 409 : 500);
+    return response({ error: error.message, validation_errors: error.validationErrors || [] }, error.validationErrors ? 400 : /deadline|Turn|canonical|fixture|world|fragment|preset substitution|match plan/i.test(error.message) ? 409 : 500);
   }
 };

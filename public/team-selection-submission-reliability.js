@@ -145,21 +145,44 @@
     return { startingXi, bench, captainId, usingBoard };
   }
 
+  function presetMatchPlans() {
+    const reader = window.tbgPresetSubstitutions?.readPlans;
+    if (typeof reader !== 'function') return [];
+    const plans = reader();
+    return Array.isArray(plans) ? plans : [];
+  }
+
   const sameIds = (left, right) => {
     const a = (left || []).map(String);
     const b = (right || []).map(String);
     return a.length === b.length && a.every((id, index) => id === b[index]);
   };
 
+  const normalizedPlan = (plan = {}) => ({
+    plan_id: String(plan.plan_id || ''),
+    minute: Number(plan.minute),
+    player_out_id: String(plan.player_out_id || ''),
+    player_in_id: String(plan.player_in_id || ''),
+    score_state: String(plan.score_state || 'always')
+  });
+
+  function sameMatchPlans(left, right) {
+    const a = (left || []).map(normalizedPlan);
+    const b = (right || []).map(normalizedPlan);
+    return a.length === b.length && a.every((plan, index) => JSON.stringify(plan) === JSON.stringify(b[index]));
+  }
+
   function canonicalMatchesPayload(state, payload) {
     const submission = state?.current_submission;
     if (!submission || !payload) return false;
     const tactics = submission.tactics || {};
+    const matchPlans = submission.match_plans || submission.instruction?.match_plans || [];
     return String(submission.fixture_id || '') === String(payload.fixture_id || '')
       && String(submission.formation || '') === String(payload.formation || '')
       && sameIds(submission.starting_xi, payload.starting_xi)
       && sameIds(submission.bench, payload.bench)
       && String(submission.captain_id || '') === String(payload.captain_id || '')
+      && sameMatchPlans(matchPlans, payload.match_plans)
       && ['mentality', 'pressing', 'tempo', 'width', 'defensive_line']
         .every((key) => String(tactics[key] || '') === String(payload.tactics?.[key] || ''));
   }
@@ -247,7 +270,8 @@
           tempo: $('tempo').value,
           width: $('width').value,
           defensive_line: $('defensiveLine').value
-        }
+        },
+        match_plans: presetMatchPlans()
       };
 
       let response;

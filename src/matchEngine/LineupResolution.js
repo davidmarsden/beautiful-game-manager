@@ -3,6 +3,7 @@ const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(
 const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 
 const MAXIMUM_SUBSTITUTIONS = 5;
+const ALLOWED_SCORE_STATES = new Set(['always', 'winning', 'drawing', 'losing']);
 const EVENT_PRIORITY = Object.freeze({ injury: 9, red_card: 8, yellow_card: 7, substitution: 6, goal: 5, penalty: 4, foul: 3, set_piece: 2, big_chance: 1, shot: 0 });
 const ROLE_UNIT = Object.freeze({
   gk: 'goalkeeping', cb: 'defence', fb: 'defence', wing_back: 'defence',
@@ -88,7 +89,46 @@ function takeCompatibleReplacement(unusedBench, requiredRole) {
   return selected.player;
 }
 
-function substitutionEvent(side, index, minute, playerOutId, playerInId, reason, sourceEventId = null) {
+function takeNamedReplacement(unusedBench, playerId) {
+  const index = unusedBench.findIndex((player) => player.player_id === text(playerId));
+  if (index < 0) return null;
+  return unusedBench.splice(index, 1)[0] || null;
+}
+
+function normalizedPlans(side, contract = {}) {
+  const rows = Array.isArray(contract?.teams?.[side]?.match_plans) ? contract.teams[side].match_plans : [];
+  return rows.slice(0, MAXIMUM_SUBSTITUTIONS).map((plan, index) => ({
+    plan_id: text(plan?.plan_id) || `${side}-plan-${index + 1}`,
+    minute: clamp(Math.trunc(number(plan?.minute, 60)), 1, 90),
+    player_out_id: text(plan?.player_out_id),
+    player_in_id: text(plan?.player_in_id),
+    score_state: ALLOWED_SCORE_STATES.has(text(plan?.score_state).toLowerCase()) ? text(plan.score_state).toLowerCase() : 'always',
+    order: index
+  })).filter((plan) => plan.player_out_id && plan.player_in_id && plan.player_out_id !== plan.player_in_id);
+}
+
+function scoreBeforeMinute(side, baseEvents, minute) {
+  const score = { home: 0, away: 0 };
+  for (const event of baseEvents) {
+    if (event.type !== 'goal' || number(event.minute, 999) >= minute) continue;
+    if (event.side === 'home') score.home += 1;
+    if (event.side === 'away') score.away += 1;
+  }
+  return side === 'home'
+    ? { own: score.home, opponent: score.away }
+    : { own: score.away, opponent: score.home };
+}
+
+function scoreStateMatches(side, condition, baseEvents, minute) {
+  if (condition === 'always') return true;
+  const score = scoreBeforeMinute(side, baseEvents, minute);
+  if (condition === 'winning') return score.own > score.opponent;
+  if (condition === 'drawing') return score.own === score.opponent;
+  if (condition === 'losing') return score.own < score.opponent;
+  return false;
+}
+
+function substitutionEvent(side, index, minute, playerOutId, playerInId, reason, sourceEventId = null, detail = {}) {
   return {
     event_id: `${side}-substitution-${index}`,
     minute: clamp(Math.trunc(minute), 1, 120),
@@ -100,7 +140,8 @@ function substitutionEvent(side, index, minute, playerOutId, playerInId, reason,
     reason,
     source_event_id: sourceEventId,
     provisional: true,
-    commentary_hook: reason === 'injury' ? 'injury_substitution' : 'substitution'
+    commentary_hook: reason === 'injury' ? 'injury_substitution' : 'substitution',
+    ...detail
   };
 }
 
@@ -116,6 +157,8 @@ function buildSideSubstitutions(side, baseEvents, contract, quality) {
   const unusedBench = [...bench];
   const substitutions = [];
   const discipline = disciplinaryTimeline(side, baseEvents);
+  const plans = normalizedPlans(side, contract);
+  const plannedMinutesExecuted = new Set();
   const yellows = new Map();
   let disciplineIndex = 0;
   let index = 0;
@@ -134,12 +177,14 @@ function buildSideSubstitutions(side, baseEvents, contract, quality) {
     }
   };
 
+  const triggerPriority = (kind) => kind === 'injury' ? 0 : kind === 'manager_plan' ? 1 : 2;
   const triggers = [
     ...baseEvents
       .filter((event) => event.side === side && event.type === 'injury' && event.player_id)
-      .map((event) => ({ kind: 'injury', minute: clamp(Math.trunc(event.minute) + 1, 1, 120), source: event })),
-    ...[60, 70, 80].map((minute) => ({ kind: 'tactical', minute, source: null }))
-  ].sort((left, right) => left.minute - right.minute || (left.kind === 'injury' ? -1 : 1));
+      .map((event) => ({ kind: 'injury', minute: clamp(Math.trunc(event.minute) + 1, 1, 120), source: event, order: 0 })),
+    ...plans.map((plan) => ({ kind: 'manager_plan', minute: plan.minute, source: plan, order: plan.order })),
+    ...[60, 70, 80].map((minute, order) => ({ kind: 'tactical', minute, source: null, order }))
+  ].sort((left, right) => left.minute - right.minute || triggerPriority(left.kind) - triggerPriority(right.kind) || left.order - right.order);
 
   for (const trigger of triggers) {
     if (substitutions.length >= MAXIMUM_SUBSTITUTIONS || !unusedBench.length) break;
@@ -158,6 +203,25 @@ function buildSideSubstitutions(side, baseEvents, contract, quality) {
       continue;
     }
 
+    if (trigger.kind === 'manager_plan') {
+      const plan = trigger.source;
+      if (!scoreStateMatches(side, plan.score_state, baseEvents, trigger.minute)) continue;
+      if (!active.has(plan.player_out_id)) continue;
+      const replacement = takeNamedReplacement(unusedBench, plan.player_in_id);
+      if (!replacement) continue;
+      active.delete(plan.player_out_id);
+      active.add(replacement.player_id);
+      plannedMinutesExecuted.add(trigger.minute);
+      index += 1;
+      substitutions.push(substitutionEvent(side, index, trigger.minute, plan.player_out_id, replacement.player_id, 'manager_plan', null, {
+        plan_id: plan.plan_id,
+        score_state: plan.score_state,
+        planned: true
+      }));
+      continue;
+    }
+
+    if (plannedMinutesExecuted.has(trigger.minute)) continue;
     const candidates = starters
       .filter((player) => active.has(player.player_id) && player.required_role !== 'gk')
       .sort((left, right) => left.effective_quality - right.effective_quality || left.player_id.localeCompare(right.player_id));
@@ -222,6 +286,7 @@ function reconcileGeneratedSubstitutions(events, lineupInputs) {
       continue;
     }
 
+    if (event.type === 'injury' && event.player_id && event.provisional && !sideState.active.has(text(event.player_id))) continue;
     reconciled.push(event);
     if (event.type === 'yellow_card' && event.player_id) {
       const playerId = text(event.player_id);
@@ -255,7 +320,15 @@ function applyLineupTimeline(side, events, initial, bench) {
       availableBench.delete(inId);
       usedPlayers.add(inId);
       minutes.set(inId, { entered: event.minute, left: 90 });
-      substitutions.push({ event_id: event.event_id, minute: event.minute, player_out_id: outId, player_in_id: inId, reason: event.reason || 'tactical' });
+      substitutions.push({
+        event_id: event.event_id,
+        minute: event.minute,
+        player_out_id: outId,
+        player_in_id: inId,
+        reason: event.reason || 'tactical',
+        ...(event.plan_id ? { plan_id: event.plan_id } : {}),
+        ...(event.score_state ? { score_state: event.score_state } : {})
+      });
       continue;
     }
     if (event.type === 'yellow_card' && event.player_id) {
