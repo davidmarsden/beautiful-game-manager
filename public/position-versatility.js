@@ -67,6 +67,17 @@ function positionOf(player = {}) {
     || 'Unknown';
 }
 
+function ratingOf(player = {}) {
+  const value = Number(
+    player.underlying_ability_rating
+    ?? player.tbg_rating
+    ?? player.tbgRating
+    ?? player.rating
+    ?? player.ability
+  );
+  return Number.isFinite(value) ? value : 0;
+}
+
 function canonicalRoleFromPosition(position) {
   const value = norm(position);
   for (const [role, aliases] of Object.entries(POSITION_GROUPS)) {
@@ -216,6 +227,132 @@ function applyCanPlayFilter() {
   separators.forEach((row) => { row.hidden = true; });
 }
 
+function maximumWeightAssignment(weights) {
+  const rowCount = weights.length;
+  const columnCount = weights[0]?.length || 0;
+  if (!rowCount || columnCount < rowCount) return null;
+  const u = Array(rowCount + 1).fill(0);
+  const v = Array(columnCount + 1).fill(0);
+  const p = Array(columnCount + 1).fill(0);
+  const way = Array(columnCount + 1).fill(0);
+  for (let i = 1; i <= rowCount; i += 1) {
+    p[0] = i;
+    let j0 = 0;
+    const minv = Array(columnCount + 1).fill(Infinity);
+    const used = Array(columnCount + 1).fill(false);
+    do {
+      used[j0] = true;
+      const i0 = p[j0];
+      let delta = Infinity;
+      let j1 = 0;
+      for (let j = 1; j <= columnCount; j += 1) {
+        if (used[j]) continue;
+        const current = -weights[i0 - 1][j - 1] - u[i0] - v[j];
+        if (current < minv[j]) {
+          minv[j] = current;
+          way[j] = j0;
+        }
+        if (minv[j] < delta) {
+          delta = minv[j];
+          j1 = j;
+        }
+      }
+      for (let j = 0; j <= columnCount; j += 1) {
+        if (used[j]) {
+          u[p[j]] += delta;
+          v[j] -= delta;
+        } else {
+          minv[j] -= delta;
+        }
+      }
+      j0 = j1;
+    } while (p[j0] !== 0);
+    do {
+      const j1 = way[j0];
+      p[j0] = p[j1];
+      j0 = j1;
+    } while (j0 !== 0);
+  }
+  const assignment = Array(rowCount).fill(-1);
+  for (let j = 1; j <= columnCount; j += 1) {
+    if (p[j] > 0 && p[j] <= rowCount) assignment[p[j] - 1] = j - 1;
+  }
+  return assignment;
+}
+
+function selectablePlayerIds() {
+  return new Set([...document.querySelectorAll('#formationSquadTray [data-player-id]')]
+    .map((node) => String(node.dataset.playerId || ''))
+    .filter(Boolean));
+}
+
+function autoPickSelection() {
+  const formation = document.getElementById('formation')?.value || '4-3-3-wide';
+  const roles = FORMATION_ROLES[formation] || FORMATION_ROLES['4-3-3-wide'];
+  const allowed = selectablePlayerIds();
+  const candidates = (snapshot?.squad || [])
+    .filter((player) => allowed.has(String(player.tbg_player_id || player.player_id || '')))
+    .map((player) => ({
+      player,
+      id: String(player.tbg_player_id || player.player_id || ''),
+      name: String(player.display_name || player.player_name || player.name || ''),
+      rating: ratingOf(player),
+      role: canonicalRoleFromPosition(positionOf(player))
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+  if (candidates.length < roles.length) return null;
+  const hasGoalkeeper = candidates.some((candidate) => candidate.role === 'gk');
+  const weights = roles.map((requiredRole) => candidates.map((candidate) => {
+    if (requiredRole === 'gk' && hasGoalkeeper && candidate.role !== 'gk') return -10000;
+    const fit = roleSuitability(candidate.role, requiredRole);
+    return candidate.rating * fit.factor;
+  }));
+  const assignment = maximumWeightAssignment(weights);
+  if (!assignment || assignment.some((index) => index < 0)) return null;
+  const startingXi = assignment.map((index) => candidates[index].id);
+  const selected = new Set(startingXi);
+  const bench = candidates
+    .filter((candidate) => !selected.has(candidate.id))
+    .sort((a, b) => b.rating - a.rating || a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
+    .slice(0, 7)
+    .map((candidate) => candidate.id);
+  return { startingXi, bench };
+}
+
+function applyAutoPickToLegacyInputs(selection) {
+  const xiContainer = document.getElementById('startingXi');
+  const benchContainer = document.getElementById('bench');
+  if (!xiContainer || !benchContainer) return false;
+  const reorder = (container, orderedIds, selectedIds) => {
+    const labels = [...container.querySelectorAll('.player-pick')];
+    const byId = new Map(labels.map((label) => [String(label.querySelector('input')?.value || ''), label]));
+    labels.forEach((label) => {
+      const input = label.querySelector('input');
+      if (input) input.checked = selectedIds.has(String(input.value));
+    });
+    orderedIds.forEach((id) => {
+      const label = byId.get(id);
+      if (label) container.appendChild(label);
+    });
+    labels.filter((label) => !orderedIds.includes(String(label.querySelector('input')?.value || '')))
+      .forEach((label) => container.appendChild(label));
+  };
+  reorder(xiContainer, selection.startingXi, new Set(selection.startingXi));
+  reorder(benchContainer, selection.bench, new Set(selection.bench));
+  document.dispatchEvent(new CustomEvent('tbg:team-sheet-override'));
+  xiContainer.querySelector('input:checked')?.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
+}
+
+function interceptAutoPick(event) {
+  const button = event.target?.closest?.('#autoPickFormation');
+  if (!button || !snapshot?.squad) return;
+  const selection = autoPickSelection();
+  if (!selection || !applyAutoPickToLegacyInputs(selection)) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}
+
 function apply() {
   if (applying || !snapshot?.squad) return;
   applying = true;
@@ -235,9 +372,16 @@ window.addEventListener('tbg:portal-rendered', (event) => {
   queueMicrotask(apply);
 });
 window.addEventListener('tbg:formation-board-ready', () => queueMicrotask(apply));
+document.addEventListener('click', interceptAutoPick, true);
 document.addEventListener('change', (event) => {
   if (event.target?.id === 'formation') queueMicrotask(apply);
 });
 new MutationObserver(() => queueMicrotask(apply)).observe(document.documentElement, { childList: true, subtree: true });
 
-window.tbgPositionVersatility = Object.freeze({ canonicalRoleFromPosition, roleSuitability, playableRoles });
+window.tbgPositionVersatility = Object.freeze({
+  canonicalRoleFromPosition,
+  roleSuitability,
+  playableRoles,
+  autoPickSelection,
+  maximumWeightAssignment
+});
