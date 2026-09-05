@@ -286,6 +286,7 @@ function reconcileGeneratedSubstitutions(events, lineupInputs) {
       continue;
     }
 
+    if (event.type === 'injury' && event.player_id && event.provisional && !sideState.active.has(text(event.player_id))) continue;
     reconciled.push(event);
     if (event.type === 'yellow_card' && event.player_id) {
       const playerId = text(event.player_id);
