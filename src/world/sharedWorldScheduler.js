@@ -15,6 +15,8 @@ export const SHARED_WORLD_SCHEDULER_VERSION = 'tbg-shared-world-scheduler-v1.6';
 const text = (value) => String(value ?? '').trim();
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const unique = (values) => new Set(values).size === values.length;
+const MAXIMUM_MATCH_PLANS = 5;
+const ALLOWED_MATCH_PLAN_SCORE_STATES = new Set(['always', 'winning', 'drawing', 'losing']);
 
 function configuredTurnCalendar(world, override = null) {
   const persisted = world.matchday_cycle?.turn_calendar || {};
@@ -51,6 +53,32 @@ export function currentTurnIdentity(world) {
 
 function selectedPlayerIds(instruction = {}) {
   return [...(instruction.starting_xi || []), ...(instruction.bench || [])].map(text).filter(Boolean);
+}
+
+function validateMatchPlans(instruction = {}) {
+  if (instruction.match_plans == null) return [];
+  if (!Array.isArray(instruction.match_plans)) return ['Match plans must be an array'];
+  const errors = [];
+  if (instruction.match_plans.length > MAXIMUM_MATCH_PLANS) errors.push(`Match plans may contain at most ${MAXIMUM_MATCH_PLANS} substitutions`);
+  const starters = Array.isArray(instruction.starting_xi) ? instruction.starting_xi.map(text) : [];
+  const bench = Array.isArray(instruction.bench) ? instruction.bench.map(text) : [];
+  instruction.match_plans.slice(0, MAXIMUM_MATCH_PLANS).forEach((plan, index) => {
+    const label = `Match plan ${index + 1}`;
+    if (!plan || typeof plan !== 'object' || Array.isArray(plan)) {
+      errors.push(`${label} must be an object`);
+      return;
+    }
+    const minute = Number(plan.minute);
+    const playerOutId = text(plan.player_out_id);
+    const playerInId = text(plan.player_in_id);
+    const scoreState = text(plan.score_state || 'always').toLowerCase();
+    if (!Number.isInteger(minute) || minute < 1 || minute > 90) errors.push(`${label} minute must be an integer from 1 to 90`);
+    if (!playerOutId || !starters.includes(playerOutId)) errors.push(`${label} player_out_id must be in the submitted starting XI`);
+    if (!playerInId || !bench.includes(playerInId)) errors.push(`${label} player_in_id must be on the submitted bench`);
+    if (playerOutId && playerInId && playerOutId === playerInId) errors.push(`${label} cannot replace a player with themselves`);
+    if (!ALLOWED_MATCH_PLAN_SCORE_STATES.has(scoreState)) errors.push(`${label} has unsupported score_state ${scoreState || 'missing'}`);
+  });
+  return errors;
 }
 
 function availabilityCalendarForPlayer(world, clubId, playerId) {
@@ -126,10 +154,12 @@ export function validateManagerTurnSubmission(world, submission, { now = new Dat
   const worldClubIds = Object.keys(world.squad_cycle.clubs || {});
   if (!worldClubIds.includes(text(submission.club_id))) errors.push('Submission club is not in the canonical world');
   if (nextTurnAt && new Date(now) >= new Date(nextTurnAt)) errors.push('The turn deadline has passed');
-  const instruction = submission.instruction || {};
+  const instruction = submission.instruction && typeof submission.instruction === 'object' && !Array.isArray(submission.instruction) ? submission.instruction : {};
+  if (submission.instruction != null && instruction !== submission.instruction) errors.push('Submission instruction must be an object');
   if (instruction.starting_xi && (!Array.isArray(instruction.starting_xi) || instruction.starting_xi.length !== 11 || !unique(instruction.starting_xi))) errors.push('Starting XI must contain exactly eleven unique players');
   if (instruction.bench && (!Array.isArray(instruction.bench) || !unique(instruction.bench))) errors.push('Substitutes must contain unique players');
-  if (instruction.starting_xi && instruction.bench && !unique([...instruction.starting_xi, ...instruction.bench])) errors.push('A player cannot appear in both the starting XI and substitutes');
+  if (instruction.starting_xi && instruction.bench && Array.isArray(instruction.starting_xi) && Array.isArray(instruction.bench) && !unique([...instruction.starting_xi, ...instruction.bench])) errors.push('A player cannot appear in both the starting XI and substitutes');
+  errors.push(...validateMatchPlans(instruction));
   if (worldClubIds.includes(text(submission.club_id))) {
     const eligibility = validateManagerSelectionEligibility(world, submission.club_id, instruction);
     errors.push(...eligibility.errors);
@@ -286,7 +316,7 @@ export function executeScheduledTurn(worldInput, plan) {
   if (world.matchday_cycle) alignCanonicalFixtureKickoffs(world, { currentMatchday: current.matchday, currentTurnAt: plan.scheduled_for, nextTurnAt: plan.next_turn_at, weekdaysUtc: cadence.weekdays_utc, hourUtc: cadence.hour_utc });
   const advance = advancePersistentMatchday(world, { instructionsByClub: executionInstructions, instructionSourcesByClub: plan.instruction_sources_by_club });
   if (!advance.accepted) throw new Error('Scheduled matchday advance was rejected');
-  if (advance.world.matchday_cycle && plan.next_turn_at) alignCanonicalFixtureKickoffs(advance.world, { currentMatchday: advance.world.matchday_cycle.current_matchday, currentTurnAt: plan.next_turn_at, weekdaysUtc: cadence.weekdays_utc, hourUtc: cadence.hour_utc });
+  if (advance.world.matchday_cycle && plan.next_turn_at) alignCanonicalFixtureKickoffs(advance.world, { currentMatchday: advance.world.matchday_cycle.current_matchday, currentTurnAt: plan.next_turn_at, nextTurnAt: plan.next_turn_at, weekdaysUtc: cadence.weekdays_utc, hourUtc: cadence.hour_utc });
   advance.world.shared_turn_history ||= [];
   advance.world.shared_turn_history.push({
     version: SHARED_WORLD_SCHEDULER_VERSION,
