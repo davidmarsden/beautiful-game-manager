@@ -1,0 +1,84 @@
+#portal #tacticsView .preset-substitutions-panel{
+  margin-top:16px;
+  padding:16px;
+  border:1px solid #668275!important;
+  border-top:3px solid var(--tbg-brazil-yellow,#ffdc02)!important;
+  border-radius:10px;
+  background:#dce5d8!important;
+  color:#17212a!important;
+}
+#portal #tacticsView .preset-substitutions-panel *{box-sizing:border-box}
+#portal #tacticsView .preset-sub-heading{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+  margin-bottom:12px;
+}
+#portal #tacticsView .preset-sub-heading h3{margin:0 0 4px;color:#102330!important}
+#portal #tacticsView .preset-sub-heading p{margin:0;max-width:760px;color:#405249!important}
+#portal #tacticsView .preset-sub-badge{
+  flex:none;
+  padding:5px 9px;
+  border-radius:999px;
+  background:#193375!important;
+  color:#fff!important;
+  -webkit-text-fill-color:#fff!important;
+  font-size:.78rem;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:.03em;
+}
+#portal #tacticsView .preset-sub-rows{display:grid;gap:8px}
+#portal #tacticsView .preset-sub-row{
+  display:grid;
+  grid-template-columns:minmax(86px,.55fr) minmax(150px,1.2fr) minmax(150px,1.2fr) minmax(130px,.9fr) auto;
+  gap:8px;
+  align-items:end;
+  padding:10px;
+  border:1px solid #8ba090;
+  border-radius:8px;
+  background:#edf1e9!important;
+}
+#portal #tacticsView .preset-sub-row select,
+#portal #tacticsView .preset-sub-row input{
+  width:100%;
+  min-height:40px;
+}
+#portal #tacticsView .preset-sub-minute-wrap{display:grid;gap:4px}
+#portal #tacticsView .preset-sub-minute-wrap span{font-size:.78rem;font-weight:800;color:#405249!important}
+#portal #tacticsView .preset-sub-remove{
+  min-height:40px;
+  padding:8px 10px;
+  background:#f4f5f0!important;
+  color:#7a2424!important;
+  border:1px solid #9a6969!important;
+}
+#portal #tacticsView .preset-sub-footer{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  margin-top:10px;
+}
+#portal #tacticsView #addPresetSubstitution{
+  flex:none;
+  background:#193375!important;
+  color:#fff!important;
+  -webkit-text-fill-color:#fff!important;
+  border-color:#102330!important;
+}
+#portal #tacticsView #addPresetSubstitution:disabled{opacity:.62;cursor:not-allowed}
+#portal #tacticsView .preset-sub-footer small{color:#46574e!important}
+@media (max-width:800px){
+  #portal #tacticsView .preset-sub-heading{display:grid}
+  #portal #tacticsView .preset-sub-badge{justify-self:start}
+  #portal #tacticsView .preset-sub-row{
+    grid-template-columns:1fr 1fr;
+  }
+  #portal #tacticsView .preset-sub-remove{grid-column:1 / -1}
+  #portal #tacticsView .preset-sub-footer{align-items:flex-start;flex-direction:column}
+}
+@media (max-width:520px){
+  #portal #tacticsView .preset-sub-row{grid-template-columns:1fr}
+  #portal #tacticsView .preset-sub-remove{grid-column:auto}
+}
