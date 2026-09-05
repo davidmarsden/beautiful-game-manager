@@ -60,6 +60,19 @@ test('clearing Can play restores the current rendered table before returning', a
   assert.ok(resetIndex >= 0 && returnIndex > resetIndex);
 });
 
+test('Formation Board auto-pick maximises engine-adjusted slot quality instead of raw rating', async () => {
+  const source = await read('public/position-versatility.js');
+  assert.match(source, /function maximumWeightAssignment\(weights\)/);
+  assert.match(source, /const fit = roleSuitability\(candidate\.role, requiredRole\)/);
+  assert.match(source, /return candidate\.rating \* fit\.factor/);
+  assert.match(source, /const assignment = maximumWeightAssignment\(weights\)/);
+  assert.match(source, /requiredRole === 'gk' && hasGoalkeeper && candidate\.role !== 'gk'/);
+  assert.match(source, /document\.addEventListener\('click', interceptAutoPick, true\)/);
+  assert.match(source, /event\.target\?\.closest\?\.\('#autoPickFormation'\)/);
+  assert.match(source, /new CustomEvent\('tbg:team-sheet-override'\)/);
+  assert.match(source, /event\.stopImmediatePropagation\(\)/);
+});
+
 test('positional versatility assets are loaded through the canonical portal enhancement chain', async () => {
   const loader = await read('public/position-versatility-loader.js');
   const chain = await read('public/internal-profile-links.js');
