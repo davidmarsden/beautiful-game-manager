@@ -84,10 +84,21 @@ test('preset substitution becomes a safe skip when the named player is no longer
   const { contract: matchContract, quality } = contract([{
     plan_id: 'injured-out', minute: 55, player_out_id: 'h-cm2', player_in_id: 'h-bst', score_state: 'always'
   }]);
-  const events = [{ event_id: 'injury-40', minute: 40, side: 'home', type: 'injury', player_id: 'h-cm2' }];
+  const events = [{ event_id: 'injury-40', minute: 40, side: 'home', type: 'injury', player_id: 'h-cm2', provisional: true }];
   const result = resolveLineupEvents({ seed_commitment: 'preset-4', provisional_event_stream: events }, matchContract, quality);
   assert.equal(result.events.some((event) => event.reason === 'manager_plan' && event.plan_id === 'injured-out'), false);
   assert.ok(result.events.some((event) => event.type === 'substitution' && event.reason === 'injury'));
+});
+
+test('later provisional injury is dropped after a preset has already removed that player', () => {
+  const { contract: matchContract, quality } = contract([{
+    plan_id: 'early-change', minute: 55, player_out_id: 'h-cm2', player_in_id: 'h-bcm', score_state: 'always'
+  }]);
+  const events = [{ event_id: 'late-injury', minute: 70, side: 'home', type: 'injury', player_id: 'h-cm2', provisional: true }];
+  const result = resolveLineupEvents({ seed_commitment: 'preset-injury-causality', provisional_event_stream: events }, matchContract, quality);
+  assert.ok(result.events.some((event) => event.reason === 'manager_plan' && event.plan_id === 'early-change'));
+  assert.equal(result.events.some((event) => event.event_id === 'late-injury'), false);
+  assert.equal(result.events.some((event) => event.reason === 'injury' && event.source_event_id === 'late-injury'), false);
 });
 
 test('manager submission carries the exact seven-player bench and match plans into the engine contract', async () => {
@@ -96,6 +107,15 @@ test('manager submission carries the exact seven-player bench and match plans in
   assert.match(source, /match_plans: normalizeMatchPlans\(instruction\.match_plans \|\| \[\]\)/);
   assert.match(source, /team\.bench = \[\.\.\.normalized\.bench\]/);
   assert.match(source, /team\.match_plans = clone\(normalized\.match_plans\)/);
+});
+
+test('shared submission boundary rejects malformed match plans before scheduled execution', async () => {
+  const scheduler = await read('src/world/sharedWorldScheduler.js');
+  assert.match(scheduler, /function validateMatchPlans\(instruction = \{\}\)/);
+  assert.match(scheduler, /if \(!Array\.isArray\(instruction\.match_plans\)\) return \['Match plans must be an array'\]/);
+  assert.match(scheduler, /errors\.push\(\.\.\.validateMatchPlans\(instruction\)\)/);
+  assert.match(scheduler, /player_out_id must be in the submitted starting XI/);
+  assert.match(scheduler, /player_in_id must be on the submitted bench/);
 });
 
 test('Team Selection planner is pre-match, conditional, canonical and reloadable', async () => {
@@ -107,6 +127,9 @@ test('Team Selection planner is pre-match, conditional, canonical and reloadable
   assert.match(ui, /\['drawing', 'If drawing'\]/);
   assert.match(ui, /\['losing', 'If losing'\]/);
   assert.match(ui, /submission\?\.match_plans \|\| submission\?\.instruction\?\.match_plans/);
+  assert.match(ui, /function teamSheetReady\(\)/);
+  assert.match(ui, /selected && !ids\.includes\(selected\) && !teamSheetReady\(\)/);
+  assert.match(ui, /tbg:formation-board-ready/);
   assert.match(save, /match_plans: presetMatchPlans\(\)/);
   assert.match(save, /sameMatchPlans\(matchPlans, payload\.match_plans\)/);
   assert.match(api, /match_plans: matchPlans/);
