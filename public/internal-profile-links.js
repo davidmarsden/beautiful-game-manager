@@ -10,6 +10,7 @@ import './external-market-ui.js';
 import './rating-history-enhancements.js';
 import './squad-player-statistics.js';
 import './preset-substitutions.js';
+import './position-versatility-loader.js';
 import './alpha-team-ux-fixes.js';
 import './alpha-presentation-fixes.js';
 import './transfer-exchange-response-ui.js';
