@@ -42,10 +42,14 @@ const ADJACENT = Object.freeze({
   st: ['am','wing']
 });
 
-const BOARD_ROLE = Object.freeze({
-  GK: 'gk', CB: 'cb', LCB: 'cb', RCB: 'cb', LB: 'fb', RB: 'fb', LWB: 'wing_back', RWB: 'wing_back',
-  LDM: 'dm', RDM: 'dm', CM: 'cm', LCM: 'cm', RCM: 'cm', AM: 'am', LM: 'wide_mid', RM: 'wide_mid',
-  LW: 'wing', RW: 'wing', CF: 'st', LCF: 'st', RCF: 'st'
+const FORMATION_ROLES = Object.freeze({
+  '4-4-2': ['gk','fb','cb','cb','fb','wide_mid','cm','cm','wide_mid','st','st'],
+  '4-3-3-wide': ['gk','fb','cb','cb','fb','dm','cm','cm','wing','st','wing'],
+  '4-2-3-1': ['gk','fb','cb','cb','fb','dm','dm','wing','am','wing','st'],
+  '4-1-4-1': ['gk','fb','cb','cb','fb','dm','wide_mid','cm','cm','wide_mid','st'],
+  '3-5-2': ['gk','cb','cb','cb','wing_back','cm','dm','cm','wing_back','st','st'],
+  '3-4-3': ['gk','cb','cb','cb','wing_back','cm','cm','wing_back','wing','st','wing'],
+  '5-3-2': ['gk','wing_back','cb','cb','cb','wing_back','dm','cm','cm','st','st']
 });
 
 let snapshot = null;
@@ -53,7 +57,14 @@ let applying = false;
 const norm = (value) => String(value ?? '').trim().toLowerCase();
 
 function positionOf(player = {}) {
-  return player.specific_position || player.position || player.primary_position || player.position_group || 'Unknown';
+  return player.position
+    || player.primary_position
+    || player.position_name
+    || player.position_detail
+    || player.canonical_position
+    || player.transfermarkt_position
+    || player.position_group
+    || 'Unknown';
 }
 
 function canonicalRoleFromPosition(position) {
@@ -136,12 +147,17 @@ function enhanceLegacyPicks() {
   });
 }
 
+function requiredRoleForSlot(slot, index) {
+  const formation = document.getElementById('formation')?.value || '4-3-3-wide';
+  return FORMATION_ROLES[formation]?.[index] || null;
+}
+
 function enhanceFormationSlots() {
   const directory = playerDirectory();
-  document.querySelectorAll('#formationPitch .formation-slot[data-role]').forEach((slot) => {
+  document.querySelectorAll('#formationPitch .formation-slot[data-role]').forEach((slot, index) => {
     const playerId = slot.querySelector('[data-player-id]')?.dataset.playerId;
     const player = directory.get(String(playerId || ''));
-    const requiredRole = BOARD_ROLE[slot.dataset.role];
+    const requiredRole = requiredRoleForSlot(slot, index);
     const token = slot.querySelector('.player-token');
     if (!player || !requiredRole || !token) return;
     const actualRole = canonicalRoleFromPosition(positionOf(player));
@@ -184,8 +200,12 @@ function ensureCanPlayFilter() {
 function applyCanPlayFilter() {
   const select = document.getElementById('versatilityFilter');
   const role = select?.value || 'all';
+  const rows = [...document.querySelectorAll('#squadRows tr:not(.position-separator)')];
+  const separators = [...document.querySelectorAll('#squadRows .position-separator')];
+  rows.forEach((row) => { row.hidden = false; });
+  separators.forEach((row) => { row.hidden = false; });
   if (role === 'all') return;
-  document.querySelectorAll('#squadRows tr:not(.position-separator)').forEach((row) => {
+  rows.forEach((row) => {
     const name = row.querySelector('.player-link')?.textContent?.trim();
     const player = playerByName(name);
     if (!player) return;
@@ -193,7 +213,7 @@ function applyCanPlayFilter() {
     const tier = roleSuitability(natural, role).tier;
     row.hidden = !['natural','comfortable','cover'].includes(tier);
   });
-  document.querySelectorAll('#squadRows .position-separator').forEach((row) => { row.hidden = true; });
+  separators.forEach((row) => { row.hidden = true; });
 }
 
 function apply() {
