@@ -146,10 +146,13 @@ function enhanceFormationSlots() {
     if (!player || !requiredRole || !token) return;
     const actualRole = canonicalRoleFromPosition(positionOf(player));
     const fit = roleSuitability(actualRole, requiredRole);
+    const existingBadge = token.querySelector('.versatility-fit');
+    if (token.dataset.versatilityTier === fit.tier && existingBadge) return;
+    token.dataset.versatilityTier = fit.tier;
     token.classList.remove('versatility-natural','versatility-comfortable','versatility-cover','versatility-emergency','suitability-warning');
     token.classList.add(`versatility-${fit.tier}`);
     if (fit.tier === 'emergency' || fit.tier === 'unknown') token.classList.add('suitability-warning');
-    token.querySelector('.versatility-fit')?.remove();
+    existingBadge?.remove();
     const label = fit.tier === 'natural' ? 'Natural' : fit.tier === 'comfortable' ? 'Comfortable' : fit.tier === 'cover' ? 'Cover' : fit.tier === 'unknown' ? 'Unknown fit' : 'Emergency';
     token.insertAdjacentHTML('beforeend', `<small class="versatility-fit" title="Role suitability ${Math.round(fit.factor * 100)}%">${label}</small>`);
   });
