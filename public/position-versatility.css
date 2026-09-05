@@ -1,0 +1,25 @@
+.position-versatility {
+  display: block;
+  margin-top: .2rem;
+  font-size: .72rem;
+  line-height: 1.3;
+  opacity: .78;
+}
+
+#versatilityFilter {
+  min-width: 10.5rem;
+}
+
+.player-token .versatility-fit {
+  display: block;
+  margin-top: .12rem;
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+
+.player-token.versatility-natural .versatility-fit { opacity: .82; }
+.player-token.versatility-comfortable .versatility-fit { opacity: .88; }
+.player-token.versatility-cover .versatility-fit { opacity: .72; }
+.player-token.versatility-emergency .versatility-fit { opacity: .9; }
