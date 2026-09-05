@@ -41,6 +41,10 @@ function bench() {
   return boardIds('#formationBench .bench-slot', 'bench');
 }
 
+function teamSheetReady() {
+  return startingXi().length === 11 && bench().length === 7;
+}
+
 function playerDirectory() {
   const rows = Array.isArray(portalState?.squad) ? portalState.squad : [];
   return new Map(rows.map((player) => [
@@ -67,7 +71,8 @@ function playerSelect(kind, selected = '') {
   const ids = kind === 'out' ? startingXi() : bench();
   select.append(option('', kind === 'out' ? 'Player off…' : 'Player on…'));
   for (const playerId of ids) select.append(option(playerId, playerLabel(playerId)));
-  select.value = ids.includes(selected) ? selected : '';
+  if (selected && !ids.includes(selected) && !teamSheetReady()) select.append(option(selected, playerLabel(selected)));
+  select.value = ids.includes(selected) || (selected && !teamSheetReady()) ? selected : '';
   return select;
 }
 
@@ -138,14 +143,17 @@ function updateAddButton() {
 function syncPlayerOptions() {
   const host = rowsHost();
   if (!host) return;
+  const ready = teamSheetReady();
   for (const row of host.querySelectorAll('.preset-sub-row')) {
     for (const [kind, ids] of [['out', startingXi()], ['in', bench()]]) {
       const select = row.querySelector(`.preset-sub-${kind}`);
       if (!select) continue;
       const previous = text(select.value);
       const placeholder = kind === 'out' ? 'Player off…' : 'Player on…';
-      select.replaceChildren(option('', placeholder), ...ids.map((playerId) => option(playerId, playerLabel(playerId))));
-      select.value = ids.includes(previous) ? previous : '';
+      const options = [option('', placeholder), ...ids.map((playerId) => option(playerId, playerLabel(playerId)))];
+      if (previous && !ids.includes(previous) && !ready) options.push(option(previous, playerLabel(previous)));
+      select.replaceChildren(...options);
+      select.value = ids.includes(previous) || (previous && !ready) ? previous : '';
     }
   }
 }
@@ -267,6 +275,11 @@ function readPlans() {
 
 window.tbgPresetSubstitutions = Object.freeze({ readPlans, hydrate, syncPlayerOptions });
 window.addEventListener('tbg:portal-rendered', (event) => hydrate(event.detail));
+window.addEventListener('tbg:formation-board-ready', () => {
+  installBoardObserver();
+  syncPlayerOptions();
+  hydrate(window.tbgPortalState || portalState);
+});
 window.addEventListener('tbg:team-submission-saved', (event) => hydrate(event.detail?.state || window.tbgPortalState, { force: true }));
 window.addEventListener('DOMContentLoaded', () => hydrate(window.tbgPortalState));
 window.addEventListener('load', () => hydrate(window.tbgPortalState));
