@@ -27,11 +27,16 @@ test('publication state independently drives all manager-facing delivery channel
   assert.match(migration, /m\.status = 'active'/);
 });
 
-test('publication delivery is deferred so the existing admin RPC stays idempotent', () => {
+test('deferred publication delivery re-reads the authoritative row at trigger execution', () => {
   assert.match(migration, /create constraint trigger alpha_updates_deliver_on_publish/);
   assert.match(migration, /after insert or update on public\.alpha_updates/);
   assert.match(migration, /deferrable initially deferred/);
-  assert.match(migration, /if tg_op = 'UPDATE' and old\.status = 'published' then/);
+  assert.match(migration, /select \* into v_update\s+from public\.alpha_updates\s+where id = new\.id/);
+  assert.match(migration, /if not found or v_update\.status <> 'published' then/);
+  assert.match(migration, /v_update\.world_id/);
+  assert.match(migration, /v_update\.title/);
+  assert.match(migration, /v_update\.summary/);
+  assert.doesNotMatch(migration, /if tg_op = 'UPDATE' and old\.status = 'published' then/);
   assert.match(migration, /on conflict\(manager_id, dedupe_key\) do nothing/);
 });
 
