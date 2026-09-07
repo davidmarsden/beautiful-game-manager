@@ -4,20 +4,65 @@ import { competitiveRegistration, isYouthRegistrationExempt } from './registrati
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = null) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
+function titleCaseSlug(slug) {
+  const lowercaseWords = new Set(['da', 'de', 'del', 'do', 'dos', 'van', 'von']);
+  const words = text(slug)
+    .split('-')
+    .filter(Boolean)
+    .map((word, index) => {
+      const lower = word.toLowerCase();
+      if (index > 0 && lowercaseWords.has(lower)) return lower;
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    });
+  if (words.length > 1 && words.at(-1) === 'Junior') words[words.length - 1] = 'Jr.';
+  return words.join(' ');
+}
+
+function transfermarktProfileName(player = {}) {
+  const candidates = [player.source_profile_url, player.transfermarkt_url, player.profile_url]
+    .map(text)
+    .filter(Boolean);
+  for (const candidate of candidates) {
+    try {
+      const url = new URL(candidate);
+      const hostname = url.hostname.toLowerCase().replace(/^www\./u, '');
+      if (!/^transfermarkt\.[a-z]{2,}(?:\.[a-z]{2})?$/u.test(hostname)) continue;
+      const parts = url.pathname.split('/').filter(Boolean);
+      const profileIndex = parts.findIndex((part) => ['profil', 'profile'].includes(part.toLowerCase()));
+      const slug = profileIndex > 0 ? parts[profileIndex - 1] : null;
+      const name = titleCaseSlug(slug);
+      if (name) return name;
+    } catch {
+      // Ignore malformed source URLs and fall back to canonical player data.
+    }
+  }
+  return '';
+}
+
 function preferredFootballName(player = {}) {
   const listValue = (value) => Array.isArray(value) ? value.find((item) => text(item)) : null;
-  return text(
+  const explicit = text(
     player.known_as
     || player.knownAs
     || player.short_name
+    || player.shortName
     || player.nickname
     || player.nick_name
     || listValue(player.nicknames)
-    || player.display_name
+  );
+  if (explicit) return explicit;
+
+  const canonical = text(
+    player.display_name
     || player.player_name
     || player.canonical_name
+    || player.full_name
+    || player.name
     || player.tbg_player_id
   );
+  const profileName = transfermarktProfileName(player);
+  if (profileName && (!canonical || profileName.split(/\s+/u).length < canonical.split(/\s+/u).length)) return profileName;
+  return canonical || profileName;
 }
 
 function resultForClub(result, clubId) {
