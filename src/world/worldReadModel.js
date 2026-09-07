@@ -1,6 +1,7 @@
 import { clubFinanceReadModel } from '../squadCycle/clubFinance.js';
 
 const clone = (value) => JSON.parse(JSON.stringify(value ?? null));
+const text = (value) => String(value ?? '').trim();
 
 function compactRuntimePlayerState(player = {}) {
   return {
@@ -33,13 +34,71 @@ function compactRuntime(runtime = {}) {
   };
 }
 
+function titleCaseSlug(slug) {
+  const lowercaseWords = new Set(['da', 'de', 'del', 'do', 'dos', 'van', 'von']);
+  return text(slug)
+    .split('-')
+    .filter(Boolean)
+    .map((word, index) => {
+      const lower = word.toLowerCase();
+      if (index > 0 && lowercaseWords.has(lower)) return lower;
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join(' ')
+    .replace(/\bJunior$/u, 'Jr.');
+}
+
+function transfermarktProfileName(player = {}) {
+  const candidates = [player.source_profile_url, player.transfermarkt_url, player.profile_url]
+    .map(text)
+    .filter((value) => value && /transfermarkt/i.test(value));
+  for (const candidate of candidates) {
+    try {
+      const pathname = new URL(candidate).pathname;
+      const parts = pathname.split('/').filter(Boolean);
+      const profileIndex = parts.findIndex((part) => ['profil', 'profile'].includes(part.toLowerCase()));
+      const slug = profileIndex > 0 ? parts[profileIndex - 1] : null;
+      const name = titleCaseSlug(slug);
+      if (name) return name;
+    } catch {
+      // Ignore malformed source URLs and fall back to canonical player data.
+    }
+  }
+  return '';
+}
+
+function preferredPlayerName(player = {}, playerId = null) {
+  const listNickname = Array.isArray(player.nicknames) ? player.nicknames.find((value) => text(value)) : null;
+  const explicit = text(
+    player.known_as
+    || player.knownAs
+    || player.short_name
+    || player.shortName
+    || player.nickname
+    || player.nick_name
+    || listNickname
+  );
+  if (explicit) return explicit;
+
+  const canonical = text(player.display_name || player.player_name || player.full_name || player.name);
+  const profileName = transfermarktProfileName(player);
+  if (profileName && (!canonical || profileName.split(/\s+/u).length < canonical.split(/\s+/u).length)) return profileName;
+  return canonical || profileName || text(playerId);
+}
+
 function compactPlayer(player = {}, playerId = null) {
+  const displayName = preferredPlayerName(player, playerId);
   return {
     tbg_player_id: player.tbg_player_id || player.player_id || player.id || playerId,
     player_id: player.player_id || player.tbg_player_id || player.id || playerId,
     transfermarkt_id: player.transfermarkt_id || player.transfermarktId || player.transfermarkt_player_id || null,
-    display_name: player.display_name || player.player_name || player.full_name || player.name || playerId,
-    player_name: player.player_name || player.display_name || player.full_name || player.name || playerId,
+    display_name: displayName,
+    player_name: displayName,
+    canonical_name: player.canonical_name || player.full_name || player.player_name || player.display_name || player.name || playerId,
+    known_as: player.known_as || player.knownAs || null,
+    short_name: player.short_name || player.shortName || null,
+    nickname: player.nickname || player.nick_name || null,
+    nicknames: Array.isArray(player.nicknames) ? clone(player.nicknames) : null,
     club_id: player.club_id || player.tbg_club_id || player.current_club_id || null,
     age: player.age ?? null,
     season_start_age: player.season_start_age ?? null,
