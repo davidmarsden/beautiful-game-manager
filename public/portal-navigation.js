@@ -8,6 +8,7 @@ import './world-feed-enhancements.js';
 import './manager-participation.js';
 import './manager-notifications.js';
 import './manager-directory.js';
+import './external-transfer-ui.js';
 
 const VIEW_ALIASES = new Map([
   ['dashboard', 'dashboard'],
