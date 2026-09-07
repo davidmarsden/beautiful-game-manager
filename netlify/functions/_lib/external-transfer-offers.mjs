@@ -103,14 +103,13 @@ function externalClubUniverse(rows, managedNames) {
     const name = clubName(row);
     const sourceId = clubSourceId(row);
     if (!sourceId || !usableClubName(name) || managedNames.has(normalise(name))) continue;
-    const key = sourceId;
     const rating = Math.max(0, Number(row?.tbg_rating ?? row?.underlying_ability_rating) || 0);
     const value = Math.max(0, Number(row?.market_value_eur) || 0);
-    const existing = clubs.get(key) || { source_id: sourceId, name, max_rating: 0, max_value: 0, player_count: 0 };
+    const existing = clubs.get(sourceId) || { source_id: sourceId, name, max_rating: 0, max_value: 0, player_count: 0 };
     existing.max_rating = Math.max(existing.max_rating, rating);
     existing.max_value = Math.max(existing.max_value, value);
     existing.player_count += 1;
-    clubs.set(key, existing);
+    clubs.set(sourceId, existing);
   }
   return [...clubs.values()];
 }
@@ -129,6 +128,7 @@ function managedClubNames(readModel) {
 }
 
 function realLifeExternalClub(row, managedNames) {
+  if (!row) return null;
   const name = clubName(row);
   const sourceId = clubSourceId(row);
   if (!sourceId || !usableClubName(name) || managedNames.has(normalise(name))) return null;
@@ -136,8 +136,8 @@ function realLifeExternalClub(row, managedNames) {
 }
 
 function suitableExternalClub({ clubs, player, listing, excluded = new Set() }) {
-  const rating = Math.max(0, Number(player?.tbg_rating ?? player?.underlying_ability_rating) || 0);
-  const marketValue = Math.max(0, Number(player?.market_value_eur) || 0);
+  const rating = Math.max(0, Number(player?.tbg_rating ?? player?.underlying_ability_rating ?? player?.rating) || 0);
+  const marketValue = Math.max(0, Number(player?.market_value_eur ?? player?.market_value) || 0);
   const candidates = clubs.filter((club) => !excluded.has(club.source_id));
   candidates.sort((a, b) => {
     const aRatingGap = Math.abs(a.max_rating - rating);
@@ -168,7 +168,7 @@ async function worldReadModel(worldId) {
 
 async function createOffer(listing, player, club, kind) {
   const fee = governedExternalOffer({
-    marketValue: player.market_value_eur,
+    marketValue: player?.market_value_eur ?? player?.market_value,
     askingFee: listing.asking_fee,
     seed: `${listing.world_id}|${listing.player_id}|${club.source_id}|${kind}`
   });
@@ -212,13 +212,12 @@ export async function generateScheduledExternalOffers({ worldId = null, limit = 
 
   for (const listing of listings) {
     try {
-      const player = databaseByPlayer.get(String(listing.player_id));
-      if (!player) {
-        processed.push({ listing_id: listing.id, player_id: listing.player_id, status: 'skipped', reason: 'player_not_in_tpf_database' });
-        continue;
-      }
       if (!readModels.has(listing.world_id)) readModels.set(listing.world_id, await worldReadModel(listing.world_id));
       const readModel = readModels.get(listing.world_id);
+      const tpfPlayer = databaseByPlayer.get(String(listing.player_id)) || null;
+      // Missing TPF player metadata is a data-quality fault, not a reason to strand a
+      // listed player. Fall back to the canonical TBG projection for market matching.
+      const player = tpfPlayer || readModel?.squad_cycle?.players?.[listing.player_id] || { tbg_player_id: listing.player_id };
       const names = managedClubNames(readModel);
       const clubs = externalClubUniverse(rows, names);
       const already = existingByListing.get(listing.id) || new Set();
@@ -226,7 +225,7 @@ export async function generateScheduledExternalOffers({ worldId = null, limit = 
 
       // SMW-compatible anchor: when the player's current real-world club is outside
       // the managed TBG world, that real club always makes an offer.
-      const realClub = realLifeExternalClub(player, names);
+      const realClub = realLifeExternalClub(tpfPlayer, names);
       if (realClub && !already.has(realClub.source_id)) targets.push({ ...realClub, kind: 'real_life_club' });
 
       // Every listing must have an acceptable external market. If the real-world club
@@ -248,6 +247,7 @@ export async function generateScheduledExternalOffers({ worldId = null, limit = 
         listing_id: listing.id,
         player_id: listing.player_id,
         status: offers.length ? 'offered' : 'already_offered',
+        tpf_player_metadata: Boolean(tpfPlayer),
         real_world_club_guaranteed: Boolean(realClub),
         offers: offers.map((offer) => ({
           kind: offer.kind,
