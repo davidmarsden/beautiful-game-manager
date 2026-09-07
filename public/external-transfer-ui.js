@@ -16,15 +16,18 @@ function decorateExternalOfferCards() {
     if (!counterpart || managedNames.has(counterpart)) return;
 
     card.dataset.dealOrigin = 'external_market';
-    const counter = card.querySelector('.transfer-counter-controls');
-    counter?.remove();
+    card.querySelector('.transfer-counter-controls')?.remove();
+    card.querySelectorAll('[data-agreed-change-action="propose_agreed_amendment"], [data-agreed-change-action="propose_agreed_cancellation"]')
+      .forEach((control) => control.remove());
 
     const actionControls = card.querySelector('.first-class-response-controls');
     if (actionControls && !actionControls.querySelector('[data-external-firm-offer-note]')) {
       const note = document.createElement('small');
       note.dataset.externalFirmOfferNote = 'true';
       note.className = 'external-firm-offer-note';
-      note.textContent = 'External market offer · firm bid · accept or decline';
+      note.textContent = card.querySelector('[data-deal-response="accept_offer"]')
+        ? 'External market offer · firm bid · accept or decline'
+        : 'External market deal · fixed terms · awaiting completion';
       actionControls.prepend(note);
     }
   });
