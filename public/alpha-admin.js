@@ -67,9 +67,12 @@ function renderInvites() {
     const resendAction = invite.status === 'invited'
       ? '<div class="alpha-actions"><button type="button" class="resend-invite-button">Resend invitation</button></div>'
       : '';
+    const poolNote = invite.status === 'pool'
+      ? ' · awaiting admin re-invitation/reappointment'
+      : '';
     return `<article class="alpha-row" data-invite="${text(invite.id)}">
       <strong>${text(invite.email)}</strong>
-      <small>${text(invite.status)} · ${text(allowed)}${invite.claimed_club_id ? ` · claimed ${text(invite.claimed_club_id)}` : ''} · ${text(inviteDeliveryLabel(invite))}</small>
+      <small>${text(invite.status)} · ${text(allowed)}${invite.claimed_club_id ? ` · claimed ${text(invite.claimed_club_id)}` : ''}${text(poolNote)} · ${text(inviteDeliveryLabel(invite))}</small>
       ${resendAction}
     </article>`;
   }).join('') : '<p class="muted">No alpha invitations yet.</p>';
@@ -118,7 +121,7 @@ function renderAppointments() {
 
   document.querySelectorAll('.end-button').forEach((button) => button.addEventListener('click', async () => {
     const row = button.closest('[data-appointment]');
-    if (!confirm('End this active appointment and make the manager eligible to claim again?')) return;
+    if (!confirm('End this active appointment? The manager will move to the reappointment pool and cannot self-claim a vacant club. To appoint them again, an admin must send a new invitation after the normal priority/consent process.')) return;
     await mutate({ action: 'end', appointment_id: row.dataset.appointment, reason: 'Controlled alpha admin recovery' });
   }));
 }
@@ -143,7 +146,9 @@ async function mutate(payload) {
     await api({ method: 'POST', body: JSON.stringify(payload) });
     context = await api();
     render();
-    $('adminStatus').textContent = 'Saved.';
+    $('adminStatus').textContent = payload.action === 'end'
+      ? 'Appointment ended. Manager moved to the reappointment pool; admin re-invitation is required before any future appointment.'
+      : 'Saved.';
   } catch (error) {
     $('adminStatus').textContent = error.message;
   }
