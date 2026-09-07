@@ -1,26 +1,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildWorldReadModel } from '../src/world/worldReadModel.js';
+import { projectManagerPortal } from '../src/world/managerPortalProjection.js';
 
 function worldWithPlayer(player) {
   return {
     world_id: 'test-world',
     display_name: 'Test World',
     season_number: 1,
-    club_profiles: {},
+    club_profiles: { club_1: { club_name: 'Test Club' } },
     competition: { divisions: [] },
     squad_cycle: {
       season_id: 's1',
-      clubs: { club_1: { player_ids: ['p1'] } },
+      clubs: { club_1: { player_ids: ['p1'], registered_player_ids: ['p1'] } },
       players: { p1: { tbg_player_id: 'p1', club_id: 'club_1', ...player } },
       contracts: {}
     },
-    matchday_cycle: { runtimes: {} }
+    matchday_cycle: { current_matchday: 1, runtimes: {} }
   };
 }
 
 function projectedPlayer(player) {
   return buildWorldReadModel(worldWithPlayer(player)).squad_cycle.players.p1;
+}
+
+function portalProjectedPlayer(player) {
+  return projectManagerPortal(worldWithPlayer(player), 'club_1').squad[0];
 }
 
 test('explicit football names outrank legal/canonical names and survive the read model', () => {
@@ -40,6 +45,20 @@ test('Transfermarkt profile slugs provide shorter football names when canonical 
     source_profile_url: 'https://www.transfermarkt.com/vinicius-junior/profil/spieler/371998'
   });
   const rodrygo = projectedPlayer({
+    display_name: 'Rodrygo Silva de Goes',
+    source_profile_url: 'https://www.transfermarkt.com/rodrygo/profil/spieler/412363'
+  });
+
+  assert.equal(vinicius.display_name, 'Vinicius Jr.');
+  assert.equal(rodrygo.display_name, 'Rodrygo');
+});
+
+test('live manager portal projection applies the same football-name fallback', () => {
+  const vinicius = portalProjectedPlayer({
+    display_name: 'Vinicius José Paixão de Oliveira Júnior',
+    source_profile_url: 'https://www.transfermarkt.com/vinicius-junior/profil/spieler/371998'
+  });
+  const rodrygo = portalProjectedPlayer({
     display_name: 'Rodrygo Silva de Goes',
     source_profile_url: 'https://www.transfermarkt.com/rodrygo/profil/spieler/412363'
   });
