@@ -9,7 +9,11 @@ test('mobile formation board uses compact non-overlapping pitch cards', () => {
   assert.match(formationCss, /@media\(max-width:600px\)/);
   assert.match(formationCss, /\.formation-slot\{width:min\(72px,18%\);min-height:50px/);
   assert.match(formationCss, /\.formation-slot \.player-token small,\.formation-slot \.versatility-fit\{display:none!important\}/);
-  assert.match(formationCss, /\.formation-slot \.player-token strong\{font-size:9px[\s\S]*white-space:nowrap\}/);
+});
+
+test('mobile pitch names use the card width and can wrap to two readable lines', () => {
+  assert.match(formationCss, /\.formation-slot \.player-token\{grid-template-columns:1fr;gap:1px;justify-items:center\}/);
+  assert.match(formationCss, /\.formation-slot \.player-token strong\{display:-webkit-box[\s\S]*white-space:normal[\s\S]*overflow-wrap:anywhere[\s\S]*-webkit-line-clamp:2/);
 });
 
 test('small phones keep proportional slot sizing for closest 20 percent formation spacing', () => {
