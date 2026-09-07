@@ -68,6 +68,14 @@ test('#291 provides admin invite, end and reassign controls', () => {
   assert.match(adminUi, /Controlled alpha admin reassignment/);
 });
 
+test('#291 explains that ended appointments enter the reappointment pool', () => {
+  assert.match(adminUi, /move to the reappointment pool and cannot self-claim a vacant club/i);
+  assert.match(adminUi, /admin must send a new invitation after the normal priority\/consent process/i);
+  assert.match(adminUi, /awaiting admin re-invitation\/reappointment/i);
+  assert.match(adminUi, /Manager moved to the reappointment pool; admin re-invitation is required/i);
+  assert.doesNotMatch(adminUi, /make the manager eligible to claim again/i);
+});
+
 test('#291 refreshes the admin session before every API request', () => {
   assert.match(adminUi, /async function currentAccessToken\(\)/);
   assert.match(adminUi, /supabase\.auth\.getSession\(\)/);
