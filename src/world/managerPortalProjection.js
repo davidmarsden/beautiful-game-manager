@@ -152,6 +152,7 @@ function projectPlayer(world, club, playerId, index) {
     morale: text(condition.morale ?? player?.morale) || 'Good',
     injury_status: injured ? 'Injured' : suspended ? 'Suspended' : 'Available',
     contract_expiry: text(contract?.end_at) || 'Open-ended',
+    wage: number(contract?.wage),
     transfer_listed: Boolean(player?.transfer_listed),
     loan_listed: Boolean(player?.loan_listed),
     youth_eligible_at_season_start: isYouthEligible,
