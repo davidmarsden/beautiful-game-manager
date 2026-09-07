@@ -3,9 +3,10 @@ const wholeMoney = (value, fallback = 0) => Number.isFinite(Number(value)) ? Mat
 const cashMoney = (value, fallback = 0) => Number.isFinite(Number(value)) ? Math.max(0, Math.round(Number(value) * 100) / 100) : fallback;
 const hasValue = (value) => value !== null && value !== undefined && Number.isFinite(Number(value));
 
-export const CLUB_FINANCE_VERSION = 'tbg-club-finance-v0.1';
+export const CLUB_FINANCE_VERSION = 'tbg-club-finance-v0.2';
 export const DEFAULT_OPENING_CASH_BALANCE = 100_000_000;
-export const DEFAULT_WAGE_HEADROOM_RATIO = 1.20;
+export const DEFAULT_WAGE_HEADROOM_RATIO = 2.00;
+export const DEFAULT_ADDITIONAL_WAGE_HEADROOM = 100_000;
 export const DEFAULT_MINIMUM_WAGE_BUDGET = 1_000;
 
 function activeContractStats(state, clubId) {
@@ -36,13 +37,15 @@ function configuredWageBudget(state, clubId, existing) {
 }
 
 function bootstrapWageBudget(wageBill, highestWage) {
-  // Alpha bootstrap only: retain 20% proportional headroom, guarantee enough room for
-  // one ordinary incumbent-level incoming player, and give an otherwise empty club enough
-  // budget for one default-wage signing rather than bootstrapping permanently to zero.
+  // Controlled-alpha recruitment needs enough room to build toward the governed 25/25
+  // first-team/youth squad caps rather than forcing managers to sell before they can test
+  // the market. Keep the finance guard, but provide a deliberately generous temporary floor:
+  // at least double the current bill and at least £100k/week of additional headroom.
   return Math.max(
     DEFAULT_MINIMUM_WAGE_BUDGET,
     wageBill,
     Math.ceil(wageBill * DEFAULT_WAGE_HEADROOM_RATIO),
+    wageBill + DEFAULT_ADDITIONAL_WAGE_HEADROOM,
     wageBill + highestWage
   );
 }
@@ -59,15 +62,14 @@ function projectedFinanceState(state, {
     const wages = activeContractStats(state, clubId);
     const existing = currentClubs[clubId] || {};
     const configuredBudget = configuredWageBudget(state, clubId, existing);
+    const alphaFloor = bootstrapWageBudget(wages.total, wages.highest);
     clubs[clubId] = {
       club_id: clubId,
       currency: text(existing.currency) || 'GBP',
       cash_balance: cashMoney(existing.cash_balance, bootstrapCash(state, clubId, openingCashBalance)),
-      // An explicit budget is a fixed constraint, even when a legacy/imported club is already
-      // over it. Only a missing budget is bootstrapped from the current contract book.
-      wage_budget: configuredBudget === null
-        ? bootstrapWageBudget(wages.total, wages.highest)
-        : configuredBudget
+      // During controlled alpha, never let an imported/legacy configured budget strand a club
+      // below the recruitment floor. Larger explicit budgets remain intact.
+      wage_budget: Math.max(configuredBudget ?? 0, alphaFloor)
     };
   }
   return { version: CLUB_FINANCE_VERSION, clubs };
