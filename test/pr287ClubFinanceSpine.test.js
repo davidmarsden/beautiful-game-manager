@@ -69,6 +69,8 @@ test('#287 an empty club bootstraps enough alpha budget to recruit before sellin
     contractEndAt: '2029-06-30T23:59:59.000Z'
   });
   assert.equal(result.contract.wage, 1000);
+  assert.equal(cycle.finances.version, 'tbg-club-finance-v0.2');
+  assert.equal(cycle.finances.clubs.EMPTY.wage_budget, 101000);
 });
 
 test('#287 alpha wage floor raises undersized configured budgets without lowering larger ones', () => {
