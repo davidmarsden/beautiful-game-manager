@@ -63,8 +63,8 @@ function projectNewPlayer(world, player, clubId) {
   }
 }
 
-function deterministicApplicationError(error) {
-  return /Transfer window is closed|Unknown club|already exists in the world|already belongs to|not a free agent|not in active circulation|Transfermarkt ID .* already exists|registration limit reached|first-team squad limit reached|youth squad limit reached|Registration is closed|Contract end must be after|Cannot save invalid world/i.test(String(error?.message || error));
+export function deterministicApplicationError(error) {
+  return /Transfer window is closed|Unknown club|already exists in the world|already belongs to|not a free agent|not in active circulation|Transfermarkt ID .* already exists|registration limit reached|first-team squad limit reached|youth squad limit reached|Registration is closed|Contract end must be after|wage budget exceeded|Cannot save invalid world/i.test(String(error?.message || error));
 }
 
 function normaliseNonNegativeInteger(value, fallback) {
@@ -120,7 +120,7 @@ export async function signFreeAgent({
     return { ...acquisition, accepted: true, idempotent: true };
   }
   if (acquisition.status === 'application_failed') {
-    return { ...acquisition, accepted: false, reason: 'application_failed' };
+    return { ...acquisition, accepted: false, reason: acquisition.application_error || 'application_failed' };
   }
 
   const acquisitionId = acquisition.acquisition_id;
