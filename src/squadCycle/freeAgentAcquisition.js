@@ -1,5 +1,5 @@
 import { activeTransferWindow, isYouthSquadPlayer, registerPlayer } from './squadCycle.js';
-import { assertFinalWageBudgets } from './clubFinance.js';
+import { assertFinalWageBudgets, ensureClubFinanceState } from './clubFinance.js';
 
 const text = (value) => String(value ?? '').trim();
 const integer = (value, fallback = 0) => Number.isInteger(Number(value)) ? Number(value) : fallback;
@@ -123,6 +123,10 @@ export function acquireFreeAgent(state, { player: sourcePlayer, toClubId, at, co
     delete state.contracts[contract.contract_id];
     throw error;
   }
+
+  // A successful signing is a safe point to persist any controlled-alpha finance bootstrap
+  // upgrade. Failed validation above remains side-effect free.
+  ensureClubFinanceState(state);
 
   const external = sourcePlayer?.acquisition_type === 'external_transfermarkt';
   event(state, external ? 'external_player_acquired' : 'free_agent_signed', atIso, {
