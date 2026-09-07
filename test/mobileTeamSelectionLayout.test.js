@@ -7,14 +7,14 @@ const fitnessCss = fs.readFileSync(new URL('../public/team-selection-fitness.css
 
 test('mobile formation board uses compact non-overlapping pitch cards', () => {
   assert.match(formationCss, /@media\(max-width:600px\)/);
-  assert.match(formationCss, /\.formation-slot\{width:72px;min-height:50px/);
+  assert.match(formationCss, /\.formation-slot\{width:min\(72px,18%\);min-height:50px/);
   assert.match(formationCss, /\.formation-slot \.player-token small,\.formation-slot \.versatility-fit\{display:none!important\}/);
   assert.match(formationCss, /\.formation-slot \.player-token strong\{font-size:9px[\s\S]*white-space:nowrap\}/);
 });
 
-test('small phones get a second compact breakpoint', () => {
+test('small phones keep proportional slot sizing for closest 20 percent formation spacing', () => {
   assert.match(formationCss, /@media\(max-width:390px\)/);
-  assert.match(formationCss, /\.formation-slot\{width:66px\}/);
+  assert.match(formationCss, /\.formation-slot\{width:min\(66px,18%\)\}/);
 });
 
 test('pitch fitness information stays visible without expanding mobile cards', () => {
