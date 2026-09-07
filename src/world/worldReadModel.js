@@ -36,26 +36,29 @@ function compactRuntime(runtime = {}) {
 
 function titleCaseSlug(slug) {
   const lowercaseWords = new Set(['da', 'de', 'del', 'do', 'dos', 'van', 'von']);
-  return text(slug)
+  const words = text(slug)
     .split('-')
     .filter(Boolean)
     .map((word, index) => {
       const lower = word.toLowerCase();
       if (index > 0 && lowercaseWords.has(lower)) return lower;
       return lower.charAt(0).toUpperCase() + lower.slice(1);
-    })
-    .join(' ')
-    .replace(/\bJunior$/u, 'Jr.');
+    });
+  if (words.length > 1 && words[words.length - 1] === 'Junior') words[words.length - 1] = 'Jr.';
+  return words.join(' ');
 }
 
 function transfermarktProfileName(player = {}) {
   const candidates = [player.source_profile_url, player.transfermarkt_url, player.profile_url]
     .map(text)
-    .filter((value) => value && /transfermarkt/i.test(value));
+    .filter(Boolean);
   for (const candidate of candidates) {
     try {
-      const pathname = new URL(candidate).pathname;
-      const parts = pathname.split('/').filter(Boolean);
+      const url = new URL(candidate);
+      const hostname = url.hostname.toLowerCase();
+      const isTransfermarktHost = /(^|\.)transfermarkt\.[a-z]{2,3}(?:\.[a-z]{2})?$/iu.test(hostname);
+      if (!isTransfermarktHost) continue;
+      const parts = url.pathname.split('/').filter(Boolean);
       const profileIndex = parts.findIndex((part) => ['profil', 'profile'].includes(part.toLowerCase()));
       const slug = profileIndex > 0 ? parts[profileIndex - 1] : null;
       const name = titleCaseSlug(slug);
