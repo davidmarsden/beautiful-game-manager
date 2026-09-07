@@ -59,9 +59,11 @@ test('external settlement removes managed ownership, preserves the player as ext
 });
 
 test('external transfer migration keeps TPF provenance and separates external settlement from managed clubs', async () => {
-  const [offerSql, settlementSql, generator, scheduled] = await Promise.all([
+  const [offerSql, settlementSql, queueSql, eventsSql, generator, scheduled] = await Promise.all([
     read('supabase/migrations/20260907a_external_transfer_offers.sql'),
     read('supabase/migrations/20260907b_external_transfer_settlement_projection.sql'),
+    read('supabase/migrations/20260907c_external_offer_candidate_queue.sql'),
+    read('supabase/migrations/20260907d_external_transfer_events.sql'),
     read('netlify/functions/_lib/external-transfer-offers.mjs'),
     read('netlify/functions/settle-transfers.mjs')
   ]);
@@ -77,10 +79,19 @@ test('external transfer migration keeps TPF provenance and separates external se
   assert.match(settlementSql, /get_due_external_transfer_settlements/);
   assert.match(settlementSql, /deal\.deal_origin = 'external_market'/);
 
+  assert.match(queueSql, /get_external_offer_candidate_listings/);
+  assert.match(queueSql, /not exists[\s\S]*deal\.deal_origin = 'external_market'/);
+
+  assert.match(eventsSql, /transfer_deal_events[\s\S]*manager_id drop not null/);
+  assert.match(eventsSql, /emit_external_transfer_offered_event/);
+  assert.match(eventsSql, /new\.manager_id is null/);
+  assert.match(eventsSql, /participant\.manager_id is not distinct from new\.manager_id/);
+
   assert.match(generator, /beautiful-game-data\/main\/derived\/player-database\/player-database\.json/);
   assert.match(generator, /current_club_id/);
   assert.match(generator, /real_life_club/);
   assert.match(generator, /Every listing must have an acceptable external market/);
+  assert.match(generator, /get_external_offer_candidate_listings/);
   assert.doesNotMatch(generator, /Math\.random/);
 
   assert.match(scheduled, /generateScheduledExternalOffers/);
