@@ -64,3 +64,25 @@ test('malformed or non-Transfermarkt profile URLs cannot invent player names', (
   });
   assert.equal(player.display_name, 'Jude Bellingham');
 });
+
+test('URLs that only mention Transfermarkt outside the hostname are not trusted', () => {
+  const player = projectedPlayer({
+    display_name: 'Long Canonical Footballer Name',
+    source_profile_url: 'https://example.test/short/profil/player/1?source=transfermarkt'
+  });
+  assert.equal(player.display_name, 'Long Canonical Footballer Name');
+});
+
+test('standalone Junior remains a mononym while multi-word Junior becomes Jr.', () => {
+  const mononym = projectedPlayer({
+    display_name: 'Very Long Legal Player Name',
+    source_profile_url: 'https://www.transfermarkt.com/junior/profil/spieler/1'
+  });
+  const suffix = projectedPlayer({
+    display_name: 'Vinicius José Paixão de Oliveira Júnior',
+    source_profile_url: 'https://www.transfermarkt.com/vinicius-junior/profil/spieler/371998'
+  });
+
+  assert.equal(mononym.display_name, 'Junior');
+  assert.equal(suffix.display_name, 'Vinicius Jr.');
+});
