@@ -33,8 +33,8 @@ test('all clubs share the first offer deadline, revisions do not extend it, and 
 });
 
 test('player expectation makes implausibly low offers rejectable while strong offers can qualify', () => {
-  const player = { tbg_player_id: 'p1', tbg_rating: 87, market_value_eur: 25_000_000, position_group: 'Midfield' };
-  assert.equal(freeAgentOfferExpectation(player), 50_000);
+  const player = { tbg_player_id: 'p1', tbg_rating: 87, age: 25, reputation: 50, market_value_eur: 25_000_000, position_group: 'Midfield' };
+  assert.equal(freeAgentOfferExpectation(player), 146_100);
   const world = {
     squad_cycle: {
       players: Object.fromEntries(Array.from({ length: 20 }, (_, index) => [`c${index}`, {
@@ -43,7 +43,7 @@ test('player expectation makes implausibly low offers rejectable while strong of
     }
   };
   const low = scoreFreeAgentOffer({ world, offer: { club_id: 'club-a', player_snapshot: player, wage: 1000, contract_years: 3 } });
-  const strong = scoreFreeAgentOffer({ world, offer: { club_id: 'club-a', player_snapshot: player, wage: 50_000, contract_years: 3 } });
+  const strong = scoreFreeAgentOffer({ world, offer: { club_id: 'club-a', player_snapshot: player, wage: 150_000, contract_years: 3 } });
   assert.ok(low.score < low.minimumScore);
   assert.ok(strong.score >= strong.minimumScore);
 });
