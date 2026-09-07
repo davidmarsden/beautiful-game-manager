@@ -97,6 +97,25 @@ function usableClubName(value) {
   return Boolean(name && !/^(without club|retired|unknown|n\/a|-|—)$/i.test(name));
 }
 
+function managedClubNames(readModel, rows = []) {
+  const names = new Set();
+  for (const profile of Object.values(readModel?.club_profiles || {})) {
+    const name = profile?.club_name || profile?.canonical_name;
+    if (name) names.add(normalise(name));
+  }
+  for (const club of Object.values(readModel?.squad_cycle?.clubs || {})) {
+    const name = club?.club_name || club?.canonical_name;
+    if (name) names.add(normalise(name));
+  }
+  // TPF's own managed-club assignment is an additional alias guard: a current
+  // real-world club that is one of the 80 must never bid as an external club just
+  // because its display spelling differs slightly from the world read model.
+  for (const row of rows) {
+    if (row?.tbg_club) names.add(normalise(row.tbg_club));
+  }
+  return names;
+}
+
 function externalClubUniverse(rows, managedNames) {
   const clubs = new Map();
   for (const row of rows) {
@@ -112,19 +131,6 @@ function externalClubUniverse(rows, managedNames) {
     clubs.set(sourceId, existing);
   }
   return [...clubs.values()];
-}
-
-function managedClubNames(readModel) {
-  const names = new Set();
-  for (const profile of Object.values(readModel?.club_profiles || {})) {
-    const name = profile?.club_name || profile?.canonical_name;
-    if (name) names.add(normalise(name));
-  }
-  for (const club of Object.values(readModel?.squad_cycle?.clubs || {})) {
-    const name = club?.club_name || club?.canonical_name;
-    if (name) names.add(normalise(name));
-  }
-  return names;
 }
 
 function realLifeExternalClub(row, managedNames) {
@@ -189,28 +195,15 @@ async function createOffer(listing, player, club, kind) {
 export async function generateScheduledExternalOffers({ worldId = null, limit = 20 } = {}) {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return { configured: false, processed: [] };
   const rows = await playerDatabase();
-  const query = new URLSearchParams({
-    status: 'eq.active',
-    select: 'id,world_id,player_id,club_id,manager_id,asking_fee,created_at,updated_at',
-    order: 'created_at.asc',
-    limit: String(Math.max(1, Math.min(Number(limit) || 20, 50)))
+  const listings = await service('/rest/v1/rpc/get_external_offer_candidate_listings', {
+    method: 'POST',
+    body: JSON.stringify({ p_world_id: worldId, p_limit: Math.max(1, Math.min(Number(limit) || 20, 100)) })
   });
-  if (worldId) query.set('world_id', `eq.${worldId}`);
-  const listings = await service(`/rest/v1/transfer_market_listings?${query.toString()}`);
-  const existingDeals = listings.length
-    ? await service(`/rest/v1/transfer_deals?deal_origin=eq.external_market&listing_id=in.(${listings.map((listing) => listing.id).join(',')})&select=listing_id,external_club_source_id,status`)
-    : [];
-  const existingByListing = new Map();
-  for (const deal of existingDeals) {
-    if (!existingByListing.has(deal.listing_id)) existingByListing.set(deal.listing_id, new Set());
-    existingByListing.get(deal.listing_id).add(String(deal.external_club_source_id || ''));
-  }
-
   const databaseByPlayer = new Map(rows.map((row) => [playerId(row), row]).filter(([id]) => id));
   const readModels = new Map();
   const processed = [];
 
-  for (const listing of listings) {
+  for (const listing of Array.isArray(listings) ? listings : []) {
     try {
       if (!readModels.has(listing.world_id)) readModels.set(listing.world_id, await worldReadModel(listing.world_id));
       const readModel = readModels.get(listing.world_id);
@@ -218,35 +211,37 @@ export async function generateScheduledExternalOffers({ worldId = null, limit = 
       // Missing TPF player metadata is a data-quality fault, not a reason to strand a
       // listed player. Fall back to the canonical TBG projection for market matching.
       const player = tpfPlayer || readModel?.squad_cycle?.players?.[listing.player_id] || { tbg_player_id: listing.player_id };
-      const names = managedClubNames(readModel);
+      const names = managedClubNames(readModel, rows);
       const clubs = externalClubUniverse(rows, names);
-      const already = existingByListing.get(listing.id) || new Set();
       const targets = [];
 
       // SMW-compatible anchor: when the player's current real-world club is outside
       // the managed TBG world, that real club always makes an offer.
       const realClub = realLifeExternalClub(tpfPlayer, names);
-      if (realClub && !already.has(realClub.source_id)) targets.push({ ...realClub, kind: 'real_life_club' });
+      if (realClub) targets.push({ ...realClub, kind: 'real_life_club' });
 
       // Every listing must have an acceptable external market. If the real-world club
       // is managed (the common case at launch), select a plausible real TPF club.
       // When the real-world club is external, add one suitable competing club as well.
-      const excluded = new Set([...already, ...targets.map((club) => club.source_id)]);
+      const excluded = new Set(targets.map((club) => club.source_id));
       const marketClub = suitableExternalClub({ clubs, player, listing, excluded });
-      const hasAnyExternalOffer = already.size > 0 || targets.length > 0;
-      if (marketClub && (!hasAnyExternalOffer || realClub)) targets.push({ ...marketClub, kind: 'market_match' });
+      if (marketClub && (!realClub || marketClub.source_id !== realClub.source_id)) {
+        targets.push({ ...marketClub, kind: 'market_match' });
+      }
 
-      if (!targets.length && already.size === 0) {
+      if (!targets.length) {
         processed.push({ listing_id: listing.id, player_id: listing.player_id, status: 'retry', reason: 'no_external_tpf_club_available' });
         continue;
       }
 
       const offers = [];
+      // Keep the guaranteed real-life-club bid first. If an optional second bid fails,
+      // the listing still has its required external market and leaves the candidate queue.
       for (const target of targets) offers.push(await createOffer(listing, player, target, target.kind));
       processed.push({
         listing_id: listing.id,
         player_id: listing.player_id,
-        status: offers.length ? 'offered' : 'already_offered',
+        status: 'offered',
         tpf_player_metadata: Boolean(tpfPlayer),
         real_world_club_guaranteed: Boolean(realClub),
         offers: offers.map((offer) => ({
@@ -262,5 +257,5 @@ export async function generateScheduledExternalOffers({ worldId = null, limit = 
     }
   }
 
-  return { configured: true, listings: listings.length, processed };
+  return { configured: true, listings: Array.isArray(listings) ? listings.length : 0, processed };
 }
