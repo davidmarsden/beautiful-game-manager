@@ -4,6 +4,22 @@ import { competitiveRegistration, isYouthRegistrationExempt } from './registrati
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = null) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
+function preferredFootballName(player = {}) {
+  const listValue = (value) => Array.isArray(value) ? value.find((item) => text(item)) : null;
+  return text(
+    player.known_as
+    || player.knownAs
+    || player.short_name
+    || player.nickname
+    || player.nick_name
+    || listValue(player.nicknames)
+    || player.display_name
+    || player.player_name
+    || player.canonical_name
+    || player.tbg_player_id
+  );
+}
+
 function resultForClub(result, clubId) {
   const fixture = result?.fixture;
   const score = result?.score;
@@ -82,6 +98,7 @@ function projectPlayer(world, club, playerId, index) {
   const isYouthEligible = isYouthRegistrationExempt(player, contract);
   return {
     ...player,
+    display_name: preferredFootballName(player) || text(playerId),
     registered: registration.registered,
     registration_status: registration.status,
     squad_number: number(player?.squad_number, index + 1),
