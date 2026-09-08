@@ -8,7 +8,7 @@ const history = fs.readFileSync(new URL('../public/transfer-history.js', import.
 const endpoint = fs.readFileSync(new URL('../netlify/functions/club-finance.mjs', import.meta.url), 'utf8');
 const migration = fs.readFileSync(new URL('../supabase/migrations/20260823c_transfer_history_authoritative_legs.sql', import.meta.url), 'utf8');
 
-test('finance view exposes checksum-matched canonical cash and wage constraints', () => {
+test('finance view exposes checksum-matched cash plus wage constraints reconciled from the bounded club fragment', () => {
   assert.ok(navigation.includes("['finances', 'finance']"));
   assert.ok(navigation.includes('financeView'));
   assert.ok(finance.includes('/api/club-finance'));
@@ -17,7 +17,9 @@ test('finance view exposes checksum-matched canonical cash and wage constraints'
   assert.ok(finance.includes('Weekly wage budget'));
   assert.ok(finance.includes('Wage headroom'));
   assert.ok(endpoint.includes('get_manager_club_finance_for_user'));
-  assert.doesNotMatch(endpoint, /get_manager_portal_world_fragment/);
+  assert.ok(endpoint.includes('get_manager_portal_world_fragment'));
+  assert.ok(endpoint.includes('migrateLegacyPlaceholderWages(world)'));
+  assert.ok(endpoint.includes('clubFinanceSummary(world.squad_cycle, appointment.club_id)'));
   assert.ok(migration.includes("cache_row.source_checksum <> canonical_checksum"));
   assert.ok(migration.includes("array['squad_cycle','finances',club_id_value]"));
   assert.ok(migration.includes('get_manager_club_finance_for_user'));

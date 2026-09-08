@@ -15,7 +15,7 @@ const POSITION_ALIASES = new Map([
 const DATA_VIEWS = {
   general: {
     label: 'General',
-    headers: [['#', 'squad_number'], ['Player', 'name'], ['Position', 'position'], ['Age', 'age'], ['TBG', 'tbg'], ['Fitness', 'fitness'], ['Morale', 'morale'], ['Availability', 'availability'], ['Contract', 'contract'], ['Status', 'status']]
+    headers: [['#', 'squad_number'], ['Player', 'name'], ['Position', 'position'], ['Age', 'age'], ['TBG', 'tbg'], ['Fitness', 'fitness'], ['Morale', 'morale'], ['Availability', 'availability'], ['Wage', 'wage'], ['Contract', 'contract'], ['Status', 'status']]
   },
   statistics: {
     label: 'Statistics',
@@ -31,7 +31,7 @@ const DATA_VIEWS = {
   },
   contracts: {
     label: 'Contracts',
-    headers: [['#', 'squad_number'], ['Player', 'name'], ['Position', 'position'], ['Age', 'age'], ['TBG', 'tbg'], ['Contract', 'contract'], ['Transfer', 'transfer'], ['Loan', 'loan'], ['Availability', 'availability'], ['Squad status', 'status']]
+    headers: [['#', 'squad_number'], ['Player', 'name'], ['Position', 'position'], ['Age', 'age'], ['TBG', 'tbg'], ['Wage', 'wage'], ['Contract', 'contract'], ['Transfer', 'transfer'], ['Loan', 'loan'], ['Availability', 'availability'], ['Squad status', 'status']]
   }
 };
 
@@ -103,6 +103,14 @@ function statusBadges(player) {
 
 function availabilityLabel(player) { return player.injury_status || player.availability || 'Available'; }
 function availabilityBadge(player) { return `<span class="badge ${isAvailable(player) ? 'fit' : 'injured'}">${escapeHtml(availabilityLabel(player))}</span>`; }
+function wageValue(player) {
+  const wage = Number(player.wage ?? player.weekly_wage ?? player.contract?.wage);
+  return Number.isFinite(wage) && wage >= 0 ? wage : null;
+}
+function wageLabel(player) {
+  const wage = wageValue(player);
+  return wage == null ? '—' : `£${Math.round(wage).toLocaleString('en-GB')}/wk`;
+}
 function contractValue(player) { return player.contract_expiry || player.contract_end_at || player.contract?.end_at || ''; }
 function contractLabel(player) { return formatDate(contractValue(player), 'Open-ended'); }
 
@@ -157,7 +165,7 @@ async function loadAbility() {
 }
 
 function generalCells(player) {
-  return `<td>${player.squad_number ?? '—'}</td><td>${playerNameMarkup(player)}</td><td>${escapeHtml(canonicalPosition(player))}</td><td>${wholeNumber(player.age)}</td><td><strong>${wholeNumber(playerRating(player))}</strong></td><td>${wholeNumber(player.fitness ?? 100)}%</td><td>${wholeNumber(player.morale, escapeHtml(player.morale || 'Good'))}</td><td>${availabilityBadge(player)}</td><td>${contractLabel(player)}</td><td>${statusBadges(player)}</td>`;
+  return `<td>${player.squad_number ?? '—'}</td><td>${playerNameMarkup(player)}</td><td>${escapeHtml(canonicalPosition(player))}</td><td>${wholeNumber(player.age)}</td><td><strong>${wholeNumber(playerRating(player))}</strong></td><td>${wholeNumber(player.fitness ?? 100)}%</td><td>${wholeNumber(player.morale, escapeHtml(player.morale || 'Good'))}</td><td>${availabilityBadge(player)}</td><td>${escapeHtml(wageLabel(player))}</td><td>${contractLabel(player)}</td><td>${statusBadges(player)}</td>`;
 }
 
 function baseCells(player) {
@@ -191,7 +199,7 @@ function abilityCells(player) {
 function contractCells(player) {
   const transfer = player.transfer_listed ? 'Transfer listed' : 'Not listed';
   const loan = isLoanedOutPlayer(player) ? (player.loan_club_name ? `At ${player.loan_club_name}` : 'Loaned out') : player.loan_listed ? 'Loan listed' : 'Not listed';
-  return `${baseCells(player)}<td>${contractLabel(player)}</td><td>${escapeHtml(transfer)}</td><td>${escapeHtml(loan)}</td><td>${availabilityBadge(player)}</td><td>${statusBadges(player)}</td>`;
+  return `${baseCells(player)}<td>${escapeHtml(wageLabel(player))}</td><td>${contractLabel(player)}</td><td>${escapeHtml(transfer)}</td><td>${escapeHtml(loan)}</td><td>${availabilityBadge(player)}</td><td>${statusBadges(player)}</td>`;
 }
 
 function rowCells(player, view, statisticsUnavailable) {
@@ -214,6 +222,7 @@ function sortValue(player, key) {
   if (key === 'fitness') return Number(player.fitness ?? 100);
   if (key === 'morale') return String(player.morale || 'Good');
   if (key === 'availability') return availabilityLabel(player);
+  if (key === 'wage') return wageValue(player);
   if (key === 'contract' || key === 'published') {
     const value = key === 'contract' ? contractValue(player) : (change?.published_at || change?.slot);
     const time = value ? new Date(value).getTime() : NaN;
@@ -316,15 +325,16 @@ export function mountReadOnlySquadView(root, club) {
     const dataView = root.querySelector('[data-squad-data-view]').value;
     const rows = filtered();
     const grouped = sort.key === 'position';
+    const columnCount = DATA_VIEWS[dataView].headers.length;
     let previousPosition = '';
     const html = rows.map((player) => {
       const position = canonicalPosition(player);
-      const separator = grouped && position !== previousPosition ? `<tr class="position-separator"><td colspan="10">${escapeHtml(position)}</td></tr>` : '';
+      const separator = grouped && position !== previousPosition ? `<tr class="position-separator"><td colspan="${columnCount}">${escapeHtml(position)}</td></tr>` : '';
       previousPosition = position;
       return `${separator}<tr>${rowCells(player, dataView, statisticsUnavailable)}</tr>`;
     }).join('');
     root.querySelector('[data-squad-count]').textContent = `${rows.length} players · ${DATA_VIEWS[dataView].label}`;
-    root.querySelector('[data-squad-rows]').innerHTML = html || '<tr><td colspan="10" class="empty-state">No players match this squad view and filter.</td></tr>';
+    root.querySelector('[data-squad-rows]').innerHTML = html || `<tr><td colspan="${columnCount}" class="empty-state">No players match this squad view and filter.</td></tr>`;
     updateHeaders();
     window.dispatchEvent(new CustomEvent('tbg:read-only-squad-rendered', { detail: { root, players: rows, squad: players, club } }));
   };

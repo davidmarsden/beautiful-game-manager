@@ -83,6 +83,7 @@ function safePlayer(playerId, player) {
     injury_status: text(player.injury_status || player.availability) || 'Available',
     availability: text(player.availability || player.injury_status) || 'Available',
     contract_expiry: player.contract_expiry || player.contract_end_at || player.contract?.end_at || null,
+    wage: number(player.wage ?? player.weekly_wage ?? player.contract?.wage),
     registered: Boolean(player.registered),
     registration_status: player.registered ? 'registered' : 'unregistered',
     transfer_listed: Boolean(player.transfer_listed),

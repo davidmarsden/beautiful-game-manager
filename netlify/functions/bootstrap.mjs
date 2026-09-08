@@ -1,4 +1,5 @@
 import { canonicalFixtureIds, projectManagerPortal } from '../../src/world/managerPortalProjection.js';
+import { migrateLegacyPlaceholderWages } from '../../src/squadCycle/expectedWage.js';
 import { projectPinkFinalSquadLinks } from '../../src/world/pinkFinalPlayerProfile.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
@@ -119,6 +120,8 @@ export default async (request) => {
 
     const world = context.world;
     if (world.world_id !== appointment.world_id) throw new Error('Appointment world does not match the canonical fragment');
+    // Apply the one-way compatibility repair to the compact portal fragment before projection.
+    migrateLegacyPlaceholderWages(world);
     const projection = projectPinkFinalSquadLinks(spoilerSafeProjection(projectManagerPortal(world, appointment.club_id, {
       nextTurnAt: context.next_turn_at,
       weekdaysUtc: TURN_DAYS,

@@ -15,12 +15,15 @@ test('history club inspection uses the shared full squad renderer', () => {
   assert.match(renderer, /Youth Team/);
   assert.match(renderer, /Loaned Out/);
   assert.match(renderer, /Total Owned/);
+  assert.match(renderer, /\['Wage', 'wage'\]/);
+  assert.match(renderer, /£\$\{Math\.round\(wage\)\.toLocaleString\('en-GB'\)\}\/wk/);
+  assert.match(renderer, /if \(key === 'wage'\) return wageValue\(player\)/);
   assert.match(renderer, /data-squad-search/);
   assert.match(renderer, /data-position-filter/);
   assert.match(renderer, /data-availability-filter/);
 });
 
-test('history projection uses canonical runtime state and split squad capacity', () => {
+test('history projection uses canonical runtime state, contracts and split squad capacity', () => {
   const world = {
     world_id: 'world-1', season_number: 1, phase: 'season',
     club_profiles: { alpha: { club_name: 'Alpha' } },
@@ -37,7 +40,7 @@ test('history projection uses canonical runtime state and split squad capacity',
       season_id: 'world-1:season-1', registration_limit: 22,
       squad_limits: { first_team: 25, youth: 25 },
       clubs: { alpha: { player_ids: ['p1', 'p2'], registered_player_ids: ['p1', 'p2'] } },
-      contracts: { c1: { end_at: '2026-10-01' } },
+      contracts: { c1: { end_at: '2026-10-01', wage: 3750 } },
       players: {
         p1: { tbg_player_id: 'p1', club_id: 'alpha', contract_id: 'c1', display_name: 'Keeper One', position: 'GK', age: 28, underlying_ability_rating: 90 },
         p2: { tbg_player_id: 'p2', club_id: 'alpha', display_name: 'Young Forward', position: 'ST', age: 19, underlying_ability_rating: 72, transfer_listed: true }
@@ -49,6 +52,7 @@ test('history projection uses canonical runtime state and split squad capacity',
   assert.equal(club.players[0].fitness, 84);
   assert.equal(club.players[0].morale, 'Excellent');
   assert.equal(club.players[0].contract_expiry, '2026-10-01');
+  assert.equal(club.players[0].wage, 3750);
   assert.equal(club.players[1].injury_status, 'Injured');
   assert.equal(club.squad_rules.first_team_capacity, 25);
   assert.equal(club.squad_rules.youth_team_capacity, 25);

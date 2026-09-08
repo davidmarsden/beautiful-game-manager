@@ -18,7 +18,7 @@ const VIEWS = {
   general: {
     label: 'General',
     headers: [...COMMON_HEADERS,
-      ['Fitness', 'fitness'], ['Morale', 'morale'], ['Availability', 'injury_status'], ['Contract', 'contract_expiry'], ['Status', 'transfer_listed']
+      ['Fitness', 'fitness'], ['Morale', 'morale'], ['Availability', 'injury_status'], ['Contract', 'contract_expiry'], ['Wage', 'wage'], ['Status', 'transfer_listed']
     ]
   },
   statistics: {
@@ -35,7 +35,7 @@ const VIEWS = {
   },
   contracts: {
     label: 'Contracts',
-    headers: [...COMMON_HEADERS, ['Contract', 'contract_expiry'], ['Transfer', 'transfer_state'], ['Loan', 'loan_state'], ['Availability', 'injury_status'], ['Squad status', 'squad_status']]
+    headers: [...COMMON_HEADERS, ['Contract', 'contract_expiry'], ['Wage', 'wage'], ['Transfer', 'transfer_state'], ['Loan', 'loan_state'], ['Availability', 'injury_status'], ['Squad status', 'squad_status']]
   }
 };
 
@@ -48,6 +48,7 @@ let abilityByPlayer = {};
 let installed = false;
 let renderTicket = 0;
 const alternateSort = {
+  general: { key: 'position_order', dir: 'asc' },
   statistics: { key: 'position_order', dir: 'asc' },
   physical: { key: 'position_order', dir: 'asc' },
   ability: { key: 'position_order', dir: 'asc' },
@@ -118,6 +119,14 @@ function formatDate(value) {
 }
 
 function contractValue(player) { return player.contract_expiry || player.contract_end_at || player.contract?.end_at || null; }
+function wageValue(player) {
+  const wage = Number(player.wage ?? player.weekly_wage ?? player.contract?.wage);
+  return Number.isFinite(wage) && wage >= 0 ? wage : null;
+}
+function wageLabel(player) {
+  const wage = wageValue(player);
+  return wage == null ? '—' : `£${Math.round(wage).toLocaleString('en-GB')}/wk`;
+}
 function availabilityValue(player) { return player.injury_status || player.availability || 'Available'; }
 function transferValue(player) { return player.transfer_listed ? 'Transfer listed' : 'Not listed'; }
 function loanValue(player) {
@@ -171,8 +180,10 @@ function sortValue(player, key) {
   if (key === 'morale') return Number.isFinite(Number(player.morale)) ? Number(player.morale) : String(player.morale || 'Good');
   if (key === 'injury_status') return availabilityValue(player);
   if (key === 'contract_expiry') return contractValue(player) ? new Date(contractValue(player)).getTime() : null;
+  if (key === 'wage') return wageValue(player);
   if (key === 'squad_status') return statusBadge(player);
   if (key === 'transfer_state') return transferValue(player);
+  if (key === 'transfer_listed') return player.transfer_listed ? 1 : 0;
   if (key === 'loan_state') return loanValue(player);
   if (key === 'stats_apps') return stats?.appearances ?? null;
   if (key === 'stats_goals') return stats?.goals ?? null;
@@ -215,23 +226,20 @@ function sortPlayers(rows, viewName) {
 
 function updateHeaders(viewName) {
   const table = document.getElementById('squadTable');
-  const headers = table?.querySelectorAll('thead th');
+  const row = table?.querySelector('thead tr');
   const definition = VIEWS[viewName] || VIEWS.general;
-  if (!headers || headers.length !== definition.headers.length) return;
+  if (!table || !row) return;
   const state = alternateSort[viewName];
-  headers.forEach((header, index) => {
-    const [label, sortKey] = definition.headers[index];
-    header.textContent = label;
-    header.classList.toggle('active-sort', Boolean(state && sortKey === state.key));
-    header.dataset.arrow = state && sortKey === state.key ? (state.dir === 'asc' ? '▲' : '▼') : '';
-    if (sortKey) header.dataset.sort = sortKey;
-    else delete header.dataset.sort;
-  });
+  row.innerHTML = definition.headers.map(([label, sortKey]) => `<th${sortKey ? ` data-sort="${escapeHtml(sortKey)}"` : ''} class="${state && sortKey === state.key ? 'active-sort' : ''}" data-arrow="${state && sortKey === state.key ? (state.dir === 'asc' ? '▲' : '▼') : ''}">${escapeHtml(label)}</th>`).join('');
   table.classList.toggle('squad-data-view-active', viewName !== 'general');
 }
 
 function baseCells(player) {
   return `<td>${escapeHtml(player.squad_number ?? '—')}</td><td>${playerLink(player)}</td><td>${escapeHtml(position(player))}</td><td>${wholeNumber(player.age)}</td><td><strong>${wholeNumber(rating(player))}</strong></td>`;
+}
+
+function generalCells(player) {
+  return `${baseCells(player)}<td>${wholeNumber(player.fitness ?? 100)}%</td><td>${wholeNumber(player.morale, escapeHtml(player.morale ?? 'Good'))}</td><td>${escapeHtml(availabilityValue(player))}</td><td>${formatDate(contractValue(player))}</td><td>${escapeHtml(wageLabel(player))}</td><td>${escapeHtml(statusBadge(player))}</td>`;
 }
 
 function statisticsCells(player) {
@@ -261,14 +269,15 @@ function abilityCells(player) {
 }
 
 function contractCells(player) {
-  return `${baseCells(player)}<td>${formatDate(contractValue(player))}</td><td>${escapeHtml(transferValue(player))}</td><td>${escapeHtml(loanValue(player))}</td><td>${escapeHtml(availabilityValue(player))}</td><td>${escapeHtml(statusBadge(player))}</td>`;
+  return `${baseCells(player)}<td>${formatDate(contractValue(player))}</td><td>${escapeHtml(wageLabel(player))}</td><td>${escapeHtml(transferValue(player))}</td><td>${escapeHtml(loanValue(player))}</td><td>${escapeHtml(availabilityValue(player))}</td><td>${escapeHtml(statusBadge(player))}</td>`;
 }
 
 function rowFor(player, viewName) {
-  const cells = viewName === 'statistics' ? statisticsCells(player)
-    : viewName === 'physical' ? physicalCells(player)
-      : viewName === 'ability' ? abilityCells(player)
-        : contractCells(player);
+  const cells = viewName === 'general' ? generalCells(player)
+    : viewName === 'statistics' ? statisticsCells(player)
+      : viewName === 'physical' ? physicalCells(player)
+        : viewName === 'ability' ? abilityCells(player)
+          : contractCells(player);
   return `<tr>${cells}</tr>`;
 }
 
@@ -278,14 +287,15 @@ function renderRows(viewName) {
   if (!body) return;
   const sortKey = alternateSort[viewName]?.key;
   const grouped = sortKey === 'position_order' || sortKey === 'specific_position';
+  const columnCount = VIEWS[viewName].headers.length;
   let previous = '';
   const html = rows.map((player) => {
     const group = position(player);
-    const separator = grouped && group !== previous ? `<tr class="position-separator"><td colspan="10">${escapeHtml(group)}</td></tr>` : '';
+    const separator = grouped && group !== previous ? `<tr class="position-separator"><td colspan="${columnCount}">${escapeHtml(group)}</td></tr>` : '';
     previous = group;
     return separator + rowFor(player, viewName);
   }).join('');
-  body.innerHTML = html || '<tr><td colspan="10" class="empty-state">No players match this squad view and filter.</td></tr>';
+  body.innerHTML = html || `<tr><td colspan="${columnCount}" class="empty-state">No players match this squad view and filter.</td></tr>`;
   const count = document.getElementById('squadResultCount');
   const registration = document.getElementById('registrationFilter')?.selectedOptions?.[0]?.textContent || 'Squad';
   if (count) count.textContent = `${registration} · ${rows.length} players · ${VIEWS[viewName].label}`;
@@ -355,11 +365,6 @@ async function renderSelectedView() {
   const ticket = ++renderTicket;
   const viewName = currentView();
   updateHeaders(viewName);
-  if (viewName === 'general') {
-    statusMessage('');
-    document.getElementById('registrationFilter')?.dispatchEvent(new Event('change', { bubbles: true }));
-    return;
-  }
   if (!portalSnapshot?.squad) {
     statusMessage('Loading squad data…');
     return;
@@ -400,12 +405,10 @@ function install() {
   ['registrationFilter', 'squadSearch', 'positionFilter', 'availabilityFilter'].forEach((id) => {
     const control = document.getElementById(id);
     control?.addEventListener(id === 'squadSearch' ? 'input' : 'change', () => {
-      if (currentView() === 'general') return;
       requestAnimationFrame(() => renderSelectedView().catch(() => {}));
     });
   });
   document.getElementById('squadTable')?.addEventListener('click', (event) => {
-    if (currentView() === 'general') return;
     const header = event.target.closest('th[data-sort]');
     if (!header) return;
     event.preventDefault();
@@ -426,13 +429,13 @@ function install() {
 window.addEventListener('tbg:portal-rendered', (event) => {
   portalSnapshot = event.detail || portalSnapshot;
   install();
-  if (currentView() !== 'general') renderSelectedView().catch(() => {});
+  renderSelectedView().catch(() => {});
 });
 
 document.addEventListener('tbg:view-changed', (event) => {
   if (event.detail?.view !== 'squad') return;
   install();
-  if (currentView() !== 'general') renderSelectedView().catch(() => {});
+  renderSelectedView().catch(() => {});
 });
 
 install();

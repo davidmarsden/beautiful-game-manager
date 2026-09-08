@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { loadPersistentWorld } from '../../../src/world/persistentSeasonLoop.js';
+import { expectedWeeklyWage } from '../../../src/squadCycle/expectedWage.js';
 import { signFreeAgent } from './free-agent-settlement.mjs';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
@@ -28,11 +29,7 @@ const ratingOf = (player) => Number(player?.underlying_ability_rating ?? player?
 const positionOf = (player) => String(player?.position_group || player?.position || player?.primary_position || '').toLowerCase();
 
 export function freeAgentOfferExpectation(player) {
-  const marketValue = Math.max(0, Number(player?.market_value_eur) || 0);
-  const rating = ratingOf(player);
-  const valueWage = Math.round(marketValue / 500);
-  const ratingFloor = rating >= 90 ? 45000 : rating >= 85 ? 20000 : rating >= 80 ? 8000 : rating >= 70 ? 2500 : 1000;
-  return Math.max(1000, valueWage, ratingFloor);
+  return expectedWeeklyWage(player);
 }
 
 export function scoreFreeAgentOffer({ world, offer }) {

@@ -9,6 +9,8 @@ import {
   renewContract,
   squadCycleSnapshot
 } from '../squadCycle/squadCycle.js';
+import { ensureClubFinanceState } from '../squadCycle/clubFinance.js';
+import { migrateLegacyPlaceholderWages, withExpectedInitialWages } from '../squadCycle/expectedWage.js';
 import { executeAiSquadPlan } from '../intelligence/aiSquadManagement.js';
 import { analyseSquad } from '../intelligence/squadIntelligence.js';
 import { appendSeasonArchive, createSeasonArchive } from '../history/seasonArchive.js';
@@ -226,6 +228,10 @@ export function loadPersistentWorld(serialized) {
   if (checksum(envelope.world) !== envelope.checksum) throw new Error('Persistent-world checksum mismatch');
   const validation = validatePersistentWorld(envelope.world);
   if (!validation.valid) throw new Error(`Invalid persistent world: ${validation.errors.join('; ')}`);
+  const migratedWages = migrateLegacyPlaceholderWages(envelope.world);
+  if (migratedWages > 0) ensureClubFinanceState(envelope.world.squad_cycle);
+  const migratedValidation = validatePersistentWorld(envelope.world);
+  if (!migratedValidation.valid) throw new Error(`Invalid migrated persistent world: ${migratedValidation.errors.join('; ')}`);
   return envelope.world;
 }
 
@@ -241,8 +247,9 @@ export function createPersistentWorld({
   const start = iso(seasonStart);
   const end = iso(seasonEnd);
   const initialSeasonId = `${worldId}:season-1`;
+  const seededClubs = withExpectedInitialWages(clubs);
   const squadCycle = createSquadCycleState({
-    clubs,
+    clubs: seededClubs,
     seasonId: initialSeasonId,
     seasonStart: start,
     seasonEnd: end,
@@ -258,7 +265,7 @@ export function createPersistentWorld({
     season_end: end,
     human_club_id: text(humanClubId),
     human_offseason_instruction: { ...humanOffseasonInstruction },
-    club_profiles: clubProfiles(clubs),
+    club_profiles: clubProfiles(seededClubs),
     squad_cycle: squadCycle,
     history: { version: 'tbg-history-index-v1.0', archives: [] },
     completed_seasons: [],
@@ -267,7 +274,7 @@ export function createPersistentWorld({
   };
   worldEvent(world, 'world_created', world.clock, {
     human_club_id: world.human_club_id,
-    club_count: clubs.length
+    club_count: seededClubs.length
   });
   const validation = validatePersistentWorld(world);
   if (!validation.valid) throw new Error(`Could not create persistent world: ${validation.errors.join('; ')}`);

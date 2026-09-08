@@ -4,7 +4,7 @@ import fs from 'node:fs';
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 
-test('manager squad adds SMW-style multi-view player data without replacing the canonical general table', () => {
+test('manager squad adds SMW-style multi-view player data with a canonical General renderer', () => {
   const source = read('../public/squad-player-statistics.js');
   const loader = read('../public/internal-profile-links.js');
   assert.match(loader, /import '\.\/squad-player-statistics\.js'/);
@@ -14,11 +14,12 @@ test('manager squad adds SMW-style multi-view player data without replacing the 
   assert.match(source, /ability:\s*\{/);
   assert.match(source, /contracts:\s*\{/);
   assert.match(source, /Display<select id="squadDataView"/);
-  assert.match(source, /dispatchEvent\(new Event\('change'/);
+  assert.match(source, /function generalCells\(player\)/);
+  assert.match(source, /viewName === 'general' \? generalCells\(player\)/);
   assert.match(source, /data-tbg-player-id/);
 });
 
-test('every column in every alternate squad view is sortable with the General-view arrow interaction', () => {
+test('every column in every squad data view is sortable with the same arrow interaction', () => {
   const source = read('../public/squad-player-statistics.js');
   assert.match(source, /\['Apps', 'stats_apps'\]/);
   assert.match(source, /\['Last 5', 'stats_recent'\]/);
@@ -27,19 +28,22 @@ test('every column in every alternate squad view is sortable with the General-vi
   assert.match(source, /\['History', 'ability_history'\]/);
   assert.match(source, /\['Transfer', 'transfer_state'\]/);
   assert.match(source, /\['Loan', 'loan_state'\]/);
-  assert.match(source, /header\.dataset\.sort = sortKey/);
-  assert.match(source, /header\.dataset\.arrow = state && sortKey === state\.key/);
+  assert.match(source, /\['Wage', 'wage'\]/);
+  assert.match(source, /data-sort="\$\{escapeHtml\(sortKey\)\}"/);
+  assert.match(source, /data-arrow="\$\{state && sortKey === state\.key/);
   assert.match(source, /function sortValue\(player, key\)/);
+  assert.match(source, /if \(key === 'wage'\) return wageValue\(player\)/);
   assert.match(source, /function sortPlayers\(rows, viewName\)/);
   assert.match(source, /state\.dir = state\.dir === 'asc' \? 'desc' : 'asc'/);
 });
 
-test('alternate squad views intercept legacy header sorting before app.js can redraw General rows', () => {
+test('squad data-view controller intercepts header sorting before app.js can redraw rows', () => {
   const source = read('../public/squad-player-statistics.js');
   assert.match(source, /getElementById\('squadTable'\)\?\.addEventListener\('click'/);
-  assert.match(source, /currentView\(\) === 'general'/);
   assert.match(source, /event\.target\.closest\('th\[data-sort\]'\)/);
   assert.match(source, /event\.stopImmediatePropagation\(\)/);
+  assert.match(source, /const viewName = currentView\(\)/);
+  assert.match(source, /const state = alternateSort\[viewName\]/);
   assert.match(source, /}, true\);/);
 });
 
