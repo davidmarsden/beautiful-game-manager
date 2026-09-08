@@ -101,9 +101,20 @@ window.tbgInvalidateBootstrapCache = invalidateBootstrapCache;
 document.addEventListener('submit', synchronizeLegacySelectorsFromVisibleBoard, true);
 
 window.fetch = async (input, init = {}) => {
-  if (invalidatesBootstrap(input, init)) invalidateBootstrapCache();
+  const invalidatingWrite = invalidatesBootstrap(input, init);
+  if (invalidatingWrite) {
+    invalidateBootstrapCache();
+    try {
+      if (isDecisionWrite(input, init)) return await fetchDecisionWithRetry(input, init);
+      return await networkFetch(input, init);
+    } finally {
+      // A bootstrap read may have started after the pre-write invalidation and
+      // completed before the mutation committed. Invalidate again once the
+      // write settles so that stale overlapping reads cannot repopulate cache.
+      invalidateBootstrapCache();
+    }
+  }
 
-  if (isDecisionWrite(input, init)) return fetchDecisionWithRetry(input, init);
   if (!isBootstrap(input, init)) return networkFetch(input, init);
   if (bootstrapSnapshot) return responseFromSnapshot(bootstrapSnapshot);
 
