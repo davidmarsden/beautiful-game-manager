@@ -108,7 +108,12 @@ begin
       claimed.appointment_id::text,
       'manager_inactivity:' || claimed.appointment_id::text || ':' || extract(epoch from claimed.activity_anchor)::bigint::text
     from claimed
-    on conflict (dedupe_key) do nothing
+    where not exists (
+      select 1
+      from public.manager_notifications existing_notification
+      where existing_notification.dedupe_key =
+        'manager_inactivity:' || claimed.appointment_id::text || ':' || extract(epoch from claimed.activity_anchor)::bigint::text
+    )
     returning id
   )
   select coalesce(jsonb_agg(jsonb_build_object(
