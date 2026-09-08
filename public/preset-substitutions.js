@@ -10,6 +10,8 @@ let portalState = window.tbgPortalState || null;
 let hydratedFixtureId = null;
 let dirty = false;
 let boardObserver = null;
+let lastTeamSheetSignature = '';
+let playerOptionSyncQueued = false;
 
 function text(value) {
   return String(value ?? '').trim();
@@ -43,6 +45,10 @@ function bench() {
 
 function teamSheetReady() {
   return startingXi().length === 11 && bench().length === 7;
+}
+
+function teamSheetSignature() {
+  return `${startingXi().join('|')}::${bench().join('|')}`;
 }
 
 function playerDirectory() {
@@ -140,15 +146,31 @@ function updateAddButton() {
   button.textContent = count >= MAX_PLANS ? 'Five plans set' : 'Add substitution plan';
 }
 
-function syncPlayerOptions() {
+function optionValues(select) {
+  return [...select.options].map((item) => item.value);
+}
+
+function sameValues(left, right) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function syncPlayerOptions({ force = false } = {}) {
   const host = rowsHost();
   if (!host) return;
+  const signature = teamSheetSignature();
+  if (!force && signature === lastTeamSheetSignature) return;
+  lastTeamSheetSignature = signature;
   const ready = teamSheetReady();
+  const xi = startingXi();
+  const substitutes = bench();
   for (const row of host.querySelectorAll('.preset-sub-row')) {
-    for (const [kind, ids] of [['out', startingXi()], ['in', bench()]]) {
+    for (const [kind, ids] of [['out', xi], ['in', substitutes]]) {
       const select = row.querySelector(`.preset-sub-${kind}`);
       if (!select) continue;
       const previous = text(select.value);
+      const expectedValues = ['', ...ids];
+      if (previous && !ids.includes(previous) && !ready) expectedValues.push(previous);
+      if (sameValues(optionValues(select), expectedValues)) continue;
       const placeholder = kind === 'out' ? 'Player off…' : 'Player on…';
       const options = [option('', placeholder), ...ids.map((playerId) => option(playerId, playerLabel(playerId)))];
       if (previous && !ids.includes(previous) && !ready) options.push(option(previous, playerLabel(previous)));
@@ -158,13 +180,34 @@ function syncPlayerOptions() {
   }
 }
 
+function schedulePlayerOptionSync() {
+  if (playerOptionSyncQueued) return;
+  playerOptionSyncQueued = true;
+  requestAnimationFrame(() => {
+    playerOptionSyncQueued = false;
+    syncPlayerOptions();
+  });
+}
+
+function mutationChangesTeamSheet(mutations) {
+  return mutations.some((mutation) => {
+    if (mutation.type === 'attributes') return mutation.attributeName === 'data-player-id';
+    if (mutation.type !== 'childList') return false;
+    const nodes = [...mutation.addedNodes, ...mutation.removedNodes].filter((node) => node.nodeType === Node.ELEMENT_NODE);
+    return nodes.some((node) => node.matches?.('.formation-slot,.bench-slot,.player-token') || node.querySelector?.('.formation-slot,.bench-slot,.player-token'));
+  });
+}
+
 function installBoardObserver() {
   const board = document.getElementById('interactiveFormationBoard');
   if (!board || board.dataset.presetSubsObserved === 'true') return;
   board.dataset.presetSubsObserved = 'true';
   boardObserver?.disconnect();
-  boardObserver = new MutationObserver(() => syncPlayerOptions());
+  boardObserver = new MutationObserver((mutations) => {
+    if (mutationChangesTeamSheet(mutations)) schedulePlayerOptionSync();
+  });
   boardObserver.observe(board, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-player-id'] });
+  lastTeamSheetSignature = teamSheetSignature();
 }
 
 function ensurePanel() {
@@ -246,6 +289,8 @@ function hydrate(state, { force = false } = {}) {
   host.replaceChildren(...currentPlans(portalState).slice(0, MAX_PLANS).map((plan, index) => planRow(plan, index)));
   hydratedFixtureId = fixtureId || null;
   dirty = false;
+  lastTeamSheetSignature = '';
+  syncPlayerOptions({ force: true });
   updateAddButton();
 }
 
@@ -277,7 +322,8 @@ window.tbgPresetSubstitutions = Object.freeze({ readPlans, hydrate, syncPlayerOp
 window.addEventListener('tbg:portal-rendered', (event) => hydrate(event.detail));
 window.addEventListener('tbg:formation-board-ready', () => {
   installBoardObserver();
-  syncPlayerOptions();
+  lastTeamSheetSignature = '';
+  syncPlayerOptions({ force: true });
   hydrate(window.tbgPortalState || portalState);
 });
 window.addEventListener('tbg:team-submission-saved', (event) => hydrate(event.detail?.state || window.tbgPortalState, { force: true }));
