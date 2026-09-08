@@ -2,6 +2,7 @@ import './portal-brazil-pitch.js';
 import './transfer-feedback-placement.js';
 import './transfer-grace-pending-fix.js';
 import './transfer-history.js';
+import './profile-transfer-history.js';
 import './world-transfer-register.js';
 import './open-market-review-fixes.js';
 import './open-market.js';

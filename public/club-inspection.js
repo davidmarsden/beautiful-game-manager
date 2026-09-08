@@ -1,4 +1,5 @@
 import { mountReadOnlySquadView } from './squad-view.js';
+import { mountClubTransferHistory } from './profile-transfer-history.js';
 
 let directoryPromise = null;
 
@@ -64,6 +65,7 @@ export async function openClubInspection(clubId) {
   mountReadOnlySquadView(host, club);
   const panel = host.querySelector('#historyClubPanel');
   addPinkFinalClubLink(panel, club);
+  mountClubTransferHistory(panel, club);
   panel?.querySelector('[data-close-club]')?.addEventListener('click', () => host.remove());
   panel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
