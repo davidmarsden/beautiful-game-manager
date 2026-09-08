@@ -153,6 +153,7 @@ export function openTbgPlayerProfile(root, player, club = {}) {
   host.setAttribute('role', 'dialog');
   host.setAttribute('aria-modal', 'true');
   host.setAttribute('aria-label', `${playerName(player)} TBG player profile`);
+  host._tbgPlayerProfileContext = { player, club };
   const pinkFinalLink = player.profile_url || player.pink_final_profile_url;
   host.innerHTML = `<div class="tbg-player-profile-backdrop" data-close-player></div><section class="tbg-player-profile" data-player-id="${escapeHtml(playerId(player))}"><button type="button" class="tbg-profile-close" data-close-player aria-label="Close player profile">×</button>${profileIdentity(player, club, pinkFinalLink)}<nav class="tbg-profile-tabs" aria-label="Player profile sections"><button class="active" data-player-tab="selection" aria-selected="true">Selection</button><button data-player-tab="transfers" aria-selected="false">Transfers</button><button data-player-tab="statistics" aria-selected="false">Statistics</button><button data-player-tab="ability" aria-selected="false">Ability</button><button data-player-tab="history" aria-selected="false">History</button></nav><div class="tbg-profile-panel" data-player-tab-panel>${tabPanel('selection', player)}</div></section>`;
   document.body.append(host);

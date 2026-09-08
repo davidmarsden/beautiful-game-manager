@@ -16,6 +16,7 @@ import './alpha-presentation-fixes.js';
 import './transfer-exchange-response-ui.js';
 import './transfer-exchange-direct-controls.js';
 import './transfer-section-cards.js';
+import './global-search.js';
 import { openTbgPlayerProfile } from './player-profile.js';
 
 let historyDirectory = null;
@@ -64,9 +65,13 @@ async function historyDirectoryData() {
   return loading;
 }
 
+function triggerPlayerId(trigger) {
+  return String(trigger.dataset.tbgPlayerId || trigger.dataset.playerId || trigger.dataset.playerProfileId || '').trim();
+}
+
 function findPlayer(data, trigger) {
   const href = trigger instanceof HTMLAnchorElement ? trigger.href : '';
-  const playerId = String(trigger.dataset.tbgPlayerId || trigger.dataset.playerId || '').trim();
+  const playerId = triggerPlayerId(trigger);
   const label = trigger.textContent.trim();
   for (const club of Object.values(data?.clubs || {})) {
     const player = (club.players || []).find((candidate) =>
@@ -79,10 +84,31 @@ function findPlayer(data, trigger) {
   return null;
 }
 
+async function globalPlayerMatch(trigger) {
+  const token = storedAccessToken();
+  if (!token) return null;
+  const playerId = triggerPlayerId(trigger);
+  const label = trigger.textContent.trim();
+  const query = playerId || label;
+  if (query.length < 2) return null;
+  const response = await fetch(`/api/global-search?q=${encodeURIComponent(query)}`, {
+    headers: { authorization: `Bearer ${token}` },
+    cache: 'no-store'
+  });
+  if (!response.ok) return null;
+  const body = await response.json().catch(() => ({}));
+  const result = (body.results || []).find((candidate) => candidate.type === 'player' && (
+    (playerId && candidate.id === playerId) || (!playerId && candidate.name === label)
+  ));
+  return result ? { player: result.player, club: result.club || {} } : null;
+}
+
 async function resolvePlayer(trigger) {
   const localMatch = findPlayer(portalDirectory(), trigger);
   if (localMatch) return localMatch;
-  return findPlayer(await historyDirectoryData(), trigger);
+  const historyMatch = findPlayer(await historyDirectoryData(), trigger);
+  if (historyMatch) return historyMatch;
+  return globalPlayerMatch(trigger);
 }
 
 function profileRoot(trigger) {
@@ -100,7 +126,7 @@ window.addEventListener('tbg:portal-rendered', (event) => {
 });
 
 document.addEventListener('click', async (event) => {
-  const trigger = event.target.closest('.player-link');
+  const trigger = event.target.closest('.player-link, [data-player-profile-id]');
   if (!trigger || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
   event.preventDefault();
   try {

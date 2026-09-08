@@ -1,0 +1,107 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
+
+test('global search reads the canonical world and includes clubs plus all squad-cycle players', async () => {
+  const source = await read('../netlify/functions/global-search.mjs');
+  assert.match(source, /world_read_model_cache/);
+  assert.match(source, /canonical_world_saves/);
+  assert.match(source, /readRow\.source_checksum !== canonicalRow\.save_checksum/);
+  assert.match(source, /Object\.entries\(clubProfiles\)/);
+  assert.match(source, /Object\.entries\(world\.squad_cycle\?\.players \|\| \{\}\)/);
+  assert.match(source, /type: 'player'/);
+  assert.match(source, /type: 'club'/);
+});
+
+test('global player results use live portal condition, contracts and governed Pink Final identity', async () => {
+  const source = await read('../netlify/functions/global-search.mjs');
+  assert.match(source, /import \{ projectManagerPortal \}/);
+  assert.match(source, /import \{ projectHistoryPlayerIdentity \}/);
+  assert.match(source, /projectManagerPortal\(world, clubId\)/);
+  assert.match(source, /contractFor\(world, rawPlayer\)/);
+  assert.match(source, /projectHistoryPlayerIdentity\(playerId/);
+  assert.match(source, /profile_url: governed\.pink_final_profile_url \|\| null/);
+  assert.match(source, /pink_final_profile_url: governed\.pink_final_profile_url \|\| null/);
+  assert.doesNotMatch(source, /pink_final_profile_url: player\.pink_final_profile_url \|\| player\.profile_url/);
+});
+
+test('global search rejects queries whose searchable normalization is empty', async () => {
+  const source = await read('../netlify/functions/global-search.mjs');
+  assert.match(source, /if \(!q\) return 0/);
+  assert.match(source, /query\.length < 2 \|\| !norm\(query\)/);
+});
+
+test('manager portal search combines world results with governed external players', async () => {
+  const search = await read('../public/global-search.js');
+  assert.match(search, /\/api\/global-search\?q=/);
+  assert.match(search, /\/api\/external-player-search\?q=/);
+  assert.match(search, /filter\(\(player\) => !player\.in_world\)/);
+  assert.match(search, /type: 'external-player'/);
+  assert.match(search, /tbg:open-external-player/);
+  assert.match(search, /EXTERNAL/);
+});
+
+test('manager portal exposes accessible native player and club profile opening', async () => {
+  const search = await read('../public/global-search.js');
+  const links = await read('../public/internal-profile-links.js');
+  assert.match(search, /Search players and clubs/);
+  assert.match(search, /aria-autocomplete="list"/);
+  assert.match(search, /openTbgPlayerProfile\(document\.body, result\.player/);
+  assert.match(search, /openClubInspection\(result\.id\)/);
+  assert.match(search, /ArrowDown/);
+  assert.match(search, /ArrowUp/);
+  assert.match(search, /event\.key === 'Escape'/);
+  assert.match(links, /import '\.\/global-search\.js'/);
+  assert.match(links, /globalPlayerMatch/);
+  assert.match(links, /\[data-player-profile-id\]/);
+});
+
+test('player profiles expose shortlist offer and human-manager contact actions without duplicate async mounts', async () => {
+  const actions = await read('../public/player-profile-actions.js');
+  assert.match(actions, /\/api\/player-shortlist/);
+  assert.match(actions, /Add to shortlist/);
+  assert.match(actions, /Make offer/);
+  assert.match(actions, /Offer contract/);
+  assert.match(actions, /Contact \$\{manager\.manager_name/);
+  assert.match(actions, /openManagerParticipation\(manager\.manager_id\)/);
+  assert.match(actions, /tbg:prepare-player-offer/);
+  assert.match(actions, /tbg:prepare-free-agent-offer/);
+  assert.match(actions, /negotiationClub/);
+  assert.match(actions, /receivePlayer/);
+  assert.match(actions, /freeAgentSearchQuery/);
+  assert.match(actions, /tbgPlayerActionsMounting === 'true'/);
+  assert.match(actions, /host\.dataset\.tbgPlayerActionsMounting = 'true'/);
+  assert.match(actions, /delete host\.dataset\.tbgPlayerActionsMounting/);
+  assert.doesNotMatch(actions, /tbg-private-player-shortlist-v1/);
+});
+
+test('shortlist persists privately per manager and world through the server', async () => {
+  const api = await read('../netlify/functions/player-shortlist.mjs');
+  const migration = await read('../supabase/migrations/20260908b_manager_player_shortlists.sql');
+  assert.match(api, /manager_player_shortlists/);
+  assert.match(api, /manager_profiles/);
+  assert.match(api, /manager_appointments/);
+  assert.match(api, /action === 'remove'/);
+  assert.match(api, /action !== 'add'/);
+  assert.match(migration, /create table if not exists public\.manager_player_shortlists/);
+  assert.match(migration, /unique \(manager_id, world_id, player_id\)/);
+  assert.match(migration, /enable row level security/);
+  assert.match(migration, /revoke all on table public\.manager_player_shortlists from public, anon, authenticated/);
+});
+
+test('persistent shortlist is reachable directly from the global search control', async () => {
+  const search = await read('../public/global-search.js');
+  assert.match(search, /★ Shortlist/);
+  assert.match(search, /await shortlistResults\(\{ force: true \}\)/);
+  assert.match(search, /Your shortlist is empty/);
+});
+
+test('global search remains scoped to authenticated managers and does not accept world ids from the client', async () => {
+  const source = await read('../netlify/functions/global-search.mjs');
+  assert.match(source, /Authentication required/);
+  assert.match(source, /manager_appointments/);
+  assert.match(source, /appointment\.world_id/);
+  assert.doesNotMatch(source, /searchParams\.get\(['"]world/);
+});
