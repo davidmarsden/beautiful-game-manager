@@ -5,6 +5,7 @@ let shortlistLoaded = false;
 let shortlistLoading = null;
 let shortlistObserver = null;
 let shortlistActive = false;
+let shortlistError = '';
 
 function shortlistToken() {
   for (let index = 0; index < localStorage.length; index += 1) {
@@ -61,12 +62,20 @@ async function loadShortlist({ force = false } = {}) {
   if (shortlistLoading) return shortlistLoading;
   if (shortlistLoaded && !force) return shortlistItems;
   shortlistLoading = (async () => {
-    const data = await shortlistRequest();
-    shortlistItems = Array.isArray(data.items) ? data.items : [];
-    shortlistLoaded = true;
-    decorateOpenMarketCards();
-    if (shortlistActive) renderShortlist();
-    return shortlistItems;
+    try {
+      const data = await shortlistRequest();
+      shortlistItems = Array.isArray(data.items) ? data.items : [];
+      shortlistLoaded = true;
+      shortlistError = '';
+      decorateOpenMarketCards();
+      if (shortlistActive) renderShortlist();
+      return shortlistItems;
+    } catch (error) {
+      shortlistLoaded = false;
+      shortlistError = error.message || 'Could not load your shortlist.';
+      if (shortlistActive) renderShortlist();
+      throw error;
+    }
   })().finally(() => { shortlistLoading = null; });
   return shortlistLoading;
 }
@@ -134,7 +143,8 @@ function decorateOpenMarketCards() {
     button.setAttribute('aria-pressed', String(selected));
     button.setAttribute('aria-label', selected ? 'Remove from shortlist' : 'Add to shortlist');
     button.title = selected ? 'Remove from shortlist' : 'Add to shortlist';
-    button.textContent = selected ? '★' : '☆';
+    const glyph = selected ? '★' : '☆';
+    if (button.textContent !== glyph) button.textContent = glyph;
   });
 }
 
@@ -198,7 +208,8 @@ function renderShortlist() {
   const panel = document.getElementById('shortlistPanel');
   if (!panel) return;
   if (!shortlistLoaded) {
-    panel.innerHTML = '<p class="shortlist-intro">Loading your shortlist…</p>';
+    const message = shortlistError ? shortlistEscape(shortlistError) : 'Loading your shortlist…';
+    panel.innerHTML = `<p class="shortlist-intro">${message}</p><p id="shortlistMessage" class="shortlist-message" aria-live="polite"></p>${shortlistError ? '<button type="button" data-shortlist-retry>Try again</button>' : ''}`;
     return;
   }
   panel.innerHTML = `
@@ -279,6 +290,15 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
+  const retry = event.target.closest('[data-shortlist-retry]');
+  if (retry) {
+    retry.disabled = true;
+    shortlistError = '';
+    renderShortlist();
+    loadShortlist({ force: true }).catch(() => {});
+    return;
+  }
+
   const toggle = event.target.closest('[data-shortlist-toggle]');
   if (toggle) {
     event.preventDefault();
@@ -332,13 +352,13 @@ document.addEventListener('click', async (event) => {
     const action = marketAction.dataset.shortlistMarketAction;
     if (action === 'offer') {
       const id = marketAction.dataset.playerId;
-      const offer = [...document.querySelectorAll('[data-open-market-prepare-offer]')]
-        .find((button) => String(button.dataset.playerId || '') === String(id));
-      if (offer) {
-        openMarketTab('listed');
-        setTimeout(() => offer.click(), 0);
-        return;
-      }
+      openMarketTab('listed');
+      setTimeout(() => {
+        const offer = [...document.querySelectorAll('[data-open-market-prepare-offer]')]
+          .find((button) => String(button.dataset.playerId || '') === String(id));
+        if (offer) offer.click();
+      }, 0);
+      return;
     }
     openMarketTab(action === 'free-agents' || action === 'external' ? action : 'listed');
   }
