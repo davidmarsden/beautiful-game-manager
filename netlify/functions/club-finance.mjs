@@ -1,3 +1,6 @@
+import { migrateLegacyPlaceholderWages } from '../../src/squadCycle/expectedWage.js';
+import { clubFinanceSummary } from '../../src/squadCycle/clubFinance.js';
+
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -56,20 +59,43 @@ export default async (request) => {
     const manager = profiles[0];
     if (!manager) return json({ error: 'Manager profile has not been created yet' }, 409);
 
-    const appointments = await userSupabase(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=world_id&limit=1`, token);
+    const appointments = await userSupabase(`/rest/v1/manager_appointments?manager_id=eq.${encodeURIComponent(manager.id)}&status=eq.active&select=world_id,club_id&limit=1`, token);
     const appointment = appointments[0];
     if (!appointment) return json({ error: 'No active club appointment' }, 409);
 
-    const finance = await serverSupabase('/rest/v1/rpc/get_manager_club_finance_for_user', {
-      method: 'POST',
-      body: JSON.stringify({ p_user_id: user.id, p_world_id: appointment.world_id })
-    });
+    const [finance, context] = await Promise.all([
+      serverSupabase('/rest/v1/rpc/get_manager_club_finance_for_user', {
+        method: 'POST',
+        body: JSON.stringify({ p_user_id: user.id, p_world_id: appointment.world_id })
+      }),
+      serverSupabase('/rest/v1/rpc/get_manager_portal_world_fragment', {
+        method: 'POST',
+        body: JSON.stringify({ p_world_id: appointment.world_id, p_club_id: appointment.club_id })
+      })
+    ]);
     if (!finance?.finance) return json({ error: 'Canonical club finance is unavailable' }, 409);
+    if (!context?.world?.squad_cycle) return json({ error: 'Canonical club wage state is unavailable' }, 409);
 
-    return json(finance);
+    const world = context.world;
+    migrateLegacyPlaceholderWages(world);
+    world.squad_cycle.finances = {
+      version: 'portal-reconciled',
+      clubs: { [appointment.club_id]: { ...finance.finance } }
+    };
+    const reconciled = clubFinanceSummary(world.squad_cycle, appointment.club_id);
+
+    return json({
+      ...finance,
+      source_checksum: context.save_checksum || finance.source_checksum,
+      updated_at: context.updated_at || finance.updated_at,
+      finance: {
+        ...finance.finance,
+        ...reconciled
+      }
+    });
   } catch (error) {
     const message = String(error?.message || 'Could not load club finances');
-    const status = /Session|Authentication/.test(message) ? 401 : /appointment|canonical|world|read model/i.test(message) ? 409 : 503;
+    const status = /Session|Authentication/.test(message) ? 401 : /appointment|canonical|world|read model|wage state/i.test(message) ? 409 : 503;
     return json({ error: message }, status);
   }
 };
