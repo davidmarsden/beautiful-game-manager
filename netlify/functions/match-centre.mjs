@@ -8,6 +8,8 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
 });
 const text = (value) => String(value ?? '').trim();
 const number = (value, fallback = null) => value === null || value === undefined || value === '' ? fallback : Number.isFinite(Number(value)) ? Number(value) : fallback;
+const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+const fixtureMatchday = (fixtureId) => number(String(fixtureId || '').match(/:md(\d+)(?::|$)/i)?.[1]);
 const bearer = (request) => {
   const value = request.headers.get('authorization') || '';
   return value.toLowerCase().startsWith('bearer ') ? value.slice(7).trim() : '';
@@ -27,6 +29,18 @@ async function service(path, options = {}) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.message || body.error || `Supabase returned ${response.status}`);
   return body;
+}
+
+async function archiveForFixture(fixtureId, worldIds) {
+  const rows = await service(`/rest/v1/canonical_match_archives?fixture_id=eq.${encodeURIComponent(fixtureId)}&world_id=in.(${worldIds.map(encodeURIComponent).join(',')})&select=*&limit=1`);
+  return rows[0] || null;
+}
+
+async function completedFixtureStillProjecting(fixtureId, worldIds) {
+  const matchday = fixtureMatchday(fixtureId);
+  if (matchday === null) return false;
+  const rows = await service(`/rest/v1/canonical_world_saves?world_id=in.(${worldIds.map(encodeURIComponent).join(',')})&select=world_id,matchday`);
+  return rows.some((row) => String(fixtureId).startsWith(`${row.world_id}:`) && number(row.matchday, 0) > matchday);
 }
 
 const prettyId = (value) => text(value).replace(/^tbg[-_:]?/i, '').replace(/[-_:]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) || 'Unknown player';
@@ -251,9 +265,21 @@ export default async (request) => {
     if (!appointments.length) return json({ error: 'Manager has no active world appointment' }, 403);
 
     const worldIds = appointments.map((row) => row.world_id);
-    const archives = await service(`/rest/v1/canonical_match_archives?fixture_id=eq.${encodeURIComponent(fixtureId)}&world_id=in.(${worldIds.map(encodeURIComponent).join(',')})&select=*&limit=1`);
-    const row = archives[0];
-    if (!row) return json({ error: 'Match archive is not available for this fixture' }, 404);
+    let row = null;
+    for (let attempt = 0; attempt < 5 && !row; attempt += 1) {
+      row = await archiveForFixture(fixtureId, worldIds);
+      if (!row && attempt < 4) await sleep(750);
+    }
+    if (!row) {
+      if (await completedFixtureStillProjecting(fixtureId, worldIds)) {
+        return json({
+          error: 'Match replay is being prepared. Try again in a moment.',
+          code: 'archive_pending',
+          retry_after_ms: 3000
+        }, 425);
+      }
+      return json({ error: 'Match archive is not available for this fixture', code: 'archive_unavailable' }, 404);
+    }
     const appointment = appointments.find((item) => item.world_id === row.world_id);
     const archive = row.archive_payload || {};
     const fixture = {
