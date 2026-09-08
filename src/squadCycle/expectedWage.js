@@ -75,11 +75,18 @@ export function withExpectedInitialWages(clubs = []) {
   }));
 }
 
-function isLegacyInitialPlaceholder(contract = {}) {
+export function isLegacyInitialPlaceholder(contract = {}) {
   if (Number(contract.wage) !== 1000) return false;
   const playerId = String(contract.player_id || '');
   const clubId = String(contract.club_id || '');
   return Boolean(playerId && clubId && String(contract.contract_id || '') === `${playerId}:${clubId}:contract`);
+}
+
+export function contractWeeklyWage(player = {}, contract = null) {
+  if (!contract) return null;
+  if (isLegacyInitialPlaceholder(contract)) return expectedWeeklyWage(player);
+  const wage = Number(contract.wage);
+  return Number.isFinite(wage) && wage >= 0 ? wage : null;
 }
 
 export function migrateLegacyPlaceholderWages(world) {
