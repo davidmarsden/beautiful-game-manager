@@ -47,10 +47,6 @@ function teamSheetReady() {
   return startingXi().length === 11 && bench().length === 7;
 }
 
-function teamSheetSignature() {
-  return `${startingXi().join('|')}::${bench().join('|')}`;
-}
-
 function playerDirectory() {
   const rows = Array.isArray(portalState?.squad) ? portalState.squad : [];
   return new Map(rows.map((player) => [
@@ -61,6 +57,13 @@ function playerDirectory() {
 
 function playerLabel(playerId) {
   return playerDirectory().get(playerId) || playerId;
+}
+
+function teamSheetSignature() {
+  const xi = startingXi();
+  const substitutes = bench();
+  const labels = [...xi, ...substitutes].map((playerId) => `${playerId}=${playerLabel(playerId)}`);
+  return `${xi.join('|')}::${substitutes.join('|')}::${labels.join('|')}`;
 }
 
 function option(value, label) {
@@ -154,6 +157,13 @@ function sameValues(left, right) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
+function refreshOptionLabels(select, labels) {
+  [...select.options].forEach((item, index) => {
+    const nextLabel = labels[index];
+    if (nextLabel != null && item.textContent !== nextLabel) item.textContent = nextLabel;
+  });
+}
+
 function syncPlayerOptions({ force = false } = {}) {
   const host = rowsHost();
   if (!host) return;
@@ -168,12 +178,18 @@ function syncPlayerOptions({ force = false } = {}) {
       const select = row.querySelector(`.preset-sub-${kind}`);
       if (!select) continue;
       const previous = text(select.value);
-      const expectedValues = ['', ...ids];
-      if (previous && !ids.includes(previous) && !ready) expectedValues.push(previous);
-      if (sameValues(optionValues(select), expectedValues)) continue;
       const placeholder = kind === 'out' ? 'Player off…' : 'Player on…';
-      const options = [option('', placeholder), ...ids.map((playerId) => option(playerId, playerLabel(playerId)))];
-      if (previous && !ids.includes(previous) && !ready) options.push(option(previous, playerLabel(previous)));
+      const expectedValues = ['', ...ids];
+      const expectedLabels = [placeholder, ...ids.map((playerId) => playerLabel(playerId))];
+      if (previous && !ids.includes(previous) && !ready) {
+        expectedValues.push(previous);
+        expectedLabels.push(playerLabel(previous));
+      }
+      if (sameValues(optionValues(select), expectedValues)) {
+        refreshOptionLabels(select, expectedLabels);
+        continue;
+      }
+      const options = expectedValues.map((value, index) => option(value, expectedLabels[index]));
       select.replaceChildren(...options);
       select.value = ids.includes(previous) || (previous && !ready) ? previous : '';
     }
