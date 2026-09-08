@@ -19,6 +19,8 @@ test('unmanaged club players cannot start impossible transfer offers', async () 
 test('managed clubs and free agents keep their valid actions', async () => {
   const guard = await read('../public/unmanaged-player-offer-guard.js');
   assert.match(guard, /button\.textContent = 'Make offer'/);
-  assert.match(guard, /button\.textContent = 'Offer contract'/);
+  assert.match(guard, /'Offer contract'/);
+  assert.match(guard, /if \(!clubId\)/);
+  assert.match(guard, /button\.disabled = false/);
   assert.match(guard, /manager\?\.manager_id/);
 });
