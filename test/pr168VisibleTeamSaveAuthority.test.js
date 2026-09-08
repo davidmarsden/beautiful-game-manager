@@ -28,7 +28,7 @@ test('ambiguous decision writes receive one idempotent retry before failure is s
   assert.match(cache, /catch \{\s*return retryDecisionAfterAmbiguity\(input, init\);\s*\}/s);
   assert.match(cache, /if \(!retryableDecisionStatus\(firstResponse\.status\)\) return firstResponse/);
   assert.match(cache, /return retryDecisionAfterAmbiguity\(input, init\)/);
-  assert.match(cache, /if \(isDecisionWrite\(input, init\)\) return fetchDecisionWithRetry\(input, init\)/);
+  assert.match(cache, /if \(isDecisionWrite\(input, init\)\) return (?:await )?fetchDecisionWithRetry\(input, init\)/);
 });
 
 test('a rejecting retry preserves the first attempt ambiguity for canonical verification', async () => {
