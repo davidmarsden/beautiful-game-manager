@@ -131,6 +131,6 @@ window.addEventListener('tbg:formation-board-ready', () => applyEligibilityGuard
 window.addEventListener('tbg:selection-submission-restored', (event) => {
   applyEligibilityGuard(event.detail || window.tbgPortalState);
 });
-document.addEventListener('tbg:transfer-history-refresh', () => {
+document.addEventListener('tbg:transfer-completed', () => {
   refreshPortalAfterTransfer().catch((error) => console.warn('Could not refresh team selection after transfer', error));
 });
