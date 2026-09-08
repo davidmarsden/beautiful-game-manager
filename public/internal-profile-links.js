@@ -16,6 +16,7 @@ import './alpha-presentation-fixes.js';
 import './transfer-exchange-response-ui.js';
 import './transfer-exchange-direct-controls.js';
 import './transfer-section-cards.js';
+import './global-search.js';
 import { openTbgPlayerProfile } from './player-profile.js';
 
 let historyDirectory = null;
