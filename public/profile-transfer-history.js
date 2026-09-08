@@ -20,10 +20,18 @@ function formatDate(value) {
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
-function formatMoney(value) {
+function formatMoney(value, currency = 'GBP') {
   const amount = Number(value || 0);
   if (!Number.isFinite(amount) || amount <= 0) return 'Free';
-  return `£${amount.toLocaleString('en-GB')}`;
+  try {
+    return new Intl.NumberFormat('en-GB', {
+      style: 'currency',
+      currency: String(currency || 'GBP').toUpperCase(),
+      maximumFractionDigits: 0
+    }).format(amount);
+  } catch {
+    return `${String(currency || 'GBP').toUpperCase()} ${amount.toLocaleString('en-GB')}`;
+  }
 }
 
 function typeLabel(event) {
@@ -49,8 +57,8 @@ function row(event, { showPlayer = false, perspectiveClubId = '' } = {}) {
     : typeLabel(event);
   const route = `${clubLink(event.from_club_id, event.from_club_name)} <span aria-hidden="true">→</span> ${clubLink(event.to_club_id, event.to_club_name)}`;
   const money = event.transfer_type === 'exchange' && event.package_player_count > 1
-    ? `${formatMoney(event.fee)} package`
-    : formatMoney(event.fee);
+    ? `${formatMoney(event.fee, event.fee_currency)} package`
+    : formatMoney(event.fee, event.fee_currency);
   return `<article class="tbg-profile-history-row transfer-profile-history-row">
     <span>${escapeHtml(formatDate(event.completed_at))}</span>
     <strong>${showPlayer ? `${playerLink(event.player_id, event.player_name)} · ` : ''}${escapeHtml(direction)} · ${escapeHtml(typeLabel(event))}</strong>
@@ -121,6 +129,12 @@ export async function mountClubTransferHistory(panel, club = {}) {
     body.innerHTML = emptyState('Transfer history unavailable', error.message || 'Could not load club transfer history.');
   }
 }
+
+document.addEventListener('click', (event) => {
+  const clubButton = event.target.closest('.transfer-profile-club-link');
+  const playerModal = clubButton?.closest('[data-tbg-player-profile-host]');
+  if (playerModal) playerModal.remove();
+}, true);
 
 document.addEventListener('click', (event) => {
   const button = event.target.closest('[data-player-tab="transfers"]');
