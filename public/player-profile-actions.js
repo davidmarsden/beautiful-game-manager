@@ -1,7 +1,7 @@
-const SHORTLIST_KEY = 'tbg-private-player-shortlist-v1';
 let ownClubId = '';
 let managerDirectoryPromise = null;
-let mountedProfileId = '';
+let shortlistCache = [];
+let shortlistPromise = null;
 
 function token() {
   for (let index = 0; index < localStorage.length; index += 1) {
@@ -16,35 +16,40 @@ function token() {
   return '';
 }
 
-function readShortlist() {
-  try {
-    const value = JSON.parse(localStorage.getItem(SHORTLIST_KEY) || '[]');
-    return Array.isArray(value) ? value : [];
-  } catch {
-    return [];
-  }
+async function shortlistRequest(body = null) {
+  const auth = token();
+  if (!auth) throw new Error('Sign in again to use your shortlist.');
+  const response = await fetch('/api/player-shortlist', {
+    method: body ? 'POST' : 'GET',
+    headers: { authorization: `Bearer ${auth}`, ...(body ? { 'content-type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+    cache: 'no-store'
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || 'Could not update your shortlist.');
+  shortlistCache = Array.isArray(data.results) ? data.results : [];
+  return shortlistCache;
 }
 
-function writeShortlist(entries) {
-  localStorage.setItem(SHORTLIST_KEY, JSON.stringify(entries.slice(0, 250)));
-  document.dispatchEvent(new CustomEvent('tbg:shortlist-changed', { detail: { count: entries.length } }));
-}
-
-export function shortlistResults() {
-  return readShortlist();
+export async function shortlistResults({ force = false } = {}) {
+  if (!force && shortlistPromise) return shortlistPromise;
+  shortlistPromise = shortlistRequest().catch((error) => {
+    shortlistPromise = null;
+    throw error;
+  });
+  return shortlistPromise;
 }
 
 function isShortlisted(id) {
-  return readShortlist().some((entry) => entry.id === id);
+  return shortlistCache.some((entry) => entry.id === id);
 }
 
-function toggleShortlist(result) {
-  const entries = readShortlist();
-  const index = entries.findIndex((entry) => entry.id === result.id);
-  if (index >= 0) entries.splice(index, 1);
-  else entries.unshift(result);
-  writeShortlist(entries);
-  return index < 0;
+async function toggleShortlist(result) {
+  const currentlyShortlisted = isShortlisted(result.id);
+  const results = await shortlistRequest({ action: currentlyShortlisted ? 'remove' : 'add', player_id: result.id, result });
+  shortlistPromise = Promise.resolve(results);
+  document.dispatchEvent(new CustomEvent('tbg:shortlist-changed', { detail: { count: results.length } }));
+  return !currentlyShortlisted;
 }
 
 function installStyles() {
@@ -143,77 +148,88 @@ async function resolveProfile(playerId) {
 async function mountActions(host) {
   const section = host?.querySelector('.tbg-player-profile[data-player-id]');
   const id = String(section?.dataset.playerId || '').trim();
-  if (!host || !section || !id || host.querySelector('[data-tbg-player-game-actions]')) return;
-  const result = await resolveProfile(id);
-  if (!result || !host.isConnected) return;
-  const { player, club = {} } = result;
-  const clubId = String(club.club_id || player.club_id || '').trim();
-  if (clubId && !ownClubId) await managerDirectory().catch(() => null);
-  const ownPlayer = Boolean(clubId && ownClubId && clubId === ownClubId);
-  const actionsHost = host.querySelector('.tbg-player-actions');
-  if (!actionsHost) return;
+  if (!host || !section || !id || host.querySelector('[data-tbg-player-game-actions]') || host.dataset.tbgPlayerActionsMounting === 'true') return;
+  host.dataset.tbgPlayerActionsMounting = 'true';
+  try {
+    const [result] = await Promise.all([resolveProfile(id), shortlistResults().catch(() => [])]);
+    if (!result || !host.isConnected || host.querySelector('[data-tbg-player-game-actions]')) return;
+    const { player, club = {} } = result;
+    const clubId = String(club.club_id || player.club_id || '').trim();
+    if (clubId && !ownClubId) await managerDirectory().catch(() => null);
+    const ownPlayer = Boolean(clubId && ownClubId && clubId === ownClubId);
+    const actionsHost = host.querySelector('.tbg-player-actions');
+    if (!actionsHost) return;
 
-  installStyles();
-  actionsHost.classList.add('tbg-player-actions-enhanced');
-  const gameActions = document.createElement('div');
-  gameActions.className = 'tbg-player-game-actions';
-  gameActions.dataset.tbgPlayerGameActions = '';
-  const shortlisted = isShortlisted(id);
-  gameActions.innerHTML = `
-    <button type="button" data-player-shortlist>${shortlisted ? '★ Shortlisted' : '☆ Add to shortlist'}</button>
-    <button type="button" class="primary" data-player-make-offer${ownPlayer ? ' disabled' : ''}>${ownPlayer ? 'Your player' : clubId ? 'Make offer' : 'Offer contract'}</button>
-    ${clubId && !ownPlayer ? '<button type="button" data-player-contact-manager hidden>Contact manager</button>' : ''}
-  `;
-  actionsHost.append(gameActions);
+    installStyles();
+    actionsHost.classList.add('tbg-player-actions-enhanced');
+    const gameActions = document.createElement('div');
+    gameActions.className = 'tbg-player-game-actions';
+    gameActions.dataset.tbgPlayerGameActions = '';
+    const shortlisted = isShortlisted(id);
+    gameActions.innerHTML = `
+      <button type="button" data-player-shortlist>${shortlisted ? '★ Shortlisted' : '☆ Add to shortlist'}</button>
+      <button type="button" class="primary" data-player-make-offer${ownPlayer ? ' disabled' : ''}>${ownPlayer ? 'Your player' : clubId ? 'Make offer' : 'Offer contract'}</button>
+      ${clubId && !ownPlayer ? '<button type="button" data-player-contact-manager hidden>Contact manager</button>' : ''}
+    `;
+    actionsHost.append(gameActions);
 
-  gameActions.querySelector('[data-player-shortlist]')?.addEventListener('click', (event) => {
-    const added = toggleShortlist(profileResult(player, club));
-    event.currentTarget.textContent = added ? '★ Shortlisted' : '☆ Add to shortlist';
-    showActionMessage(gameActions, added ? 'Added to your private shortlist on this device.' : 'Removed from your shortlist.');
-  });
+    gameActions.querySelector('[data-player-shortlist]')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const added = await toggleShortlist(profileResult(player, club));
+        button.textContent = added ? '★ Shortlisted' : '☆ Add to shortlist';
+        showActionMessage(gameActions, added ? 'Added to your private shortlist. It will follow your manager account across devices.' : 'Removed from your shortlist.');
+      } catch (error) {
+        showActionMessage(gameActions, error.message || 'Could not update your shortlist.');
+      } finally {
+        button.disabled = false;
+      }
+    });
 
-  gameActions.querySelector('[data-player-make-offer]')?.addEventListener('click', () => {
-    if (ownPlayer) return;
-    if (clubId) {
-      openTransfersAndDispatch(host, 'tbg:prepare-player-offer', {
-        playerId: id,
-        playerName: result.name,
-        clubId,
-        clubName: club.club_name || club.canonical_name || player.club_name || clubId
-      });
-    } else {
-      openTransfersAndDispatch(host, 'tbg:prepare-free-agent-offer', {
-        playerId: id,
-        playerName: result.name
+    gameActions.querySelector('[data-player-make-offer]')?.addEventListener('click', () => {
+      if (ownPlayer) return;
+      if (clubId) {
+        openTransfersAndDispatch(host, 'tbg:prepare-player-offer', {
+          playerId: id,
+          playerName: result.name,
+          clubId,
+          clubName: club.club_name || club.canonical_name || player.club_name || clubId
+        });
+      } else {
+        openTransfersAndDispatch(host, 'tbg:prepare-free-agent-offer', {
+          playerId: id,
+          playerName: result.name
+        });
+      }
+    });
+
+    const contact = gameActions.querySelector('[data-player-contact-manager]');
+    if (contact) {
+      managerDirectory().then((data) => {
+        if (!host.isConnected) return;
+        const manager = managerForClub(data, clubId);
+        if (manager?.manager_id) {
+          contact.hidden = false;
+          contact.textContent = `Contact ${manager.manager_name || 'manager'}`;
+        }
+      }).catch(() => {});
+      contact.addEventListener('click', () => {
+        contact.disabled = true;
+        openManagerForClub(host, clubId).catch((error) => {
+          contact.disabled = false;
+          showActionMessage(gameActions, error.message);
+        });
       });
     }
-  });
-
-  const contact = gameActions.querySelector('[data-player-contact-manager]');
-  if (contact) {
-    managerDirectory().then((data) => {
-      if (!host.isConnected) return;
-      const manager = managerForClub(data, clubId);
-      if (manager?.manager_id) {
-        contact.hidden = false;
-        contact.textContent = `Contact ${manager.manager_name || 'manager'}`;
-      }
-    }).catch(() => {});
-    contact.addEventListener('click', () => {
-      contact.disabled = true;
-      openManagerForClub(host, clubId).catch((error) => {
-        contact.disabled = false;
-        showActionMessage(gameActions, error.message);
-      });
-    });
+  } finally {
+    delete host.dataset.tbgPlayerActionsMounting;
   }
 }
 
 function inspectProfiles() {
   const host = document.querySelector('[data-tbg-player-profile-host]');
-  const id = String(host?.querySelector('.tbg-player-profile[data-player-id]')?.dataset.playerId || '').trim();
-  if (!host || !id || id === mountedProfileId && host.querySelector('[data-tbg-player-game-actions]')) return;
-  mountedProfileId = id;
+  if (!host || host.querySelector('[data-tbg-player-game-actions]') || host.dataset.tbgPlayerActionsMounting === 'true') return;
   mountActions(host).catch((error) => console.error('Could not mount player profile actions', error));
 }
 
@@ -300,9 +316,10 @@ async function openExternalPlayer(detail = {}) {
 window.addEventListener('tbg:portal-rendered', (event) => {
   ownClubId = String(event.detail?.appointment?.club_id || event.detail?.club?.club_id || '').trim();
   managerDirectoryPromise = null;
+  shortlistCache = [];
+  shortlistPromise = null;
 });
 
-document.addEventListener('tbg:shortlist-changed', inspectProfiles);
 document.addEventListener('tbg:prepare-player-offer', (event) => {
   prepareDirectOffer(event.detail).catch((error) => console.error('Could not prepare player offer', error));
 });
