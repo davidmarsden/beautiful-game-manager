@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import {
   ageModifier,
   baseAnnualWageMillions,
+  contractWeeklyWage,
   expectedWeeklyWage,
   migrateLegacyPlaceholderWages,
   reputationModifier,
@@ -40,19 +41,21 @@ test('initial wage seeding differentiates players while preserving explicit impo
   assert.ok(new Set(wages.slice(0, 3)).size === 3);
 });
 
-test('legacy migration replaces only original £1,000 seed contracts and leaves negotiated £1,000 deals alone', () => {
+test('legacy migration repairs opening/imported £1,000 placeholders but leaves timestamped negotiated £1,000 deals alone', () => {
   const world = {
     squad_cycle: {
       players: {
-        p1: { tbg_player_id: 'p1', underlying_ability_rating: 90, age: 25, club_id: 'a' },
-        p2: { tbg_player_id: 'p2', underlying_ability_rating: 90, age: 25, club_id: 'a' }
+        p1: { tbg_player_id: 'p1', underlying_ability_rating: 90, age: 25, club_id: 'a', contract_id: 'legacy-import-123' },
+        p2: { tbg_player_id: 'p2', underlying_ability_rating: 90, age: 25, club_id: 'a', contract_id: 'p2:a:2026-09-01T00:00:00.000Z' }
       },
       contracts: {
-        original: { contract_id: 'p1:a:contract', player_id: 'p1', club_id: 'a', wage: 1000, status: 'active' },
+        original: { contract_id: 'legacy-import-123', player_id: 'p1', club_id: 'a', wage: 1000, status: 'active' },
         negotiated: { contract_id: 'p2:a:2026-09-01T00:00:00.000Z', player_id: 'p2', club_id: 'a', wage: 1000, status: 'active' }
       }
     }
   };
+  assert.equal(contractWeeklyWage(world.squad_cycle.players.p1, world.squad_cycle.contracts.original), 192_300);
+  assert.equal(contractWeeklyWage(world.squad_cycle.players.p2, world.squad_cycle.contracts.negotiated), 1000);
   const migrated = migrateLegacyPlaceholderWages(world);
   assert.equal(migrated, 1);
   assert.equal(world.squad_cycle.contracts.original.wage, 192_300);
@@ -80,8 +83,13 @@ test('persistent worlds seed differentiated wages and reconcile finance after lo
   assert.ok(finance.wage_budget >= finance.wage_bill);
 });
 
-test('manager portal bootstrap repairs privacy-safe fragments that bypass the persistent save loader', async () => {
-  const bootstrap = await readFile(new URL('../netlify/functions/bootstrap.mjs', import.meta.url), 'utf8');
+test('manager portal bootstrap repairs compact fragments and projection reads compatibility wage', async () => {
+  const [bootstrap, projection] = await Promise.all([
+    readFile(new URL('../netlify/functions/bootstrap.mjs', import.meta.url), 'utf8'),
+    readFile(new URL('../src/world/managerPortalProjection.js', import.meta.url), 'utf8')
+  ]);
   assert.match(bootstrap, /import \{ migrateLegacyPlaceholderWages \} from '\.\.\/\.\.\/src\/squadCycle\/expectedWage\.js'/);
   assert.match(bootstrap, /const world = context\.world;[\s\S]*migrateLegacyPlaceholderWages\(world\);[\s\S]*projectManagerPortal\(world,/);
+  assert.match(projection, /import \{ contractWeeklyWage \} from '\.\.\/squadCycle\/expectedWage\.js'/);
+  assert.match(projection, /wage: contractWeeklyWage\(player, contract\)/);
 });
