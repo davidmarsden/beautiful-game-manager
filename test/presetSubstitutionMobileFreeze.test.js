@@ -9,7 +9,7 @@ test('preset substitution player selects are not rebuilt on unrelated formation-
   assert.match(source, /function teamSheetSignature\(\)/);
   assert.match(source, /if \(!force && signature === lastTeamSheetSignature\) return/);
   assert.match(source, /function sameValues\(left, right\)/);
-  assert.match(source, /if \(sameValues\(optionValues\(select\), expectedValues\)\) continue/);
+  assert.match(source, /if \(sameValues\(optionValues\(select\), expectedValues\)\) \{[\s\S]*refreshOptionLabels\(select, expectedLabels\);[\s\S]*continue;/);
   assert.match(source, /function mutationChangesTeamSheet\(mutations\)/);
   assert.match(source, /if \(mutationChangesTeamSheet\(mutations\)\) schedulePlayerOptionSync\(\)/);
   assert.match(source, /requestAnimationFrame\(\(\) => \{/);
@@ -20,4 +20,13 @@ test('formation observer only reacts to lineup token changes rather than fitness
   assert.match(source, /attributeFilter: \['data-player-id'\]/);
   assert.match(source, /\.formation-slot,\.bench-slot,\.player-token/);
   assert.doesNotMatch(source, /new MutationObserver\(\(\) => syncPlayerOptions\(\)\)/);
+});
+
+test('squad display-name updates refresh option labels without replacing open select nodes', async () => {
+  const source = await read('public/preset-substitutions.js');
+  assert.match(source, /const labels = \[\.\.\.xi, \.\.\.substitutes\]\.map\(\(playerId\) => `\$\{playerId\}=\$\{playerLabel\(playerId\)\}`\)/);
+  assert.match(source, /function refreshOptionLabels\(select, labels\)/);
+  assert.match(source, /item\.textContent = nextLabel/);
+  assert.match(source, /const expectedLabels = \[placeholder, \.\.\.ids\.map\(\(playerId\) => playerLabel\(playerId\)\)\]/);
+  assert.doesNotMatch(source, /sameValues\(optionValues\(select\), expectedValues\)\) continue/);
 });
