@@ -38,10 +38,50 @@ function compactMatchCentrePayload(payload) {
   return { ...payload, result: compactResult };
 }
 
+const jsonErrorResponse = (message, code, status = 503) => new Response(JSON.stringify({
+  error: message,
+  code
+}), {
+  status,
+  headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
+});
+
 window.fetch = async (input, init) => {
   const url = requestUrl(input);
-  const response = await guardedFetch(input, init);
-  if (!response.ok || !isMatchCentreResponse(url)) return response;
+  const matchCentreRequest = isMatchCentreResponse(url);
+  let response;
+
+  try {
+    response = await guardedFetch(input, init);
+  } catch (error) {
+    // Match Report is a secondary view. A transient network/API failure must
+    // stay inside the modal rather than escape as an unhandled rejection and
+    // trigger the portal-wide recovery screen.
+    if (!matchCentreRequest) throw error;
+    return jsonErrorResponse(
+      'Could not reach the match archive. Check your connection and try again.',
+      'match_centre_fetch_failed',
+      503
+    );
+  }
+
+  if (!matchCentreRequest) return response;
+
+  if (!response.ok) {
+    // phase2d4.js always parses Match Centre responses as JSON. Netlify/proxy
+    // failures can occasionally return HTML/plain text; normalize those too so
+    // the failure remains a local Match Report error rather than a portal crash.
+    try {
+      await response.clone().json();
+      return response;
+    } catch {
+      return jsonErrorResponse(
+        `Could not load the match report (${response.status || 'server error'}). Please try again.`,
+        'match_centre_invalid_error_response',
+        Number(response.status) >= 400 ? Number(response.status) : 502
+      );
+    }
+  }
 
   try {
     const payload = await response.clone().json();
@@ -52,7 +92,11 @@ window.fetch = async (input, init) => {
       headers: response.headers
     });
   } catch {
-    return response;
+    return jsonErrorResponse(
+      'The match archive returned an unreadable response. Please try again.',
+      'match_centre_invalid_success_response',
+      502
+    );
   }
 };
 
