@@ -75,16 +75,24 @@ export function withExpectedInitialWages(clubs = []) {
   }));
 }
 
-export function isLegacyInitialPlaceholder(contract = {}) {
-  if (Number(contract.wage) !== 1000) return false;
+function isTimestampedNegotiatedContract(contract = {}) {
+  const id = String(contract.contract_id || '');
+  // Transfers, renewals and free-agent signings all use player:club:<ISO timestamp> IDs.
+  return /:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(id);
+}
+
+export function isLegacyInitialPlaceholder(contract = {}, player = null) {
+  if (Number(contract.wage) !== 1000 || contract.status !== 'active') return false;
   const playerId = String(contract.player_id || '');
   const clubId = String(contract.club_id || '');
-  return Boolean(playerId && clubId && String(contract.contract_id || '') === `${playerId}:${clubId}:contract`);
+  if (!playerId || !clubId) return false;
+  if (player && String(player.contract_id || '') && String(player.contract_id) !== String(contract.contract_id || '')) return false;
+  return !isTimestampedNegotiatedContract(contract);
 }
 
 export function contractWeeklyWage(player = {}, contract = null) {
   if (!contract) return null;
-  if (isLegacyInitialPlaceholder(contract)) return expectedWeeklyWage(player);
+  if (isLegacyInitialPlaceholder(contract, player)) return expectedWeeklyWage(player);
   const wage = Number(contract.wage);
   return Number.isFinite(wage) && wage >= 0 ? wage : null;
 }
@@ -94,9 +102,8 @@ export function migrateLegacyPlaceholderWages(world) {
   if (!state?.contracts || !state?.players) return 0;
   let migrated = 0;
   for (const contract of Object.values(state.contracts)) {
-    if (contract?.status !== 'active' || !isLegacyInitialPlaceholder(contract)) continue;
-    const player = state.players[contract.player_id];
-    if (!player) continue;
+    const player = state.players[contract?.player_id];
+    if (!player || !isLegacyInitialPlaceholder(contract, player)) continue;
     const wage = expectedWeeklyWage(player);
     if (wage === Number(contract.wage)) continue;
     contract.wage = wage;
