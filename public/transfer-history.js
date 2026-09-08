@@ -9,6 +9,7 @@ const formatDate = (value) => {
 let lastLoadedAt = 0;
 let loading = null;
 const TTL = 60_000;
+const announcedCompletedTransfers = new Set();
 
 function storedAccessToken() {
   for (let index = 0; index < localStorage.length; index += 1) {
@@ -70,6 +71,24 @@ function statusPresentation(row) {
     case 'reneged': return { label: 'Reneged', detail: 'The binding deal was not completed.' };
     default: return { label: String(row.status || 'Closed').replaceAll('_', ' '), detail: row.terminal_reason || '' };
   }
+}
+
+function completionIdentity(row) {
+  return String(row?.deal_id || row?.proposal_id || row?.acquisition_id || `${row?.player_id || ''}:${row?.terminal_at || row?.updated_at || ''}`).trim();
+}
+
+function announceNewCompletions(rows) {
+  const completed = rows.filter((row) => row?.status === 'completed');
+  const newlyCompleted = completed.filter((row) => {
+    const id = completionIdentity(row);
+    if (!id || announcedCompletedTransfers.has(id)) return false;
+    announcedCompletedTransfers.add(id);
+    return true;
+  });
+  if (!newlyCompleted.length) return;
+  document.dispatchEvent(new CustomEvent('tbg:transfer-completed', {
+    detail: { transfer_ids: newlyCompleted.map(completionIdentity) }
+  }));
 }
 
 function groupHistory(rows) {
@@ -150,7 +169,9 @@ async function loadHistory({ force = false } = {}) {
     const response = await fetch('/api/transfer-history', { headers: { authorization: `Bearer ${token}` } });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || 'Could not load transfer history');
-    renderHistory(Array.isArray(data.history) ? data.history : []);
+    const rows = Array.isArray(data.history) ? data.history : [];
+    announceNewCompletions(rows);
+    renderHistory(rows);
     lastLoadedAt = Date.now();
   })().catch((error) => {
     const current = historyHost();
@@ -185,3 +206,8 @@ document.addEventListener('tbg:transfer-history-refresh', () => {
   lastLoadedAt = 0;
   setTimeout(() => maybeMount(true), 0);
 });
+
+window.setInterval(() => {
+  if (document.visibilityState === 'hidden') return;
+  maybeMount(false);
+}, TTL);
