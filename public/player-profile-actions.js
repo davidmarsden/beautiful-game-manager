@@ -115,9 +115,7 @@ function openTransfersAndDispatch(host, eventName, detail) {
   window.setTimeout(() => document.dispatchEvent(new CustomEvent(eventName, { detail })), 50);
 }
 
-async function openManagerForClub(host, clubId) {
-  const data = await managerDirectory();
-  const manager = managerForClub(data, clubId);
+async function openManagerForClub(host, manager) {
   if (!manager?.manager_id) throw new Error('This club does not currently have a contactable human manager.');
   closeProfile(host);
   const module = await import('./manager-participation.js');
@@ -151,12 +149,26 @@ async function mountActions(host) {
   if (!host || !section || !id || host.querySelector('[data-tbg-player-game-actions]') || host.dataset.tbgPlayerActionsMounting === 'true') return;
   host.dataset.tbgPlayerActionsMounting = 'true';
   try {
-    const [result] = await Promise.all([resolveProfile(id), shortlistResults().catch(() => [])]);
+    const directContext = host._tbgPlayerProfileContext;
+    const directResult = directContext?.player ? profileResult(directContext.player, directContext.club || {}) : null;
+    const [result] = await Promise.all([Promise.resolve(directResult || resolveProfile(id)), shortlistResults().catch(() => [])]);
     if (!result || !host.isConnected || host.querySelector('[data-tbg-player-game-actions]')) return;
+
     const { player, club = {} } = result;
     const clubId = String(club.club_id || player.club_id || '').trim();
-    if (clubId && !ownClubId) await managerDirectory().catch(() => null);
+    let directory = null;
+    let directoryError = null;
+    if (clubId) {
+      try {
+        directory = await managerDirectory();
+      } catch (error) {
+        directoryError = error;
+      }
+    }
     const ownPlayer = Boolean(clubId && ownClubId && clubId === ownClubId);
+    const manager = !ownPlayer && clubId && directory ? managerForClub(directory, clubId) : null;
+    const managedPlayer = Boolean(manager?.manager_id);
+    const unmanagedPlayer = Boolean(clubId && !ownPlayer && directory && !manager);
     const actionsHost = host.querySelector('.tbg-player-actions');
     if (!actionsHost) return;
 
@@ -166,12 +178,24 @@ async function mountActions(host) {
     gameActions.className = 'tbg-player-game-actions';
     gameActions.dataset.tbgPlayerGameActions = '';
     const shortlisted = isShortlisted(id);
+    const offerLabel = ownPlayer ? 'Your player'
+      : !clubId ? 'Offer contract'
+      : managedPlayer ? 'Make offer'
+      : unmanagedPlayer ? 'Unmanaged club'
+      : 'Offer unavailable';
+    const offerDisabled = ownPlayer || unmanagedPlayer || Boolean(directoryError);
     gameActions.innerHTML = `
       <button type="button" data-player-shortlist>${shortlisted ? '★ Shortlisted' : '☆ Add to shortlist'}</button>
-      <button type="button" class="primary" data-player-make-offer${ownPlayer ? ' disabled' : ''}>${ownPlayer ? 'Your player' : clubId ? 'Make offer' : 'Offer contract'}</button>
-      ${clubId && !ownPlayer ? '<button type="button" data-player-contact-manager hidden>Contact manager</button>' : ''}
+      <button type="button" class="primary" data-player-make-offer${offerDisabled ? ' disabled' : ''}>${offerLabel}</button>
+      ${managedPlayer ? '<button type="button" data-player-contact-manager>Contact manager</button>' : ''}
     `;
     actionsHost.append(gameActions);
+
+    if (unmanagedPlayer) {
+      showActionMessage(gameActions, 'Transfer status: unmanaged club. This club has no active human manager, so direct transfer offers are not available. You can still shortlist the player.');
+    } else if (directoryError && clubId && !ownPlayer) {
+      showActionMessage(gameActions, directoryError.message || 'Transfer availability could not be checked.');
+    }
 
     gameActions.querySelector('[data-player-shortlist]')?.addEventListener('click', async (event) => {
       const button = event.currentTarget;
@@ -188,7 +212,7 @@ async function mountActions(host) {
     });
 
     gameActions.querySelector('[data-player-make-offer]')?.addEventListener('click', () => {
-      if (ownPlayer) return;
+      if (offerDisabled) return;
       if (clubId) {
         openTransfersAndDispatch(host, 'tbg:prepare-player-offer', {
           playerId: id,
@@ -205,18 +229,11 @@ async function mountActions(host) {
     });
 
     const contact = gameActions.querySelector('[data-player-contact-manager]');
-    if (contact) {
-      managerDirectory().then((data) => {
-        if (!host.isConnected) return;
-        const manager = managerForClub(data, clubId);
-        if (manager?.manager_id) {
-          contact.hidden = false;
-          contact.textContent = `Contact ${manager.manager_name || 'manager'}`;
-        }
-      }).catch(() => {});
+    if (contact && manager) {
+      contact.textContent = `Contact ${manager.manager_name || 'manager'}`;
       contact.addEventListener('click', () => {
         contact.disabled = true;
-        openManagerForClub(host, clubId).catch((error) => {
+        openManagerForClub(host, manager).catch((error) => {
           contact.disabled = false;
           showActionMessage(gameActions, error.message);
         });
