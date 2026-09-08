@@ -1,6 +1,10 @@
+import { projectManagerPortal } from '../../src/world/managerPortalProjection.js';
+import { projectHistoryPlayerIdentity } from '../../src/world/historySquadProjection.js';
+
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const PINK_FINAL_BASE_URL = process.env.PINK_FINAL_BASE_URL || undefined;
 const isJwt = (value) => String(value || '').split('.').length === 3;
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -42,6 +46,7 @@ async function service(path) {
 
 function score(query, values) {
   const q = norm(query);
+  if (!q) return 0;
   let best = 0;
   for (const value of values.map(norm).filter(Boolean)) {
     if (value === q) best = Math.max(best, 1000);
@@ -52,33 +57,54 @@ function score(query, values) {
   return best;
 }
 
+function projectedPlayerDirectory(world) {
+  const result = new Map();
+  for (const clubId of Object.keys(world.squad_cycle?.clubs || {})) {
+    if (!world.club_profiles?.[clubId]) continue;
+    const portal = projectManagerPortal(world, clubId);
+    for (const player of portal.squad || []) {
+      const playerId = text(player.tbg_player_id || player.player_id || player.id);
+      if (playerId) result.set(playerId, player);
+    }
+  }
+  return result;
+}
+
+function contractFor(world, player) {
+  const contractId = text(player?.contract_id);
+  return contractId ? world.squad_cycle?.contracts?.[contractId] || null : null;
+}
+
+function projectedSearchPlayer(world, playerId, rawPlayer, projectedPlayers) {
+  const projected = projectedPlayers.get(playerId);
+  if (projected) return projected;
+  const contract = contractFor(world, rawPlayer);
+  return {
+    ...rawPlayer,
+    contract_expiry: rawPlayer.contract_expiry || rawPlayer.contract_end_at || contract?.end_at || null,
+    wage: rawPlayer.wage ?? rawPlayer.weekly_wage ?? contract?.weekly_wage ?? contract?.wage ?? null
+  };
+}
+
 function playerResult(playerId, player, clubProfiles) {
   const clubId = text(player.club_id || player.tbg_club_id || player.current_club_id);
   const club = clubId ? clubProfiles[clubId] || {} : {};
   const displayName = text(player.display_name || player.player_name || player.canonical_name || player.full_name || player.name || playerId);
   const canonicalName = text(player.canonical_name || player.full_name || player.player_name || player.display_name || player.name);
+  const linkOptions = PINK_FINAL_BASE_URL ? { baseUrl: PINK_FINAL_BASE_URL } : {};
+  const governed = projectHistoryPlayerIdentity(playerId, { ...player, display_name: displayName }, linkOptions);
   const snapshot = {
-    tbg_player_id: text(player.tbg_player_id || player.player_id || player.id || playerId),
-    player_id: text(player.player_id || player.tbg_player_id || player.id || playerId),
+    ...governed,
+    tbg_player_id: text(governed.tbg_player_id || governed.player_id || playerId),
+    player_id: text(governed.player_id || governed.tbg_player_id || playerId),
     display_name: displayName,
     canonical_name: canonicalName || displayName,
     club_id: clubId || null,
     club_name: text(club.club_name || club.name || player.club_name) || null,
-    age: player.age ?? player.season_start_age ?? null,
     nationality: player.nationality || player.country || null,
-    specific_position: player.specific_position || player.position_detail || null,
-    position: player.position || player.primary_position || player.position_group || null,
-    underlying_ability_rating: player.underlying_ability_rating ?? player.tbg_rating ?? player.rating ?? null,
-    tbg_rating: player.tbg_rating ?? player.underlying_ability_rating ?? player.rating ?? null,
-    fitness: player.fitness ?? null,
-    morale: player.morale ?? null,
-    injury_status: player.injury_status || player.availability || null,
-    availability: player.availability || player.injury_status || null,
-    registered: player.registered ?? null,
-    registration_status: player.registration_status || null,
-    contract_expiry: player.contract_expiry || player.contract_end_at || player.contract?.end_at || null,
-    profile_url: player.profile_url || player.pink_final_profile_url || null,
-    pink_final_profile_url: player.pink_final_profile_url || player.profile_url || null
+    tbg_rating: governed.underlying_ability_rating ?? governed.rating ?? player.tbg_rating ?? null,
+    profile_url: governed.pink_final_profile_url || null,
+    pink_final_profile_url: governed.pink_final_profile_url || null
   };
   return {
     type: 'player',
@@ -107,7 +133,7 @@ export default async (request) => {
     const token = tokenOf(request);
     if (!token) return json({ error: 'Authentication required' }, 401);
     const query = text(new URL(request.url).searchParams.get('q')).slice(0, 120);
-    if (query.length < 2) return json({ query, results: [] });
+    if (query.length < 2 || !norm(query)) return json({ query, results: [] });
 
     const userResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
       headers: { apikey: SUPABASE_ANON_KEY, authorization: `Bearer ${token}` }
@@ -134,15 +160,17 @@ export default async (request) => {
 
     const world = readRow.read_model;
     const clubProfiles = world.club_profiles || {};
+    const projectedPlayers = projectedPlayerDirectory(world);
     const ranked = [];
     for (const [clubId, club] of Object.entries(clubProfiles)) {
       const result = clubResult(clubId, club || {});
       const rank = score(query, [result.name, club?.short_name, club?.canonical_name, clubId]);
       if (rank) ranked.push({ rank: rank + 20, result });
     }
-    for (const [playerId, player] of Object.entries(world.squad_cycle?.players || {})) {
-      const result = playerResult(playerId, player || {}, clubProfiles);
-      const rank = score(query, [result.name, result.player.canonical_name, player?.known_as, player?.short_name, playerId]);
+    for (const [playerId, rawPlayer] of Object.entries(world.squad_cycle?.players || {})) {
+      const player = projectedSearchPlayer(world, playerId, rawPlayer || {}, projectedPlayers);
+      const result = playerResult(playerId, player, clubProfiles);
+      const rank = score(query, [result.name, result.player.canonical_name, rawPlayer?.known_as, rawPlayer?.short_name, playerId]);
       if (rank) ranked.push({ rank: rank + 10, result });
     }
 
