@@ -153,6 +153,7 @@ async function mountActions(host) {
   if (!result || !host.isConnected) return;
   const { player, club = {} } = result;
   const clubId = String(club.club_id || player.club_id || '').trim();
+  if (clubId && !ownClubId) await managerDirectory().catch(() => null);
   const ownPlayer = Boolean(clubId && ownClubId && clubId === ownClubId);
   const actionsHost = host.querySelector('.tbg-player-actions');
   if (!actionsHost) return;
@@ -220,11 +221,97 @@ function inspectProfiles() {
   mountActions(host).catch((error) => console.error('Could not mount player profile actions', error));
 }
 
+function waitFor(selector, { attempts = 40, delay = 50 } = {}) {
+  return new Promise((resolve, reject) => {
+    let remaining = attempts;
+    const check = () => {
+      const element = document.querySelector(selector);
+      if (element) return resolve(element);
+      remaining -= 1;
+      if (remaining <= 0) return reject(new Error('The transfer controls are still loading. Try again.'));
+      window.setTimeout(check, delay);
+    };
+    check();
+  });
+}
+
+function clearPartExchangeDraft() {
+  for (let guard = 0; guard < 100; guard += 1) {
+    const remove = document.querySelector('#offerPlayersSelected [data-remove-exchange-player]');
+    if (!remove) return;
+    remove.click();
+  }
+}
+
+async function prepareDirectOffer(detail = {}) {
+  await waitFor('.transfer-negotiation-compose');
+  const action = document.getElementById('negotiationAction');
+  const club = document.getElementById('negotiationClub');
+  const receivePlayer = document.getElementById('receivePlayer');
+  const addReceivePlayer = document.getElementById('addReceivePlayer');
+  const offerCash = document.getElementById('offerCash');
+  const submit = document.getElementById('submitNegotiation');
+  const composer = document.querySelector('.transfer-negotiation-compose');
+  if (!action || !club || !receivePlayer || !addReceivePlayer || !offerCash || !submit || !composer) throw new Error('The transfer offer composer is not ready yet.');
+
+  action.value = 'offer';
+  action.dispatchEvent(new Event('change', { bubbles: true }));
+  const clubOption = [...club.options].find((option) => option.value === detail.clubId);
+  if (!clubOption) throw new Error(`${detail.clubName || 'This club'} is not currently available for direct negotiation.`);
+  club.value = detail.clubId;
+  club.dispatchEvent(new Event('change', { bubbles: true }));
+  clearPartExchangeDraft();
+  const playerOption = [...receivePlayer.options].find((option) => option.value === detail.playerId);
+  if (!playerOption) throw new Error(`${detail.playerName || 'This player'} is not available in the current transfer directory.`);
+  receivePlayer.value = detail.playerId;
+  addReceivePlayer.click();
+  offerCash.value = '0';
+  submit.textContent = 'Propose offer';
+  composer.dataset.preparedPlayerId = detail.playerId;
+  const heading = composer.querySelector('h3');
+  if (heading) heading.textContent = `Make offer for ${detail.playerName || 'player'}`;
+  document.querySelector('[data-transfer-section="my"]')?.click();
+  composer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  window.setTimeout(() => offerCash.focus({ preventScroll: true }), 0);
+}
+
+async function prepareFreeAgentOffer(detail = {}) {
+  const tab = await waitFor('[data-open-market-tab="free-agents"]');
+  tab.click();
+  const input = await waitFor('#freeAgentSearchQuery');
+  input.value = detail.playerName || detail.playerId || '';
+  const form = input.closest('[data-free-agent-search-form]');
+  form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  await waitFor(`[data-free-agent-card="${CSS.escape(String(detail.playerId || ''))}"]`).catch(() => null);
+  document.querySelector(`[data-free-agent-card="${CSS.escape(String(detail.playerId || ''))}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+async function openExternalPlayer(detail = {}) {
+  const tmId = String(detail.transfermarktId || '').trim();
+  if (!tmId) return;
+  const tab = await waitFor('[data-open-market-tab="external"]');
+  tab.click();
+  const input = await waitFor('#externalTmId');
+  input.value = tmId;
+  const form = input.closest('[data-external-search-form]');
+  form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  document.getElementById('openMarketWorkspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 window.addEventListener('tbg:portal-rendered', (event) => {
   ownClubId = String(event.detail?.appointment?.club_id || event.detail?.club?.club_id || '').trim();
   managerDirectoryPromise = null;
 });
 
 document.addEventListener('tbg:shortlist-changed', inspectProfiles);
+document.addEventListener('tbg:prepare-player-offer', (event) => {
+  prepareDirectOffer(event.detail).catch((error) => console.error('Could not prepare player offer', error));
+});
+document.addEventListener('tbg:prepare-free-agent-offer', (event) => {
+  prepareFreeAgentOffer(event.detail).catch((error) => console.error('Could not prepare free-agent offer', error));
+});
+document.addEventListener('tbg:open-external-player', (event) => {
+  openExternalPlayer(event.detail).catch((error) => console.error('Could not open external player', error));
+});
 new MutationObserver(inspectProfiles).observe(document.documentElement, { childList: true, subtree: true });
 inspectProfiles();
