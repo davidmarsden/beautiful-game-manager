@@ -199,7 +199,7 @@ document.addEventListener('tbg:view-changed', (event) => {
 });
 
 window.addEventListener('tbg:portal-rendered', () => {
-  scheduleHistoryMount(false);
+  if (document.getElementById('transfersView')?.classList.contains('active')) scheduleHistoryMount(false);
 });
 
 document.addEventListener('tbg:transfer-history-refresh', () => {
