@@ -75,19 +75,16 @@ export function withExpectedInitialWages(clubs = []) {
   }));
 }
 
-function isTimestampedNegotiatedContract(contract = {}) {
-  const id = String(contract.contract_id || '');
-  // Transfers, renewals and free-agent signings all use player:club:<ISO timestamp> IDs.
-  return /:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(id);
-}
-
 export function isLegacyInitialPlaceholder(contract = {}, player = null) {
   if (Number(contract.wage) !== 1000 || contract.status !== 'active') return false;
   const playerId = String(contract.player_id || '');
   const clubId = String(contract.club_id || '');
-  if (!playerId || !clubId) return false;
-  if (player && String(player.contract_id || '') && String(player.contract_id) !== String(contract.contract_id || '')) return false;
-  return !isTimestampedNegotiatedContract(contract);
+  if (!playerId || !clubId || !player) return false;
+  if (String(player.contract_id || '') && String(player.contract_id) !== String(contract.contract_id || '')) return false;
+  // £1,000 was the old engine fallback. Treat it as a placeholder whenever the governed
+  // ExpectedWage says this player belongs above that floor, regardless of whether a later
+  // renewal/signing copied the placeholder into a timestamped replacement contract.
+  return expectedWeeklyWage(player) > 1000;
 }
 
 export function contractWeeklyWage(player = {}, contract = null) {
