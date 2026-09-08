@@ -1,4 +1,5 @@
 let lastPortal = null;
+let transferBootstrapInFlight = null;
 
 function playerId(player) {
   return String(player?.tbg_player_id || player?.player_id || '').trim();
@@ -18,6 +19,43 @@ function selectable(player) {
     && String(player?.injury_status || 'Available').toLowerCase() === 'available'
     && !player?.loaned_out
   );
+}
+
+function playerLabelText(player) {
+  const name = String(player?.display_name || player?.player_name || playerId(player)).trim();
+  const position = String(player?.specific_position || player?.position || player?.primary_position || player?.position_group || 'Unknown').trim();
+  const rating = player?.underlying_ability_rating ?? player?.tbg_rating ?? player?.rating ?? '—';
+  return `${name} · ${position} · ${rating}`;
+}
+
+function appendMissingPlayerLabel(container, zone, player) {
+  const id = playerId(player);
+  if (!container || !id || player?.loaned_out) return;
+  const exists = [...container.querySelectorAll('.player-pick input[data-zone]')]
+    .some((input) => String(input.value || '').trim() === id);
+  if (exists) return;
+
+  const label = document.createElement('label');
+  label.className = 'player-pick';
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.dataset.zone = zone;
+  input.value = id;
+  const span = document.createElement('span');
+  span.textContent = playerLabelText(player);
+  label.append(input, span);
+  container.append(label);
+}
+
+function reconcileCanonicalSquadSelectors(portal) {
+  const squad = Array.isArray(portal?.squad) ? portal.squad : [];
+  if (!squad.length) return;
+  const startingXi = document.getElementById('startingXi');
+  const bench = document.getElementById('bench');
+  squad.forEach((player) => {
+    appendMissingPlayerLabel(startingXi, 'xi', player);
+    appendMissingPlayerLabel(bench, 'bench', player);
+  });
 }
 
 function annotateSquadRows(squad) {
@@ -65,6 +103,24 @@ function applyEligibilityGuard(portal) {
   window.dispatchEvent(new CustomEvent('tbg:selection-eligibility-updated', { detail: { allowed_player_ids: [...allowed] } }));
 }
 
+async function refreshPortalAfterTransfer() {
+  const authorization = String(window.tbgPortalAuthorization || '').trim();
+  if (!authorization) return;
+  if (transferBootstrapInFlight) return transferBootstrapInFlight;
+  transferBootstrapInFlight = fetch('/api/bootstrap', {
+    headers: { authorization },
+    cache: 'no-store'
+  }).finally(() => {
+    transferBootstrapInFlight = null;
+  });
+  return transferBootstrapInFlight;
+}
+
+window.addEventListener('tbg:portal-rendered', (event) => {
+  lastPortal = event.detail || lastPortal;
+  reconcileCanonicalSquadSelectors(lastPortal);
+}, true);
+
 window.addEventListener('tbg:portal-rendered', (event) => {
   applyEligibilityGuard(event.detail);
   requestAnimationFrame(() => applyEligibilityGuard(event.detail));
@@ -74,4 +130,7 @@ window.addEventListener('tbg:portal-rendered', (event) => {
 window.addEventListener('tbg:formation-board-ready', () => applyEligibilityGuard(lastPortal));
 window.addEventListener('tbg:selection-submission-restored', (event) => {
   applyEligibilityGuard(event.detail || window.tbgPortalState);
+});
+document.addEventListener('tbg:transfer-history-refresh', () => {
+  refreshPortalAfterTransfer().catch((error) => console.warn('Could not refresh team selection after transfer', error));
 });
