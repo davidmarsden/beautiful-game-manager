@@ -134,9 +134,13 @@ async function search(query) {
   }
 }
 
-function renderShortlist() {
-  const results = shortlistResults();
-  renderResults(results, 'Your shortlist is empty. Open a player profile and choose “Add to shortlist”.');
+async function renderShortlist() {
+  try {
+    const results = await shortlistResults({ force: true });
+    renderResults(results, 'Your shortlist is empty. Open a player profile and choose “Add to shortlist”.');
+  } catch (error) {
+    renderResults([], error.message || 'Your shortlist is temporarily unavailable.');
+  }
 }
 
 function install() {
@@ -193,7 +197,7 @@ function install() {
   host.addEventListener('click', (event) => {
     if (event.target.closest('[data-global-search-shortlist]')) {
       event.preventDefault();
-      renderShortlist();
+      void renderShortlist();
       return;
     }
     const button = event.target.closest('[data-global-search-index]');
@@ -209,5 +213,5 @@ install();
 window.addEventListener('tbg:portal-rendered', install);
 document.addEventListener('tbg:view-changed', install);
 document.addEventListener('tbg:shortlist-changed', () => {
-  if (!searchHost()?.querySelector('[data-global-search-results]')?.hidden && searchHost()?.querySelector('input')?.value.trim().length < 2) renderShortlist();
+  if (!searchHost()?.querySelector('[data-global-search-results]')?.hidden && searchHost()?.querySelector('input')?.value.trim().length < 2) void renderShortlist();
 });
