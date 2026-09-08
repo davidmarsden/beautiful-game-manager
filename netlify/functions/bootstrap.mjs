@@ -120,8 +120,7 @@ export default async (request) => {
 
     const world = context.world;
     if (world.world_id !== appointment.world_id) throw new Error('Appointment world does not match the canonical fragment');
-    // The privacy-safe portal fragment bypasses loadPersistentWorld(), so apply the same
-    // one-way compatibility repair here for untouched legacy £1,000 seed contracts.
+    // Apply the one-way compatibility repair to the compact portal fragment before projection.
     migrateLegacyPlaceholderWages(world);
     const projection = projectPinkFinalSquadLinks(spoilerSafeProjection(projectManagerPortal(world, appointment.club_id, {
       nextTurnAt: context.next_turn_at,
