@@ -7,7 +7,8 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 test('match centre reads the compact canonical archive instead of the world envelope', async () => {
   const source = await read('netlify/functions/match-centre.mjs');
   assert.match(source, /canonical_match_archives/);
-  assert.doesNotMatch(source, /canonical_world_saves/);
+  assert.match(source, /canonical_world_saves\?[^\n]*select=world_id,matchday/);
+  assert.doesNotMatch(source, /save_envelope/);
   assert.doesNotMatch(source, /loadPersistentWorld/);
   assert.match(source, /archive_payload/);
 });

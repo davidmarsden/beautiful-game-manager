@@ -2,12 +2,13 @@ import { executeScheduledTurn, buildScheduledTurnPlan } from '../../src/world/sh
 import { executePortalWorldCommand } from '../../src/world/portalWorldControl.js';
 import { loadPersistentWorld, savePersistentWorld } from '../../src/world/persistentSeasonLoop.js';
 import { prepareScheduledTurnViability } from '../../src/world/scheduledTurnViability.js';
+import { archiveRowsForCanonicalWorld, readModelRowForCanonicalWorld } from '../functions/refresh-match-archives.mjs';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const TURN_DAYS = String(process.env.TBG_TURN_DAYS || '2,5').split(',').map(Number).filter((day) => day >= 0 && day <= 6);
 const TURN_HOUR_UTC = Number(process.env.TBG_TURN_HOUR_UTC || 20);
-const SCHEDULER_VERSION = 'tbg-scheduled-world-turn-v1.9';
+const SCHEDULER_VERSION = 'tbg-scheduled-world-turn-v1.10';
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -29,6 +30,30 @@ async function service(path, options = {}) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.message || body.error || `Supabase returned ${response.status}`);
   return body;
+}
+
+async function projectCommittedCheckpoint({ worldId, envelope, checksum, seasonId, matchday }) {
+  const canonicalRow = {
+    world_id: worldId,
+    save_checksum: checksum,
+    save_envelope: envelope,
+    season_id: seasonId,
+    matchday
+  };
+  const rows = archiveRowsForCanonicalWorld(canonicalRow);
+  if (rows.length) {
+    await service('/rest/v1/canonical_match_archives?on_conflict=fixture_id', {
+      method: 'POST',
+      body: JSON.stringify(rows),
+      headers: { prefer: 'resolution=merge-duplicates,return=minimal' }
+    });
+  }
+  await service('/rest/v1/world_read_model_cache?on_conflict=world_id', {
+    method: 'POST',
+    body: JSON.stringify(readModelRowForCanonicalWorld(canonicalRow)),
+    headers: { prefer: 'resolution=merge-duplicates,return=minimal' }
+  });
+  return rows.length;
 }
 
 export function nextScheduledTurn(after = new Date()) {
@@ -256,6 +281,7 @@ async function processWorld(stored, now) {
   let seasonId = stored.season_id;
   let matchday = stored.matchday || 1;
   let failureDetails = null;
+  let archiveProjection = { status: 'not_started', projected: 0 };
 
   try {
     const claimFields = 'world_id,save_checksum,updated_at,turn_status';
@@ -353,6 +379,24 @@ async function processWorld(stored, now) {
     const checkpoint = Array.isArray(checkpointRows) ? checkpointRows[0] : checkpointRows;
     if (!checkpoint?.accepted) throw new Error('Canonical world changed during scheduled processing');
 
+    tracker.begin('project_match_archives');
+    try {
+      archiveProjection = {
+        status: 'complete',
+        projected: await projectCommittedCheckpoint({
+          worldId,
+          envelope,
+          checksum: envelope.checksum,
+          seasonId: executed.world.squad_cycle.season_id,
+          matchday: nextSummary?.current_matchday || 1
+        })
+      };
+    } catch (error) {
+      // Projection is deliberately post-commit. Never roll a completed turn back because
+      // this derived read path failed; the five-minute projector remains the recovery path.
+      archiveProjection = { status: 'deferred', projected: 0, error: error.message };
+    }
+
     tracker.begin('finalize_command_outcomes');
     const commandById = new Map(commands.map((row) => [row.id, row]));
     for (const result of commandRun.results) {
@@ -384,6 +428,7 @@ async function processWorld(stored, now) {
       checksum: envelope.checksum,
       command_outcomes: commandRun.results.length,
       negotiations_pending: commandRun.negotiations.length,
+      archive_projection: archiveProjection,
       viability: failureDetails,
       stage_timings: tracker.snapshot().stage_timings
     };

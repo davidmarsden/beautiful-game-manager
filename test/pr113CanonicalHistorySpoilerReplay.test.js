@@ -91,7 +91,8 @@ test('completed matches open spoiler-safe until replay or skip persists a reveal
   assert.match(endpoint, /revealed: Boolean\(reveal\?\.revealed_at\)/);
   assert.match(endpoint, /const reveal = views\[0\] \|\| null/);
   assert.match(endpoint, /canonical_match_archives/);
-  assert.doesNotMatch(endpoint, /canonical_world_saves/);
+  assert.match(endpoint, /canonical_world_saves\?[^\n]*select=world_id,matchday/);
+  assert.doesNotMatch(endpoint, /save_envelope|loadPersistentWorld/);
   assert.match(reveal, /manager_canonical_match_views/);
   assert.match(reveal, /canonical_match_archives/);
   assert.match(reveal, /replay_completed: Boolean\(existing\?\.replay_completed\) \|\| method === 'replay_completed'/);
