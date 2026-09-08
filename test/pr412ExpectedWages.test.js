@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import {
   ageModifier,
   baseAnnualWageMillions,
@@ -77,4 +78,10 @@ test('persistent worlds seed differentiated wages and reconcile finance after lo
   const finance = clubFinanceSummary(restored.squad_cycle, 'a');
   assert.equal(finance.wage_bill, 192_300);
   assert.ok(finance.wage_budget >= finance.wage_bill);
+});
+
+test('manager portal bootstrap repairs privacy-safe fragments that bypass the persistent save loader', async () => {
+  const bootstrap = await readFile(new URL('../netlify/functions/bootstrap.mjs', import.meta.url), 'utf8');
+  assert.match(bootstrap, /import \{ migrateLegacyPlaceholderWages \} from '\.\.\/\.\.\/src\/squadCycle\/expectedWage\.js'/);
+  assert.match(bootstrap, /const world = context\.world;[\s\S]*migrateLegacyPlaceholderWages\(world\);[\s\S]*projectManagerPortal\(world,/);
 });
