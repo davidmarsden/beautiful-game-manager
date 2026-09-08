@@ -15,6 +15,24 @@ test('global search reads the canonical world and includes clubs plus all squad-
   assert.match(source, /type: 'club'/);
 });
 
+test('global player results use live portal condition, contracts and governed Pink Final identity', async () => {
+  const source = await read('../netlify/functions/global-search.mjs');
+  assert.match(source, /import \{ projectManagerPortal \}/);
+  assert.match(source, /import \{ projectHistoryPlayerIdentity \}/);
+  assert.match(source, /projectManagerPortal\(world, clubId\)/);
+  assert.match(source, /contractFor\(world, rawPlayer\)/);
+  assert.match(source, /projectHistoryPlayerIdentity\(playerId/);
+  assert.match(source, /profile_url: governed\.pink_final_profile_url \|\| null/);
+  assert.match(source, /pink_final_profile_url: governed\.pink_final_profile_url \|\| null/);
+  assert.doesNotMatch(source, /pink_final_profile_url: player\.pink_final_profile_url \|\| player\.profile_url/);
+});
+
+test('global search rejects queries whose searchable normalization is empty', async () => {
+  const source = await read('../netlify/functions/global-search.mjs');
+  assert.match(source, /if \(!q\) return 0/);
+  assert.match(source, /query\.length < 2 \|\| !norm\(query\)/);
+});
+
 test('manager portal exposes an accessible player and club search that opens native profiles', async () => {
   const search = await read('../public/global-search.js');
   const links = await read('../public/internal-profile-links.js');
