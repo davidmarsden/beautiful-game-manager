@@ -64,7 +64,8 @@ test('canonical match centre reads the compact persisted archive rather than leg
   assert.match(source, /archive_payload/);
   assert.match(source, /const result = archive\.result \|\| \{\}/);
   assert.match(source, /result\.events/);
-  assert.doesNotMatch(source, /canonical_world_saves/);
+  assert.match(source, /canonical_world_saves\?[^\n]*select=world_id,matchday/);
+  assert.doesNotMatch(source, /save_envelope/);
   assert.doesNotMatch(source, /loadPersistentWorld/);
   assert.doesNotMatch(source, /\/rest\/v1\/fixtures\?id=eq\./);
   assert.doesNotMatch(source, /TBG_WORLD_URL|WORLD_URL/);
