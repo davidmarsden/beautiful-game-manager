@@ -1,5 +1,6 @@
 import { openTbgPlayerProfile } from './player-profile.js';
 import { openClubInspection } from './club-inspection.js';
+import { shortlistResults } from './player-profile-actions.js';
 
 let activeRequest = 0;
 let selectedIndex = -1;
@@ -55,7 +56,7 @@ function updateSelection() {
 }
 
 function resultMarkup(result, index) {
-  const label = result.type === 'club' ? 'CLUB' : 'PLAYER';
+  const label = result.type === 'club' ? 'CLUB' : result.type === 'external-player' ? 'EXTERNAL' : 'PLAYER';
   return `<button type="button" role="option" aria-selected="false" data-global-search-index="${index}">
     <span class="global-search-type">${label}</span>
     <span class="global-search-name">${escapeHtml(result.name)}</span>
@@ -75,6 +76,10 @@ function renderResults(results, message = '') {
   updateSelection();
 }
 
+function openTransfers() {
+  document.querySelector('[data-view="transfers"]')?.click();
+}
+
 async function activate(result) {
   if (!result) return;
   closeResults();
@@ -83,8 +88,26 @@ async function activate(result) {
     openTbgPlayerProfile(document.body, result.player, result.club || {});
   } else if (result.type === 'club') {
     await openClubInspection(result.id);
+  } else if (result.type === 'external-player') {
+    openTransfers();
+    window.setTimeout(() => document.dispatchEvent(new CustomEvent('tbg:open-external-player', {
+      detail: { transfermarktId: result.transfermarkt_id, player: result.external_player }
+    })), 50);
   }
   if (input) input.value = result.name || input.value;
+}
+
+function externalResults(data) {
+  return (Array.isArray(data?.results) ? data.results : [])
+    .filter((player) => !player.in_world)
+    .map((player) => ({
+      type: 'external-player',
+      id: player.tbg_player_id,
+      name: player.display_name || player.tbg_player_id,
+      secondary: [player.position || 'Player', player.real_world_club || 'Outside TBG world'].filter(Boolean).join(' · '),
+      transfermarkt_id: player.transfermarkt_id,
+      external_player: player
+    }));
 }
 
 async function search(query) {
@@ -95,17 +118,25 @@ async function search(query) {
     return;
   }
   try {
-    const response = await fetch(`/api/global-search?q=${encodeURIComponent(query)}`, {
-      headers: { authorization: `Bearer ${token}` },
-      cache: 'no-store'
-    });
-    const body = await response.json().catch(() => ({}));
+    const headers = { authorization: `Bearer ${token}` };
+    const [worldResponse, externalResponse] = await Promise.all([
+      fetch(`/api/global-search?q=${encodeURIComponent(query)}`, { headers, cache: 'no-store' }),
+      fetch(`/api/external-player-search?q=${encodeURIComponent(query)}&limit=12`, { headers, cache: 'no-store' }).catch(() => null)
+    ]);
+    const body = await worldResponse.json().catch(() => ({}));
+    const externalBody = externalResponse?.ok ? await externalResponse.json().catch(() => ({})) : {};
     if (ticket !== activeRequest) return;
-    if (!response.ok) throw new Error(body.error || `Search failed (HTTP ${response.status})`);
-    renderResults(body.results || []);
+    if (!worldResponse.ok) throw new Error(body.error || `Search failed (HTTP ${worldResponse.status})`);
+    const combined = [...(body.results || []), ...externalResults(externalBody)];
+    renderResults(combined);
   } catch (error) {
     if (ticket === activeRequest) renderResults([], error.message || 'Search is temporarily unavailable.');
   }
+}
+
+function renderShortlist() {
+  const results = shortlistResults();
+  renderResults(results, 'Your shortlist is empty. Open a player profile and choose “Add to shortlist”.');
 }
 
 function install() {
@@ -118,7 +149,7 @@ function install() {
   const host = document.createElement('div');
   host.id = 'tbgGlobalSearch';
   host.className = 'tbg-global-search';
-  host.innerHTML = `<label for="tbgGlobalSearchInput">Search TBG</label>
+  host.innerHTML = `<div class="global-search-heading"><label for="tbgGlobalSearchInput">Search TBG</label><button type="button" data-global-search-shortlist>★ Shortlist</button></div>
     <div class="global-search-control">
       <span aria-hidden="true">⌕</span>
       <input id="tbgGlobalSearchInput" type="search" autocomplete="off" spellcheck="false"
@@ -160,6 +191,11 @@ function install() {
     }
   });
   host.addEventListener('click', (event) => {
+    if (event.target.closest('[data-global-search-shortlist]')) {
+      event.preventDefault();
+      renderShortlist();
+      return;
+    }
     const button = event.target.closest('[data-global-search-index]');
     if (!button) return;
     activate(latestResults[Number(button.dataset.globalSearchIndex)]).catch(console.error);
@@ -172,3 +208,6 @@ function install() {
 install();
 window.addEventListener('tbg:portal-rendered', install);
 document.addEventListener('tbg:view-changed', install);
+document.addEventListener('tbg:shortlist-changed', () => {
+  if (!searchHost()?.querySelector('[data-global-search-results]')?.hidden && searchHost()?.querySelector('input')?.value.trim().length < 2) renderShortlist();
+});
