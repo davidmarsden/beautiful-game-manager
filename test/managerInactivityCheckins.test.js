@@ -10,7 +10,13 @@ test('inactivity check-ins wait three days and only target active human appointm
   assert.match(migration, /appointment\.status = 'active'/);
   assert.match(migration, /appointment\.control_type = 'human'/);
   assert.match(migration, /interval '3 days'/);
-  assert.match(migration, /greatest\(coalesce\(auth_user\.last_sign_in_at, appointment\.appointed_at\), appointment\.appointed_at\)/);
+});
+
+test('inactivity uses world-scoped portal activity before auth sign-in fallback', () => {
+  assert.match(migration, /manager_world_activity activity/);
+  assert.match(migration, /activity\.manager_id = appointment\.manager_id/);
+  assert.match(migration, /activity\.world_id = appointment\.world_id/);
+  assert.match(migration, /coalesce\(activity\.last_active_at, auth_user\.last_sign_in_at, appointment\.appointed_at\)/);
 });
 
 test('one check-in is created per appointment activity episode', () => {
@@ -19,10 +25,18 @@ test('one check-in is created per appointment activity episode', () => {
   assert.match(migration, /manager_inactivity:/);
 });
 
-test('three-day check-in creates an in-app action-required notification', () => {
+test('three-day check-in creates an in-app action-required notification without a duplicate generic email', () => {
   assert.match(migration, /'participation_inactivity'/);
   assert.match(migration, /'action_required'/);
   assert.match(migration, /We haven''t seen you for 3 days/);
+  assert.match(migration, /manager_notification_email_deliveries/);
+  assert.match(migration, /'skipped'/);
+});
+
+test('claim limit applies across new check-ins and retries', () => {
+  assert.match(migration, /claim_limit integer/);
+  assert.match(migration, /limit claim_limit/);
+  assert.match(migration, /claim_limit - \(select count\(\*\) from inserted\)/);
 });
 
 test('scheduled worker sends operational email with bounded retries', () => {
