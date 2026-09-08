@@ -16,12 +16,6 @@ function token() {
   return '';
 }
 
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, (character) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[character]));
-}
-
 function readShortlist() {
   try {
     const value = JSON.parse(localStorage.getItem(SHORTLIST_KEY) || '[]');
@@ -58,7 +52,8 @@ function installStyles() {
   const style = document.createElement('style');
   style.id = 'tbgPlayerProfileActionStyles';
   style.textContent = `
-    .tbg-player-game-actions{display:grid;gap:8px;margin-top:10px;width:100%}
+    .tbg-player-actions-enhanced{display:grid!important;gap:8px!important;align-items:stretch!important}
+    .tbg-player-game-actions{display:grid;gap:8px;width:100%}
     .tbg-player-game-actions button{width:100%;border:1px solid #627986;background:#203746;color:#eef6fa;padding:9px 10px;font-weight:800;text-align:left;cursor:pointer}
     .tbg-player-game-actions button:hover,.tbg-player-game-actions button:focus-visible{background:#2a4b60;border-color:#88a4b4}
     .tbg-player-game-actions button.primary{background:#24458e;border-color:#4268bd;color:#fff}
@@ -159,6 +154,7 @@ async function mountActions(host) {
   if (!actionsHost) return;
 
   installStyles();
+  actionsHost.classList.add('tbg-player-actions-enhanced');
   const gameActions = document.createElement('div');
   gameActions.className = 'tbg-player-game-actions';
   gameActions.dataset.tbgPlayerGameActions = '';
@@ -282,8 +278,11 @@ async function prepareFreeAgentOffer(detail = {}) {
   input.value = detail.playerName || detail.playerId || '';
   const form = input.closest('[data-free-agent-search-form]');
   form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-  await waitFor(`[data-free-agent-card="${CSS.escape(String(detail.playerId || ''))}"]`).catch(() => null);
-  document.querySelector(`[data-free-agent-card="${CSS.escape(String(detail.playerId || ''))}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const id = String(detail.playerId || '');
+  if (id && window.CSS?.escape) {
+    await waitFor(`[data-free-agent-card="${CSS.escape(id)}"]`).catch(() => null);
+    document.querySelector(`[data-free-agent-card="${CSS.escape(id)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 }
 
 async function openExternalPlayer(detail = {}) {
