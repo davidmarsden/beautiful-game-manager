@@ -16,7 +16,7 @@ test('profile transfer history only publishes completed canonical moves', () => 
 
 test('player profiles replace the dormant Transfers tab with ledger history', () => {
   assert.match(profileLinks, /import '\.\/profile-transfer-history\.js'/);
-  assert.match(ui, /data-player-tab=\\"transfers\\"/);
+  assert.match(ui, /data-player-tab="transfers"/);
   assert.match(ui, /player_id/);
   assert.match(ui, /Completed TBG moves only/);
 });
