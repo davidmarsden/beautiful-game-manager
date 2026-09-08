@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const guard = fs.readFileSync(new URL('../public/team-selection-eligibility-guard.js', import.meta.url), 'utf8');
+const history = fs.readFileSync(new URL('../public/transfer-history.js', import.meta.url), 'utf8');
 const projection = fs.readFileSync(new URL('../src/world/managerPortalProjection.js', import.meta.url), 'utf8');
 
 test('fresh canonical squad players are reconciled into both legacy team selectors before board listeners run', () => {
@@ -12,11 +13,21 @@ test('fresh canonical squad players are reconciled into both legacy team selecto
   assert.match(guard, /window\.addEventListener\('tbg:portal-rendered',[\s\S]*reconcileCanonicalSquadSelectors\(lastPortal\);[\s\S]*\}, true\);/);
 });
 
-test('completed transfer history refresh requests a fresh bootstrap for team selection', () => {
-  assert.match(guard, /document\.addEventListener\('tbg:transfer-history-refresh'/);
+test('canonical transfer completion requests a fresh bootstrap for team selection', () => {
+  assert.match(guard, /document\.addEventListener\('tbg:transfer-completed'/);
+  assert.doesNotMatch(guard, /document\.addEventListener\('tbg:transfer-history-refresh'/);
   assert.match(guard, /fetch\('\/api\/bootstrap'/);
   assert.match(guard, /cache: 'no-store'/);
   assert.match(guard, /window\.tbgPortalAuthorization/);
+});
+
+test('transfer history announces newly completed deals and keeps checking while the portal remains open', () => {
+  assert.match(history, /const announcedCompletedTransfers = new Set\(\)/);
+  assert.match(history, /function announceNewCompletions\(rows\)/);
+  assert.match(history, /row\?\.status === 'completed'/);
+  assert.match(history, /new CustomEvent\('tbg:transfer-completed'/);
+  assert.match(history, /announceNewCompletions\(rows\);/);
+  assert.match(history, /window\.setInterval\([\s\S]*maybeMount\(false\);[\s\S]*TTL\);/);
 });
 
 test('missing matchday runtime state defaults to selectable condition in the manager projection', () => {
