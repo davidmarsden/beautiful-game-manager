@@ -58,9 +58,9 @@ test('manager portal exposes accessible native player and club profile opening',
   assert.match(links, /\[data-player-profile-id\]/);
 });
 
-test('player profiles expose shortlist offer and human-manager contact actions', async () => {
+test('player profiles expose shortlist offer and human-manager contact actions without duplicate async mounts', async () => {
   const actions = await read('../public/player-profile-actions.js');
-  assert.match(actions, /tbg-private-player-shortlist-v1/);
+  assert.match(actions, /\/api\/player-shortlist/);
   assert.match(actions, /Add to shortlist/);
   assert.match(actions, /Make offer/);
   assert.match(actions, /Offer contract/);
@@ -71,12 +71,30 @@ test('player profiles expose shortlist offer and human-manager contact actions',
   assert.match(actions, /negotiationClub/);
   assert.match(actions, /receivePlayer/);
   assert.match(actions, /freeAgentSearchQuery/);
+  assert.match(actions, /tbgPlayerActionsMounting === 'true'/);
+  assert.match(actions, /host\.dataset\.tbgPlayerActionsMounting = 'true'/);
+  assert.match(actions, /delete host\.dataset\.tbgPlayerActionsMounting/);
+  assert.doesNotMatch(actions, /tbg-private-player-shortlist-v1/);
 });
 
-test('shortlist is reachable directly from the global search control', async () => {
+test('shortlist persists privately per manager and world through the server', async () => {
+  const api = await read('../netlify/functions/player-shortlist.mjs');
+  const migration = await read('../supabase/migrations/20260908b_manager_player_shortlists.sql');
+  assert.match(api, /manager_player_shortlists/);
+  assert.match(api, /manager_profiles/);
+  assert.match(api, /manager_appointments/);
+  assert.match(api, /action === 'remove'/);
+  assert.match(api, /action !== 'add'/);
+  assert.match(migration, /create table if not exists public\.manager_player_shortlists/);
+  assert.match(migration, /unique \(manager_id, world_id, player_id\)/);
+  assert.match(migration, /enable row level security/);
+  assert.match(migration, /revoke all on table public\.manager_player_shortlists from public, anon, authenticated/);
+});
+
+test('persistent shortlist is reachable directly from the global search control', async () => {
   const search = await read('../public/global-search.js');
   assert.match(search, /★ Shortlist/);
-  assert.match(search, /shortlistResults\(\)/);
+  assert.match(search, /await shortlistResults\(\{ force: true \}\)/);
   assert.match(search, /Your shortlist is empty/);
 });
 
