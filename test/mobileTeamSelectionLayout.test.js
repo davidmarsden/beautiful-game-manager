@@ -5,6 +5,8 @@ import fs from 'node:fs';
 const formationCss = fs.readFileSync(new URL('../public/formation-board.css', import.meta.url), 'utf8');
 const fitnessCss = fs.readFileSync(new URL('../public/team-selection-fitness.css', import.meta.url), 'utf8');
 const portalProjection = fs.readFileSync(new URL('../src/world/managerPortalProjection.js', import.meta.url), 'utf8');
+const alphaTeamUx = fs.readFileSync(new URL('../public/alpha-team-ux-fixes.js', import.meta.url), 'utf8');
+const design1982 = fs.readFileSync(new URL('../public/design-1982.css', import.meta.url), 'utf8');
 
 test('mobile formation board uses compact non-overlapping pitch cards', () => {
   assert.match(formationCss, /@media\(max-width:600px\)/);
@@ -40,8 +42,14 @@ test('phone layout survives browsers requesting a desktop viewport', () => {
   const fallback = /@media \(hover:none\) and \(pointer:coarse\) and \(max-device-width:600px\)/;
   assert.match(formationCss, fallback);
   assert.match(fitnessCss, fallback);
-  assert.match(formationCss, /max-device-width:600px\)\{\.formation-board-shell\{grid-template-columns:1fr/);
+  assert.match(formationCss, /max-device-width:600px\)\{#tacticsView \.formation-board-shell\{grid-template-columns:1fr!important/);
   assert.match(formationCss, /max-device-width:600px\)[\s\S]*\.formation-slot\{width:min\(72px,18%\);min-height:46px/);
+});
+
+test('desktop-site phone fallback outranks later desktop two-column rules', () => {
+  assert.match(design1982, /\.formation-board-shell\{[^}]*grid-template-columns:minmax\(0,1\.68fr\)/);
+  assert.match(alphaTeamUx, /#tacticsView \.formation-board-shell \{[\s\S]*grid-template-columns:[^;]+!important/);
+  assert.match(formationCss, /#tacticsView \.formation-board-shell\{grid-template-columns:1fr!important/);
 });
 
 test('manager portal prefers football display names when canonical player data provides them', () => {
