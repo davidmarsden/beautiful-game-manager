@@ -33,12 +33,21 @@ test('global search rejects queries whose searchable normalization is empty', as
   assert.match(source, /query\.length < 2 \|\| !norm\(query\)/);
 });
 
-test('manager portal exposes an accessible player and club search that opens native profiles', async () => {
+test('manager portal search combines world results with governed external players', async () => {
+  const search = await read('../public/global-search.js');
+  assert.match(search, /\/api\/global-search\?q=/);
+  assert.match(search, /\/api\/external-player-search\?q=/);
+  assert.match(search, /filter\(\(player\) => !player\.in_world\)/);
+  assert.match(search, /type: 'external-player'/);
+  assert.match(search, /tbg:open-external-player/);
+  assert.match(search, /EXTERNAL/);
+});
+
+test('manager portal exposes accessible native player and club profile opening', async () => {
   const search = await read('../public/global-search.js');
   const links = await read('../public/internal-profile-links.js');
   assert.match(search, /Search players and clubs/);
   assert.match(search, /aria-autocomplete="list"/);
-  assert.match(search, /\/api\/global-search\?q=/);
   assert.match(search, /openTbgPlayerProfile\(document\.body, result\.player/);
   assert.match(search, /openClubInspection\(result\.id\)/);
   assert.match(search, /ArrowDown/);
@@ -47,6 +56,28 @@ test('manager portal exposes an accessible player and club search that opens nat
   assert.match(links, /import '\.\/global-search\.js'/);
   assert.match(links, /globalPlayerMatch/);
   assert.match(links, /\[data-player-profile-id\]/);
+});
+
+test('player profiles expose shortlist offer and human-manager contact actions', async () => {
+  const actions = await read('../public/player-profile-actions.js');
+  assert.match(actions, /tbg-private-player-shortlist-v1/);
+  assert.match(actions, /Add to shortlist/);
+  assert.match(actions, /Make offer/);
+  assert.match(actions, /Offer contract/);
+  assert.match(actions, /Contact \$\{manager\.manager_name/);
+  assert.match(actions, /openManagerParticipation\(manager\.manager_id\)/);
+  assert.match(actions, /tbg:prepare-player-offer/);
+  assert.match(actions, /tbg:prepare-free-agent-offer/);
+  assert.match(actions, /negotiationClub/);
+  assert.match(actions, /receivePlayer/);
+  assert.match(actions, /freeAgentSearchQuery/);
+});
+
+test('shortlist is reachable directly from the global search control', async () => {
+  const search = await read('../public/global-search.js');
+  assert.match(search, /★ Shortlist/);
+  assert.match(search, /shortlistResults\(\)/);
+  assert.match(search, /Your shortlist is empty/);
 });
 
 test('global search remains scoped to authenticated managers and does not accept world ids from the client', async () => {
