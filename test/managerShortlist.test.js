@@ -37,3 +37,19 @@ test('manager notes are private, bounded, and saved independently of recruitment
   assert.match(uiSource, /Private note/);
   assert.match(uiSource, /Save note/);
 });
+
+test('shortlist decoration does not endlessly retrigger its mutation observer', () => {
+  assert.match(uiSource, /const glyph = selected \? '★' : '☆';/);
+  assert.match(uiSource, /if \(button\.textContent !== glyph\) button\.textContent = glyph;/);
+});
+
+test('direct shortlist offer re-queries the live listing after the market tab rerenders', () => {
+  assert.match(uiSource, /openMarketTab\('listed'\);\s*setTimeout\(\(\) => \{\s*const offer = \[\.\.\.document\.querySelectorAll\('\[data-open-market-prepare-offer\]'\)\]/s);
+  assert.match(uiSource, /if \(offer\) offer\.click\(\);/);
+});
+
+test('shortlist load failures render an error and an actionable retry state', () => {
+  assert.match(uiSource, /shortlistError = error\.message \|\| 'Could not load your shortlist\.'/);
+  assert.match(uiSource, /data-shortlist-retry/);
+  assert.match(uiSource, /Try again/);
+});
