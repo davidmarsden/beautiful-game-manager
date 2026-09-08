@@ -11,7 +11,7 @@ const retryableDecisionStatus = (status) => status === 408 || status === 429 || 
 const invalidatesBootstrap = (input, init) => {
   const method = requestMethod(input, init);
   const url = requestUrl(input);
-  return method !== 'GET' && ['/api/decisions', '/api/shared-world', '/api/profile'].some((path) => url.includes(path));
+  return method !== 'GET' && ['/api/decisions', '/api/shared-world', '/api/profile', '/api/free-agents'].some((path) => url.includes(path));
 };
 
 function responseFromSnapshot(snapshot) {
