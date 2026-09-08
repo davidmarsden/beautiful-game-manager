@@ -11,7 +11,7 @@ const retryableDecisionStatus = (status) => status === 408 || status === 429 || 
 const invalidatesBootstrap = (input, init) => {
   const method = requestMethod(input, init);
   const url = requestUrl(input);
-  return method !== 'GET' && ['/api/decisions', '/api/shared-world', '/api/profile'].some((path) => url.includes(path));
+  return method !== 'GET' && ['/api/decisions', '/api/shared-world', '/api/profile', '/api/free-agents'].some((path) => url.includes(path));
 };
 
 function responseFromSnapshot(snapshot) {
@@ -101,9 +101,20 @@ window.tbgInvalidateBootstrapCache = invalidateBootstrapCache;
 document.addEventListener('submit', synchronizeLegacySelectorsFromVisibleBoard, true);
 
 window.fetch = async (input, init = {}) => {
-  if (invalidatesBootstrap(input, init)) invalidateBootstrapCache();
+  const invalidatingWrite = invalidatesBootstrap(input, init);
+  if (invalidatingWrite) {
+    invalidateBootstrapCache();
+    try {
+      if (isDecisionWrite(input, init)) return await fetchDecisionWithRetry(input, init);
+      return await networkFetch(input, init);
+    } finally {
+      // A bootstrap read may have started after the pre-write invalidation and
+      // completed before the mutation committed. Invalidate again once the
+      // write settles so that stale overlapping reads cannot repopulate cache.
+      invalidateBootstrapCache();
+    }
+  }
 
-  if (isDecisionWrite(input, init)) return fetchDecisionWithRetry(input, init);
   if (!isBootstrap(input, init)) return networkFetch(input, init);
   if (bootstrapSnapshot) return responseFromSnapshot(bootstrapSnapshot);
 
