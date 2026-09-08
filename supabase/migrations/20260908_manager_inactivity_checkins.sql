@@ -35,6 +35,7 @@ set search_path = pg_catalog, public, auth
 as $$
 declare
   result_value jsonb;
+  claim_limit integer := greatest(1, least(coalesce(p_limit, 100), 250));
 begin
   if p_claim_token is null then raise exception 'Claim token is required'; end if;
 
@@ -46,27 +47,58 @@ begin
       club.name as club_name,
       profile.display_name,
       auth_user.email,
-      greatest(coalesce(auth_user.last_sign_in_at, appointment.appointed_at), appointment.appointed_at) as activity_anchor
+      greatest(
+        coalesce(activity.last_active_at, auth_user.last_sign_in_at, appointment.appointed_at),
+        appointment.appointed_at
+      ) as activity_anchor
     from public.manager_appointments appointment
     join public.manager_profiles profile on profile.id = appointment.manager_id
     join public.clubs club on club.id = appointment.club_id
+    left join public.manager_world_activity activity
+      on activity.manager_id = appointment.manager_id
+     and activity.world_id = appointment.world_id
     left join auth.users auth_user on auth_user.id = profile.user_id
     where appointment.status = 'active'
       and appointment.control_type = 'human'
       and profile.status = 'active'
       and auth_user.email is not null
-      and greatest(coalesce(auth_user.last_sign_in_at, appointment.appointed_at), appointment.appointed_at) <= now() - interval '3 days'
+      and greatest(
+        coalesce(activity.last_active_at, auth_user.last_sign_in_at, appointment.appointed_at),
+        appointment.appointed_at
+      ) <= now() - interval '3 days'
+  ), new_due as (
+    select due.*
+    from due
+    where not exists (
+      select 1
+      from public.manager_inactivity_checkins existing
+      where existing.appointment_id = due.appointment_id
+        and existing.activity_anchor = due.activity_anchor
+    )
+    order by due.activity_anchor, due.appointment_id
+    limit claim_limit
   ), inserted as (
     insert into public.manager_inactivity_checkins(
       manager_id, world_id, appointment_id, activity_anchor,
       status, claim_token, claimed_at, attempts, created_at, updated_at
     )
     select
-      due.manager_id, due.world_id, due.appointment_id, due.activity_anchor,
+      new_due.manager_id, new_due.world_id, new_due.appointment_id, new_due.activity_anchor,
       'sending', p_claim_token, now(), 1, now(), now()
-    from due
+    from new_due
     on conflict (appointment_id, activity_anchor) do nothing
     returning id, manager_id, world_id, appointment_id, activity_anchor
+  ), retry_candidates as (
+    select existing.id
+    from public.manager_inactivity_checkins existing
+    join due on due.appointment_id = existing.appointment_id
+            and due.activity_anchor = existing.activity_anchor
+    where existing.status in ('failed','sending')
+      and existing.attempts < 3
+      and coalesce(existing.claimed_at, '-infinity'::timestamptz) < now() - interval '15 minutes'
+    order by existing.created_at
+    limit greatest(0, claim_limit - (select count(*) from inserted))
+    for update of existing skip locked
   ), retried as (
     update public.manager_inactivity_checkins checkin
     set status = 'sending',
@@ -74,18 +106,7 @@ begin
         claimed_at = now(),
         attempts = checkin.attempts + 1,
         updated_at = now()
-    where checkin.id in (
-      select existing.id
-      from public.manager_inactivity_checkins existing
-      join due on due.appointment_id = existing.appointment_id
-              and due.activity_anchor = existing.activity_anchor
-      where existing.status in ('failed','sending')
-        and existing.attempts < 3
-        and coalesce(existing.claimed_at, '-infinity'::timestamptz) < now() - interval '15 minutes'
-      order by existing.created_at
-      limit greatest(1, least(coalesce(p_limit, 100), 250))
-      for update of existing skip locked
-    )
+    where checkin.id in (select retry_candidates.id from retry_candidates)
     returning checkin.id, checkin.manager_id, checkin.world_id, checkin.appointment_id, checkin.activity_anchor
   ), claimed as (
     select * from inserted
@@ -114,7 +135,15 @@ begin
       where existing_notification.dedupe_key =
         'manager_inactivity:' || claimed.appointment_id::text || ':' || extract(epoch from claimed.activity_anchor)::bigint::text
     )
-    returning id
+    returning id, manager_id
+  ), suppress_generic_email as (
+    insert into public.manager_notification_email_deliveries(
+      notification_id, manager_id, status, attempts, created_at, updated_at
+    )
+    select notified.id, notified.manager_id, 'skipped', 0, now(), now()
+    from notified
+    on conflict (notification_id) do nothing
+    returning notification_id
   )
   select coalesce(jsonb_agg(jsonb_build_object(
     'checkin_id', checkin.id,
@@ -171,6 +200,6 @@ revoke all on function public.finish_manager_inactivity_checkin(uuid,uuid,text,t
 grant execute on function public.finish_manager_inactivity_checkin(uuid,uuid,text,text) to service_role;
 
 comment on table public.manager_inactivity_checkins is
-  'Operational three-day inactivity check-ins for active human manager appointments. One message is sent per inactivity episode; a new login resets the episode anchor.';
+  'Operational three-day inactivity check-ins for active human manager appointments. One message is sent per inactivity episode; fresh portal activity resets the episode anchor.';
 
 commit;
