@@ -41,25 +41,29 @@ test('initial wage seeding differentiates players while preserving explicit impo
   assert.ok(new Set(wages.slice(0, 3)).size === 3);
 });
 
-test('legacy migration repairs opening/imported £1,000 placeholders but leaves timestamped negotiated £1,000 deals alone', () => {
+test('legacy migration repairs £1,000 fallbacks even when copied into later contracts, but keeps a legitimate low wage floor', () => {
   const world = {
     squad_cycle: {
       players: {
         p1: { tbg_player_id: 'p1', underlying_ability_rating: 90, age: 25, club_id: 'a', contract_id: 'legacy-import-123' },
-        p2: { tbg_player_id: 'p2', underlying_ability_rating: 90, age: 25, club_id: 'a', contract_id: 'p2:a:2026-09-01T00:00:00.000Z' }
+        p2: { tbg_player_id: 'p2', underlying_ability_rating: 90, age: 25, club_id: 'a', contract_id: 'p2:a:2026-09-01T00:00:00.000Z' },
+        p3: { tbg_player_id: 'p3', underlying_ability_rating: 40, age: 20, club_id: 'a', contract_id: 'p3:a:2026-09-01T00:00:00.000Z' }
       },
       contracts: {
         original: { contract_id: 'legacy-import-123', player_id: 'p1', club_id: 'a', wage: 1000, status: 'active' },
-        negotiated: { contract_id: 'p2:a:2026-09-01T00:00:00.000Z', player_id: 'p2', club_id: 'a', wage: 1000, status: 'active' }
+        copiedFallback: { contract_id: 'p2:a:2026-09-01T00:00:00.000Z', player_id: 'p2', club_id: 'a', wage: 1000, status: 'active' },
+        legitimateFloor: { contract_id: 'p3:a:2026-09-01T00:00:00.000Z', player_id: 'p3', club_id: 'a', wage: 1000, status: 'active' }
       }
     }
   };
   assert.equal(contractWeeklyWage(world.squad_cycle.players.p1, world.squad_cycle.contracts.original), 192_300);
-  assert.equal(contractWeeklyWage(world.squad_cycle.players.p2, world.squad_cycle.contracts.negotiated), 1000);
+  assert.equal(contractWeeklyWage(world.squad_cycle.players.p2, world.squad_cycle.contracts.copiedFallback), 192_300);
+  assert.equal(contractWeeklyWage(world.squad_cycle.players.p3, world.squad_cycle.contracts.legitimateFloor), 1000);
   const migrated = migrateLegacyPlaceholderWages(world);
-  assert.equal(migrated, 1);
+  assert.equal(migrated, 2);
   assert.equal(world.squad_cycle.contracts.original.wage, 192_300);
-  assert.equal(world.squad_cycle.contracts.negotiated.wage, 1000);
+  assert.equal(world.squad_cycle.contracts.copiedFallback.wage, 192_300);
+  assert.equal(world.squad_cycle.contracts.legitimateFloor.wage, 1000);
 });
 
 test('persistent worlds seed differentiated wages and reconcile finance after loading a legacy placeholder save', () => {
