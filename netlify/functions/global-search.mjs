@@ -57,27 +57,26 @@ function score(query, values) {
   return best;
 }
 
-function projectedPlayerDirectory(world) {
-  const result = new Map();
-  for (const clubId of Object.keys(world.squad_cycle?.clubs || {})) {
-    if (!world.club_profiles?.[clubId]) continue;
-    const portal = projectManagerPortal(world, clubId);
-    for (const player of portal.squad || []) {
-      const playerId = text(player.tbg_player_id || player.player_id || player.id);
-      if (playerId) result.set(playerId, player);
-    }
-  }
-  return result;
-}
-
 function contractFor(world, player) {
   const contractId = text(player?.contract_id);
   return contractId ? world.squad_cycle?.contracts?.[contractId] || null : null;
 }
 
-function projectedSearchPlayer(world, playerId, rawPlayer, projectedPlayers) {
-  const projected = projectedPlayers.get(playerId);
-  if (projected) return projected;
+function rawPlayerClubId(player) {
+  return text(player?.club_id || player?.tbg_club_id || player?.current_club_id);
+}
+
+function projectedSearchPlayer(world, playerId, rawPlayer, clubProjectionCache) {
+  const clubId = rawPlayerClubId(rawPlayer);
+  if (clubId && world.club_profiles?.[clubId]) {
+    if (!clubProjectionCache.has(clubId)) {
+      const portal = projectManagerPortal(world, clubId);
+      const players = new Map((portal.squad || []).map((player) => [text(player.tbg_player_id || player.player_id || player.id), player]));
+      clubProjectionCache.set(clubId, players);
+    }
+    const projected = clubProjectionCache.get(clubId)?.get(playerId);
+    if (projected) return projected;
+  }
   const contract = contractFor(world, rawPlayer);
   return {
     ...rawPlayer,
@@ -87,7 +86,7 @@ function projectedSearchPlayer(world, playerId, rawPlayer, projectedPlayers) {
 }
 
 function playerResult(playerId, player, clubProfiles) {
-  const clubId = text(player.club_id || player.tbg_club_id || player.current_club_id);
+  const clubId = rawPlayerClubId(player);
   const club = clubId ? clubProfiles[clubId] || {} : {};
   const displayName = text(player.display_name || player.player_name || player.canonical_name || player.full_name || player.name || playerId);
   const canonicalName = text(player.canonical_name || player.full_name || player.player_name || player.display_name || player.name);
@@ -160,22 +159,30 @@ export default async (request) => {
 
     const world = readRow.read_model;
     const clubProfiles = world.club_profiles || {};
-    const projectedPlayers = projectedPlayerDirectory(world);
     const ranked = [];
+
     for (const [clubId, club] of Object.entries(clubProfiles)) {
       const result = clubResult(clubId, club || {});
       const rank = score(query, [result.name, club?.short_name, club?.canonical_name, clubId]);
-      if (rank) ranked.push({ rank: rank + 20, result });
-    }
-    for (const [playerId, rawPlayer] of Object.entries(world.squad_cycle?.players || {})) {
-      const player = projectedSearchPlayer(world, playerId, rawPlayer || {}, projectedPlayers);
-      const result = playerResult(playerId, player, clubProfiles);
-      const rank = score(query, [result.name, result.player.canonical_name, rawPlayer?.known_as, rawPlayer?.short_name, playerId]);
-      if (rank) ranked.push({ rank: rank + 10, result });
+      if (rank) ranked.push({ rank: rank + 20, type: 'club', result });
     }
 
-    ranked.sort((a, b) => b.rank - a.rank || a.result.name.localeCompare(b.result.name, 'en'));
-    return json({ query, results: ranked.slice(0, 30).map(({ result }) => result), canonical_source: canonicalRow.save_checksum });
+    for (const [playerId, rawPlayer] of Object.entries(world.squad_cycle?.players || {})) {
+      const displayName = text(rawPlayer?.display_name || rawPlayer?.player_name || rawPlayer?.canonical_name || rawPlayer?.full_name || rawPlayer?.name || playerId);
+      const rank = score(query, [displayName, rawPlayer?.canonical_name, rawPlayer?.known_as, rawPlayer?.short_name, playerId]);
+      if (rank) ranked.push({ rank: rank + 10, type: 'player', playerId, rawPlayer: rawPlayer || {}, displayName });
+    }
+
+    ranked.sort((a, b) => b.rank - a.rank || String(a.result?.name || a.displayName || '').localeCompare(String(b.result?.name || b.displayName || ''), 'en'));
+    const selected = ranked.slice(0, 30);
+    const clubProjectionCache = new Map();
+    const results = selected.map((entry) => {
+      if (entry.type === 'club') return entry.result;
+      const player = projectedSearchPlayer(world, entry.playerId, entry.rawPlayer, clubProjectionCache);
+      return playerResult(entry.playerId, player, clubProfiles);
+    });
+
+    return json({ query, results, canonical_source: canonicalRow.save_checksum });
   } catch (error) {
     return json({ error: error.message || 'Global search failed' }, 503);
   }
