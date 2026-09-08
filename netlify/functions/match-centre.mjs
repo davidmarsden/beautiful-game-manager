@@ -36,11 +36,24 @@ async function archiveForFixture(fixtureId, worldIds) {
   return rows[0] || null;
 }
 
+function readModelContainsFixture(readModel, fixtureId) {
+  const runtimes = Object.values(readModel?.matchday_cycle?.runtimes || {});
+  return runtimes.some((runtime) => (runtime?.fixtures || []).some((fixture) => text(fixture?.fixture_id || fixture?.id) === fixtureId));
+}
+
 async function completedFixtureStillProjecting(fixtureId, worldIds) {
   const matchday = fixtureMatchday(fixtureId);
   if (matchday === null) return false;
-  const rows = await service(`/rest/v1/canonical_world_saves?world_id=in.(${worldIds.map(encodeURIComponent).join(',')})&select=world_id,matchday`);
-  return rows.some((row) => String(fixtureId).startsWith(`${row.world_id}:`) && number(row.matchday, 0) > matchday);
+  const encodedWorlds = worldIds.map(encodeURIComponent).join(',');
+  const [worldRows, readRows] = await Promise.all([
+    service(`/rest/v1/canonical_world_saves?world_id=in.(${encodedWorlds})&select=world_id,matchday`),
+    service(`/rest/v1/world_read_model_cache?world_id=in.(${encodedWorlds})&select=world_id,read_model`)
+  ]);
+  return worldRows.some((row) => {
+    if (!String(fixtureId).startsWith(`${row.world_id}:`) || number(row.matchday, 0) <= matchday) return false;
+    const readRow = readRows.find((candidate) => candidate.world_id === row.world_id);
+    return readModelContainsFixture(readRow?.read_model, fixtureId);
+  });
 }
 
 const prettyId = (value) => text(value).replace(/^tbg[-_:]?/i, '').replace(/[-_:]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) || 'Unknown player';
