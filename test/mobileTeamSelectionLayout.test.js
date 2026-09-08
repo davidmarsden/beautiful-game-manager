@@ -36,6 +36,14 @@ test('pitch fitness information stays visible without expanding mobile cards', (
   assert.match(fitnessCss, /\.football-pitch \.fitness-metrics small\{display:none\}/);
 });
 
+test('phone layout survives browsers requesting a desktop viewport', () => {
+  const fallback = /@media \(hover:none\) and \(pointer:coarse\) and \(max-device-width:600px\)/;
+  assert.match(formationCss, fallback);
+  assert.match(fitnessCss, fallback);
+  assert.match(formationCss, /max-device-width:600px\)\{\.formation-board-shell\{grid-template-columns:1fr/);
+  assert.match(formationCss, /max-device-width:600px\)[\s\S]*\.formation-slot\{width:min\(72px,18%\);min-height:46px/);
+});
+
 test('manager portal prefers football display names when canonical player data provides them', () => {
   assert.match(portalProjection, /function preferredFootballName/);
   assert.match(portalProjection, /player\.known_as[\s\S]*player\.short_name[\s\S]*player\.nickname[\s\S]*player\.nicknames[\s\S]*player\.display_name/);
