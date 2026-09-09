@@ -1,17 +1,13 @@
-// Hotfix for PR #16 tablet tap-to-swap.
-// Captures a selected squad player and performs a true two-way swap in the
+// Interaction bridge for formation-board selection.
+// Captures the tray player directly and performs a true two-way swap in the
 // hidden ordered selectors before the formation board's own click handler runs.
-// The capture bridge is installed everywhere but only handles a click when the
-// current primary input is coarse/no-hover. Desktop mouse/trackpad interaction
-// therefore remains on formation-board.js's native path, including on convertibles.
+// This no longer depends on formation-board.js first marking a tray item selected,
+// which makes the path reliable on both desktop and touch devices.
 
 const q = (selector, root = document) => root.querySelector(selector);
 const qa = (selector, root = document) => [...root.querySelectorAll(selector)];
 const id = (value) => String(value ?? '');
-
-function touchSwapEnabled() {
-  return Boolean(window.matchMedia?.('(hover: none) and (pointer: coarse)')?.matches);
-}
+let pendingPlayerId = null;
 
 function orderedChecked(zone) {
   return qa(`input[data-zone="${zone}"]:checked`).map((input) => id(input.value));
@@ -33,10 +29,6 @@ function reorderAndCheck(containerId, zone, orderedIds) {
     if (label) container.appendChild(label);
   });
   labels.filter((label) => !selected.has(id(q('input', label)?.value))).forEach((label) => container.appendChild(label));
-}
-
-function selectedTrayPlayer(board) {
-  return q('.tray-player.selected[data-player-id]', board)?.dataset.playerId || null;
 }
 
 function slotPlayerId(slot) {
@@ -75,7 +67,8 @@ function applySwap(board, movingId, targetSlot) {
 
   reorderAndCheck('startingXi', 'xi', cleanXi);
   reorderAndCheck('bench', 'bench', cleanBench);
-  importHiddenTeamIntoBoard('tablet_swap_bridge');
+  pendingPlayerId = null;
+  importHiddenTeamIntoBoard('formation_selection_bridge');
   targetSlot.blur();
 }
 
@@ -85,15 +78,18 @@ function install() {
   board.dataset.touchSwapFixed = 'true';
 
   board.addEventListener('click', (event) => {
-    if (!touchSwapEnabled()) return;
+    const trayPlayer = event.target.closest('.tray-player[data-player-id]');
+    if (trayPlayer) {
+      pendingPlayerId = id(trayPlayer.dataset.playerId);
+      return;
+    }
+
     const targetSlot = event.target.closest('[data-zone][data-index]');
-    if (!targetSlot) return;
-    const movingId = selectedTrayPlayer(board);
-    if (!movingId) return;
+    if (!targetSlot || !pendingPlayerId) return;
 
     event.preventDefault();
     event.stopImmediatePropagation();
-    applySwap(board, id(movingId), targetSlot);
+    applySwap(board, pendingPlayerId, targetSlot);
   }, true);
   return true;
 }
