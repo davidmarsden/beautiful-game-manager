@@ -1,13 +1,17 @@
 // Hotfix for PR #16 tablet tap-to-swap.
 // Captures a selected squad player and performs a true two-way swap in the
 // hidden ordered selectors before the formation board's own click handler runs.
-// The capture bridge is deliberately restricted to coarse-pointer devices;
-// desktop mouse/trackpad interaction must remain on formation-board.js's native path.
+// The capture bridge is installed everywhere but only handles a click when the
+// current primary input is coarse/no-hover. Desktop mouse/trackpad interaction
+// therefore remains on formation-board.js's native path, including on convertibles.
 
 const q = (selector, root = document) => root.querySelector(selector);
 const qa = (selector, root = document) => [...root.querySelectorAll(selector)];
 const id = (value) => String(value ?? '');
-const touchSwapEnabled = Boolean(window.matchMedia?.('(hover: none) and (pointer: coarse)')?.matches);
+
+function touchSwapEnabled() {
+  return Boolean(window.matchMedia?.('(hover: none) and (pointer: coarse)')?.matches);
+}
 
 function orderedChecked(zone) {
   return qa(`input[data-zone="${zone}"]:checked`).map((input) => id(input.value));
@@ -76,12 +80,12 @@ function applySwap(board, movingId, targetSlot) {
 }
 
 function install() {
-  if (!touchSwapEnabled) return false;
   const board = document.getElementById('interactiveFormationBoard');
   if (!board || board.dataset.touchSwapFixed === 'true') return false;
   board.dataset.touchSwapFixed = 'true';
 
   board.addEventListener('click', (event) => {
+    if (!touchSwapEnabled()) return;
     const targetSlot = event.target.closest('[data-zone][data-index]');
     if (!targetSlot) return;
     const movingId = selectedTrayPlayer(board);
@@ -109,9 +113,8 @@ document.addEventListener('change', (event) => {
   importHiddenTeamIntoBoard('captain_or_tactics_change');
 }, true);
 
-const observer = touchSwapEnabled ? new MutationObserver(() => install()) : null;
+const observer = new MutationObserver(() => install());
 window.addEventListener('load', () => {
-  if (!touchSwapEnabled) return;
   install();
   observer.observe(document.body, { childList: true, subtree: true });
 });
