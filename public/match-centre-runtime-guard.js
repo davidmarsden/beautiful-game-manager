@@ -2,6 +2,7 @@
 // Loaded after phase2d4.js and before the player-link decorator wrapper.
 
 const guardedFetch = window.fetch.bind(window);
+let latestMatchCentrePayload = null;
 
 const requestUrl = (input) => typeof input === 'string'
   ? input
@@ -16,26 +17,73 @@ function teardownVisibleReplay() {
   if (!modal || modal.hidden) return false;
   const close = modal.querySelector('#closeMatchCentre');
   if (!close) return false;
-  // Use the Match Centre's own close handler so its private replay timer/state
-  // are cleared before a second archive can replace the DOM.
   close.click();
+  latestMatchCentrePayload = null;
   return true;
 }
 
 function compactMatchCentrePayload(payload) {
   if (!payload || typeof payload !== 'object' || !payload.result || typeof payload.result !== 'object') return payload;
 
-  // phase2d4.js only needs statistics/model from result after the server has
-  // already projected events, submissions, summaries and performances. Drop
-  // the duplicate heavyweight branches before the payload is retained by the
-  // replay state and player-link decorator.
   const result = payload.result;
   const compactResult = {
     ...(result.statistics ? { statistics: result.statistics } : {}),
-    ...(result.model ? { model: result.model } : {})
+    ...(result.model ? { model: result.model } : {}),
+    ...(Array.isArray(result.control_trajectory) ? { control_trajectory: result.control_trajectory } : {})
   };
 
   return { ...payload, result: compactResult };
+}
+
+function replayTrajectory(payload = latestMatchCentrePayload) {
+  const rows = payload?.result?.control_trajectory;
+  return Array.isArray(rows) && rows.length ? rows : null;
+}
+
+function replayMinute() {
+  const raw = document.getElementById('replayClock')?.textContent || '0';
+  const value = Number.parseInt(raw, 10);
+  return Number.isFinite(value) ? Math.max(0, Math.min(90, value)) : 0;
+}
+
+function possessionPoint(rows, minute) {
+  let point = rows[0];
+  for (const candidate of rows) {
+    if (Number(candidate.minute) > minute) break;
+    point = candidate;
+  }
+  const home = Math.max(25, Math.min(75, Number(point?.home) || 50));
+  return { home: Math.round(home), away: 100 - Math.round(home) };
+}
+
+function ensureReplayPossessionBar() {
+  const rows = replayTrajectory();
+  const console = document.querySelector('#matchCentreModal:not([hidden]) .replay-console');
+  if (!rows || !console) return null;
+  let bar = console.querySelector('#replayPossession');
+  if (bar) return bar;
+  const fixture = latestMatchCentrePayload?.fixture || {};
+  bar = document.createElement('div');
+  bar.id = 'replayPossession';
+  bar.className = 'replay-possession';
+  bar.setAttribute('aria-live', 'polite');
+  bar.innerHTML = `<div class="replay-possession-heading"><span>POSSESSION</span><b id="replayPossessionScore">50–50</b></div><div class="replay-possession-labels"><span>${String(fixture.home_club_name || 'HOME')}</span><span>${String(fixture.away_club_name || 'AWAY')}</span></div><div class="replay-possession-track" role="img" aria-label="Live possession"><span id="replayPossessionHome" class="replay-possession-home"></span><span class="replay-possession-away"></span></div>`;
+  const score = console.querySelector('.replay-score');
+  if (score?.nextSibling) console.insertBefore(bar, score.nextSibling);
+  else console.prepend(bar);
+  return bar;
+}
+
+function updateReplayPossessionBar() {
+  const rows = replayTrajectory();
+  const bar = ensureReplayPossessionBar();
+  if (!rows || !bar) return;
+  const point = possessionPoint(rows, replayMinute());
+  const home = bar.querySelector('#replayPossessionHome');
+  const score = bar.querySelector('#replayPossessionScore');
+  if (home) home.style.width = `${point.home}%`;
+  if (score) score.textContent = `${point.home}–${point.away}`;
+  bar.querySelector('.replay-possession-track')?.setAttribute('aria-label', `Live possession ${point.home} to ${point.away}`);
 }
 
 const jsonErrorResponse = (message, code, status = 503) => new Response(JSON.stringify({
@@ -54,9 +102,6 @@ window.fetch = async (input, init) => {
   try {
     response = await guardedFetch(input, init);
   } catch (error) {
-    // Match Report is a secondary view. A transient network/API failure must
-    // stay inside the modal rather than escape as an unhandled rejection and
-    // trigger the portal-wide recovery screen.
     if (!matchCentreRequest) throw error;
     return jsonErrorResponse(
       'Could not reach the match archive. Check your connection and try again.',
@@ -68,9 +113,6 @@ window.fetch = async (input, init) => {
   if (!matchCentreRequest) return response;
 
   if (!response.ok) {
-    // phase2d4.js always parses Match Centre responses as JSON. Netlify/proxy
-    // failures can occasionally return HTML/plain text; normalize those too so
-    // the failure remains a local Match Report error rather than a portal crash.
     try {
       await response.clone().json();
       return response;
@@ -86,6 +128,8 @@ window.fetch = async (input, init) => {
   try {
     const payload = await response.clone().json();
     const compact = compactMatchCentrePayload(payload);
+    latestMatchCentrePayload = compact;
+    queueMicrotask(updateReplayPossessionBar);
     return new Response(JSON.stringify(compact), {
       status: response.status,
       statusText: response.statusText,
@@ -100,8 +144,6 @@ window.fetch = async (input, init) => {
   }
 };
 
-// A second replay launch must synchronously tear down the current replay before
-// phase2d4's bubbling click/keydown handler opens the next archive.
 document.addEventListener('click', (event) => {
   if (event.target.closest?.('[data-match-centre]')) teardownVisibleReplay();
 }, true);
@@ -111,8 +153,9 @@ document.addEventListener('keydown', (event) => {
   if (event.target.closest?.('[data-match-centre]')) teardownVisibleReplay();
 }, true);
 
-// Page lifecycle transitions should never leave a replay interval alive in a
-// backgrounded document.
+const replayObserver = new MutationObserver(() => updateReplayPossessionBar());
+replayObserver.observe(document.documentElement, { subtree: true, childList: true, characterData: true });
+
 window.addEventListener('pagehide', teardownVisibleReplay);
 
-export { compactMatchCentrePayload, teardownVisibleReplay };
+export { compactMatchCentrePayload, teardownVisibleReplay, possessionPoint };
