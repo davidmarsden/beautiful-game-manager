@@ -4,7 +4,7 @@ const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, v
 const round = (value, places = 4) => Number(Number(value).toFixed(places));
 const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 
-export const EVENT_GENERATION_VERSION = 'tbg-event-generation-v0.6';
+export const EVENT_GENERATION_VERSION = 'tbg-event-generation-v0.7';
 export const EVENT_GENERATION_STATE_KEY = 'module_d_event_generation';
 
 export const EVENT_DIALS = Object.freeze({
@@ -119,7 +119,7 @@ function expectedSide(side, inputs) {
   const homeFactor = side === 'home' ? EVENT_DIALS.home_factor : 1;
   const expectedChances = EVENT_DIALS.base_chances_per_side * tempo * chanceVolume * homeFactor * (0.72 + control * 0.56) * (0.72 + attackShare * 0.56);
   const finishingEdge = clamp((ownAttack - average([opponentDefence, opponentGoalkeeper])) / 100, -0.18, 0.18);
-  const conversion = clamp(EVENT_DIALS.base_conversion_rate + finishingEdge * 0.055, 0.065, 0.145);
+  const conversion = clamp(EVENT_DIALS.base_conversion_rate + finishingEdge * 0.10, 0.065, 0.145);
   const expectedGoals = clamp(expectedChances * conversion, EVENT_DIALS.minimum_expected_goals, EVENT_DIALS.maximum_expected_goals);
   const setPieces = expectedChances * EVENT_DIALS.set_piece_share;
   const workload = number(own.context?.team?.average_workload, 1);
@@ -266,7 +266,7 @@ function buildSideEvents(side, expected, quality, context, opponentQuality, rand
   for (let index = 0; index < chanceCount; index += 1) {
     const minute = 1 + Math.floor(random() * 90);
     const actor = weightedPlayer(players, random() < 0.76 ? 'attack' : 'midfield', random);
-    const chanceQuality = clamp(0.035 + random() * 0.22 + (expected.conversion_rate - 0.10) * 0.35, 0.025, 0.38);
+    const chanceQuality = clamp(0.035 + random() * 0.22 + (expected.conversion_rate - 0.10), 0.025, 0.38);
     const onTarget = random() < clamp(EVENT_DIALS.shot_on_target_share + chanceQuality * 0.45, 0.22, 0.62);
     const goal = onTarget && random() < clamp(chanceQuality * 1.55, 0.04, 0.58);
     events.push({ event_id: `${side}-chance-${index + 1}`, minute, side, type: goal ? 'goal' : chanceQuality >= 0.22 ? 'big_chance' : 'shot', player_id: actor?.player_id || null, xg: round(chanceQuality, 3), on_target: onTarget, outcome: goal ? 'goal' : onTarget ? 'saved' : 'missed', provisional: true, commentary_hook: goal ? 'goal' : chanceQuality >= 0.22 ? 'big_chance' : onTarget ? 'shot_on_target' : 'shot' });
