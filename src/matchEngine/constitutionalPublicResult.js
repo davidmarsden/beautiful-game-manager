@@ -3,7 +3,7 @@ const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(
 const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 
 export const CONSTITUTIONAL_PUBLIC_RESULT_VERSION = '2d5-v1';
-export const CONSTITUTIONAL_PUBLIC_ADAPTER_VERSION = 'tbg-constitutional-public-adapter-v0.7';
+export const CONSTITUTIONAL_PUBLIC_ADAPTER_VERSION = 'tbg-constitutional-public-adapter-v0.8';
 
 function commentaryByEvent(report = {}) { return new Map((report.commentary || []).map((row) => [String(row.event_id), row.text])); }
 
@@ -78,6 +78,11 @@ function publicEvent(event, report, contract) {
 }
 
 function possession(eventGeneration = {}) {
+  const trajectory = Array.isArray(eventGeneration.control_trajectory) ? eventGeneration.control_trajectory : [];
+  if (trajectory.length) {
+    const mean = trajectory.reduce((sum, point) => sum + number(point.home, 50), 0) / trajectory.length;
+    return clamp(Math.round(mean), 25, 75);
+  }
   const home = number(eventGeneration.expected?.home?.control_share, 0.5);
   return clamp(Math.round(home * 100), 25, 75);
 }
@@ -107,6 +112,7 @@ export function runConstitutionalPublicResult(context) {
     result_version: CONSTITUTIONAL_PUBLIC_RESULT_VERSION, run_key: context.contract.run_key, fixture_id: context.fixture.fixture_id || context.fixture.id,
     status: 'completed', played_at: playedAt, score: { ...resolution.score }, outcome: resolution.result, events,
     statistics: { home: publicStats(resolution.statistics.home, homePossession), away: publicStats(resolution.statistics.away, 100 - homePossession) },
+    control_trajectory: eventGeneration.control_trajectory || [],
     player_ratings: { home: ratings.home, away: ratings.away },
     player_of_the_match: ratings.player_of_the_match,
     report: { headline: report.headline, summary: report.summary, talking_points: report.talking_points },

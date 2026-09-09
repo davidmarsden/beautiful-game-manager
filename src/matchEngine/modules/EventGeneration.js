@@ -4,7 +4,7 @@ const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, v
 const round = (value, places = 4) => Number(Number(value).toFixed(places));
 const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 
-export const EVENT_GENERATION_VERSION = 'tbg-event-generation-v0.3';
+export const EVENT_GENERATION_VERSION = 'tbg-event-generation-v0.7';
 export const EVENT_GENERATION_STATE_KEY = 'module_d_event_generation';
 
 export const EVENT_DIALS = Object.freeze({
@@ -24,6 +24,11 @@ export const EVENT_DIALS = Object.freeze({
   maximum_penalty_retakes: 2,
   set_piece_share: 0.24,
   shot_on_target_share: 0.34,
+  style_control_weight: 0.40,
+  control_interval_minutes: 5,
+  control_noise: 0.045,
+  control_event_weight: 0.0075,
+  control_red_card_swing: 0.055,
   commentary_hook_limit: 12
 });
 
@@ -83,9 +88,11 @@ function lineStrength(quality, context, tactical, unit) {
   return round(unitQuality * fitness * sharpness * morale * familiarity * shape, 4);
 }
 
-function controlShare(ownMidfield, opponentMidfield) {
+function controlShare(ownMidfield, opponentMidfield, ownTactical = {}, opponentTactical = {}) {
   const total = Math.max(0.0001, ownMidfield + opponentMidfield);
-  return clamp(ownMidfield / total, 0.25, 0.75);
+  const qualityShare = ownMidfield / total;
+  const styleDelta = (number(ownTactical?.style_effects?.control, 0) - number(opponentTactical?.style_effects?.control, 0)) * EVENT_DIALS.style_control_weight;
+  return clamp(qualityShare + styleDelta, 0.25, 0.75);
 }
 
 function tacticalFactor(matchup, side) {
@@ -102,17 +109,18 @@ function expectedSide(side, inputs) {
   const opponentMidfield = lineStrength(opponent.quality, opponent.context, opponent.tactical, 'midfield');
   const opponentDefence = lineStrength(opponent.quality, opponent.context, opponent.tactical, 'defence');
   const opponentGoalkeeper = number(opponent.quality?.units?.goalkeeping?.effective_quality, opponentDefence);
-  const control = controlShare(ownMidfield, opponentMidfield);
+  const control = controlShare(ownMidfield, opponentMidfield, own.tactical, opponent.tactical);
   const tempo = tempoFactor(own.team);
   const matchup = tacticalFactor(inputs.matchup, side);
   const effectiveAttack = ownAttack * matchup * tempo;
   const effectiveDefence = opponentDefence * tacticalFactor(inputs.matchup, opponentSide);
   const attackShare = clamp(effectiveAttack / Math.max(0.0001, effectiveAttack + effectiveDefence), 0.25, 0.75);
-  const expectedChances = EVENT_DIALS.base_chances_per_side * tempo * (0.72 + control * 0.56) * (0.72 + attackShare * 0.56);
-  const finishingEdge = clamp((ownAttack - average([opponentDefence, opponentGoalkeeper])) / 100, -0.18, 0.18);
-  const conversion = clamp(EVENT_DIALS.base_conversion_rate + finishingEdge * 0.055, 0.065, 0.145);
+  const chanceVolume = clamp(1 + number(own.tactical?.style_effects?.chance_volume, 0), 0.85, 1.15);
   const homeFactor = side === 'home' ? EVENT_DIALS.home_factor : 1;
-  const expectedGoals = clamp(expectedChances * conversion * homeFactor, EVENT_DIALS.minimum_expected_goals, EVENT_DIALS.maximum_expected_goals);
+  const expectedChances = EVENT_DIALS.base_chances_per_side * tempo * chanceVolume * homeFactor * (0.72 + control * 0.56) * (0.72 + attackShare * 0.56);
+  const finishingEdge = clamp((ownAttack - average([opponentDefence, opponentGoalkeeper])) / 100, -0.18, 0.18);
+  const conversion = clamp(EVENT_DIALS.base_conversion_rate + finishingEdge * 0.10, 0.065, 0.145);
+  const expectedGoals = clamp(expectedChances * conversion, EVENT_DIALS.minimum_expected_goals, EVENT_DIALS.maximum_expected_goals);
   const setPieces = expectedChances * EVENT_DIALS.set_piece_share;
   const workload = number(own.context?.team?.average_workload, 1);
   const cards = EVENT_DIALS.card_base_rate * (0.85 + workload * 0.15);
@@ -156,6 +164,19 @@ function sampleCount(mean, random, maximum = 30) {
   const whole = Math.floor(mean);
   const remainder = mean - whole;
   return Math.min(maximum, whole + (random() < remainder ? 1 : 0));
+}
+
+function samplePoisson(mean, random, maximum = 30) {
+  const safeMean = clamp(number(mean, 0), 0, maximum);
+  if (safeMean <= 0) return 0;
+  const threshold = Math.exp(-safeMean);
+  let product = 1;
+  let count = 0;
+  do {
+    count += 1;
+    product *= Math.max(Number.EPSILON, random());
+  } while (product > threshold && count <= maximum + 1);
+  return Math.min(maximum, Math.max(0, count - 1));
 }
 
 function penaltyOutcome(random, retakeCount) {
@@ -234,7 +255,7 @@ export function buildPenaltyIncident({ attackingSide, defendingSide, minute, ind
 function buildSideEvents(side, expected, quality, context, opponentQuality, random) {
   const events = [];
   const opponentSide = side === 'home' ? 'away' : 'home';
-  const chanceCount = sampleCount(expected.expected_chances, random, 24);
+  const chanceCount = samplePoisson(expected.expected_chances, random, 24);
   const cardCount = sampleCount(expected.expected_cards, random, 6);
   const foulCount = sampleCount(expected.expected_fouls, random, 20);
   const setPieceCount = sampleCount(expected.expected_set_pieces, random, 8);
@@ -245,7 +266,7 @@ function buildSideEvents(side, expected, quality, context, opponentQuality, rand
   for (let index = 0; index < chanceCount; index += 1) {
     const minute = 1 + Math.floor(random() * 90);
     const actor = weightedPlayer(players, random() < 0.76 ? 'attack' : 'midfield', random);
-    const chanceQuality = clamp(0.035 + random() * 0.22 + (expected.conversion_rate - 0.10) * 0.35, 0.025, 0.38);
+    const chanceQuality = clamp(0.035 + random() * 0.22 + (expected.conversion_rate - 0.10), 0.025, 0.38);
     const onTarget = random() < clamp(EVENT_DIALS.shot_on_target_share + chanceQuality * 0.45, 0.22, 0.62);
     const goal = onTarget && random() < clamp(chanceQuality * 1.55, 0.04, 0.58);
     events.push({ event_id: `${side}-chance-${index + 1}`, minute, side, type: goal ? 'goal' : chanceQuality >= 0.22 ? 'big_chance' : 'shot', player_id: actor?.player_id || null, xg: round(chanceQuality, 3), on_target: onTarget, outcome: goal ? 'goal' : onTarget ? 'saved' : 'missed', provisional: true, commentary_hook: goal ? 'goal' : chanceQuality >= 0.22 ? 'big_chance' : onTarget ? 'shot_on_target' : 'shot' });
@@ -290,6 +311,46 @@ function commentaryHooks(events) {
   return events.filter((event) => event.commentary_hook).sort((left, right) => (EVENT_PRIORITY[right.type] || 0) - (EVENT_PRIORITY[left.type] || 0) || left.minute - right.minute).slice(0, EVENT_DIALS.commentary_hook_limit).map((event) => deepFreeze({ minute: event.minute, side: event.side, hook: event.commentary_hook, event_id: event.event_id }));
 }
 
+function controlEventValue(event) {
+  if (event.type === 'goal') return 2;
+  if (['shot', 'big_chance'].includes(event.type)) return 1.25;
+  if (event.type === 'penalty' && event.subtype === 'penalty_attempt') return 1.5;
+  if (event.type === 'set_piece') return 0.6;
+  return 0;
+}
+
+function buildControlTrajectory(homeExpected, events, seed) {
+  const random = seededRandom(`${seed}:control-trajectory`);
+  const baseline = clamp(number(homeExpected?.control_share, 0.5), 0.25, 0.75);
+  const points = [{ minute: 0, home: Math.round(baseline * 100), away: 100 - Math.round(baseline * 100) }];
+  let current = baseline;
+  let homeReds = 0;
+  let awayReds = 0;
+
+  for (let minute = EVENT_DIALS.control_interval_minutes; minute <= 90; minute += EVENT_DIALS.control_interval_minutes) {
+    const windowStart = Math.max(1, minute - 10);
+    let pressure = 0;
+    for (const event of events) {
+      if (event.minute > minute) break;
+      if (event.type === 'red_card' && event.minute > minute - EVENT_DIALS.control_interval_minutes) {
+        if (event.side === 'home') homeReds += 1;
+        if (event.side === 'away') awayReds += 1;
+      }
+      if (event.minute < windowStart) continue;
+      const value = controlEventValue(event);
+      pressure += event.side === 'home' ? value : event.side === 'away' ? -value : 0;
+    }
+    const eventSwing = clamp(pressure * EVENT_DIALS.control_event_weight, -0.055, 0.055);
+    const cardSwing = clamp((awayReds - homeReds) * EVENT_DIALS.control_red_card_swing, -0.11, 0.11);
+    const noise = ((random() + random() + random()) / 3 - 0.5) * 2 * EVENT_DIALS.control_noise;
+    const target = clamp(baseline + eventSwing + cardSwing + noise, 0.25, 0.75);
+    current = clamp(current * 0.62 + target * 0.38, 0.25, 0.75);
+    const home = Math.round(current * 100);
+    points.push({ minute, home, away: 100 - home });
+  }
+  return deepFreeze(points);
+}
+
 export function resolveEventGeneration(contract, tactical, quality, fatigue) {
   if (!tactical?.home || !tactical?.away) throw new Error('Module D requires Module A tactical resolution');
   if (!quality?.home || !quality?.away) throw new Error('Module D requires Module B player quality');
@@ -303,11 +364,13 @@ export function resolveEventGeneration(contract, tactical, quality, fatigue) {
   const home = expectedSide('home', inputs);
   const away = expectedSide('away', inputs);
   const seed = fixtureSeed(contract);
-  const random = seededRandom(seed);
+  const homeRandom = seededRandom(`${seed}:events:home`);
+  const awayRandom = seededRandom(`${seed}:events:away`);
   const events = orderEvents([
-    ...buildSideEvents('home', home, quality.home, fatigue.home, quality.away, random),
-    ...buildSideEvents('away', away, quality.away, fatigue.away, quality.home, random)
+    ...buildSideEvents('home', home, quality.home, fatigue.home, quality.away, homeRandom),
+    ...buildSideEvents('away', away, quality.away, fatigue.away, quality.home, awayRandom)
   ]);
+  const controlTrajectory = buildControlTrajectory(home, events, seed);
 
   const provisionalScore = events.reduce((score, event) => {
     if (event.type === 'goal') score[event.side] += 1;
@@ -318,6 +381,7 @@ export function resolveEventGeneration(contract, tactical, quality, fatigue) {
     version: EVENT_GENERATION_VERSION,
     seed_commitment: hashSeed(seed).toString(16).padStart(8, '0'),
     expected: { home, away },
+    control_trajectory: controlTrajectory,
     provisional_event_stream: events,
     provisional_score: provisionalScore,
     commentary_hooks: commentaryHooks(events),
