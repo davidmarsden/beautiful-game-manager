@@ -123,6 +123,57 @@
   color: #ff8a8a;
 }
 
+.replay-possession {
+  margin: .75rem 0 1rem;
+  padding: .7rem .8rem;
+  border: 1px solid #2f88a8;
+  background: #071b24;
+}
+
+.replay-possession-heading,
+.replay-possession-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: baseline;
+}
+
+.replay-possession-heading {
+  color: #73c8ee;
+  font-size: .74rem;
+  letter-spacing: .12em;
+}
+
+.replay-possession-heading b {
+  color: #ffe900;
+  font-size: 1rem;
+}
+
+.replay-possession-labels {
+  margin: .35rem 0 .3rem;
+  color: #d7e7ee;
+  font-size: .7rem;
+}
+
+.replay-possession-track {
+  display: flex;
+  height: .7rem;
+  overflow: hidden;
+  border: 1px solid #377b94;
+  background: #102f3c;
+}
+
+.replay-possession-home {
+  width: 50%;
+  background: #ffe900;
+  transition: width .35s ease;
+}
+
+.replay-possession-away {
+  flex: 1;
+  background: #55b7df;
+}
+
 @keyframes tbg-major-goal-pulse {
   0% { transform: scale(.985); }
   55% { transform: scale(1.012); }
@@ -131,6 +182,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .replay-spotlight.spotlight-goal { animation: none; }
+  .replay-possession-home { transition: none; }
 }
 
 @media (max-width: 760px) {
