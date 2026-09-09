@@ -4,7 +4,7 @@ const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, v
 const round = (value, places = 4) => Number(Number(value).toFixed(places));
 const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 
-export const EVENT_GENERATION_VERSION = 'tbg-event-generation-v0.5';
+export const EVENT_GENERATION_VERSION = 'tbg-event-generation-v0.6';
 export const EVENT_GENERATION_STATE_KEY = 'module_d_event_generation';
 
 export const EVENT_DIALS = Object.freeze({
@@ -116,11 +116,11 @@ function expectedSide(side, inputs) {
   const effectiveDefence = opponentDefence * tacticalFactor(inputs.matchup, opponentSide);
   const attackShare = clamp(effectiveAttack / Math.max(0.0001, effectiveAttack + effectiveDefence), 0.25, 0.75);
   const chanceVolume = clamp(1 + number(own.tactical?.style_effects?.chance_volume, 0), 0.85, 1.15);
-  const expectedChances = EVENT_DIALS.base_chances_per_side * tempo * chanceVolume * (0.72 + control * 0.56) * (0.72 + attackShare * 0.56);
+  const homeFactor = side === 'home' ? EVENT_DIALS.home_factor : 1;
+  const expectedChances = EVENT_DIALS.base_chances_per_side * tempo * chanceVolume * homeFactor * (0.72 + control * 0.56) * (0.72 + attackShare * 0.56);
   const finishingEdge = clamp((ownAttack - average([opponentDefence, opponentGoalkeeper])) / 100, -0.18, 0.18);
   const conversion = clamp(EVENT_DIALS.base_conversion_rate + finishingEdge * 0.055, 0.065, 0.145);
-  const homeFactor = side === 'home' ? EVENT_DIALS.home_factor : 1;
-  const expectedGoals = clamp(expectedChances * conversion * homeFactor, EVENT_DIALS.minimum_expected_goals, EVENT_DIALS.maximum_expected_goals);
+  const expectedGoals = clamp(expectedChances * conversion, EVENT_DIALS.minimum_expected_goals, EVENT_DIALS.maximum_expected_goals);
   const setPieces = expectedChances * EVENT_DIALS.set_piece_share;
   const workload = number(own.context?.team?.average_workload, 1);
   const cards = EVENT_DIALS.card_base_rate * (0.85 + workload * 0.15);
