@@ -81,9 +81,13 @@ function updateReplayPossessionBar() {
   const point = possessionPoint(rows, replayMinute());
   const home = bar.querySelector('#replayPossessionHome');
   const score = bar.querySelector('#replayPossessionScore');
-  if (home) home.style.width = `${point.home}%`;
-  if (score) score.textContent = `${point.home}–${point.away}`;
-  bar.querySelector('.replay-possession-track')?.setAttribute('aria-label', `Live possession ${point.home} to ${point.away}`);
+  const track = bar.querySelector('.replay-possession-track');
+  const width = `${point.home}%`;
+  const scoreText = `${point.home}–${point.away}`;
+  const ariaLabel = `Live possession ${point.home} to ${point.away}`;
+  if (home && home.style.width !== width) home.style.width = width;
+  if (score && score.textContent !== scoreText) score.textContent = scoreText;
+  if (track && track.getAttribute('aria-label') !== ariaLabel) track.setAttribute('aria-label', ariaLabel);
 }
 
 const jsonErrorResponse = (message, code, status = 503) => new Response(JSON.stringify({
