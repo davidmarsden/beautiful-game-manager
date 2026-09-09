@@ -1,10 +1,13 @@
 // Hotfix for PR #16 tablet tap-to-swap.
 // Captures a selected squad player and performs a true two-way swap in the
 // hidden ordered selectors before the formation board's own click handler runs.
+// The capture bridge is deliberately restricted to coarse-pointer devices;
+// desktop mouse/trackpad interaction must remain on formation-board.js's native path.
 
 const q = (selector, root = document) => root.querySelector(selector);
 const qa = (selector, root = document) => [...root.querySelectorAll(selector)];
 const id = (value) => String(value ?? '');
+const touchSwapEnabled = Boolean(window.matchMedia?.('(hover: none) and (pointer: coarse)')?.matches);
 
 function orderedChecked(zone) {
   return qa(`input[data-zone="${zone}"]:checked`).map((input) => id(input.value));
@@ -73,6 +76,7 @@ function applySwap(board, movingId, targetSlot) {
 }
 
 function install() {
+  if (!touchSwapEnabled) return false;
   const board = document.getElementById('interactiveFormationBoard');
   if (!board || board.dataset.touchSwapFixed === 'true') return false;
   board.dataset.touchSwapFixed = 'true';
@@ -105,8 +109,9 @@ document.addEventListener('change', (event) => {
   importHiddenTeamIntoBoard('captain_or_tactics_change');
 }, true);
 
-const observer = new MutationObserver(() => install());
+const observer = touchSwapEnabled ? new MutationObserver(() => install()) : null;
 window.addEventListener('load', () => {
+  if (!touchSwapEnabled) return;
   install();
   observer.observe(document.body, { childList: true, subtree: true });
 });
