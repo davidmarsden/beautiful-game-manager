@@ -5,10 +5,11 @@ import fs from 'node:fs';
 const touchFix = fs.readFileSync(new URL('../public/formation-board-touch-fix.js', import.meta.url), 'utf8');
 const board = fs.readFileSync(new URL('../public/formation-board.js', import.meta.url), 'utf8');
 
-test('tablet swap bridge is restricted to coarse-pointer devices', () => {
-  assert.match(touchFix, /matchMedia\?\.\('\(hover: none\) and \(pointer: coarse\)'\)/);
-  assert.match(touchFix, /function install\(\)[\s\S]*if \(!touchSwapEnabled\) return false;/);
-  assert.match(touchFix, /window\.addEventListener\('load',[\s\S]*if \(!touchSwapEnabled\) return;/);
+test('tablet swap bridge re-evaluates coarse-pointer mode for each interaction', () => {
+  assert.match(touchFix, /function touchSwapEnabled\(\)[\s\S]*matchMedia\?\.\('\(hover: none\) and \(pointer: coarse\)'\)/);
+  assert.match(touchFix, /board\.addEventListener\('click',[\s\S]*if \(!touchSwapEnabled\(\)\) return;/);
+  assert.doesNotMatch(touchFix, /const touchSwapEnabled\s*=/);
+  assert.doesNotMatch(touchFix, /function install\(\)[\s\S]*if \(!touchSwapEnabled\(\)\) return false;/);
 });
 
 test('desktop formation board retains its native click and drag placement path', () => {
