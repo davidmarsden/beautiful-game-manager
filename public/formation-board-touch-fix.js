@@ -9,6 +9,32 @@ const qa = (selector, root = document) => [...root.querySelectorAll(selector)];
 const id = (value) => String(value ?? '');
 let pendingPlayerId = null;
 
+function diagnosticHost(board) {
+  let host = board?.querySelector('[data-formation-selection-diagnostic]');
+  if (host) return host;
+  const trayPanel = board?.querySelector('.squad-tray-panel');
+  if (!trayPanel) return null;
+  host = document.createElement('p');
+  host.dataset.formationSelectionDiagnostic = 'true';
+  host.className = 'pitch-help';
+  host.setAttribute('aria-live', 'polite');
+  host.textContent = 'Selection diagnostic ready.';
+  trayPanel.insertBefore(host, trayPanel.querySelector('#formationSquadTray'));
+  return host;
+}
+
+function setDiagnostic(board, message) {
+  const host = diagnosticHost(board);
+  if (host) host.textContent = `Selection diagnostic: ${message}`;
+}
+
+function hiddenSelectorState(playerId) {
+  const xi = q(`#startingXi input[data-zone="xi"][value="${CSS.escape(playerId)}"]`);
+  const bench = q(`#bench input[data-zone="bench"][value="${CSS.escape(playerId)}"]`);
+  const describe = (input) => input ? `${input.disabled ? 'disabled' : 'enabled'}${input.checked ? ', checked' : ', unchecked'}` : 'missing';
+  return `XI ${describe(xi)}; bench ${describe(bench)}`;
+}
+
 function orderedChecked(zone) {
   return qa(`input[data-zone="${zone}"]:checked`).map((input) => id(input.value));
 }
@@ -65,22 +91,38 @@ function applySwap(board, movingId, targetSlot) {
     else if (sourceBench >= 0) cleanBench[sourceBench] = displacedId;
   }
 
+  setDiagnostic(board, `attempting ${movingId} → ${targetZone.toUpperCase()} slot ${targetIndex + 1}; before import: ${hiddenSelectorState(movingId)}`);
   reorderAndCheck('startingXi', 'xi', cleanXi);
   reorderAndCheck('bench', 'bench', cleanBench);
   pendingPlayerId = null;
   importHiddenTeamIntoBoard('formation_selection_bridge');
   targetSlot.blur();
+
+  setTimeout(() => {
+    const slotSelector = targetZone === 'xi'
+      ? `#formationPitch [data-zone="xi"][data-index="${targetIndex}"]`
+      : `#formationBench [data-zone="bench"][data-index="${targetIndex}"]`;
+    const rendered = q(slotSelector);
+    const renderedId = slotPlayerId(rendered);
+    if (renderedId === movingId) {
+      setDiagnostic(board, `placed ${movingId} in ${targetZone.toUpperCase()} slot ${targetIndex + 1}.`);
+    } else {
+      setDiagnostic(board, `placement rejected after import; ${targetZone.toUpperCase()} slot ${targetIndex + 1} contains ${renderedId || 'nobody'}; ${hiddenSelectorState(movingId)}.`);
+    }
+  }, 0);
 }
 
 function install() {
   const board = document.getElementById('interactiveFormationBoard');
   if (!board || board.dataset.touchSwapFixed === 'true') return false;
   board.dataset.touchSwapFixed = 'true';
+  diagnosticHost(board);
 
   board.addEventListener('click', (event) => {
     const trayPlayer = event.target.closest('.tray-player[data-player-id]');
     if (trayPlayer) {
       pendingPlayerId = id(trayPlayer.dataset.playerId);
+      setDiagnostic(board, `captured ${pendingPlayerId}; ${hiddenSelectorState(pendingPlayerId)}. Click an XI or bench slot.`);
       return;
     }
 
