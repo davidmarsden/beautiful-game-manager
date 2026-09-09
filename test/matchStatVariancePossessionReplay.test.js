@@ -72,12 +72,15 @@ test('shot volume has match-to-match dispersion and away shots are not forced on
   assert.ok(awayOffTargetMatches >= 20, `away attacks looked implausibly accurate in ${40 - awayOffTargetMatches} matches`);
 });
 
-test('Match Centre preserves and renders the replay possession trajectory', () => {
+test('Match Centre preserves and renders the replay possession trajectory without self-triggering observer writes', () => {
   const guard = readFileSync(new URL('../public/match-centre-runtime-guard.js', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../public/match-centre-major-events.css', import.meta.url), 'utf8');
   assert.match(guard, /control_trajectory/);
   assert.match(guard, /replayPossession/);
   assert.match(guard, /MutationObserver/);
+  assert.match(guard, /score\.textContent !== scoreText/);
+  assert.match(guard, /home\.style\.width !== width/);
+  assert.match(guard, /track\.getAttribute\('aria-label'\) !== ariaLabel/);
   assert.match(css, /\.replay-possession-track/);
   assert.match(css, /\.replay-possession-home/);
 });
