@@ -4,7 +4,7 @@ const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, v
 const round = (value, places = 4) => Number(Number(value).toFixed(places));
 const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 
-export const EVENT_GENERATION_VERSION = 'tbg-event-generation-v0.4';
+export const EVENT_GENERATION_VERSION = 'tbg-event-generation-v0.5';
 export const EVENT_GENERATION_STATE_KEY = 'module_d_event_generation';
 
 export const EVENT_DIALS = Object.freeze({
@@ -364,10 +364,11 @@ export function resolveEventGeneration(contract, tactical, quality, fatigue) {
   const home = expectedSide('home', inputs);
   const away = expectedSide('away', inputs);
   const seed = fixtureSeed(contract);
-  const random = seededRandom(seed);
+  const homeRandom = seededRandom(`${seed}:events:home`);
+  const awayRandom = seededRandom(`${seed}:events:away`);
   const events = orderEvents([
-    ...buildSideEvents('home', home, quality.home, fatigue.home, quality.away, random),
-    ...buildSideEvents('away', away, quality.away, fatigue.away, quality.home, random)
+    ...buildSideEvents('home', home, quality.home, fatigue.home, quality.away, homeRandom),
+    ...buildSideEvents('away', away, quality.away, fatigue.away, quality.home, awayRandom)
   ]);
   const controlTrajectory = buildControlTrajectory(home, events, seed);
 
