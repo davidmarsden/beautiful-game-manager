@@ -23,13 +23,13 @@ test('Edge fallback hit-tests player cards and slots by pointer coordinates', ()
   assert.match(bridge, /function elementAtPoint\(elements, x, y\)/);
   assert.match(bridge, /elementAtPoint\(qa\('#formationSquadTray \.tray-player\[data-player-id\]'/);
   assert.match(bridge, /elementAtPoint\(qa\('#formationPitch \[data-zone\]\[data-index\], #formationBench \[data-zone\]\[data-index\]'/);
-  assert.match(bridge, /captured \$\{pendingPlayerId\} via \$\{event\.type\} \(target \$\{targetDescription\(event\.target\)\}\)/);
+  assert.match(bridge, /return containsPoint\(board, event\.clientX, event\.clientY\) \? board : null;/);
 });
 
-test('selection diagnostics install independently of a player click', () => {
-  assert.match(bridge, /host\.textContent = 'Selection diagnostic ready\.'/);
-  assert.match(bridge, /function install\(\)[\s\S]*if \(board\) diagnosticHost\(board\)/);
-  assert.match(bridge, /install\(\);\nwindow\.addEventListener\('load'/);
+test('temporary selection diagnostics are removed from production bridge', () => {
+  assert.doesNotMatch(bridge, /Selection diagnostic/);
+  assert.doesNotMatch(bridge, /diagnosticHost/);
+  assert.doesNotMatch(bridge, /setDiagnostic/);
 });
 
 test('desktop formation board retains its native click and drag placement path as fallback', () => {
