@@ -1,13 +1,13 @@
-// Interaction bridge for formation-board selection.
-// Captures the tray player directly and performs a true two-way swap in the
-// hidden ordered selectors before the formation board's own click handler runs.
-// This no longer depends on formation-board.js first marking a tray item selected,
-// which makes the path reliable on both desktop and touch devices.
+// Early interaction bridge for formation-board selection.
+// The formation board is subsequently decorated by several enhancement layers.
+// Keep the selection listener on document capture phase so DOM rewrites cannot
+// detach it and later capture handlers cannot swallow a manager's click first.
 
 const q = (selector, root = document) => root.querySelector(selector);
 const qa = (selector, root = document) => [...root.querySelectorAll(selector)];
 const id = (value) => String(value ?? '');
 let pendingPlayerId = null;
+let interactionInstalled = false;
 
 function diagnosticHost(board) {
   let host = board?.querySelector('[data-formation-selection-diagnostic]');
@@ -29,8 +29,9 @@ function setDiagnostic(board, message) {
 }
 
 function hiddenSelectorState(playerId) {
-  const xi = q(`#startingXi input[data-zone="xi"][value="${CSS.escape(playerId)}"]`);
-  const bench = q(`#bench input[data-zone="bench"][value="${CSS.escape(playerId)}"]`);
+  const escaped = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(playerId) : playerId.replace(/["\\]/g, '\\$&');
+  const xi = q(`#startingXi input[data-zone="xi"][value="${escaped}"]`);
+  const bench = q(`#bench input[data-zone="bench"][value="${escaped}"]`);
   const describe = (input) => input ? `${input.disabled ? 'disabled' : 'enabled'}${input.checked ? ', checked' : ', unchecked'}` : 'missing';
   return `XI ${describe(xi)}; bench ${describe(bench)}`;
 }
@@ -91,7 +92,7 @@ function applySwap(board, movingId, targetSlot) {
     else if (sourceBench >= 0) cleanBench[sourceBench] = displacedId;
   }
 
-  setDiagnostic(board, `attempting ${movingId} → ${targetZone.toUpperCase()} slot ${targetIndex + 1}; before import: ${hiddenSelectorState(movingId)}`);
+  setDiagnostic(board, `attempting ${movingId} → ${targetZone.toUpperCase()} slot ${targetIndex + 1}; ${hiddenSelectorState(movingId)}`);
   reorderAndCheck('startingXi', 'xi', cleanXi);
   reorderAndCheck('bench', 'bench', cleanBench);
   pendingPlayerId = null;
@@ -102,38 +103,45 @@ function applySwap(board, movingId, targetSlot) {
     const slotSelector = targetZone === 'xi'
       ? `#formationPitch [data-zone="xi"][data-index="${targetIndex}"]`
       : `#formationBench [data-zone="bench"][data-index="${targetIndex}"]`;
-    const rendered = q(slotSelector);
-    const renderedId = slotPlayerId(rendered);
-    if (renderedId === movingId) {
-      setDiagnostic(board, `placed ${movingId} in ${targetZone.toUpperCase()} slot ${targetIndex + 1}.`);
-    } else {
-      setDiagnostic(board, `placement rejected after import; ${targetZone.toUpperCase()} slot ${targetIndex + 1} contains ${renderedId || 'nobody'}; ${hiddenSelectorState(movingId)}.`);
-    }
+    const renderedId = slotPlayerId(q(slotSelector));
+    setDiagnostic(board, renderedId === movingId
+      ? `placed ${movingId} in ${targetZone.toUpperCase()} slot ${targetIndex + 1}.`
+      : `placement rejected; ${targetZone.toUpperCase()} slot ${targetIndex + 1} contains ${renderedId || 'nobody'}; ${hiddenSelectorState(movingId)}.`);
   }, 0);
+}
+
+function currentBoardForTarget(target) {
+  const board = document.getElementById('interactiveFormationBoard');
+  return board && target instanceof Element && board.contains(target) ? board : null;
+}
+
+function handleFormationClick(event) {
+  const board = currentBoardForTarget(event.target);
+  if (!board) return;
+
+  diagnosticHost(board);
+  const trayPlayer = event.target.closest('.tray-player[data-player-id]');
+  if (trayPlayer) {
+    pendingPlayerId = id(trayPlayer.dataset.playerId);
+    setDiagnostic(board, `captured ${pendingPlayerId}; ${hiddenSelectorState(pendingPlayerId)}. Click an XI or bench slot.`);
+    return;
+  }
+
+  const targetSlot = event.target.closest('[data-zone][data-index]');
+  if (!targetSlot || !pendingPlayerId) return;
+
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  applySwap(board, pendingPlayerId, targetSlot);
 }
 
 function install() {
   const board = document.getElementById('interactiveFormationBoard');
-  if (!board || board.dataset.touchSwapFixed === 'true') return false;
-  board.dataset.touchSwapFixed = 'true';
-  diagnosticHost(board);
-
-  board.addEventListener('click', (event) => {
-    const trayPlayer = event.target.closest('.tray-player[data-player-id]');
-    if (trayPlayer) {
-      pendingPlayerId = id(trayPlayer.dataset.playerId);
-      setDiagnostic(board, `captured ${pendingPlayerId}; ${hiddenSelectorState(pendingPlayerId)}. Click an XI or bench slot.`);
-      return;
-    }
-
-    const targetSlot = event.target.closest('[data-zone][data-index]');
-    if (!targetSlot || !pendingPlayerId) return;
-
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    applySwap(board, pendingPlayerId, targetSlot);
-  }, true);
-  return true;
+  if (board) diagnosticHost(board);
+  if (interactionInstalled) return Boolean(board);
+  interactionInstalled = true;
+  document.addEventListener('click', handleFormationClick, true);
+  return Boolean(board);
 }
 
 // Captain and tactics live outside formation-board.js, but they are part of the
@@ -152,6 +160,7 @@ document.addEventListener('change', (event) => {
 }, true);
 
 const observer = new MutationObserver(() => install());
+install();
 window.addEventListener('load', () => {
   install();
   observer.observe(document.body, { childList: true, subtree: true });
