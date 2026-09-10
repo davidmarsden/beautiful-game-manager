@@ -5,15 +5,25 @@ import fs from 'node:fs';
 const bridge = fs.readFileSync(new URL('../public/formation-board-touch-fix.js', import.meta.url), 'utf8');
 const board = fs.readFileSync(new URL('../public/formation-board.js', import.meta.url), 'utf8');
 
-test('formation selection bridge captures tray player before later enhancement handlers', () => {
+test('formation selection bridge captures interactions before later enhancement handlers', () => {
   assert.match(bridge, /let pendingPlayerId = null;/);
+  assert.match(bridge, /document\.addEventListener\('pointerdown', handleFormationPointer, true\)/);
   assert.match(bridge, /document\.addEventListener\('click', handleFormationClick, true\)/);
-  assert.match(bridge, /function currentBoardForTarget/);
-  assert.match(bridge, /closest\('\.tray-player\[data-player-id\]'\)[\s\S]*pendingPlayerId = id\(trayPlayer\.dataset\.playerId\)/);
-  assert.match(bridge, /closest\('\[data-zone\]\[data-index\]'\)[\s\S]*!pendingPlayerId/);
+  assert.match(bridge, /function currentBoardForInteraction/);
+  assert.match(bridge, /function trayPlayerForInteraction/);
+  assert.match(bridge, /function slotForInteraction/);
+  assert.match(bridge, /pendingPlayerId = id\(player\.dataset\.playerId\)/);
   assert.match(bridge, /applySwap\(board, pendingPlayerId, targetSlot\)/);
   assert.doesNotMatch(bridge, /selectedTrayPlayer/);
   assert.doesNotMatch(bridge, /touchSwapEnabled/);
+});
+
+test('Edge fallback hit-tests player cards and slots by pointer coordinates', () => {
+  assert.match(bridge, /function containsPoint\(element, x, y\)/);
+  assert.match(bridge, /function elementAtPoint\(elements, x, y\)/);
+  assert.match(bridge, /elementAtPoint\(qa\('#formationSquadTray \.tray-player\[data-player-id\]'/);
+  assert.match(bridge, /elementAtPoint\(qa\('#formationPitch \[data-zone\]\[data-index\], #formationBench \[data-zone\]\[data-index\]'/);
+  assert.match(bridge, /captured \$\{pendingPlayerId\} via \$\{event\.type\} \(target \$\{targetDescription\(event\.target\)\}\)/);
 });
 
 test('selection diagnostics install independently of a player click', () => {
