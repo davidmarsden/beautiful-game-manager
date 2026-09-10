@@ -1,7 +1,7 @@
 // Early interaction bridge for formation-board selection.
 // The formation board is subsequently decorated by several enhancement layers.
 // Keep the selection listener on document capture phase so DOM rewrites cannot
-// detach it and later capture handlers cannot swallow a manager's click first.
+// detach it and later capture handlers cannot swallow a manager's interaction first.
 
 const q = (selector, root = document) => root.querySelector(selector);
 const qa = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -110,24 +110,83 @@ function applySwap(board, movingId, targetSlot) {
   }, 0);
 }
 
-function currentBoardForTarget(target) {
-  const board = document.getElementById('interactiveFormationBoard');
-  return board && target instanceof Element && board.contains(target) ? board : null;
+function containsPoint(element, x, y) {
+  if (!element || !Number.isFinite(x) || !Number.isFinite(y)) return false;
+  const rect = element.getBoundingClientRect();
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
 }
 
-function handleFormationClick(event) {
-  const board = currentBoardForTarget(event.target);
-  if (!board) return;
+function currentBoardForInteraction(event) {
+  const board = document.getElementById('interactiveFormationBoard');
+  if (!board) return null;
+  if (event.target instanceof Element && board.contains(event.target)) return board;
+  return containsPoint(board, event.clientX, event.clientY) ? board : null;
+}
 
+function targetDescription(target) {
+  if (!(target instanceof Element)) return String(target?.nodeName || 'unknown');
+  const classes = [...target.classList].slice(0, 3).join('.');
+  return `${target.tagName.toLowerCase()}${target.id ? `#${target.id}` : ''}${classes ? `.${classes}` : ''}`;
+}
+
+function elementAtPoint(elements, x, y) {
+  return elements.find((element) => containsPoint(element, x, y)) || null;
+}
+
+function trayPlayerForInteraction(board, event) {
+  const direct = event.target instanceof Element ? event.target.closest('.tray-player[data-player-id]') : null;
+  if (direct && board.contains(direct)) return direct;
+  return elementAtPoint(qa('#formationSquadTray .tray-player[data-player-id]', board), event.clientX, event.clientY);
+}
+
+function slotForInteraction(board, event) {
+  const direct = event.target instanceof Element ? event.target.closest('[data-zone][data-index]') : null;
+  if (direct && board.contains(direct)) return direct;
+  return elementAtPoint(qa('#formationPitch [data-zone][data-index], #formationBench [data-zone][data-index]', board), event.clientX, event.clientY);
+}
+
+function capturePlayer(board, player, event) {
+  pendingPlayerId = id(player.dataset.playerId);
+  setDiagnostic(board, `captured ${pendingPlayerId} via ${event.type} (target ${targetDescription(event.target)}); ${hiddenSelectorState(pendingPlayerId)}. Click an XI or bench slot.`);
+}
+
+function handleFormationPointer(event) {
+  const board = currentBoardForInteraction(event);
+  if (!board) return;
   diagnosticHost(board);
-  const trayPlayer = event.target.closest('.tray-player[data-player-id]');
+
+  const trayPlayer = trayPlayerForInteraction(board, event);
   if (trayPlayer) {
-    pendingPlayerId = id(trayPlayer.dataset.playerId);
-    setDiagnostic(board, `captured ${pendingPlayerId}; ${hiddenSelectorState(pendingPlayerId)}. Click an XI or bench slot.`);
+    capturePlayer(board, trayPlayer, event);
     return;
   }
 
-  const targetSlot = event.target.closest('[data-zone][data-index]');
+  const targetSlot = slotForInteraction(board, event);
+  if (!targetSlot || !pendingPlayerId) {
+    const tray = document.getElementById('formationSquadTray');
+    if (tray && containsPoint(tray, event.clientX, event.clientY)) {
+      setDiagnostic(board, `${event.type} reached reserves at ${Math.round(event.clientX)},${Math.round(event.clientY)} but no player card matched; target ${targetDescription(event.target)}.`);
+    }
+    return;
+  }
+
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  applySwap(board, pendingPlayerId, targetSlot);
+}
+
+function handleFormationClick(event) {
+  const board = currentBoardForInteraction(event);
+  if (!board) return;
+  diagnosticHost(board);
+
+  const trayPlayer = trayPlayerForInteraction(board, event);
+  if (trayPlayer) {
+    capturePlayer(board, trayPlayer, event);
+    return;
+  }
+
+  const targetSlot = slotForInteraction(board, event);
   if (!targetSlot || !pendingPlayerId) return;
 
   event.preventDefault();
@@ -140,6 +199,7 @@ function install() {
   if (board) diagnosticHost(board);
   if (interactionInstalled) return Boolean(board);
   interactionInstalled = true;
+  document.addEventListener('pointerdown', handleFormationPointer, true);
   document.addEventListener('click', handleFormationClick, true);
   return Boolean(board);
 }
