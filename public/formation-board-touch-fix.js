@@ -1,10 +1,13 @@
-// Hotfix for PR #16 tablet tap-to-swap.
-// Captures a selected squad player and performs a true two-way swap in the
-// hidden ordered selectors before the formation board's own click handler runs.
+// Early interaction bridge for formation-board selection.
+// The formation board is subsequently decorated by several enhancement layers.
+// Keep selection on document capture phase so DOM rewrites cannot detach it and
+// later capture handlers cannot swallow a manager's interaction first.
 
 const q = (selector, root = document) => root.querySelector(selector);
 const qa = (selector, root = document) => [...root.querySelectorAll(selector)];
 const id = (value) => String(value ?? '');
+let pendingPlayerId = null;
+let interactionInstalled = false;
 
 function orderedChecked(zone) {
   return qa(`input[data-zone="${zone}"]:checked`).map((input) => id(input.value));
@@ -26,10 +29,6 @@ function reorderAndCheck(containerId, zone, orderedIds) {
     if (label) container.appendChild(label);
   });
   labels.filter((label) => !selected.has(id(q('input', label)?.value))).forEach((label) => container.appendChild(label));
-}
-
-function selectedTrayPlayer(board) {
-  return q('.tray-player.selected[data-player-id]', board)?.dataset.playerId || null;
 }
 
 function slotPlayerId(slot) {
@@ -68,26 +67,86 @@ function applySwap(board, movingId, targetSlot) {
 
   reorderAndCheck('startingXi', 'xi', cleanXi);
   reorderAndCheck('bench', 'bench', cleanBench);
-  importHiddenTeamIntoBoard('tablet_swap_bridge');
+  pendingPlayerId = null;
+  importHiddenTeamIntoBoard('formation_selection_bridge');
   targetSlot.blur();
 }
 
-function install() {
+function containsPoint(element, x, y) {
+  if (!element || !Number.isFinite(x) || !Number.isFinite(y)) return false;
+  const rect = element.getBoundingClientRect();
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+function currentBoardForInteraction(event) {
   const board = document.getElementById('interactiveFormationBoard');
-  if (!board || board.dataset.touchSwapFixed === 'true') return false;
-  board.dataset.touchSwapFixed = 'true';
+  if (!board) return null;
+  if (event.target instanceof Element && board.contains(event.target)) return board;
+  return containsPoint(board, event.clientX, event.clientY) ? board : null;
+}
 
-  board.addEventListener('click', (event) => {
-    const targetSlot = event.target.closest('[data-zone][data-index]');
-    if (!targetSlot) return;
-    const movingId = selectedTrayPlayer(board);
-    if (!movingId) return;
+function elementAtPoint(elements, x, y) {
+  return elements.find((element) => containsPoint(element, x, y)) || null;
+}
 
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    applySwap(board, id(movingId), targetSlot);
-  }, true);
-  return true;
+function trayPlayerForInteraction(board, event) {
+  const direct = event.target instanceof Element ? event.target.closest('.tray-player[data-player-id]') : null;
+  if (direct && board.contains(direct)) return direct;
+  return elementAtPoint(qa('#formationSquadTray .tray-player[data-player-id]', board), event.clientX, event.clientY);
+}
+
+function slotForInteraction(board, event) {
+  const direct = event.target instanceof Element ? event.target.closest('[data-zone][data-index]') : null;
+  if (direct && board.contains(direct)) return direct;
+  return elementAtPoint(qa('#formationPitch [data-zone][data-index], #formationBench [data-zone][data-index]', board), event.clientX, event.clientY);
+}
+
+function capturePlayer(player) {
+  pendingPlayerId = id(player.dataset.playerId);
+}
+
+function handleFormationPointer(event) {
+  const board = currentBoardForInteraction(event);
+  if (!board) return;
+
+  const trayPlayer = trayPlayerForInteraction(board, event);
+  if (trayPlayer) {
+    capturePlayer(trayPlayer);
+    return;
+  }
+
+  const targetSlot = slotForInteraction(board, event);
+  if (!targetSlot || !pendingPlayerId) return;
+
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  applySwap(board, pendingPlayerId, targetSlot);
+}
+
+function handleFormationClick(event) {
+  const board = currentBoardForInteraction(event);
+  if (!board) return;
+
+  const trayPlayer = trayPlayerForInteraction(board, event);
+  if (trayPlayer) {
+    capturePlayer(trayPlayer);
+    return;
+  }
+
+  const targetSlot = slotForInteraction(board, event);
+  if (!targetSlot || !pendingPlayerId) return;
+
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  applySwap(board, pendingPlayerId, targetSlot);
+}
+
+function install() {
+  if (interactionInstalled) return Boolean(document.getElementById('interactiveFormationBoard'));
+  interactionInstalled = true;
+  document.addEventListener('pointerdown', handleFormationPointer, true);
+  document.addEventListener('click', handleFormationClick, true);
+  return Boolean(document.getElementById('interactiveFormationBoard'));
 }
 
 // Captain and tactics live outside formation-board.js, but they are part of the
@@ -105,8 +164,4 @@ document.addEventListener('change', (event) => {
   importHiddenTeamIntoBoard('captain_or_tactics_change');
 }, true);
 
-const observer = new MutationObserver(() => install());
-window.addEventListener('load', () => {
-  install();
-  observer.observe(document.body, { childList: true, subtree: true });
-});
+install();

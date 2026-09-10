@@ -40,13 +40,13 @@ test('manager edits and explicit team-sheet loads remain authoritative', async (
   assert.match(source, /managerEdited=false/);
 });
 
-test('tablet swaps explicitly authorise hidden-team import before synthetic change', async () => {
+test('formation bridge explicitly authorises hidden-team import before synthetic change', async () => {
   const source = await read('public/formation-board-touch-fix.js');
 
-  const authorise = source.indexOf("authoriseBoardImport(source)");
+  const authorise = source.indexOf('authoriseBoardImport(source)');
   const syntheticChange = source.indexOf("dispatchEvent(new Event('change', { bubbles: true }))");
-  assert.ok(authorise >= 0 && syntheticChange > authorise, 'tablet bridge must authorise board import before synthetic change');
-  assert.match(source, /importHiddenTeamIntoBoard\('tablet_swap_bridge'\)/);
+  assert.ok(authorise >= 0 && syntheticChange > authorise, 'formation bridge must authorise board import before synthetic change');
+  assert.match(source, /importHiddenTeamIntoBoard\('formation_selection_bridge'\)/);
   assert.match(source, /new CustomEvent\('tbg:team-sheet-override'/);
 });
 
