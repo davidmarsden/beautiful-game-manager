@@ -47,28 +47,14 @@ function importHiddenTeamIntoBoard(source) {
 }
 
 function applySwap(board, movingId, targetSlot) {
-  const xi = orderedChecked('xi');
-  const bench = orderedChecked('bench');
-  const targetZone = targetSlot.dataset.zone;
-  const targetIndex = Number(targetSlot.dataset.index);
-  const displacedId = slotPlayerId(targetSlot);
-
-  const sourceXi = xi.indexOf(movingId);
-  const sourceBench = bench.indexOf(movingId);
-  const cleanXi = xi.map((playerId) => playerId === movingId ? null : playerId);
-  const cleanBench = bench.map((playerId) => playerId === movingId ? null : playerId);
-  const target = targetZone === 'xi' ? cleanXi : cleanBench;
-  target[targetIndex] = movingId;
-
-  if (displacedId && displacedId !== movingId) {
-    if (sourceXi >= 0) cleanXi[sourceXi] = displacedId;
-    else if (sourceBench >= 0) cleanBench[sourceBench] = displacedId;
-  }
-
-  reorderAndCheck('startingXi', 'xi', cleanXi);
-  reorderAndCheck('bench', 'bench', cleanBench);
+  document.dispatchEvent(new CustomEvent('tbg:formation-place-player', {
+    detail: {
+      player_id: movingId,
+      zone: targetSlot.dataset.zone,
+      index: Number(targetSlot.dataset.index)
+    }
+  }));
   pendingPlayerId = null;
-  importHiddenTeamIntoBoard('formation_selection_bridge');
   targetSlot.blur();
 }
 
