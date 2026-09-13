@@ -1,4 +1,40 @@
 (() => {
+  function ensurePwaMetadata() {
+    const head = document.head;
+    if (!head) return;
+
+    const ensureMeta = (name, content) => {
+      let node = head.querySelector(`meta[name="${name}"]`);
+      if (!node) {
+        node = document.createElement('meta');
+        node.name = name;
+        head.appendChild(node);
+      }
+      node.content = content;
+    };
+
+    if (!head.querySelector('link[rel="manifest"]')) {
+      const manifest = document.createElement('link');
+      manifest.rel = 'manifest';
+      manifest.href = '/tbg.webmanifest';
+      head.appendChild(manifest);
+    }
+
+    ensureMeta('theme-color', '#263b4d');
+    ensureMeta('application-name', 'The Beautiful Game');
+    ensureMeta('apple-mobile-web-app-capable', 'yes');
+    ensureMeta('apple-mobile-web-app-status-bar-style', 'black-translucent');
+    ensureMeta('apple-mobile-web-app-title', 'TBG');
+  }
+
+  ensurePwaMetadata();
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/tbg-sw.js', { scope: '/', updateViaCache: 'none' }).catch(() => undefined);
+    });
+  }
+
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
   }[char]));
