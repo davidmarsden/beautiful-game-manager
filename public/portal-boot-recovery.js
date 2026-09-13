@@ -6,13 +6,14 @@
   const startupStartedAt = performance.now();
   const trackedRequests = [];
   const pendingRequests = new Map();
+  const observers = [];
   let requestSequence = 0;
   let portalRenderedAt = null;
   let loadingTicker = null;
 
   const originalFetch = window.fetch.bind(window);
 
-  function requestStage(input, init = {}) {
+  function requestStage(input) {
     const requestUrl = typeof input === 'string' ? input : input?.url;
     if (!requestUrl) return '';
     let url;
@@ -69,10 +70,17 @@
     return data;
   }
 
+  function stopObservers() {
+    while (observers.length) observers.pop()?.disconnect();
+  }
+
   function finalizeStartup() {
     if (portalRenderedAt !== null) return;
+    const recovery = document.getElementById('portalBootRecovery');
+    if (recovery?.dataset.recoverySource === 'boot_loading') clear();
     portalRenderedAt = performance.now();
     pendingRequests.clear();
+    stopObservers();
     const data = persistSnapshot();
     console.info('TBG portal startup timing', data);
   }
@@ -81,7 +89,7 @@
 
   window.fetch = async (...args) => {
     if (portalRenderedAt !== null) return originalFetch(...args);
-    const stage = requestStage(args[0], args[1] || {});
+    const stage = requestStage(args[0]);
     if (!stage) return originalFetch(...args);
 
     const id = ++requestSequence;
@@ -122,6 +130,7 @@
   }
 
   function show(message, source = 'portal_boot') {
+    stopObservers();
     const existing = document.getElementById('portalBootRecovery');
     const detail = String(message || 'The manager portal could not finish loading.').trim();
     const html = `
@@ -227,6 +236,7 @@
   }
 
   function inspectPortal() {
+    if (portalRenderedAt !== null) return;
     const fatal = document.querySelector('#portal .fatal-error');
     if (fatal?.textContent?.trim()) {
       show(fatal.textContent.trim(), 'bootstrap_error');
@@ -240,6 +250,32 @@
     }
     if (!recovery) showLoading();
     refreshLoadingCopy();
+  }
+
+  function observePortalState() {
+    stopObservers();
+    const stateTargets = [
+      document.getElementById('authGate'),
+      document.getElementById('clubPortal'),
+      document.getElementById('unassignedState'),
+      document.getElementById('onboardingState')
+    ].filter(Boolean);
+
+    stateTargets.forEach((target) => {
+      const observer = new MutationObserver(inspectPortal);
+      observer.observe(target, {
+        attributes: true,
+        attributeFilter: ['hidden', 'class', 'style']
+      });
+      observers.push(observer);
+    });
+
+    const portal = document.querySelector('#portal');
+    if (portal) {
+      const observer = new MutationObserver(inspectPortal);
+      observer.observe(portal, { childList: true, subtree: true });
+      observers.push(observer);
+    }
   }
 
   window.tbgShowPortalRecovery = show;
@@ -261,15 +297,7 @@
   });
 
   window.addEventListener('DOMContentLoaded', () => {
-    if (document.body) {
-      new MutationObserver(inspectPortal).observe(document.body, {
-        childList: true,
-        subtree: true,
-        characterData: true,
-        attributes: true,
-        attributeFilter: ['hidden', 'class', 'style']
-      });
-    }
+    observePortalState();
     inspectPortal();
   });
 
