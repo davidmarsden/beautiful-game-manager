@@ -201,7 +201,8 @@ function placePlayer(id, zone, index) {
   const previous = assignments.findIndex((value) => value === id);
   const previousBench = benchAssignments.findIndex((value) => value === id);
   removePlayer(id);
-  target[index] = id;
+  const currentTarget = zone === 'xi' ? assignments : benchAssignments;
+  currentTarget[index] = id;
   if (displaced && displaced !== id) {
     if (previous >= 0) assignments[previous] = displaced;
     else if (previousBench >= 0) benchAssignments[previousBench] = displaced;
