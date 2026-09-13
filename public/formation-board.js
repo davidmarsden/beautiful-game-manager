@@ -201,7 +201,8 @@ function placePlayer(id, zone, index) {
   const previous = assignments.findIndex((value) => value === id);
   const previousBench = benchAssignments.findIndex((value) => value === id);
   removePlayer(id);
-  target[index] = id;
+  const currentTarget = zone === 'xi' ? assignments : benchAssignments;
+  currentTarget[index] = id;
   if (displaced && displaced !== id) {
     if (previous >= 0) assignments[previous] = displaced;
     else if (previousBench >= 0) benchAssignments[previousBench] = displaced;
@@ -316,6 +317,15 @@ window.addEventListener('tbg:team-submission-saved',(event)=>{
   managerEdited=false;
   collectPlayers();
   applyCanonicalSubmission(event.detail.state);
+});
+document.addEventListener('tbg:formation-place-player',(event)=>{
+  const detail = event.detail || {};
+  const zone = detail.zone === 'bench' ? 'bench' : 'xi';
+  const index = Number(detail.index);
+  const target = zone === 'xi' ? assignments : benchAssignments;
+  if (!Number.isInteger(index) || index < 0 || index >= target.length) return;
+  placePlayer(norm(detail.player_id), zone, index);
+  syncLegacyInputs();
 });
 document.addEventListener('tbg:team-sheet-override', allowExplicitLegacyImport);
 document.addEventListener('click',(event)=>{ if (event.target?.closest('#loadPreset, #loadPreviousMatch')) allowExplicitLegacyImport(); },true);

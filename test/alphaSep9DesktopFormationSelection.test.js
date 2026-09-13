@@ -26,6 +26,27 @@ test('Edge fallback hit-tests player cards and slots by pointer coordinates', ()
   assert.match(bridge, /return containsPoint\(board, event\.clientX, event\.clientY\) \? board : null;/);
 });
 
+test('bridged placement preserves sparse formation slot indexes', () => {
+  assert.match(bridge, /new CustomEvent\('tbg:formation-place-player'/);
+  assert.match(bridge, /zone: targetSlot\.dataset\.zone/);
+  assert.match(bridge, /index: Number\(targetSlot\.dataset\.index\)/);
+  assert.match(board, /document\.addEventListener\('tbg:formation-place-player'/);
+  assert.match(board, /placePlayer\(norm\(detail\.player_id\), zone, index\)/);
+  assert.match(board, /syncLegacyInputs\(\)/);
+  const applySwapBody = bridge.match(/function applySwap\([\s\S]*?\n}\n/)[0];
+  assert.doesNotMatch(applySwapBody, /orderedChecked\(/);
+  assert.doesNotMatch(applySwapBody, /importHiddenTeamIntoBoard\(/);
+});
+
+test('placePlayer writes into the live assignment array after removePlayer refreshes it', () => {
+  const placePlayerBody = board.match(/function placePlayer\([\s\S]*?\n}\nfunction clickSlot/)[0];
+  const removeIndex = placePlayerBody.indexOf('removePlayer(id);');
+  const reacquireIndex = placePlayerBody.indexOf("const currentTarget = zone === 'xi' ? assignments : benchAssignments;");
+  const writeIndex = placePlayerBody.indexOf('currentTarget[index] = id;');
+  assert.ok(removeIndex >= 0 && reacquireIndex > removeIndex && writeIndex > reacquireIndex);
+  assert.doesNotMatch(placePlayerBody, /removePlayer\(id\);\n  target\[index\] = id;/);
+});
+
 test('temporary selection diagnostics are removed from production bridge', () => {
   assert.doesNotMatch(bridge, /Selection diagnostic/);
   assert.doesNotMatch(bridge, /diagnosticHost/);
