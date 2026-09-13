@@ -317,6 +317,15 @@ window.addEventListener('tbg:team-submission-saved',(event)=>{
   collectPlayers();
   applyCanonicalSubmission(event.detail.state);
 });
+document.addEventListener('tbg:formation-place-player',(event)=>{
+  const detail = event.detail || {};
+  const zone = detail.zone === 'bench' ? 'bench' : 'xi';
+  const index = Number(detail.index);
+  const target = zone === 'xi' ? assignments : benchAssignments;
+  if (!Number.isInteger(index) || index < 0 || index >= target.length) return;
+  placePlayer(norm(detail.player_id), zone, index);
+  syncLegacyInputs();
+});
 document.addEventListener('tbg:team-sheet-override', allowExplicitLegacyImport);
 document.addEventListener('click',(event)=>{ if (event.target?.closest('#loadPreset, #loadPreviousMatch')) allowExplicitLegacyImport(); },true);
 document.addEventListener('change',(event)=>{
