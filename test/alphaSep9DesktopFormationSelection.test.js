@@ -38,6 +38,15 @@ test('bridged placement preserves sparse formation slot indexes', () => {
   assert.doesNotMatch(applySwapBody, /importHiddenTeamIntoBoard\(/);
 });
 
+test('placePlayer writes into the live assignment array after removePlayer refreshes it', () => {
+  const placePlayerBody = board.match(/function placePlayer\([\s\S]*?\n}\nfunction clickSlot/)[0];
+  const removeIndex = placePlayerBody.indexOf('removePlayer(id);');
+  const reacquireIndex = placePlayerBody.indexOf("const currentTarget = zone === 'xi' ? assignments : benchAssignments;");
+  const writeIndex = placePlayerBody.indexOf('currentTarget[index] = id;');
+  assert.ok(removeIndex >= 0 && reacquireIndex > removeIndex && writeIndex > reacquireIndex);
+  assert.doesNotMatch(placePlayerBody, /removePlayer\(id\);\n  target\[index\] = id;/);
+});
+
 test('temporary selection diagnostics are removed from production bridge', () => {
   assert.doesNotMatch(bridge, /Selection diagnostic/);
   assert.doesNotMatch(bridge, /diagnosticHost/);
