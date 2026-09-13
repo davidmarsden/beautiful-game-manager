@@ -26,6 +26,18 @@ test('Edge fallback hit-tests player cards and slots by pointer coordinates', ()
   assert.match(bridge, /return containsPoint\(board, event\.clientX, event\.clientY\) \? board : null;/);
 });
 
+test('bridged placement preserves sparse formation slot indexes', () => {
+  assert.match(bridge, /new CustomEvent\('tbg:formation-place-player'/);
+  assert.match(bridge, /zone: targetSlot\.dataset\.zone/);
+  assert.match(bridge, /index: Number\(targetSlot\.dataset\.index\)/);
+  assert.match(board, /document\.addEventListener\('tbg:formation-place-player'/);
+  assert.match(board, /placePlayer\(norm\(detail\.player_id\), zone, index\)/);
+  assert.match(board, /syncLegacyInputs\(\)/);
+  const applySwapBody = bridge.match(/function applySwap\([\s\S]*?\n}\n/)[0];
+  assert.doesNotMatch(applySwapBody, /orderedChecked\(/);
+  assert.doesNotMatch(applySwapBody, /importHiddenTeamIntoBoard\(/);
+});
+
 test('temporary selection diagnostics are removed from production bridge', () => {
   assert.doesNotMatch(bridge, /Selection diagnostic/);
   assert.doesNotMatch(bridge, /diagnosticHost/);
