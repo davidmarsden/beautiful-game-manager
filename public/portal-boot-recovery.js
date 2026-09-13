@@ -76,6 +76,8 @@
 
   function finalizeStartup() {
     if (portalRenderedAt !== null) return;
+    const recovery = document.getElementById('portalBootRecovery');
+    if (recovery?.dataset.recoverySource === 'boot_loading') clear();
     portalRenderedAt = performance.now();
     pendingRequests.clear();
     stopObservers();
@@ -268,7 +270,7 @@
       observers.push(observer);
     });
 
-    const portal = document.getElementById('portal');
+    const portal = document.querySelector('#portal');
     if (portal) {
       const observer = new MutationObserver(inspectPortal);
       observer.observe(portal, { childList: true, subtree: true });
