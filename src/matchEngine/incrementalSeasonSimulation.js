@@ -9,7 +9,7 @@ import {
 } from './squadAvailability.js';
 import { buildDoubleRoundRobin } from './seasonSimulation.js';
 
-export const INCREMENTAL_SEASON_VERSION = 'tbg-incremental-season-v1.3';
+export const INCREMENTAL_SEASON_VERSION = 'tbg-incremental-season-v1.4';
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
 const round = (value, places = 4) => Number(Number(value).toFixed(places));
@@ -184,6 +184,17 @@ function normalizeInstruction(instruction = {}) {
 
 function fallbackSource() {
   return Object.freeze({ type: 'deterministic_fallback' });
+}
+
+function generatedInstructionSource(source = {}) {
+  if (text(source?.type) === 'alpha_simulation_manager') {
+    return Object.freeze({
+      type: 'alpha_simulation_manager',
+      version: source.version || 'tbg-alpha-simulation-manager-v0.1',
+      reason: source.reason || 'unmanaged_alpha_club'
+    });
+  }
+  return fallbackSource();
 }
 
 function submittedSource(source = {}) {
@@ -398,11 +409,21 @@ export function advanceIncrementalMatchday(runtime, {
       away: resolvedInstructions[fixture.away_club_id]
     };
     const instructionSources = {
-      home: instructions.home ? submittedSource(resolvedSources[fixture.home_club_id]) : fallbackSource(),
-      away: instructions.away ? submittedSource(resolvedSources[fixture.away_club_id]) : fallbackSource()
+      home: instructions.home ? submittedSource(resolvedSources[fixture.home_club_id]) : generatedInstructionSource(resolvedSources[fixture.home_club_id]),
+      away: instructions.away ? submittedSource(resolvedSources[fixture.away_club_id]) : generatedInstructionSource(resolvedSources[fixture.away_club_id])
     };
     for (const side of ['home', 'away']) {
-      if (!instructions[side]) continue;
+      if (!instructions[side]) {
+        if (instructionSources[side].type === 'alpha_simulation_manager') {
+          teams[side].manager_decision = {
+            ...teams[side].manager_decision,
+            source: 'alpha_simulation_manager',
+            alpha_simulation: true,
+            simulation_version: instructionSources[side].version
+          };
+        }
+        continue;
+      }
       const club = side === 'home' ? homeClub : awayClub;
       applySubmittedInstruction(teams[side], instructions[side], club, matchState, runtime.state.availability, fixture.matchday);
       runtime.human_decisions.push({
