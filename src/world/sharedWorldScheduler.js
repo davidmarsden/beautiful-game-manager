@@ -10,7 +10,9 @@ import {
   repairCompletedFixtureKickoffs
 } from './canonicalTurnCalendar.js';
 
-export const SHARED_WORLD_SCHEDULER_VERSION = 'tbg-shared-world-scheduler-v1.6';
+export const SHARED_WORLD_SCHEDULER_VERSION = 'tbg-shared-world-scheduler-v1.7';
+export const ALPHA_SIMULATION_SOURCE = 'alpha_simulation_manager';
+export const ALPHA_SIMULATION_VERSION = 'tbg-alpha-simulation-manager-v0.1';
 
 const text = (value) => String(value ?? '').trim();
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -175,11 +177,17 @@ export function buildManagerTurnSubmission(world, { managerId, clubId, instructi
   return Object.freeze(submission);
 }
 
+export function alphaSimulationManagersEnabled(value = (typeof process !== 'undefined' ? process.env?.TBG_ALPHA_SIMULATION_MANAGERS : '')) {
+  return ['1', 'true', 'yes', 'on'].includes(text(value).toLowerCase());
+}
+
 function activeAppointmentMap(world, appointments = []) {
   const worldClubIds = new Set(Object.keys(world.squad_cycle.clubs || {}));
   const byClub = new Map();
   for (const appointment of appointments) {
     if (appointment.status !== 'active' || text(appointment.world_id) !== text(world.world_id)) continue;
+    const controlType = text(appointment.control_type).toLowerCase();
+    if (controlType && controlType !== 'human') continue;
     const clubId = text(appointment.club_id), managerId = text(appointment.manager_id);
     if (clubId && managerId && worldClubIds.has(clubId)) byClub.set(clubId, managerId);
   }
@@ -269,7 +277,7 @@ export function selectTurnInstructions(world, submissions = [], appointments = [
   });
 }
 
-export function buildScheduledTurnPlan(worldInput, submissions = [], { appointments = [], scheduledFor = new Date().toISOString(), nextTurnAt = null, turnCalendar = null } = {}) {
+export function buildScheduledTurnPlan(worldInput, submissions = [], { appointments = [], scheduledFor = new Date().toISOString(), nextTurnAt = null, turnCalendar = null, simulationEnabled = alphaSimulationManagersEnabled() } = {}) {
   const world = loadPersistentWorld(savePersistentWorld(worldInput));
   const validation = validatePersistentMatchdayWorld(world);
   if (!validation.valid) throw new Error(`Canonical world is invalid: ${validation.errors.join('; ')}`);
@@ -277,6 +285,12 @@ export function buildScheduledTurnPlan(worldInput, submissions = [], { appointme
   const allClubIds = Object.keys(world.squad_cycle.clubs || {}).sort();
   const submittedClubIds = Object.keys(selected.by_club).sort();
   const fallbackClubIds = allClubIds.filter((id) => !submittedClubIds.includes(id));
+  const humanAppointedClubIds = new Set(selected.appointed_club_ids);
+  const simulationClubIds = simulationEnabled
+    ? allClubIds.filter((clubId) => !humanAppointedClubIds.has(clubId))
+    : [];
+  const simulationClubIdSet = new Set(simulationClubIds);
+  const humanFallbackClubIds = fallbackClubIds.filter((clubId) => !simulationClubIdSet.has(clubId));
   const instructionSourcesByClub = Object.fromEntries(allClubIds.map((clubId) => {
     const selectedSubmission = selected.selected_submissions[clubId];
     const rejectedSubmission = selected.rejected_submissions[clubId];
@@ -284,7 +298,9 @@ export function buildScheduledTurnPlan(worldInput, submissions = [], { appointme
       ? { type: 'manager_submission', ...clone(selectedSubmission) }
       : rejectedSubmission
         ? { type: 'deterministic_fallback', invalid_submission: clone(rejectedSubmission) }
-        : { type: 'deterministic_fallback' }];
+        : simulationClubIdSet.has(clubId)
+          ? { type: ALPHA_SIMULATION_SOURCE, version: ALPHA_SIMULATION_VERSION, reason: 'unmanaged_alpha_club' }
+          : { type: 'deterministic_fallback' }];
   }));
   return Object.freeze({
     version: SHARED_WORLD_SCHEDULER_VERSION,
@@ -301,8 +317,13 @@ export function buildScheduledTurnPlan(worldInput, submissions = [], { appointme
     appointed_club_ids: selected.appointed_club_ids,
     submitted_club_ids: Object.freeze(submittedClubIds),
     fallback_club_ids: Object.freeze(fallbackClubIds),
+    simulation_enabled: Boolean(simulationEnabled),
+    simulation_club_ids: Object.freeze(simulationClubIds),
+    human_fallback_club_ids: Object.freeze(humanFallbackClubIds),
     submission_count: submittedClubIds.length,
-    fallback_count: fallbackClubIds.length
+    fallback_count: fallbackClubIds.length,
+    simulation_count: simulationClubIds.length,
+    human_fallback_count: humanFallbackClubIds.length
   });
 }
 
@@ -329,6 +350,11 @@ export function executeScheduledTurn(worldInput, plan) {
     appointed_club_ids: [...plan.appointed_club_ids],
     submitted_club_ids: [...plan.submitted_club_ids],
     fallback_club_ids: [...plan.fallback_club_ids],
+    simulation_enabled: Boolean(plan.simulation_enabled),
+    simulation_club_ids: [...(plan.simulation_club_ids || [])],
+    human_fallback_club_ids: [...(plan.human_fallback_club_ids || [])],
+    simulation_count: Number(plan.simulation_count || 0),
+    human_fallback_count: Number(plan.human_fallback_count || 0),
     instruction_sources_by_club: clone(plan.instruction_sources_by_club),
     selected_submissions: clone(plan.selected_submissions),
     rejected_submissions: clone(plan.rejected_submissions || {}),

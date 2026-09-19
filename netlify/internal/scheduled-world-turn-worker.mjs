@@ -8,7 +8,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const TURN_DAYS = String(process.env.TBG_TURN_DAYS || '2,5').split(',').map(Number).filter((day) => day >= 0 && day <= 6);
 const TURN_HOUR_UTC = Number(process.env.TBG_TURN_HOUR_UTC || 20);
-const SCHEDULER_VERSION = 'tbg-scheduled-world-turn-v1.10';
+const SCHEDULER_VERSION = 'tbg-scheduled-world-turn-v1.11';
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -303,7 +303,7 @@ async function processWorld(stored, now) {
     matchday = world.matchday_cycle?.current_matchday || 1;
 
     tracker.begin('load_manager_inputs');
-    const appointments = await service(`/rest/v1/manager_appointments?world_id=eq.${encodeURIComponent(worldId)}&status=eq.active&select=world_id,manager_id,club_id,status`);
+    const appointments = await service(`/rest/v1/manager_appointments?world_id=eq.${encodeURIComponent(worldId)}&status=eq.active&select=world_id,manager_id,club_id,status,control_type`);
     const submissions = await service(`/rest/v1/manager_turn_submissions?world_id=eq.${encodeURIComponent(worldId)}&season_id=eq.${encodeURIComponent(seasonId)}&matchday=eq.${matchday}&status=eq.submitted&select=*&order=submitted_at.asc,id.asc`);
     const commands = await service(`/rest/v1/manager_world_commands?world_id=eq.${encodeURIComponent(worldId)}&status=eq.pending&effective_season_id=eq.${encodeURIComponent(seasonId)}&effective_matchday=lte.${matchday}&select=*&order=submitted_at.asc,id.asc`);
 
@@ -428,6 +428,9 @@ async function processWorld(stored, now) {
       checksum: envelope.checksum,
       command_outcomes: commandRun.results.length,
       negotiations_pending: commandRun.negotiations.length,
+      simulation_enabled: Boolean(plan.simulation_enabled),
+      simulation_count: Number(plan.simulation_count || 0),
+      human_fallback_count: Number(plan.human_fallback_count || 0),
       archive_projection: archiveProjection,
       viability: failureDetails,
       stage_timings: tracker.snapshot().stage_timings
