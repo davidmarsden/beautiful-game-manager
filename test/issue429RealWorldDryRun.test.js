@@ -17,8 +17,8 @@ test('issue #429 real-world dry run is structurally read-only', () => {
 test('issue #429 workflow is manual and uploads the diagnostic report', () => {
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /TBG_DRY_RUN_WORLD_ID:/);
-  assert.match(workflow, /dry-run-alpha-simulation-managers\\.mjs/);
-  assert.match(workflow, /actions\\/upload-artifact@v4/);
+  assert.equal(workflow.includes('dry-run-alpha-simulation-managers.mjs'), true);
+  assert.equal(workflow.includes('actions/upload-artifact@v4'), true);
   assert.doesNotMatch(workflow, /schedule:/);
 });
 
