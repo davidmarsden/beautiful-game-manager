@@ -10,7 +10,7 @@ test('issue #429 real-world dry run is structurally read-only', () => {
   assert.match(script, /fetch\\(`\\$\\{SUPABASE_URL\\}\\$\\{path\\}`, \\{ headers: serviceHeaders\\(\\) \\}\\)/);
   assert.doesNotMatch(script, /method:\\s*['\"](?:POST|PATCH|PUT|DELETE)['\"]/i);
   assert.doesNotMatch(script, /replace_canonical_world_checkpoint/);
-  assert.doesNotMatch(script, /rpc\\//);
+  assert.equal(script.includes('/rpc/'), false);
   assert.match(script, /read_only: true/);
 });
 
