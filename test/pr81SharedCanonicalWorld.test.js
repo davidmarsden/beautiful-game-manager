@@ -10,7 +10,9 @@ import {
   currentTurnIdentity,
   executeScheduledTurn,
   selectTurnInstructions,
-  validateManagerTurnSubmission
+  validateManagerTurnSubmission,
+  alphaSimulationManagersEnabled,
+  ALPHA_SIMULATION_SOURCE
 } from '../src/world/sharedWorldScheduler.js';
 import { commandForDomain, nextScheduledTurn } from '../netlify/functions/scheduled-world-turn.mjs';
 
@@ -29,7 +31,8 @@ function activeAppointment(source, managerId = 'manager-one', clubId = source.hu
     world_id: source.world_id,
     manager_id: managerId,
     club_id: clubId,
-    status: 'active'
+    status: 'active',
+    control_type: 'human'
   };
 }
 
@@ -87,6 +90,47 @@ test('latest appointed club submission wins and missing clubs use deterministic 
   assert.deepEqual(plan.instruction_sources_by_club[source.human_club_id], {
     type: 'manager_submission', submission_id: 'latest', manager_id: 'm1', submitted_at: '2026-07-22T11:00:00.000Z'
   });
+});
+
+test('alpha simulation managers fill every club without a human appointment and preserve human fallback semantics', () => {
+  const source = world();
+  const humanClubId = source.human_club_id;
+  const appointments = [activeAppointment(source, 'manager-one', humanClubId)];
+  const plan = buildScheduledTurnPlan(source, [], {
+    appointments,
+    scheduledFor: '2026-07-23T20:00:00.000Z',
+    simulationEnabled: true
+  });
+
+  assert.equal(plan.simulation_enabled, true);
+  assert.equal(plan.simulation_count, 19);
+  assert.equal(plan.human_fallback_count, 1);
+  assert.equal(plan.instruction_sources_by_club[humanClubId].type, 'deterministic_fallback');
+
+  const simulationClubId = plan.simulation_club_ids[0];
+  assert.equal(plan.instruction_sources_by_club[simulationClubId].type, ALPHA_SIMULATION_SOURCE);
+
+  const result = executeScheduledTurn(source, plan);
+  const simulatedTeam = fixtureTeamForClub(result, simulationClubId).team;
+  const humanTeam = fixtureTeamForClub(result, humanClubId).team;
+  assert.equal(simulatedTeam.instruction_source.type, ALPHA_SIMULATION_SOURCE);
+  assert.equal(simulatedTeam.manager_decision.source, ALPHA_SIMULATION_SOURCE);
+  assert.equal(simulatedTeam.manager_decision.alpha_simulation, true);
+  assert.equal(humanTeam.instruction_source.type, 'deterministic_fallback');
+});
+
+test('alpha simulation manager kill switch leaves unmanaged clubs on deterministic fallback', () => {
+  const source = world();
+  const plan = buildScheduledTurnPlan(source, [], {
+    appointments: [activeAppointment(source)],
+    scheduledFor: '2026-07-23T20:00:00.000Z',
+    simulationEnabled: false
+  });
+  assert.equal(plan.simulation_count, 0);
+  assert.equal(plan.human_fallback_count, 20);
+  assert.ok(Object.values(plan.instruction_sources_by_club).every((row) => row.type === 'deterministic_fallback'));
+  assert.equal(alphaSimulationManagersEnabled('on'), true);
+  assert.equal(alphaSimulationManagersEnabled('false'), false);
 });
 
 test('a submission without the active club appointment is ignored', () => {
