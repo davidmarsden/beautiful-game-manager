@@ -1,0 +1,40 @@
+name: Alpha Simulation Manager Dry Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      world_id:
+        description: Canonical world ID to inspect
+        required: true
+        default: tbg-world-1
+
+permissions:
+  contents: read
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out manager portal
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run read-only alpha simulation diagnostic
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TBG_DRY_RUN_WORLD_ID: ${{ inputs.world_id }}
+        run: node scripts/dry-run-alpha-simulation-managers.mjs
+
+      - name: Upload dry-run report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alpha-simulation-dry-run-${{ inputs.world_id }}
+          path: artifacts/alpha-simulation-dry-run/
+          if-no-files-found: error
+          retention-days: 14
