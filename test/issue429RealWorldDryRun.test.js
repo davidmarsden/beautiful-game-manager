@@ -6,12 +6,15 @@ const script = fs.readFileSync(new URL('../scripts/dry-run-alpha-simulation-mana
 const workflow = fs.readFileSync(new URL('../.github/workflows/alpha-simulation-dry-run.yml', import.meta.url), 'utf8');
 
 test('issue #429 real-world dry run is structurally read-only', () => {
-  assert.match(script, /async function read\\(path\\)/);
-  assert.match(script, /fetch\\(`\\$\\{SUPABASE_URL\\}\\$\\{path\\}`, \\{ headers: serviceHeaders\\(\\) \\}\\)/);
-  assert.doesNotMatch(script, /method:\\s*['\"](?:POST|PATCH|PUT|DELETE)['\"]/i);
-  assert.doesNotMatch(script, /replace_canonical_world_checkpoint/);
+  assert.equal(script.includes('async function read(path)'), true);
+  assert.equal(script.includes('fetch(`${SUPABASE_URL}${path}`, { headers: serviceHeaders() })'), true);
+  for (const verb of ['POST', 'PATCH', 'PUT', 'DELETE']) {
+    assert.equal(script.includes(`method: '${verb}'`), false);
+    assert.equal(script.includes(`method: "${verb}"`), false);
+  }
+  assert.equal(script.includes('replace_canonical_world_checkpoint'), false);
   assert.equal(script.includes('/rpc/'), false);
-  assert.match(script, /read_only: true/);
+  assert.equal(script.includes('read_only: true'), true);
 });
 
 test('issue #429 workflow is manual and uploads the diagnostic report', () => {
