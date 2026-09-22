@@ -81,6 +81,7 @@ test('message sequencing and read advancement serialize on the same conversation
 
   assert.match(sendSql, /from public\.conversations[\s\S]*where id = p_conversation_id[\s\S]*for update/i);
   assert.match(sendSql, /set last_message_seq = last_message_seq \+ 1/i);
+  assert.match(sendSql, /last_read_message_seq = greatest\(last_read_message_seq, next_seq\)[\s\S]*manager_id = caller_manager_id/i);
   assert.match(readSql, /from public\.conversations[\s\S]*where id = p_conversation_id[\s\S]*for update/i);
   assert.match(readSql, /p_message_seq > conversation_row\.last_message_seq/i);
   assert.match(readSql, /last_read_message_seq = greatest\(last_read_message_seq, p_message_seq\)/i);
