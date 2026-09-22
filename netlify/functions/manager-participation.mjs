@@ -53,14 +53,9 @@ async function activeContext(userId) {
 
 async function touchActivity(managerId, worldId) {
   const now = new Date().toISOString();
-  await serviceSupabase('/rest/v1/manager_world_activity?on_conflict=manager_id,world_id', {
+  await serviceSupabase('/rest/v1/rpc/touch_manager_world_activity_atomic', {
     method: 'POST',
-    headers: { prefer: 'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify({ manager_id: managerId, world_id: worldId, last_active_at: now })
-  });
-  await serviceSupabase(`/rest/v1/manager_participation_states?manager_id=eq.${encodeURIComponent(managerId)}&world_id=eq.${encodeURIComponent(worldId)}&status=eq.caretaker`, {
-    method: 'DELETE',
-    headers: { prefer: 'return=minimal' }
+    body: JSON.stringify({ p_manager_id: managerId, p_world_id: worldId, p_active_at: now })
   });
   return now;
 }
