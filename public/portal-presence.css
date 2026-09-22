@@ -57,6 +57,7 @@
 #managersView .manager-directory-last-active{display:grid;gap:.1rem;min-width:0}
 #managersView .manager-directory-last-active small{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--tbg-colour-muted,#58685c)}
 #managersView .manager-directory-last-active strong{font-size:.84rem;color:#237227;white-space:nowrap}
+#managersView .manager-directory-caretaker{display:inline-block;width:max-content;padding:.08rem .35rem;border:1px solid #9b6b00;background:#fff0b8;color:#6d4b00;font-size:.62rem;font-style:normal;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
 #managersView .manager-directory-activity-summary{margin-left:auto;font-size:.82rem;font-weight:700;color:var(--tbg-brazil-blue,#193375)}
 
 @media(max-width:700px){

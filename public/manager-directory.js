@@ -47,10 +47,13 @@ function lastActiveLabel(value, now = Date.now()) {
   return `${days} days ago`;
 }
 
-function activityMarkup(value) {
+function activityMarkup(value, participationStatus = 'active') {
   const label = lastActiveLabel(value);
   const title = value ? ` title="${escapeHtml(new Date(value).toLocaleString())}"` : '';
-  return `<span class="manager-directory-last-active"${title}><small>Last active</small><strong>${escapeHtml(label)}</strong></span>`;
+  const caretaker = participationStatus === 'caretaker'
+    ? '<em class="manager-directory-caretaker">Caretaker</em>'
+    : '';
+  return `<span class="manager-directory-last-active"${title}><small>Last active</small><strong>${escapeHtml(label)}</strong>${caretaker}</span>`;
 }
 
 function render(data) {
@@ -63,14 +66,14 @@ function render(data) {
     <button type="button" class="manager-directory-list-row manager-directory-list-row-self" data-manager-directory-self>
       <span class="manager-directory-identity"><strong>${escapeHtml(data.manager_name || 'Manager')} <small class="manager-directory-you">You</small></strong><small>${escapeHtml(data.club_name || 'No club')}</small></span>
       <span class="manager-directory-club">${escapeHtml(data.division_name || data.division || '')}</span>
-      ${activityMarkup(data.last_active_at)}
+      ${activityMarkup(data.last_active_at, data.participation_status)}
       <span class="manager-directory-open">View profile <span aria-hidden="true">→</span></span>
     </button>` : '';
   const rows = directory.map((manager) => `
     <button type="button" class="manager-directory-list-row" data-manager-profile-id="${escapeHtml(manager.manager_id || '')}">
       <span class="manager-directory-identity"><strong>${escapeHtml(manager.manager_name || 'Manager')}</strong><small>${escapeHtml(manager.club_name || manager.club_id || 'No club')}</small></span>
       <span class="manager-directory-club">${escapeHtml(manager.division_name || manager.division || '')}</span>
-      ${activityMarkup(manager.last_active_at)}
+      ${activityMarkup(manager.last_active_at, manager.participation_status)}
       <span class="manager-directory-open">View profile <span aria-hidden="true">→</span></span>
     </button>`).join('');
   const appointedCount = directory.length + (hasSelf ? 1 : 0);
