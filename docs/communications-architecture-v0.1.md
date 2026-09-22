@@ -93,14 +93,17 @@ Minimum conceptual model:
       conversation_id
       manager_id
       joined_at
-      last_read_at
+      last_read_message_seq
       muted_at?
       left_at?
 
     conversation_messages
       id
       conversation_id
+      message_seq
       sender_manager_id?
+      sender_appointment_id?
+      sender_club_id?
       actor_type
       actor_id?
       body
@@ -157,7 +160,7 @@ The same rule must hold for accept/reject/counter, contract promises, manager ap
 
 TBG manager identity is canonical. No communications account or username is created separately.
 
-A conversation member references the TBG manager profile/identity. Club affiliation is resolved from the manager's current appointment for presentation and eligibility.
+A conversation member references the TBG manager profile/identity. The manager's current appointment determines present-day eligibility and contact permissions, but each message also persists the sender's appointment and/or club affiliation at send time. Historical messages therefore continue to show the club context in which they were written even after the manager changes or leaves a club.
 
 System actors must carry explicit actor types such as manager, agent, board, journalist, club, competition and system. Generated actors must never masquerade as humans.
 
@@ -196,7 +199,7 @@ RLS/API tests must prove at minimum:
 
 Unread state is convenience, not game performance.
 
-For ordinary conversations, a per-member last_read_at or equivalent monotonic message marker is sufficient to derive unread counts without writing one receipt per message.
+For ordinary conversations, unread state uses a per-conversation monotonic message cursor rather than timestamps. Each committed message receives an ordering value such as message_seq, allocated so that message insertion and read advancement cannot race past one another. Each member stores the highest message sequence they have read. Unread counts are derived from messages whose sequence is greater than that cursor, without writing one receipt per message.
 
 Do not add visible read receipts, online-now status, typing indicators, streaks or response-speed rewards.
 
