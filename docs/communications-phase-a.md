@@ -44,12 +44,15 @@ Messages carry:
 
 ## Read model and RLS
 
-Authenticated clients receive SELECT only.
+Authenticated clients receive SELECT only on conversations and messages.
 
-RLS permits a manager to read a conversation, its membership rows and its messages only when:
+Membership rows are not directly exposed because they contain private per-user state such as read cursors and mute/leave state. Phase B must expose a sanitized participant projection separately from the caller's own private membership state.
+
+RLS permits a manager to read a conversation and its messages only when:
 - the authenticated user maps to the member's TBG manager profile;
 - that profile is active;
-- that manager has an active membership row for the conversation.
+- that manager has an active membership row for the conversation;
+- that manager still holds an active human appointment in the conversation's world.
 
 The membership lookup is implemented by a narrowly scoped helper in the non-exposed `private` schema.
 
@@ -102,8 +105,8 @@ The repository test contract checks that:
 1. only the three bounded Phase A tables are introduced;
 2. all three have RLS enabled;
 3. anonymous and broad public privileges are revoked;
-4. authenticated access is SELECT-only;
-5. all reads are membership-scoped;
+4. authenticated reads are limited to conversations/messages, while raw membership state remains private;
+5. all exposed reads require both membership and current active-human eligibility in the conversation's world;
 6. manager identity comes from `auth.uid()`, never caller-supplied sender IDs;
 7. direct conversations are same-world and human-manager only;
 8. sender appointment/club identity is captured at send time;
