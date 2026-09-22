@@ -47,6 +47,38 @@ alter table public.manager_inactivity_escalations enable row level security;
 revoke all on table public.manager_inactivity_escalations from public, anon, authenticated;
 grant select, insert, update, delete on table public.manager_inactivity_escalations to service_role;
 
+create or replace function public.touch_manager_world_activity_atomic(
+  p_manager_id uuid,
+  p_world_id text,
+  p_active_at timestamptz default now()
+) returns timestamptz
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $
+declare
+  v_active_at timestamptz := coalesce(p_active_at, now());
+begin
+  if p_manager_id is null or p_world_id is null then
+    raise exception 'Manager and world are required';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(p_manager_id::text || ':' || p_world_id, 613));
+
+  insert into public.manager_world_activity(manager_id, world_id, last_active_at)
+  values (p_manager_id, p_world_id, v_active_at)
+  on conflict (manager_id, world_id) do update
+  set last_active_at = greatest(public.manager_world_activity.last_active_at, excluded.last_active_at);
+
+  delete from public.manager_participation_states
+  where manager_id = p_manager_id
+    and world_id = p_world_id
+    and status = 'caretaker';
+
+  return v_active_at;
+end;
+$;
+
 create or replace function public.claim_manager_inactivity_escalations(
   p_claim_token uuid,
   p_limit integer default 100
@@ -60,6 +92,24 @@ declare
   claim_limit integer := greatest(1, least(coalesce(p_limit, 100), 250));
 begin
   if p_claim_token is null then raise exception 'Claim token is required'; end if;
+
+  -- Serialize enforcement against portal activity touches. Whichever transaction
+  -- acquires this lock first wins; the following statement then sees a fresh
+  -- READ COMMITTED snapshot after all earlier touches have committed.
+  perform pg_advisory_xact_lock(hashtextextended(appointment.manager_id::text || ':' || appointment.world_id, 613))
+  from public.manager_appointments appointment
+  join public.manager_profiles profile on profile.id = appointment.manager_id
+  left join public.manager_world_activity activity
+    on activity.manager_id = appointment.manager_id
+   and activity.world_id = appointment.world_id
+  left join auth.users auth_user on auth_user.id = profile.user_id
+  where appointment.status = 'active'
+    and appointment.control_type = 'human'
+    and profile.status = 'active'
+    and greatest(
+      coalesce(activity.last_active_at, auth_user.last_sign_in_at, appointment.appointed_at),
+      appointment.appointed_at
+    ) <= now() - interval '7 days';
 
   with active_due as (
     select
@@ -365,6 +415,113 @@ begin
   return affected = 1;
 end;
 $$;
+
+create or replace function public.get_manager_notifications_for_user(p_user_id uuid, p_world_id text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $
+declare
+  v_manager_id uuid;
+  v_notifications jsonb;
+  v_reports jsonb;
+  v_points integer := 0;
+  v_confirmed integer := 0;
+  v_max_points integer := 0;
+begin
+  select p.id into v_manager_id
+  from public.manager_profiles p
+  where p.user_id = p_user_id
+    and p.status = 'active'
+    and (
+      exists (
+        select 1 from public.manager_appointments a
+        where a.manager_id = p.id and a.world_id = p_world_id
+      )
+      or exists (
+        select 1 from public.manager_notifications n
+        where n.manager_id = p.id and n.world_id = p_world_id
+      )
+    )
+  limit 1;
+  if v_manager_id is null then raise exception 'No manager history for this user and world'; end if;
+
+  select coalesce(jsonb_agg(to_jsonb(n) order by n.created_at desc), '[]'::jsonb) into v_notifications
+  from (
+    select id, notification_type, notification_class, title, body, action_url, source_type, source_id, read_at, created_at
+    from public.manager_notifications
+    where manager_id = v_manager_id and world_id = p_world_id
+    order by created_at desc limit 100
+  ) n;
+
+  select coalesce(jsonb_agg(to_jsonb(r) order by r.created_at desc), '[]'::jsonb) into v_reports
+  from (
+    select id, kind, category, page_area, status, severity, github_issue_url, created_at, updated_at,
+      (select coalesce(jsonb_agg(jsonb_build_object(
+        'event_type',e.event_type,'status',e.status,'severity',e.severity,
+        'github_issue_url',e.github_issue_url,'created_at',e.created_at
+      ) order by e.created_at),'[]'::jsonb) from public.alpha_feedback_events e where e.report_id = report.id) as events
+    from public.alpha_feedback_reports report
+    where report.manager_id = v_manager_id and report.world_id = p_world_id
+    order by report.created_at desc limit 50
+  ) r;
+
+  select coalesce(sum(points),0)::integer, count(*)::integer, coalesce(max(points),0)::integer
+    into v_points, v_confirmed, v_max_points
+  from public.alpha_feedback_bug_credits
+  where manager_id = v_manager_id and world_id = p_world_id;
+
+  return jsonb_build_object(
+    'notifications', v_notifications,
+    'unread_count', (select count(*) from public.manager_notifications where manager_id = v_manager_id and world_id = p_world_id and read_at is null),
+    'reports', v_reports,
+    'bug_hunter', jsonb_build_object('points',v_points,'confirmed_reports',v_confirmed,'max_report_points',v_max_points)
+  );
+end;
+$;
+
+create or replace function public.mark_manager_notification_read_for_user(
+  p_user_id uuid, p_world_id text, p_notification_id uuid default null, p_all boolean default false
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $
+declare v_manager_id uuid; v_count integer;
+begin
+  select p.id into v_manager_id
+  from public.manager_profiles p
+  where p.user_id = p_user_id
+    and p.status = 'active'
+    and (
+      exists (
+        select 1 from public.manager_appointments a
+        where a.manager_id = p.id and a.world_id = p_world_id
+      )
+      or exists (
+        select 1 from public.manager_notifications n
+        where n.manager_id = p.id and n.world_id = p_world_id
+      )
+    )
+  limit 1;
+  if v_manager_id is null then raise exception 'No manager history for this user and world'; end if;
+
+  update public.manager_notifications set read_at = coalesce(read_at, now())
+  where manager_id = v_manager_id and world_id = p_world_id
+    and (p_all or (not p_all and id = p_notification_id));
+  get diagnostics v_count = row_count;
+  return jsonb_build_object('ok',true,'updated',v_count);
+end;
+$;
+
+revoke all on function public.touch_manager_world_activity_atomic(uuid,text,timestamptz) from public, anon, authenticated;
+grant execute on function public.touch_manager_world_activity_atomic(uuid,text,timestamptz) to service_role;
+revoke all on function public.get_manager_notifications_for_user(uuid,text) from public, anon, authenticated;
+grant execute on function public.get_manager_notifications_for_user(uuid,text) to service_role;
+revoke all on function public.mark_manager_notification_read_for_user(uuid,text,uuid,boolean) from public, anon, authenticated;
+grant execute on function public.mark_manager_notification_read_for_user(uuid,text,uuid,boolean) to service_role;
 
 revoke all on function public.claim_manager_inactivity_escalations(uuid,integer) from public, anon, authenticated;
 grant execute on function public.claim_manager_inactivity_escalations(uuid,integer) to service_role;
