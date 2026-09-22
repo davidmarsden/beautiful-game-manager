@@ -74,7 +74,7 @@ export const MODULE_F_COMMENTARY_REPORT = createEngineModule({
   id: 'module-f-commentary-report',
   name: 'Module F — Commentary & Report',
   order: 6,
-  constitution: 'Match Engine Constitution v0.3; Information, Media & Communication Constitution v1.2',
+  constitution: 'Match Engine Constitution v0.3; Information, Media & Communication Constitution v1.3',
   execute: executeCommentaryReport
 });
 

@@ -548,3 +548,46 @@ Provide a pre-match comparison of the two clubs without exposing the opponent’
 - PR #24 Match Centre archive security fix.
 - Player Rating Constitution.
 - Information, Media & Communication Constitution.
+
+
+---
+
+## FR-019 — Integrated communications and social layer
+
+**Status:** Accepted  
+**Likely phase:** Post-alpha social infrastructure; staged delivery per communications architecture
+
+### User-facing idea
+
+Turn TBG's existing World Feed, manager inbox and notifications into a coherent in-world communications experience, adding private manager-to-manager conversation, object-attached discussion, transfer/recruitment listings and later authorised game-actor conversations.
+
+### Rules and constraints
+
+- Conversation never substitutes for an authoritative game action.
+- Ordinary social messages create no Professionalism obligation.
+- Private message content remains private and must not drive rumours, scouting, player reactions, media generation or AI decisions.
+- Identity is the existing TBG manager identity; there is no separate chat account.
+- Server-side membership and RLS enforce private visibility.
+- Social activity, speed, presence and message volume confer no mechanical advantage.
+- Generated/system actors must be visibly distinguishable from human managers.
+- RSS/Atom/JSON Feed may later publish already-public information but are not dependencies of the communications system.
+
+### Technical notes
+
+- Preserve existing world_feed_items/world_feed_comments, manager_messages, manager_notifications and manager_world_commands as authoritative in their current domains.
+- Add a bounded private-conversation domain: conversations, conversation members and conversation messages.
+- Reuse the existing notification router for social unread/attention events.
+- Reuse lessons from private Top 100 Chat for authenticated privacy boundaries, PWA and Web Push, without making rss.chat the TBG datastore.
+- Bind discussions to durable canonical TBG object type/id pairs rather than mutable URLs.
+- Add structured transfer/recruitment listings separately from free-text posts.
+- Implement in security-first stages before unifying News/Inbox/World/Market presentation.
+
+### Related work
+
+- Information, Media & Communication Constitution v1.3.
+- Communications & Social Layer Appendix v0.1.
+- docs/communications-architecture-v0.1.md.
+- Existing World Feed social notifications.
+- Existing manager inbox and notification delivery.
+- Existing bilateral transfer command/inbox workflow.
+- Private Top 100 Chat as reference implementation for auth, privacy, PWA and push.
