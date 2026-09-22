@@ -354,6 +354,13 @@ begin
   )
   returning * into inserted_message;
 
+  -- A manager has necessarily read the message they just sent. Advance only
+  -- their own cursor; other participants retain their existing unread state.
+  update public.conversation_members
+  set last_read_message_seq = greatest(last_read_message_seq, next_seq)
+  where conversation_id = p_conversation_id
+    and manager_id = caller_manager_id;
+
   return inserted_message;
 end;
 $$;
