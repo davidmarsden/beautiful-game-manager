@@ -52,12 +52,31 @@ test('removal email preserves career history and explains reappointment', () => 
 });
 
 
-test('returning to the portal immediately clears caretaker state and the directory exposes it', () => {
+test('returning to the portal atomically clears caretaker state and the directory exposes it', () => {
   const participation = read('netlify/functions/manager-participation.mjs');
   const directory = read('public/manager-directory.js');
-  assert.match(participation, /manager_participation_states\?manager_id=/);
-  assert.match(participation, /method: 'DELETE'/);
+  assert.match(participation, /touch_manager_world_activity_atomic/);
+  assert.match(migration, /pg_advisory_xact_lock\(hashtextextended\(p_manager_id::text \|\| ':' \|\| p_world_id, 613\)\)/);
+  assert.match(migration, /delete from public\.manager_participation_states/);
   assert.match(participation, /participation_status/);
   assert.match(directory, /manager-directory-caretaker/);
   assert.match(directory, /participation_status/);
+});
+
+test('enforcement serializes against a concurrent portal return before applying removal', () => {
+  assert.match(migration, /Serialize enforcement against portal activity touches/);
+  assert.match(migration, /pg_advisory_xact_lock\(hashtextextended\(appointment\.manager_id::text \|\| ':' \|\| appointment\.world_id, 613\)\)/);
+  assert.match(migration, /following statement then sees a fresh/);
+});
+
+test('removed managers can still read and mark their removal notification', () => {
+  assert.match(migration, /create or replace function public\.get_manager_notifications_for_user/);
+  assert.match(migration, /create or replace function public\.mark_manager_notification_read_for_user/);
+  assert.match(migration, /No manager history for this user and world/);
+  assert.doesNotMatch(migration, /No active manager appointment for this user and world/);
+});
+
+test('Resend retries use a stable idempotency key', () => {
+  assert.match(worker, /Idempotency-Key/);
+  assert.match(worker, /manager-inactivity-\$\{item\.escalation_id\}/);
 });
