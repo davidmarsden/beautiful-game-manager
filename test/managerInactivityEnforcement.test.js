@@ -50,3 +50,14 @@ test('removal email preserves career history and explains reappointment', () => 
   assert.match(worker, /reappointment pool/i);
   assert.match(worker, /club is now available for a replacement manager/i);
 });
+
+
+test('returning to the portal immediately clears caretaker state and the directory exposes it', () => {
+  const participation = read('netlify/functions/manager-participation.mjs');
+  const directory = read('public/manager-directory.js');
+  assert.match(participation, /manager_participation_states\?manager_id=/);
+  assert.match(participation, /method: 'DELETE'/);
+  assert.match(participation, /participation_status/);
+  assert.match(directory, /manager-directory-caretaker/);
+  assert.match(directory, /participation_status/);
+});
