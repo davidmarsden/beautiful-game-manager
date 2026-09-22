@@ -86,7 +86,6 @@ revoke all on public.conversation_members from public, anon, authenticated;
 revoke all on public.conversation_messages from public, anon, authenticated;
 
 grant select on public.conversations to authenticated;
-grant select on public.conversation_members to authenticated;
 grant select on public.conversation_messages to authenticated;
 
 grant select, insert, update, delete on public.conversations to service_role;
@@ -105,8 +104,15 @@ as $$
   select exists (
     select 1
     from public.conversation_members member
+    join public.conversations conversation
+      on conversation.id = member.conversation_id
     join public.manager_profiles profile
       on profile.id = member.manager_id
+    join public.manager_appointments appointment
+      on appointment.manager_id = profile.id
+     and appointment.world_id = conversation.world_id
+     and appointment.status = 'active'
+     and appointment.control_type = 'human'
     where member.conversation_id = p_conversation_id
       and member.left_at is null
       and profile.user_id = (select auth.uid())
@@ -128,14 +134,10 @@ create policy "conversation members can read conversations"
   to authenticated
   using ((select private.manager_can_read_conversation(id)));
 
-drop policy if exists "conversation members can read membership"
-  on public.conversation_members;
-create policy "conversation members can read membership"
-  on public.conversation_members
-  for select
-  to authenticated
-  using ((select private.manager_can_read_conversation(conversation_id)));
-
+-- Membership contains private per-user state (read cursor, mute/leave state).
+-- It is intentionally not directly selectable by authenticated clients.
+-- Phase B must expose only a sanitized participant projection plus the
+-- caller's own private cursor/preferences.
 drop policy if exists "conversation members can read messages"
   on public.conversation_messages;
 create policy "conversation members can read messages"
@@ -457,7 +459,7 @@ grant execute on function public.mark_conversation_read(uuid, bigint)
 comment on table public.conversations is
   'TBG Comms conversation containers. Social state only; never authoritative football actions.';
 comment on table public.conversation_members is
-  'Server-controlled conversation membership and per-member monotonic read cursor.';
+  'Server-controlled membership and private per-member state. Not directly exposed to authenticated clients.';
 comment on table public.conversation_messages is
   'Private conversational messages with send-time manager/appointment/club snapshots.';
 comment on column public.conversation_messages.message_seq is
