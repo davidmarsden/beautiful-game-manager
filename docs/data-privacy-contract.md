@@ -45,6 +45,10 @@ Visibility is not edit authority. Appointment-scoped commands and submissions re
 
 The following must never enter Pink Final or another unauthenticated projection:
 
+- private manager-to-manager conversation rows, membership, message bodies and read/mute state;
+- private system inbox items and notification delivery/subscription endpoints;
+- private conversation-derived metadata, including whether two managers are privately talking;
+
 - world/save identifiers and checksums;
 - manager email, manager ID, appointment ID or access tokens;
 - team sheets, tactical submissions, private submissions or command queues;
@@ -89,3 +93,16 @@ Adding a public field requires all of:
 5. a coordinated Pink Final consumer change.
 
 A convenient field is not automatically a public field.
+
+
+## Communications boundary
+
+The communications layer is governed by the Information, Media & Communication Constitution and the Communications & Social Layer Appendix.
+
+Private conversation content is delivery data, not football knowledge. It must not be mined, summarised or inspected to create rumours, scouting information, player/agent reactions, media stories, recommendation scores, manager reputation effects or other canonical game state.
+
+Where a private conversation accompanies an authoritative action such as an enquiry, bid or manager approach, any constitutional leakage derives from the authoritative action record. It never derives from the free-text conversation.
+
+Public feed adapters may expose only information already public by a governed rule. RSS, Atom, JSON Feed, WebSub, rssCloud or another syndication mechanism must never expose private conversation, private membership, read state, inbox records, notification subscriptions or private command payloads.
+
+A social block or mute may suppress ordinary human conversation and its social notifications. It must not suppress a separately authoritative game obligation or system notice.
