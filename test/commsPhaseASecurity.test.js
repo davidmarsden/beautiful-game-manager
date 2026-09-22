@@ -16,37 +16,41 @@ test('Phase A creates only the bounded private conversation domain', () => {
   assert.doesNotMatch(migration, /web.?push|notification.*insert|manager_notifications.*insert/is);
 });
 
-test('private conversation tables fail closed and expose read-only RLS to authenticated users', () => {
+test('private conversation tables fail closed and expose only the intended read surfaces', () => {
   for (const table of ['conversations', 'conversation_members', 'conversation_messages']) {
     assert.match(migration, new RegExp(`alter table public\\.${table} enable row level security`, 'i'));
     assert.match(migration, new RegExp(`revoke all on public\\.${table} from public, anon, authenticated`, 'i'));
-    assert.match(migration, new RegExp(`grant select on public\\.${table} to authenticated`, 'i'));
     assert.doesNotMatch(
       migration,
       new RegExp(`grant [^;]*(?:insert|update|delete)[^;]*on public\\.${table} to authenticated`, 'i')
     );
   }
 
+  assert.match(migration, /grant select on public\.conversations to authenticated/i);
+  assert.match(migration, /grant select on public\.conversation_messages to authenticated/i);
+  assert.doesNotMatch(migration, /grant select on public\.conversation_members to authenticated/i);
+
   assert.match(migration, /create schema if not exists private/i);
   assert.match(migration, /private\.manager_can_read_conversation/i);
   assert.match(migration, /security definer[\s\S]*set search_path = ''/i);
   assert.match(migration, /profile\.user_id = \(select auth\.uid\(\)\)/i);
   assert.match(migration, /profile\.status = 'active'/i);
+  assert.match(migration, /appointment\.world_id = conversation\.world_id/i);
+  assert.match(migration, /appointment\.status = 'active'/i);
+  assert.match(migration, /appointment\.control_type = 'human'/i);
 });
 
-test('RLS grants no private metadata to non-members', () => {
+test('RLS grants no conversation content to non-members and hides private member state entirely', () => {
   assert.match(
     migration,
     /create policy "conversation members can read conversations"[\s\S]*private\.manager_can_read_conversation\(id\)/i
   );
-  assert.match(
-    migration,
-    /create policy "conversation members can read membership"[\s\S]*private\.manager_can_read_conversation\(conversation_id\)/i
-  );
+  assert.doesNotMatch(migration, /create policy "conversation members can read membership"/i);
   assert.match(
     migration,
     /create policy "conversation members can read messages"[\s\S]*private\.manager_can_read_conversation\(conversation_id\)/i
   );
+  assert.match(migration, /Membership contains private per-user state/i);
 });
 
 test('direct conversation creation is identity-controlled and same-world human-only', () => {
