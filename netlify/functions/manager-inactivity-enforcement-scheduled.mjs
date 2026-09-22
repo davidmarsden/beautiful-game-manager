@@ -79,7 +79,11 @@ async function sendEmail(item) {
   const message = messageFor(item);
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      'content-type': 'application/json',
+      'Idempotency-Key': `manager-inactivity-${item.escalation_id}`
+    },
     body: JSON.stringify({
       from,
       to: [item.email],
