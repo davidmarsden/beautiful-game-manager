@@ -58,12 +58,21 @@ async function touchActivity(managerId, worldId) {
     headers: { prefer: 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify({ manager_id: managerId, world_id: worldId, last_active_at: now })
   });
+  await serviceSupabase(`/rest/v1/manager_participation_states?manager_id=eq.${encodeURIComponent(managerId)}&world_id=eq.${encodeURIComponent(worldId)}&status=eq.caretaker`, {
+    method: 'DELETE',
+    headers: { prefer: 'return=minimal' }
+  });
   return now;
 }
 
 async function lastActiveFor(managerId, worldId) {
   const rows = await serviceSupabase(`/rest/v1/manager_world_activity?manager_id=eq.${encodeURIComponent(managerId)}&world_id=eq.${encodeURIComponent(worldId)}&select=last_active_at&limit=1`);
   return rows[0]?.last_active_at || null;
+}
+
+async function participationStateFor(managerId, worldId) {
+  const rows = await serviceSupabase(`/rest/v1/manager_participation_states?manager_id=eq.${encodeURIComponent(managerId)}&world_id=eq.${encodeURIComponent(worldId)}&select=status,activity_anchor,entered_at&limit=1`);
+  return rows[0] || null;
 }
 
 async function clubNamesForWorld(userId, worldId) {
@@ -84,13 +93,15 @@ async function managerDirectory(worldId, selfId, userId) {
   const ids = [...new Set(appointments.map((row) => row.manager_id).filter(Boolean))];
   if (!ids.length) return [];
   const idFilter = ids.map((id) => String(id).replaceAll(',', '')).join(',');
-  const [profiles, clubNames, activity] = await Promise.all([
+  const [profiles, clubNames, activity, participationStates] = await Promise.all([
     serviceSupabase(`/rest/v1/manager_profiles?id=in.(${idFilter})&select=id,display_name`),
     clubNamesForWorld(userId, worldId),
-    serviceSupabase(`/rest/v1/manager_world_activity?world_id=eq.${encodeURIComponent(worldId)}&manager_id=in.(${idFilter})&select=manager_id,last_active_at`)
+    serviceSupabase(`/rest/v1/manager_world_activity?world_id=eq.${encodeURIComponent(worldId)}&manager_id=in.(${idFilter})&select=manager_id,last_active_at`),
+    serviceSupabase(`/rest/v1/manager_participation_states?world_id=eq.${encodeURIComponent(worldId)}&manager_id=in.(${idFilter})&status=eq.caretaker&select=manager_id,status`)
   ]);
   const names = new Map(profiles.map((profile) => [String(profile.id), profile.display_name]));
   const activeTimes = new Map(activity.map((row) => [String(row.manager_id), row.last_active_at]));
+  const participationByManager = new Map(participationStates.map((row) => [String(row.manager_id), row.status]));
   return appointments
     .filter((row) => String(row.manager_id) !== String(selfId))
     .map((row) => ({
@@ -98,7 +109,8 @@ async function managerDirectory(worldId, selfId, userId) {
       manager_name: names.get(String(row.manager_id)) || 'Manager',
       club_id: row.club_id,
       club_name: clubNames.get(String(row.club_id)) || row.club_id,
-      last_active_at: activeTimes.get(String(row.manager_id)) || null
+      last_active_at: activeTimes.get(String(row.manager_id)) || null,
+      participation_status: participationByManager.get(String(row.manager_id)) || 'active'
     }))
     .sort((a, b) => String(a.manager_name).localeCompare(String(b.manager_name)));
 }
@@ -172,6 +184,7 @@ export default async (request) => {
     if (isSelf && hunter?.private_detail) result.bug_hunter = hunter.private_detail;
     result.contact = await contactFor(targetId, isSelf);
     result.last_active_at = await lastActiveFor(targetId, context.worldId);
+    result.participation_status = (await participationStateFor(targetId, context.worldId))?.status || 'active';
     if (isSelf) result.directory = await managerDirectory(context.worldId, context.managerId, user.id);
     return json(result);
   } catch (error) {
