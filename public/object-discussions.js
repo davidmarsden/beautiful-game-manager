@@ -172,8 +172,15 @@ function actionButton(type, id, title) {
   return button;
 }
 
+function matchesAndDescendants(root, selector) {
+  const nodes = [];
+  if (root?.matches?.(selector)) nodes.push(root);
+  root?.querySelectorAll?.(selector).forEach((node) => nodes.push(node));
+  return nodes;
+}
+
 function addPlayerActions(root = document) {
-  root.querySelectorAll?.('.tbg-player-profile[data-player-id]').forEach((panel) => {
+  matchesAndDescendants(root, '.tbg-player-profile[data-player-id]').forEach((panel) => {
     if (panel.querySelector('[data-object-discussion][data-object-type="player"]')) return;
     const id = String(panel.dataset.playerId || '').trim();
     const title = panel.querySelector('h2,h1')?.textContent?.trim() || id;
@@ -184,7 +191,7 @@ function addPlayerActions(root = document) {
 }
 
 function addClubActions(root = document) {
-  root.querySelectorAll?.('#historyClubPanel').forEach((panel) => {
+  matchesAndDescendants(root, '#historyClubPanel').forEach((panel) => {
     if (panel.querySelector('[data-object-discussion][data-object-type="club"]')) return;
     const id = String(panel.dataset.clubId || '').trim();
     const title = panel.querySelector('h2')?.textContent?.trim() || id;
@@ -195,17 +202,33 @@ function addClubActions(root = document) {
 }
 
 function addFixtureActions(root = document) {
-  root.querySelectorAll?.('[data-match-centre]').forEach((trigger) => {
-    if (trigger.parentElement?.querySelector?.(`[data-object-discussion][data-object-type="fixture"][data-object-id="${CSS.escape(String(trigger.dataset.matchCentre || ''))}"]`)) return;
+  matchesAndDescendants(root, '[data-match-centre]').forEach((trigger) => {
     const id = String(trigger.dataset.matchCentre || '').trim();
     if (!id) return;
+    const existing = trigger.querySelector?.(`[data-object-discussion][data-object-type="fixture"][data-object-id="${CSS.escape(id)}"]`)
+      || trigger.parentElement?.querySelector?.(`:scope > [data-object-discussion][data-object-type="fixture"][data-object-id="${CSS.escape(id)}"]`);
+    if (existing) return;
     const title = (trigger.getAttribute('aria-label') || trigger.textContent || id).trim().replace(/\s+/g, ' ').slice(0, 240);
-    trigger.insertAdjacentElement('afterend', actionButton('fixture', id, title));
+    const button = actionButton('fixture', id, title);
+
+    if (trigger.tagName === 'TR') {
+      let cell = trigger.querySelector('[data-fixture-discussion-cell]');
+      if (!cell) {
+        cell = document.createElement('td');
+        cell.dataset.fixtureDiscussionCell = '';
+        cell.className = 'fixture-discussion-cell';
+        trigger.append(cell);
+      }
+      cell.append(button);
+      return;
+    }
+
+    trigger.insertAdjacentElement('afterend', button);
   });
 }
 
 function addNewsActions(root = document) {
-  root.querySelectorAll?.('[data-feed-item-id]').forEach((card) => {
+  matchesAndDescendants(root, '[data-feed-item-id]').forEach((card) => {
     if (card.querySelector('[data-object-discussion][data-object-type="news"]')) return;
     const id = String(card.dataset.feedItemId || '').trim();
     if (!id) return;
