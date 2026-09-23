@@ -145,7 +145,7 @@ begin
     p_world_id,
     'object_discussion',
     manager_id_value,
-    'Discussion · ' || normalized_title,
+    left('Discussion · ' || normalized_title, 160),
     'Public manager discussion attached to this TBG ' || normalized_type || '.',
     'object-discussion:' || normalized_type || ':' || normalized_id,
     normalized_type,
