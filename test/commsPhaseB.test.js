@@ -96,9 +96,7 @@ test('Messages UI keeps conversation text separate from formal football actions'
 
 
 test('notification delivery category preserves transfer and free-agent routing', () => {
-  assert.match(migration, /like 'transfer_%'[\s\S]*like 'free_agent_%'[\s\S]*then 'transfers'/i);
-  assert.match(migration, /like 'news_%'[\s\S]*= 'direct_message'[\s\S]*then 'social'/i);
-  assert.doesNotMatch(migration, /as \$\n\s*select case/i);
+  assert.match(migration, /as \$category\$[\s\S]*like 'transfer_%'[\s\S]*like 'free_agent_%'[\s\S]*then 'transfers'[\s\S]*like 'news_%'[\s\S]*= 'direct_message'[\s\S]*then 'social'[\s\S]*\$category\$;/i);
 });
 
 test('composer retains the same idempotency key for the same pending draft retry', () => {
