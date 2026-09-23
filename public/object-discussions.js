@@ -205,21 +205,25 @@ function addFixtureActions(root = document) {
   matchesAndDescendants(root, '[data-match-centre]').forEach((trigger) => {
     const id = String(trigger.dataset.matchCentre || '').trim();
     if (!id) return;
-    const existing = trigger.querySelector?.(`[data-object-discussion][data-object-type="fixture"][data-object-id="${CSS.escape(id)}"]`)
-      || trigger.parentElement?.querySelector?.(`:scope > [data-object-discussion][data-object-type="fixture"][data-object-id="${CSS.escape(id)}"]`);
+    const owner = trigger.tagName === 'TR' ? trigger : trigger.parentElement;
+    const existing = owner?.querySelector?.(`[data-object-discussion][data-object-type="fixture"][data-object-id="${CSS.escape(id)}"]`);
     if (existing) return;
+
     const title = (trigger.getAttribute('aria-label') || trigger.textContent || id).trim().replace(/\s+/g, ' ').slice(0, 240);
     const button = actionButton('fixture', id, title);
+    button.classList.add('fixture-discussion-trigger');
 
     if (trigger.tagName === 'TR') {
-      let cell = trigger.querySelector('[data-fixture-discussion-cell]');
-      if (!cell) {
-        cell = document.createElement('td');
-        cell.dataset.fixtureDiscussionCell = '';
-        cell.className = 'fixture-discussion-cell';
-        trigger.append(cell);
-      }
-      cell.append(button);
+      const cell = trigger.lastElementChild;
+      if (cell?.tagName === 'TD') cell.append(button);
+      return;
+    }
+
+    if (trigger.closest('.division-round-fixture')) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'fixture-discussion-actions';
+      trigger.replaceWith(wrapper);
+      wrapper.append(trigger, button);
       return;
     }
 
@@ -227,21 +231,10 @@ function addFixtureActions(root = document) {
   });
 }
 
-function addNewsActions(root = document) {
-  matchesAndDescendants(root, '[data-feed-item-id]').forEach((card) => {
-    if (card.querySelector('[data-object-discussion][data-object-type="news"]')) return;
-    const id = String(card.dataset.feedItemId || '').trim();
-    if (!id) return;
-    const title = (card.querySelector('h3,h2,strong')?.textContent || 'News discussion').trim().replace(/\s+/g, ' ').slice(0, 240);
-    card.append(actionButton('news', id, title));
-  });
-}
-
 function decorate(root = document) {
   addPlayerActions(root);
   addClubActions(root);
   addFixtureActions(root);
-  addNewsActions(root);
 }
 
 document.addEventListener('click', (event) => {

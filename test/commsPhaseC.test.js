@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 
 const migration = fs.readFileSync(new URL('../supabase/migrations/20260923b_tbg_comms_phase_c.sql', import.meta.url), 'utf8');
+const liveFix = fs.readFileSync(new URL('../supabase/migrations/20260923c_tbg_comms_phase_c_live_fixes.sql', import.meta.url), 'utf8');
 const endpoint = fs.readFileSync(new URL('../netlify/functions/object-discussion.mjs', import.meta.url), 'utf8');
 const ui = fs.readFileSync(new URL('../public/object-discussions.js', import.meta.url), 'utf8');
 const css = fs.readFileSync(new URL('../public/object-discussions.css', import.meta.url), 'utf8');
@@ -65,15 +66,15 @@ test('API validates auth then passes canonical object fields to service RPCs', (
   assert.match(endpoint, /p_object_id: objectId/);
 });
 
-test('browser exposes discussions from player club fixture and news surfaces', () => {
+test('browser exposes object discussions from player club and fixture surfaces without duplicating News comments', () => {
   assert.match(ui, /addPlayerActions/);
   assert.match(ui, /addClubActions/);
   assert.match(ui, /addFixtureActions/);
-  assert.match(ui, /addNewsActions/);
+  assert.doesNotMatch(ui, /function addNewsActions/);
+  assert.doesNotMatch(ui, /data-object-type="news"/);
   assert.match(ui, /\.tbg-player-profile\[data-player-id\]/);
   assert.match(ui, /#historyClubPanel/);
   assert.match(ui, /\[data-match-centre\]/);
-  assert.match(ui, /\[data-feed-item-id\]/);
   assert.match(squad, /data-club-id=/);
   assert.match(navigation, /import '\.\/object-discussions\.js'/);
   assert.match(navigation, /object-discussions\.css/);
@@ -98,17 +99,31 @@ test('dynamic decoration includes inserted roots as well as descendants', () => 
   assert.match(ui, /function matchesAndDescendants\(root, selector\)/);
   assert.match(ui, /root\?\.matches\?\.\(selector\)/);
   assert.match(ui, /matchesAndDescendants\(root, '#historyClubPanel'\)/);
-  assert.match(ui, /matchesAndDescendants\(root, '\[data-feed-item-id\]'\)/);
+  assert.doesNotMatch(ui, /matchesAndDescendants\(root, '\[data-feed-item-id\]'\)/);
 });
 
-test('fixture discussion controls stay inside valid table row markup', () => {
+test('fixture discussion controls preserve existing matchday and table structure', () => {
   assert.match(ui, /if \(trigger\.tagName === 'TR'\)/);
-  assert.match(ui, /document\.createElement\('td'\)/);
-  assert.match(ui, /cell\.dataset\.fixtureDiscussionCell/);
-  assert.match(ui, /trigger\.append\(cell\)/);
-  assert.match(ui, /cell\.append\(button\)/);
+  assert.match(ui, /const cell = trigger\.lastElementChild/);
+  assert.match(ui, /if \(cell\?\.tagName === 'TD'\) cell\.append\(button\)/);
+  assert.match(ui, /trigger\.closest\('\.division-round-fixture'\)/);
+  assert.match(ui, /wrapper\.className = 'fixture-discussion-actions'/);
+  assert.match(ui, /trigger\.replaceWith\(wrapper\)/);
+  assert.doesNotMatch(ui, /document\.createElement\('td'\)/);
 });
 
 test('generated object-discussion feed title respects the 160 character constraint', () => {
   assert.match(migration, /left\('Discussion · ' \|\| normalized_title, 160\)/);
+});
+
+
+test('played fixture discussion accepts canonical match archives as authoritative fixture identity', () => {
+  assert.match(liveFix, /canonical_match_archives archive/i);
+  assert.match(liveFix, /archive\.world_id = p_world_id and archive\.fixture_id = normalized_id/i);
+});
+
+test('News keeps one canonical discussion thread by folding object comments back into the News item', () => {
+  assert.match(liveFix, /update public\.world_feed_comments comment[\s\S]*set feed_item_id = source_item\.id/i);
+  assert.match(liveFix, /if normalized_type = 'news' then[\s\S]*return discussion_id/i);
+  assert.match(liveFix, /item\.item_type <> 'object_discussion'/i);
 });
