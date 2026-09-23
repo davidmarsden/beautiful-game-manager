@@ -769,7 +769,8 @@ immutable
 set search_path = pg_catalog
 as $
   select case
-    when coalesce(p_notification_type, '') like 'transfer_%' then 'transfers'
+    when coalesce(p_notification_type, '') like 'transfer_%'
+      or coalesce(p_notification_type, '') like 'free_agent_%' then 'transfers'
     when coalesce(p_notification_type, '') like 'news_%'
       or coalesce(p_notification_type, '') = 'direct_message' then 'social'
     else 'system'
