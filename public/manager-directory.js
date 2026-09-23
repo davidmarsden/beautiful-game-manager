@@ -70,12 +70,15 @@ function render(data) {
       <span class="manager-directory-open">View profile <span aria-hidden="true">→</span></span>
     </button>` : '';
   const rows = directory.map((manager) => `
-    <button type="button" class="manager-directory-list-row" data-manager-profile-id="${escapeHtml(manager.manager_id || '')}">
-      <span class="manager-directory-identity"><strong>${escapeHtml(manager.manager_name || 'Manager')}</strong><small>${escapeHtml(manager.club_name || manager.club_id || 'No club')}</small></span>
-      <span class="manager-directory-club">${escapeHtml(manager.division_name || manager.division || '')}</span>
-      ${activityMarkup(manager.last_active_at, manager.participation_status)}
-      <span class="manager-directory-open">View profile <span aria-hidden="true">→</span></span>
-    </button>`).join('');
+    <div class="manager-directory-entry" role="listitem">
+      <button type="button" class="manager-directory-list-row" data-manager-profile-id="${escapeHtml(manager.manager_id || '')}">
+        <span class="manager-directory-identity"><strong>${escapeHtml(manager.manager_name || 'Manager')}</strong><small>${escapeHtml(manager.club_name || manager.club_id || 'No club')}</small></span>
+        <span class="manager-directory-club">${escapeHtml(manager.division_name || manager.division || '')}</span>
+        ${activityMarkup(manager.last_active_at, manager.participation_status)}
+        <span class="manager-directory-open">View profile <span aria-hidden="true">→</span></span>
+      </button>
+      <button type="button" class="manager-directory-message" data-manager-message-id="${escapeHtml(manager.manager_id || '')}">Message</button>
+    </div>`).join('');
   const appointedCount = directory.length + (hasSelf ? 1 : 0);
   const allManagers = [...directory, ...(hasSelf ? [{ last_active_at: data.last_active_at }] : [])];
   const now = Date.now();
@@ -144,3 +147,19 @@ window.addEventListener('tbg:world-feed-mutation-succeeded', () => { loadedAt = 
 window.setInterval(refreshRelativeActivity, RELATIVE_ACTIVITY_REFRESH);
 
 export { lastActiveLabel, loadDirectory, refreshRelativeActivity };
+
+
+document.addEventListener('click', (event) => {
+  const button = event.target.closest?.('[data-manager-message-id]');
+  if (!button) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const managerId = String(button.dataset.managerMessageId || '').trim();
+  if (!managerId) return;
+  const url = new URL(window.location.href);
+  url.searchParams.set('view', 'comms');
+  url.searchParams.set('manager', managerId);
+  url.searchParams.delete('conversation');
+  history.pushState({}, '', url);
+  document.querySelector('[data-view="comms"]')?.click();
+});
