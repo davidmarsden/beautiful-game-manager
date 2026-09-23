@@ -147,7 +147,7 @@ function createMessageNode(message, selfId) {
   const who = document.createElement('strong');
   who.textContent = own ? 'You' : (message.sender_display_name || 'Manager');
   const context = document.createElement('small');
-  context.textContent = [message.sender_club_id || '', relativeTime(message.created_at)].filter(Boolean).join(' · ');
+  context.textContent = [message.sender_club_name || message.sender_club_id || '', relativeTime(message.created_at)].filter(Boolean).join(' · ');
   head.append(who, context);
   const body = document.createElement('p');
   body.textContent = message.body || '';
