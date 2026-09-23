@@ -92,3 +92,23 @@ test('reply notifications deep-link back to canonical object discussion', () => 
   assert.match(ui, /discussion_type/);
   assert.match(ui, /discussion_id/);
 });
+
+
+test('dynamic decoration includes inserted roots as well as descendants', () => {
+  assert.match(ui, /function matchesAndDescendants\(root, selector\)/);
+  assert.match(ui, /root\?\.matches\?\.\(selector\)/);
+  assert.match(ui, /matchesAndDescendants\(root, '#historyClubPanel'\)/);
+  assert.match(ui, /matchesAndDescendants\(root, '\[data-feed-item-id\]'\)/);
+});
+
+test('fixture discussion controls stay inside valid table row markup', () => {
+  assert.match(ui, /if \(trigger\.tagName === 'TR'\)/);
+  assert.match(ui, /document\.createElement\('td'\)/);
+  assert.match(ui, /cell\.dataset\.fixtureDiscussionCell/);
+  assert.match(ui, /trigger\.append\(cell\)/);
+  assert.match(ui, /cell\.append\(button\)/);
+});
+
+test('generated object-discussion feed title respects the 160 character constraint', () => {
+  assert.match(migration, /left\('Discussion · ' \|\| normalized_title, 160\)/);
+});
