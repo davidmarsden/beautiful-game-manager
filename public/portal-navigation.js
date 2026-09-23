@@ -9,6 +9,7 @@ import './manager-participation.js';
 import './manager-notifications.js';
 import './manager-directory.js';
 import './comms.js';
+import './object-discussions.js';
 import './external-transfer-ui.js';
 
 const VIEW_ALIASES = new Map([
@@ -80,6 +81,7 @@ function installWorldFeedShell() {
   installStylesheet('./world-feed.css');
   installStylesheet('./manager-participation.css');
   installStylesheet('./manager-notifications.css');
+  installStylesheet('./object-discussions.css');
   const workspace = document.querySelector('.workspace');
   const tabs = workspace?.querySelector('.tabs');
   if (tabs && !tabs.querySelector('[data-view="feed"]')) {

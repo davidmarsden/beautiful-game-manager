@@ -1,0 +1,28 @@
+.object-discussion-trigger{border:1px solid rgba(25,51,117,.24);background:#fff;color:var(--tbg-brazil-blue,#193375);border-radius:.45rem;padding:.42rem .65rem;font-weight:800;font-size:.78rem}
+.object-discussion-trigger:hover,.object-discussion-trigger:focus-visible{background:rgba(255,220,2,.14);outline:2px solid var(--tbg-brazil-sky,#0C87D1);outline-offset:1px}
+.tbg-player-profile>.object-discussion-trigger{margin:.7rem 1rem 0}
+.object-discussion-dialog{padding:0;border:0;background:transparent;max-width:min(760px,94vw);width:100%}
+.object-discussion-dialog::backdrop{background:rgba(8,18,26,.62)}
+.object-discussion-card{background:#fff;border-radius:.8rem;overflow:hidden;box-shadow:0 18px 60px rgba(0,0,0,.28);max-height:88vh;display:flex;flex-direction:column}
+.object-discussion-card>header{display:flex;justify-content:space-between;gap:1rem;padding:1rem 1.1rem;border-bottom:1px solid rgba(25,51,117,.15)}
+.object-discussion-card>header small{font-weight:900;letter-spacing:.08em;color:#58685c}
+.object-discussion-card>header h2{margin:.15rem 0;color:var(--tbg-brazil-blue,#193375)}
+.object-discussion-card>header p{margin:.2rem 0 0;color:#5f6f65;font-size:.85rem}
+.object-discussion-card>header>button{border:0;background:transparent;font-size:1.7rem;line-height:1;color:#4c5b52}
+.object-discussion-comments{padding:1rem;overflow:auto;display:grid;gap:.7rem;min-height:180px}
+.object-discussion-comment{border:1px solid rgba(25,51,117,.14);background:#f8faf8;border-radius:.65rem;padding:.7rem .8rem}
+.object-discussion-comment.reply{margin-left:2rem;border-left:3px solid rgba(25,51,117,.32)}
+.object-discussion-comment header{display:flex;justify-content:space-between;gap:1rem}
+.object-discussion-comment header strong{color:var(--tbg-brazil-blue,#193375)}
+.object-discussion-comment header small{color:#66756b;font-size:.72rem}
+.object-discussion-comment p{white-space:pre-wrap;overflow-wrap:anywhere}
+.object-discussion-comment>button{border:0;background:transparent;color:var(--tbg-brazil-blue,#193375);font-weight:800;padding:0;font-size:.75rem}
+.object-discussion-composer{border-top:1px solid rgba(25,51,117,.14);padding:.9rem 1rem;background:#fbfcfb}
+.object-discussion-composer textarea{box-sizing:border-box;width:100%;border:1px solid rgba(25,51,117,.25);border-radius:.5rem;padding:.65rem;font:inherit;resize:vertical}
+.object-discussion-composer>div{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-top:.5rem}
+.object-discussion-composer small,.object-discussion-status,.object-discussion-empty{color:#647269}
+.object-discussion-composer button{border:0;background:var(--tbg-brazil-blue,#193375);color:#fff;border-radius:.45rem;padding:.5rem .9rem;font-weight:800}
+.object-discussion-status{margin:.4rem 0 0;font-size:.8rem}
+[data-feed-item-id]>.object-discussion-trigger{margin:.5rem 0 0}
+[data-match-centre]+.object-discussion-trigger{margin-left:.4rem}
+@media(max-width:700px){.object-discussion-card{max-height:92vh}.object-discussion-comment.reply{margin-left:.7rem}.object-discussion-composer>div{align-items:flex-end}.object-discussion-composer small{max-width:70%}}
