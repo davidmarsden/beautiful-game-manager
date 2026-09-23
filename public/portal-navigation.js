@@ -8,11 +8,16 @@ import './world-feed-enhancements.js';
 import './manager-participation.js';
 import './manager-notifications.js';
 import './manager-directory.js';
+import './comms.js';
 import './external-transfer-ui.js';
 
 const VIEW_ALIASES = new Map([
   ['dashboard', 'dashboard'],
   ['inbox', 'dashboard'],
+  ['comms', 'comms'],
+  ['messages', 'comms'],
+  ['message', 'comms'],
+  ['direct messages', 'comms'],
   ['feed', 'feed'],
   ['news', 'feed'],
   ['newsfeed', 'feed'],
@@ -41,6 +46,7 @@ const VIEW_ALIASES = new Map([
 
 const NAVIGATION = [
   ['dashboard', 'Inbox'],
+  ['comms', 'Messages'],
   ['feed', 'News'],
   ['squad', 'Squad'],
   ['tactics', 'Team'],
@@ -91,6 +97,30 @@ function installWorldFeedShell() {
     section.className = 'view';
     section.hidden = true;
     section.innerHTML = '<div class="empty-state">Loading World Feed…</div>';
+    workspace.append(section);
+  }
+}
+
+function installCommsShell() {
+  installStylesheet('./comms.css');
+  const workspace = document.querySelector('.workspace');
+  const tabs = workspace?.querySelector('.tabs');
+  if (tabs && !tabs.querySelector('[data-view="comms"]')) {
+    const button = document.createElement('button');
+    button.id = 'commsNavButton';
+    button.type = 'button';
+    button.dataset.view = 'comms';
+    button.textContent = 'Messages';
+    const feed = tabs.querySelector('[data-view="feed"]');
+    if (feed) feed.before(button);
+    else tabs.prepend(button);
+  }
+  if (workspace && !document.getElementById('commsView')) {
+    const section = document.createElement('div');
+    section.id = 'commsView';
+    section.className = 'view';
+    section.hidden = true;
+    section.innerHTML = '<div class="empty-state">Loading private messages…</div>';
     workspace.append(section);
   }
 }
@@ -228,6 +258,7 @@ function simplifyNavigation() {
 function installDynamicShells() {
   retireLegacyClubNav();
   installWorldFeedShell();
+  installCommsShell();
   installHistoryShell();
   installFinanceShell();
   installTransfersShell();
