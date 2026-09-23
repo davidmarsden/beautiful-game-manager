@@ -767,7 +767,7 @@ returns text
 language sql
 immutable
 set search_path = pg_catalog
-as $
+as $category$
   select case
     when coalesce(p_notification_type, '') like 'transfer_%'
       or coalesce(p_notification_type, '') like 'free_agent_%' then 'transfers'
@@ -775,7 +775,7 @@ as $
       or coalesce(p_notification_type, '') = 'direct_message' then 'social'
     else 'system'
   end;
-$;
+$category$;
 
 revoke all on function public.get_manager_comms_for_user(uuid, text)
   from public, anon, authenticated;
