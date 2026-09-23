@@ -80,3 +80,11 @@ test('Resend retries use a stable idempotency key', () => {
   assert.match(worker, /Idempotency-Key/);
   assert.match(worker, /manager-inactivity-\$\{item\.escalation_id\}/);
 });
+
+
+test('inactivity migration uses valid PL/pgSQL dollar quoting', () => {
+  assert.doesNotMatch(migration, /^as \$$/m);
+  assert.doesNotMatch(migration, /^\$;$/m);
+  assert.match(migration, /^as \$\$$/m);
+  assert.match(migration, /^\$\$;$/m);
+});
