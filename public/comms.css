@@ -38,3 +38,9 @@
 .comms-empty-thread,.comms-empty-list,.comms-thread-empty{margin:auto;padding:2rem;text-align:center;color:#617067}
 .comms-empty-thread strong{display:block;color:var(--tbg-brazil-blue,#193375);font-size:1.1rem}
 @media(max-width:760px){.comms-shell{grid-template-columns:1fr}.comms-sidebar{border-right:0;border-bottom:1px solid rgba(25,51,117,.14)}.comms-conversation-list{max-height:250px;overflow:auto}.comms-message{max-width:90%}.comms-thread-header{align-items:center}.comms-thread-controls{justify-content:flex-end}.comms-composer>div{align-items:flex-end}.comms-composer small{max-width:70%}}
+
+#managersView .manager-directory-entry{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:stretch;border-top:1px solid rgba(25,51,117,.1)}
+#managersView .manager-directory-entry>.manager-directory-list-row{border-top:0}
+#managersView .manager-directory-message{align-self:center;margin:.55rem .75rem .55rem 0;border:1px solid rgba(25,51,117,.22);background:#fff;color:var(--tbg-brazil-blue,#193375);border-radius:.45rem;padding:.5rem .7rem;font-weight:800}
+#managersView .manager-directory-message:hover,#managersView .manager-directory-message:focus-visible{background:rgba(255,220,2,.12);outline:2px solid var(--tbg-brazil-sky,#0C87D1);outline-offset:1px}
+@media(max-width:760px){#managersView .manager-directory-entry{grid-template-columns:1fr}#managersView .manager-directory-message{margin:0 .75rem .65rem;justify-self:end}}
