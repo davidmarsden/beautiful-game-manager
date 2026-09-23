@@ -93,3 +93,22 @@ test('Messages UI keeps conversation text separate from formal football actions'
   assert.match(ui, /action: 'report'/);
   assert.doesNotMatch(ui, /transfer_offer|manager_world_commands|submit.*bid/i);
 });
+
+
+test('notification delivery category preserves transfer and free-agent routing', () => {
+  assert.match(migration, /like 'transfer_%'[\s\S]*like 'free_agent_%'[\s\S]*then 'transfers'/i);
+  assert.match(migration, /like 'news_%'[\s\S]*= 'direct_message'[\s\S]*then 'social'/i);
+  assert.doesNotMatch(migration, /as \$\n\s*select case/i);
+});
+
+test('composer retains the same idempotency key for the same pending draft retry', () => {
+  assert.match(ui, /let pendingSend = null/);
+  assert.match(ui, /samePendingDraft[\s\S]*pendingSend\.conversationId === activeThread\.id[\s\S]*pendingSend\.message === message/i);
+  assert.match(ui, /pendingSend\.requestKey/);
+  assert.match(ui, /pendingSend = \{ conversationId: activeThread\.id, message, requestKey \}/);
+  assert.match(ui, /textarea\.value = ''[\s\S]*pendingSend = null/);
+});
+
+test('browser history clears the active thread when the conversation parameter disappears', () => {
+  assert.match(ui, /else if \(!id\) \{[\s\S]*activeThread = null;[\s\S]*pendingSend = null;[\s\S]*renderThread\(\)/i);
+});
