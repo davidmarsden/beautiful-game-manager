@@ -55,7 +55,7 @@ create or replace function public.touch_manager_world_activity_atomic(
 language plpgsql
 security definer
 set search_path = pg_catalog, public
-as $
+as $$
 declare
   v_active_at timestamptz := coalesce(p_active_at, now());
 begin
@@ -77,7 +77,7 @@ begin
 
   return v_active_at;
 end;
-$;
+$$;
 
 create or replace function public.claim_manager_inactivity_escalations(
   p_claim_token uuid,
@@ -422,7 +422,7 @@ language plpgsql
 stable
 security definer
 set search_path = public, pg_temp
-as $
+as $$
 declare
   v_manager_id uuid;
   v_notifications jsonb;
@@ -480,7 +480,7 @@ begin
     'bug_hunter', jsonb_build_object('points',v_points,'confirmed_reports',v_confirmed,'max_report_points',v_max_points)
   );
 end;
-$;
+$$;
 
 create or replace function public.mark_manager_notification_read_for_user(
   p_user_id uuid, p_world_id text, p_notification_id uuid default null, p_all boolean default false
@@ -488,7 +488,7 @@ create or replace function public.mark_manager_notification_read_for_user(
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $
+as $$
 declare v_manager_id uuid; v_count integer;
 begin
   select p.id into v_manager_id
@@ -514,7 +514,7 @@ begin
   get diagnostics v_count = row_count;
   return jsonb_build_object('ok',true,'updated',v_count);
 end;
-$;
+$$;
 
 revoke all on function public.touch_manager_world_activity_atomic(uuid,text,timestamptz) from public, anon, authenticated;
 grant execute on function public.touch_manager_world_activity_atomic(uuid,text,timestamptz) to service_role;
