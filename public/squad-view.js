@@ -283,7 +283,7 @@ export function mountReadOnlySquadView(root, club) {
   let statisticsUnavailable = false;
   let dataTicket = 0;
 
-  root.innerHTML = `<section class="competition-card history-club-panel read-only-squad" id="historyClubPanel">
+  root.innerHTML = `<section class="competition-card history-club-panel read-only-squad" id="historyClubPanel" data-club-id="${escapeHtml(club.club_id || club.id || '')}">
     <div class="section-heading"><div><span class="status-label">READ-ONLY CLUB INSPECTION</span><h2>${escapeHtml(club.club_name)}</h2><p>${escapeHtml(club.division_name)}${club.country ? ` · ${escapeHtml(club.country)}` : ''}${club.stadium ? ` · ${escapeHtml(club.stadium)}` : ''}</p></div><button type="button" data-close-club>Close</button></div>
     <div class="squad-summary"><div><span>First Team</span><strong>${summary.firstTeam} / ${summary.firstTeamCapacity}</strong></div><div><span>Youth Team</span><strong>${summary.youth} / ${summary.youthCapacity}</strong></div><div><span>Loaned Out</span><strong>${summary.loaned}</strong></div><div><span>Total Owned</span><strong>${summary.total}</strong></div></div>
     ${club.coverage?.length ? `<div class="portal-section-heading"><div><h3>Squad intelligence</h3><p>Registered and currently available cover against the playable minimum.</p></div></div><section class="squad-depth-grid">${coverageCards(club.coverage)}</section>` : ''}
