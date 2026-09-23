@@ -23,6 +23,8 @@
 .object-discussion-composer small,.object-discussion-status,.object-discussion-empty{color:#647269}
 .object-discussion-composer button{border:0;background:var(--tbg-brazil-blue,#193375);color:#fff;border-radius:.45rem;padding:.5rem .9rem;font-weight:800}
 .object-discussion-status{margin:.4rem 0 0;font-size:.8rem}
-[data-feed-item-id]>.object-discussion-trigger{margin:.5rem 0 0}
+.fixture-discussion-actions{display:grid;justify-items:center;gap:.3rem;align-self:center}
+.fixture-discussion-actions .fixture-discussion-trigger{font-size:.7rem;padding:.28rem .5rem}
+.match-centre-row td .fixture-discussion-trigger{margin-left:.45rem;font-size:.68rem;padding:.2rem .4rem;vertical-align:middle}
 [data-match-centre]+.object-discussion-trigger{margin-left:.4rem}
 @media(max-width:700px){.object-discussion-card{max-height:92vh}.object-discussion-comment.reply{margin-left:.7rem}.object-discussion-composer>div{align-items:flex-end}.object-discussion-composer small{max-width:70%}}
