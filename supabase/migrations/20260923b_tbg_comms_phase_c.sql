@@ -159,8 +159,23 @@ begin
   )
   on conflict (world_id, object_type, object_id)
     where item_type = 'object_discussion' and hidden_at is null
-  do update set object_title = excluded.object_title
+  do nothing
   returning id into discussion_id;
+
+  if discussion_id is null then
+    select item.id into discussion_id
+    from public.world_feed_items item
+    where item.world_id = p_world_id
+      and item.item_type = 'object_discussion'
+      and item.object_type = normalized_type
+      and item.object_id = normalized_id
+      and item.hidden_at is null
+    limit 1;
+  end if;
+
+  if discussion_id is null then
+    raise exception 'Object discussion unavailable';
+  end if;
 
   return discussion_id;
 end;
