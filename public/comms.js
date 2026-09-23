@@ -1,6 +1,7 @@
 let overview = null;
 let activeThread = null;
 let loading = false;
+let pendingSend = null;
 
 async function authorization() {
   if (!window.tbgPortalAuth?.waitForAuthorization) throw new Error('Portal authentication bridge is unavailable');
@@ -242,7 +243,11 @@ async function loadOverview({ forceThread = false } = {}) {
     renderConversationList();
     const id = conversationFromUrl();
     if (id && (forceThread || activeThread?.id !== id)) await openConversation(id, { push: false });
-    else if (!id) renderThread();
+    else if (!id) {
+      activeThread = null;
+      pendingSend = null;
+      renderThread();
+    }
   } catch (error) {
     const host = root();
     if (host) host.innerHTML = `<div class="empty-state">${error.message}</div>`;
@@ -294,7 +299,14 @@ async function sendMessage(event, textarea, button) {
   button.disabled = true;
   textarea.disabled = true;
   try {
-    const requestKey = globalThis.crypto?.randomUUID?.() || `msg-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const samePendingDraft = pendingSend
+      && pendingSend.conversationId === activeThread.id
+      && pendingSend.message === message;
+    const requestKey = samePendingDraft
+      ? pendingSend.requestKey
+      : (globalThis.crypto?.randomUUID?.() || `msg-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    pendingSend = { conversationId: activeThread.id, message, requestKey };
+
     const result = await mutate({
       action: 'send',
       conversation_id: activeThread.id,
@@ -303,6 +315,7 @@ async function sendMessage(event, textarea, button) {
     });
     activeThread = result.conversation || activeThread;
     textarea.value = '';
+    pendingSend = null;
     overview = await api();
     updateNavBadge();
     renderThread();
