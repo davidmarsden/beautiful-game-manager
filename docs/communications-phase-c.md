@@ -36,8 +36,8 @@ This preserves the existing comment identity, club-at-comment-time context, mode
 The server validates every requested object before an anchor can exist:
 
 - club → `clubs` in the manager's world;
-- fixture → `fixtures` in the manager's world;
-- news → an existing visible non-discussion `world_feed_items` row;
+- fixture → either the live `fixtures` table or the persisted `canonical_match_archives` record for a completed match;
+- news → an existing visible non-discussion `world_feed_items` row, whose existing comments are the discussion itself;
 - player → the canonical world's `squad_cycle.players` object.
 
 The browser cannot create an arbitrary discussion simply by supplying a plausible ID or title.
@@ -48,10 +48,11 @@ A **Discuss** action is added to:
 
 - TBG player profiles;
 - read-only club inspection;
-- fixture / match-centre links;
-- News cards.
+- fixture / match-centre links.
 
-All four open the same responsive public discussion modal.
+News is deliberately different: a News item already owns its canonical public discussion through the existing comment/reply thread, so Phase C does **not** add a second Discuss control or hidden parallel thread to News cards.
+
+Player, club and fixture surfaces open the same responsive public discussion modal.
 
 Replies are supported. A reply creates an ordinary manager notification to the manager being replied to, with a deep link back to the canonical object discussion.
 
