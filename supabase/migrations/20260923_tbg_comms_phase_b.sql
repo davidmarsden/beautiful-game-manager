@@ -291,12 +291,14 @@ begin
           message.sender_manager_id,
           message.sender_appointment_id,
           message.sender_club_id,
+          sender_club.name as sender_club_name,
           message.sender_display_name,
           message.actor_type,
           message.body,
           message.created_at,
           message.edited_at
         from public.conversation_messages message
+        left join public.clubs sender_club on sender_club.id = message.sender_club_id
         where message.conversation_id = p_conversation_id
           and message.deleted_at is null
         order by message.message_seq desc
@@ -392,18 +394,21 @@ begin
 
   if caller_manager_id is null
      or p_other_manager_id is null
-     or caller_manager_id = p_other_manager_id
-     or not exists (
-       select 1
-       from public.manager_profiles target_profile
-       join public.manager_appointments target_appointment
-         on target_appointment.manager_id = target_profile.id
-        and target_appointment.world_id = p_world_id
-        and target_appointment.status = 'active'
-        and target_appointment.control_type = 'human'
-       where target_profile.id = p_other_manager_id
-         and target_profile.status = 'active'
-     ) then
+     or caller_manager_id = p_other_manager_id then
+    raise exception 'Conversation unavailable';
+  end if;
+
+  if p_blocked and not exists (
+    select 1
+    from public.manager_profiles target_profile
+    join public.manager_appointments target_appointment
+      on target_appointment.manager_id = target_profile.id
+     and target_appointment.world_id = p_world_id
+     and target_appointment.status = 'active'
+     and target_appointment.control_type = 'human'
+    where target_profile.id = p_other_manager_id
+      and target_profile.status = 'active'
+  ) then
     raise exception 'Conversation unavailable';
   end if;
 
@@ -726,7 +731,7 @@ begin
     conversation_row.world_id,
     recipient.manager_id,
     'direct_message',
-    'social',
+    'info',
     caller_display_name || ' sent you a private message',
     'Open your TBG messages to read it.',
     '/?view=comms&conversation=' || p_conversation_id::text,
@@ -752,6 +757,24 @@ begin
   return inserted_message;
 end;
 $$;
+
+
+
+-- Direct messages are social delivery for opt-in email preferences without
+-- introducing a new manager_notifications notification_class value.
+create or replace function public.manager_notification_delivery_category(p_notification_type text)
+returns text
+language sql
+immutable
+set search_path = pg_catalog
+as $
+  select case
+    when coalesce(p_notification_type, '') like 'transfer_%' then 'transfers'
+    when coalesce(p_notification_type, '') like 'news_%'
+      or coalesce(p_notification_type, '') = 'direct_message' then 'social'
+    else 'system'
+  end;
+$;
 
 revoke all on function public.get_manager_comms_for_user(uuid, text)
   from public, anon, authenticated;
