@@ -1,4 +1,4 @@
-import { runScheduledJob } from './_lib/scheduled-job-guard.mjs';
+import { runScheduledJob, scheduledFetch } from './_lib/scheduled-job-guard.mjs';
 import { loadPersistentWorld, savePersistentWorld } from '../../src/world/persistentSeasonLoop.js';
 import { buildWorldReadModel } from '../../src/world/worldReadModel.js';
 import { applyPublishedPlayerReleases } from '../../src/world/playerDataRelease.js';
@@ -10,7 +10,7 @@ const RELEASE_HISTORY_URL = process.env.TBG_PLAYER_RELEASE_HISTORY_URL || 'https
 const isJwt = (value) => String(value || '').split('.').length === 3;
 
 async function service(path, options = {}) {
-  const response = await fetch(`${SUPABASE_URL}${path}`, {
+  const response = await scheduledFetch(`${SUPABASE_URL}${path}`, {
     ...options,
     headers: {
       apikey: SUPABASE_SERVICE_ROLE_KEY,
@@ -27,7 +27,7 @@ async function service(path, options = {}) {
 }
 
 async function releaseHistory() {
-  const response = await fetch(RELEASE_HISTORY_URL, { headers: { accept: 'application/json', 'cache-control': 'no-cache' }, cache: 'no-store' });
+  const response = await scheduledFetch(RELEASE_HISTORY_URL, { headers: { accept: 'application/json', 'cache-control': 'no-cache' }, cache: 'no-store' });
   if (!response.ok) throw new Error(`Player release history unavailable (HTTP ${response.status})`);
   const history = await response.json();
   if (!Array.isArray(history?.releases)) throw new Error('Player release history is malformed');
