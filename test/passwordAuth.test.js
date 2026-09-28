@@ -28,5 +28,5 @@ test('independent login controls own exactly one login form submit path without 
   assert.equal(handlers.length, 1);
   assert.match(loginSource, /\$\("magicLinkButton"\)\?\.addEventListener\("click"/);
   assert.match(loginSource, /persistSession:\s*true/);
-  assert.match(loginSource, /autoRefreshToken:\s*false/);
+  assert.match(loginSource, /autoRefreshToken:\s*false/);\n  assert.match(loginSource, /AUTH_TIMEOUT_MS\s*=\s*12000/);\n  assert.match(loginSource, /Connecting to TBG…/);\n  assert.match(loginSource, /Checking credentials…/);\n  assert.match(loginSource, /Supabase password sign-in/);
 });
