@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const functionSource = await readFile(new URL('../netlify/functions/request-login-link.mjs', import.meta.url), 'utf8');
-const bridgeSource = await readFile(new URL('../public/login-proxy.js', import.meta.url), 'utf8');
+const appSource = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
 const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
 
 test('magic-link request is proxied through the same-origin Netlify endpoint', () => {
-  assert.match(bridgeSource, /fetch\('\/api\/request-login-link'/);
-  assert.match(bridgeSource, /stopImmediatePropagation\(\)/);
-  assert.match(html, /src="\.\/login-proxy\.js"/);
+  assert.match(appSource, /fetch\("\/api\/request-login-link"/);
+  assert.match(appSource, /\$\("magicLinkButton"\)\?\.addEventListener\("click"/);
+  assert.doesNotMatch(appSource, /auth\.signInWithOtp\(/);
+  assert.doesNotMatch(html, /src="\.\/login-proxy\.js"/);
 });
 
 test('server proxy normalizes configuration and sends the public key to Supabase Auth', () => {
