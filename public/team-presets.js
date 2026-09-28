@@ -281,16 +281,31 @@ async function carryForward() {
   tryApply();
 }
 
-async function initialise() {
-  const bearer = await authorization();
-  const response = await fetch('/api/bootstrap', { headers: { authorization: bearer }, cache: 'no-store' });
-  bootstrapState = await response.json();
-  if (!response.ok || !bootstrapState?.club) return;
+async function initialise({ refresh = false } = {}) {
+  if (!window.tbgPortalStateStore?.get) throw new Error('Portal state service is unavailable');
+  bootstrapState = refresh
+    ? await window.tbgPortalStateStore.refresh()
+    : await window.tbgPortalStateStore.get();
+  if (!bootstrapState?.club) return;
   installControls();
   await Promise.all([loadPresets(), carryForward()]);
 }
 
-window.addEventListener('load', () => setTimeout(() => initialise().catch(console.error), 900));
-document.addEventListener('submit', (event) => {
-  if (event.target?.id === 'decisionForm') setTimeout(() => initialise().catch(console.error), 1400);
+window.addEventListener('tbg:portal-state-ready', (event) => {
+  if (!bootstrapState || !event.detail?.state?.club || bootstrapState === event.detail.state) return;
+  bootstrapState = event.detail.state;
+  installControls();
+  Promise.all([loadPresets(), carryForward()]).catch(console.error);
+});
+
+window.addEventListener('load', () => initialise().catch(console.error));
+window.addEventListener('tbg:team-submission-saved', (event) => {
+  const state = event.detail?.state;
+  if (state?.club) {
+    bootstrapState = state;
+    return;
+  }
+  window.tbgPortalStateStore?.get().then((nextState) => {
+    bootstrapState = nextState;
+  }).catch(console.error);
 });

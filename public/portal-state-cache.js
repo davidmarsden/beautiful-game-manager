@@ -2,6 +2,8 @@ const networkFetch = window.fetch.bind(window);
 let bootstrapSnapshot = null;
 let bootstrapRequest = null;
 let bootstrapGeneration = 0;
+let portalState = null;
+let portalStateRequest = null;
 
 const requestUrl = (input) => typeof input === 'string' ? input : input?.url || '';
 const requestMethod = (input, init = {}) => String(init.method || input?.method || 'GET').toUpperCase();
@@ -26,6 +28,9 @@ function invalidateBootstrapCache() {
   bootstrapGeneration += 1;
   bootstrapSnapshot = null;
   bootstrapRequest = null;
+  portalState = null;
+  portalStateRequest = null;
+  window.dispatchEvent(new CustomEvent('tbg:portal-state-invalidated', { detail: { generation: bootstrapGeneration } }));
 }
 
 async function fetchBootstrapSnapshot(input, init, generation) {
@@ -96,6 +101,44 @@ function synchronizeLegacySelectorsFromVisibleBoard(event) {
   reorderCheckedLabels('startingXi', startingXi);
   reorderCheckedLabels('bench', bench);
 }
+
+
+async function getPortalState({ force = false } = {}) {
+  if (force) invalidateBootstrapCache();
+  if (portalState) return portalState;
+  if (portalStateRequest) return portalStateRequest;
+
+  const generation = bootstrapGeneration;
+  portalStateRequest = (async () => {
+    const bearer = await window.tbgPortalAuth?.waitForAuthorization?.();
+    if (!bearer) throw new Error('Portal authentication bridge is unavailable');
+    const response = await window.fetch('/api/bootstrap', {
+      headers: { authorization: bearer },
+      cache: 'no-store'
+    });
+    const state = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(state.error || 'Portal bootstrap failed');
+    if (generation === bootstrapGeneration) {
+      portalState = state;
+      window.dispatchEvent(new CustomEvent('tbg:portal-state-ready', { detail: { state, generation } }));
+    }
+    return state;
+  })();
+
+  try {
+    return await portalStateRequest;
+  } finally {
+    if (generation === bootstrapGeneration) portalStateRequest = null;
+  }
+}
+
+window.tbgPortalStateStore = Object.freeze({
+  get: getPortalState,
+  refresh: () => getPortalState({ force: true }),
+  invalidate: invalidateBootstrapCache,
+  peek: () => portalState,
+  generation: () => bootstrapGeneration
+});
 
 window.tbgInvalidateBootstrapCache = invalidateBootstrapCache;
 document.addEventListener('submit', synchronizeLegacySelectorsFromVisibleBoard, true);
