@@ -1,3 +1,4 @@
+import { scheduledFetch } from './scheduled-job-guard.mjs';
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const PLAYER_DATABASE_URL = process.env.TBG_PLAYER_DATABASE_URL || 'https://raw.githubusercontent.com/davidmarsden/beautiful-game-data/main/derived/player-database/player-database.json';
@@ -9,7 +10,7 @@ let playerDatabasePromise = null;
 let playerDatabaseLoadedAt = 0;
 
 async function service(path, options = {}) {
-  const response = await fetch(`${SUPABASE_URL}${path}`, {
+  const response = await scheduledFetch(`${SUPABASE_URL}${path}`, {
     ...options,
     headers: {
       apikey: SUPABASE_SERVICE_ROLE_KEY,
@@ -29,7 +30,7 @@ async function playerDatabase() {
   const fresh = playerDatabasePromise && Date.now() - playerDatabaseLoadedAt < PLAYER_DATABASE_CACHE_MS;
   if (!fresh) {
     playerDatabaseLoadedAt = Date.now();
-    playerDatabasePromise = fetch(PLAYER_DATABASE_URL, {
+    playerDatabasePromise = scheduledFetch(PLAYER_DATABASE_URL, {
       headers: { accept: 'application/json', 'cache-control': 'no-cache' },
       cache: 'no-store'
     }).then(async (response) => {
