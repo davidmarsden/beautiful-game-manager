@@ -73,50 +73,49 @@ export async function runScheduledJob(name, handler, { timeoutMs = DEFAULT_JOB_T
   }
 
   state.running.set(name, true);
-  try {
-    if (healthcheck) {
-      const health = await databaseHealthy();
-      if (!health.healthy) {
-        noteDatabaseFailure();
-        return json({ ok: true, skipped: 'database_unhealthy', job: name, reason: health.reason });
-      }
+  if (healthcheck) {
+    const health = await databaseHealthy();
+    if (!health.healthy) {
+      noteDatabaseFailure();
+      state.running.delete(name);
+      return json({ ok: true, skipped: 'database_unhealthy', job: name, reason: health.reason });
     }
+  }
 
-    let timer;
-    let timedOut = false;
-    const handlerPromise = Promise.resolve().then(handler);
-    state.running.set(name, handlerPromise);
-    try {
-      const result = await Promise.race([
-        handlerPromise,
-        new Promise((resolve) => {
-          timer = setTimeout(() => {
-            timedOut = true;
-            noteDatabaseFailure();
-            resolve(json({ ok: false, error: `${name} exceeded ${timeoutMs}ms job budget` }, 503));
-          }, timeoutMs);
-        })
-      ]);
-      if (!timedOut) {
-        if (result instanceof Response && result.status >= 500) noteDatabaseFailure();
-        else noteDatabaseSuccess();
-      }
-      return result;
-    } finally {
-      clearTimeout(timer);
-      if (timedOut) {
-        handlerPromise.catch(() => null).finally(() => {
-          if (state.running.get(name) === handlerPromise) state.running.delete(name);
-        });
-      }
+  let timer;
+  let timedOut = false;
+  const handlerPromise = Promise.resolve().then(handler);
+  state.running.set(name, handlerPromise);
+
+  try {
+    const result = await Promise.race([
+      handlerPromise,
+      new Promise((resolve) => {
+        timer = setTimeout(() => {
+          timedOut = true;
+          noteDatabaseFailure();
+          resolve(json({ ok: false, error: `${name} exceeded ${timeoutMs}ms job budget` }, 503));
+        }, timeoutMs);
+      })
+    ]);
+
+    if (!timedOut) {
+      if (result instanceof Response && result.status >= 500) noteDatabaseFailure();
+      else noteDatabaseSuccess();
     }
+    return result;
   } catch (error) {
     if (/Supabase|database|timed out|timeout|fetch failed|522|525/i.test(String(error?.message || ''))) noteDatabaseFailure();
     throw error;
   } finally {
-    const running = state.running.get(name);
-    if (running === true) state.running.delete(name);
-    else if (!timedOut && running === handlerPromise) state.running.delete(name);
+    clearTimeout(timer);
+    if (timedOut) {
+      handlerPromise.catch(() => null).finally(() => {
+        if (state.running.get(name) === handlerPromise) state.running.delete(name);
+      });
+    } else if (state.running.get(name) === handlerPromise) {
+      state.running.delete(name);
+    }
   }
 }
 
