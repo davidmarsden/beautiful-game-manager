@@ -1,3 +1,4 @@
+import { runScheduledJob, scheduledFetch } from '../functions/_lib/scheduled-job-guard.mjs';
 import { executeScheduledTurn, buildScheduledTurnPlan } from '../../src/world/sharedWorldScheduler.js';
 import { executePortalWorldCommand } from '../../src/world/portalWorldControl.js';
 import { loadPersistentWorld, savePersistentWorld } from '../../src/world/persistentSeasonLoop.js';
@@ -16,7 +17,7 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
 });
 
 async function service(path, options = {}) {
-  const response = await fetch(`${SUPABASE_URL}${path}`, {
+  const response = await scheduledFetch(`${SUPABASE_URL}${path}`, {
     ...options,
     headers: {
       apikey: SERVICE_ROLE_KEY,
@@ -485,7 +486,7 @@ async function processWorld(stored, now) {
   }
 }
 
-export default async () => {
+async function runScheduledWork() {
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return json({ error: 'Scheduled world processing is not configured' }, 503);
   const now = new Date().toISOString();
   const fields = 'world_id,save_checksum,season_id,season_number,phase,matchday,next_turn_at,turn_status,updated_at';
@@ -495,4 +496,6 @@ export default async () => {
   return json({ version: SCHEDULER_VERSION, checked_at: now, worlds_due: due.length, results });
 };
 
-export const config = { schedule: '*/15 * * * *' };
+
+
+export default () => runScheduledJob('scheduled-world-turn', runScheduledWork, { timeoutMs: 120_000 });
