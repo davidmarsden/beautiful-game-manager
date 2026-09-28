@@ -42,7 +42,8 @@ test('scheduled email worker claims deliveries and uses Resend', () => {
   assert.match(scheduled, /finish_manager_notification_email_deliveries/);
   assert.match(scheduled, /https:\/\/api\.resend\.com\/emails/);
   assert.match(scheduled, /RESEND_API_KEY/);
-  assert.match(scheduled, /schedule: '\*\/5 \* \* \* \*'/);
+  assert.match(scheduled, /runScheduledJob\('manager-notification-email'/);
+  assert.match(schedulerRegistry, /manager-notification-email-scheduled\s+\*\/5 \* \* \* \*/);
 });
 
 test('daily delivery groups manager notifications into a digest even for one item', () => {
