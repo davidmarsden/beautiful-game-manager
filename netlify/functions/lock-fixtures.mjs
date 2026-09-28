@@ -1,4 +1,4 @@
-import { runScheduledJob } from './_lib/scheduled-job-guard.mjs';
+import { runScheduledJob, scheduledFetch } from './_lib/scheduled-job-guard.mjs';
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const WORLD_URL = process.env.TBG_WORLD_URL || 'https://raw.githubusercontent.com/davidmarsden/beautiful-game-engine/main/derived/world/world.json';
@@ -9,7 +9,7 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
 });
 
 async function rest(path, options = {}) {
-  const response = await fetch(`${SUPABASE_URL}${path}`, {
+  const response = await scheduledFetch(`${SUPABASE_URL}${path}`, {
     ...options,
     headers: {
       apikey: SUPABASE_SERVICE_ROLE_KEY,
@@ -189,7 +189,7 @@ async function runScheduledWork() {
   }
 
   try {
-    const worldResponse = await fetch(WORLD_URL, { headers: { accept: 'application/json' } });
+    const worldResponse = await scheduledFetch(WORLD_URL, { headers: { accept: 'application/json' } });
     if (!worldResponse.ok) throw new Error(`World source returned ${worldResponse.status}`);
     const world = await worldResponse.json();
     const clubsById = new Map((world.clubs || []).map((club) => [club.tbg_club_id, club]));
