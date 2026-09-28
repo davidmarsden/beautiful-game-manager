@@ -45,7 +45,8 @@ test('scheduled worker sends operational email with bounded retries', () => {
   assert.match(scheduled, /finish_manager_inactivity_checkin/);
   assert.match(scheduled, /RESEND_API_KEY/);
   assert.match(scheduled, /manager_inactivity_checkin/);
-  assert.match(scheduled, /schedule: '15 \* \* \* \*'/);
+  assert.match(scheduled, /runScheduledJob\('manager-inactivity-checkin'/);
+  assert.match(schedulerRegistry, /manager-inactivity-checkin-scheduled\s+15 \* \* \* \*/);
   assert.match(migration, /attempts < 3/);
   assert.match(migration, /interval '15 minutes'/);
 });
