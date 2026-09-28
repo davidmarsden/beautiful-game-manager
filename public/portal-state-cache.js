@@ -132,7 +132,7 @@ async function getPortalState({ force = false } = {}) {
   }
 }
 
-window.tbgPortalState = Object.freeze({
+window.tbgPortalStateStore = Object.freeze({
   get: getPortalState,
   refresh: () => getPortalState({ force: true }),
   invalidate: invalidateBootstrapCache,
