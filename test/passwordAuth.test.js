@@ -3,14 +3,15 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const indexSource = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
-const appSource = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
+const loginSource = await readFile(new URL('../public/login-controls.js', import.meta.url), 'utf8');
 const accountSource = await readFile(new URL('../public/password-account.js', import.meta.url), 'utf8');
 
 test('login screen offers password sign-in without removing magic-link access', () => {
   assert.match(indexSource, /id="loginPassword"/);
   assert.match(indexSource, /id="magicLinkButton"/);
-  assert.match(appSource, /signInWithPassword\(\{ email, password \}\)/);
-  assert.match(appSource, /\/api\/request-login-link/);
+  assert.match(indexSource, /src="\.\/login-controls\.js"/);
+  assert.match(loginSource, /signInWithPassword\(\{ email, password \}\)/);
+  assert.match(loginSource, /\/api\/request-login-link/);
   assert.doesNotMatch(indexSource, /login-proxy\.js/);
 });
 
@@ -22,8 +23,10 @@ test('signed-in managers can set a password on their existing Supabase user', ()
   assert.doesNotMatch(accountSource, /signUp\(/);
 });
 
-test('primary portal auth owns exactly one login form submit path', () => {
-  const handlers = appSource.match(/\$\("loginForm"\)\.addEventListener\("submit"/g) || [];
+test('independent login controls own exactly one login form submit path without owning token refresh', () => {
+  const handlers = loginSource.match(/\$\("loginForm"\)\?\.addEventListener\("submit"/g) || [];
   assert.equal(handlers.length, 1);
-  assert.match(appSource, /\$\("magicLinkButton"\)\?\.addEventListener\("click"/);
+  assert.match(loginSource, /\$\("magicLinkButton"\)\?\.addEventListener\("click"/);
+  assert.match(loginSource, /persistSession:\s*true/);
+  assert.match(loginSource, /autoRefreshToken:\s*false/);
 });
