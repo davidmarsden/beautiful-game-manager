@@ -7,20 +7,19 @@
   # The service-role key must never be excluded from Netlify secret scanning.
   SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL,SUPABASE_ANON_KEY"
 
-[functions."lock-fixtures"]
-  schedule = "*/5 * * * *"
-
-[functions."run-fixtures"]
-  schedule = "*/5 * * * *"
-
-[functions."player-release-settlement"]
-  schedule = "7 * * * *"
-
-[functions."world-maintenance"]
-  schedule = "17 * * * *"
-
-[functions."scheduled-world-turn"]
-  schedule = "*/15 * * * *"
+# RECOVERY PAUSE — 2026-09-28
+# Automatic database-facing jobs are temporarily unscheduled while the TBG
+# Supabase project is returning widespread HTTP 522 origin timeouts.
+#
+# Previous schedules (restore only after the database is demonstrably healthy):
+# lock-fixtures              */5 * * * *
+# run-fixtures               */5 * * * *
+# player-release-settlement  7 * * * *
+# world-maintenance          17 * * * *
+# scheduled-world-turn       */15 * * * *
+#
+# The function files remain deployed and may still be invoked deliberately;
+# only Netlify's automatic cron triggers are paused.
 
 # The Pink Final now has its own canonical public origin. Preserve the old
 # /pink-final namespace as a permanent route-preserving redirect so bookmarks
