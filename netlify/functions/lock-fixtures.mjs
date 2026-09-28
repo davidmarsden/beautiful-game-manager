@@ -1,3 +1,4 @@
+import { runScheduledJob } from './_lib/scheduled-job-guard.mjs';
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const WORLD_URL = process.env.TBG_WORLD_URL || 'https://raw.githubusercontent.com/davidmarsden/beautiful-game-engine/main/derived/world/world.json';
@@ -182,7 +183,7 @@ async function processFixture(fixture, world, clubsById) {
   return outcomes;
 }
 
-export default async () => {
+async function runScheduledWork() {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     return json({ error: 'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required' }, 503);
   }
@@ -214,3 +215,5 @@ export default async () => {
     return json({ error: error.message }, 500);
   }
 };
+
+export default () => runScheduledJob('lock-fixtures', runScheduledWork);
