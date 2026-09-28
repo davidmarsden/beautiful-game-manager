@@ -10,7 +10,7 @@ async function client() {
       const config = await response.json();
       if (!response.ok || !config.configured) throw new Error(config.error || "Supabase is not configured on Netlify yet.");
       return createClient(config.supabase_url, config.supabase_anon_key, {
-        auth: { flowType: "pkce", persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
+        auth: { flowType: "pkce", persistSession: true, autoRefreshToken: false, detectSessionInUrl: false }
       });
     })();
   }
