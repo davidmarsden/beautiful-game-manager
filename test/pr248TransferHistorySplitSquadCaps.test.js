@@ -99,12 +99,14 @@ test('world read model drops heavyweight runtime/player state but preserves Hist
 });
 
 test('transfer history and recovery are first-class and agreement is guarded before binding', async () => {
-  const [historySql, guardSql, endpoint, ui, refresh, settlement] = await Promise.all([
+  const [historySql, guardSql, endpoint, ui, archiveRepair, worldTurn, schedulerRegistry, settlement] = await Promise.all([
     read('supabase/migrations/20260819c_transfer_history_split_squad_recovery.sql'),
     read('supabase/migrations/20260819d_transfer_split_squad_capacity_guard.sql'),
     read('netlify/functions/transfer-history.mjs'),
     read('public/transfer-history.js'),
-    read('netlify/functions/refresh-world-read-model.mjs'),
+    read('netlify/functions/refresh-match-archives.mjs'),
+    read('netlify/internal/scheduled-world-turn-worker.mjs'),
+    read('netlify.toml'),
     read('netlify/functions/_lib/transfer-settlement.mjs')
   ]);
   assert.match(historySql, /get_manager_transfer_history_for_user/);
