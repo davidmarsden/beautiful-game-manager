@@ -263,17 +263,48 @@ async function initialiseAuth() {
 
 $("loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const email = $("loginEmail").value.trim();
+  const password = $("loginPassword")?.value || "";
+  $("loginStatus").className = "";
+
+  if (!email || !password) {
+    $("loginStatus").className = "error";
+    $("loginStatus").textContent = "Enter your email address and password, or use the email login-link option.";
+    return;
+  }
+
+  $("loginStatus").textContent = "Signing in…";
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  $("loginStatus").className = error ? "error" : "ok";
+  $("loginStatus").textContent = error ? error.message : "Signed in. Loading your manager portal…";
+});
+
+$("magicLinkButton")?.addEventListener("click", async (event) => {
+  event.preventDefault();
+  const email = $("loginEmail").value.trim();
+  if (!email) {
+    $("loginStatus").className = "error";
+    $("loginStatus").textContent = "Enter your registered email address first.";
+    $("loginEmail").focus();
+    return;
+  }
+
   $("loginStatus").className = "";
   $("loginStatus").textContent = "Sending secure login link…";
-  const email = $("loginEmail").value.trim();
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: `${window.location.origin}/`
-    }
-  });
-  $("loginStatus").className = error ? "error" : "ok";
-  $("loginStatus").textContent = error ? error.message : "Check your email for the TBG sign-in link.";
+  try {
+    const response = await fetch("/api/request-login-link", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, redirect_to: `${window.location.origin}/` })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "Could not send login link");
+    $("loginStatus").className = "ok";
+    $("loginStatus").textContent = "Check your email for the TBG sign-in link.";
+  } catch (error) {
+    $("loginStatus").className = "error";
+    $("loginStatus").textContent = error?.message || "Could not send login link";
+  }
 });
 $("logoutButton").addEventListener("click", async () => { await supabase.auth.signOut(); window.location.reload(); });
 document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => showView(button.dataset.view)));
