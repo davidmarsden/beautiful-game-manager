@@ -1,4 +1,4 @@
-import { runScheduledJob } from './_lib/scheduled-job-guard.mjs';
+import { runScheduledJob, scheduledFetch } from './_lib/scheduled-job-guard.mjs';
 import { randomUUID } from 'node:crypto';
 
 const runtimeEnv = (key) => globalThis.Netlify?.env?.get?.(key) || process.env[key] || '';
@@ -11,7 +11,7 @@ async function rpc(name, body) {
   if (!base || !key) throw new Error('Supabase is not configured');
   const headers = { apikey: key, accept: 'application/json', 'content-type': 'application/json' };
   if (isJwt(key)) headers.authorization = `Bearer ${key}`;
-  const response = await fetch(`${base}/rest/v1/rpc/${name}`, { method: 'POST', headers, body: JSON.stringify(body) });
+  const response = await scheduledFetch(`${base}/rest/v1/rpc/${name}`, { method: 'POST', headers, body: JSON.stringify(body) });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.message || result.error || `Supabase returned ${response.status}`);
   return result;
@@ -44,7 +44,7 @@ async function sendEmail(item) {
   if (!item.email) throw new Error('Manager email address is unavailable');
   const from = runtimeEnv('NOTIFICATION_EMAIL_FROM') || runtimeEnv('ALPHA_INVITE_FROM') || 'The Beautiful Game <login@auth.thebeautifulgame.online>';
   const message = messageFor(item);
-  const response = await fetch('https://api.resend.com/emails', {
+  const response = await scheduledFetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
     body: JSON.stringify({
