@@ -51,6 +51,7 @@ test('player expectation makes implausibly low offers rejectable while strong of
 test('due player decisions settle on the existing CAS-safe acquisition path and reject losing offers', async () => {
   const resolver = await read('netlify/functions/_lib/free-agent-offers.mjs');
   const scheduler = await read('netlify/functions/settle-transfers.mjs');
+  const schedulerRegistry = await read('netlify.toml');
   assert.match(resolver, /signFreeAgent\(/);
   assert.match(resolver, /player_chose_other_club/);
   assert.match(resolver, /terms_below_expectation/);
