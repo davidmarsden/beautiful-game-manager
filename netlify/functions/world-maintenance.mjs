@@ -1,4 +1,4 @@
-import { runScheduledJob } from './_lib/scheduled-job-guard.mjs';
+import { runScheduledJob, scheduledFetch } from './_lib/scheduled-job-guard.mjs';
 import {
   buildMonitoringAlert,
   buildWorldBackupRecord,
@@ -11,7 +11,7 @@ const BACKUP_INTERVAL_HOURS = Number(process.env.TBG_BACKUP_INTERVAL_HOURS || 24
 const STALE_SAVE_HOURS = Number(process.env.TBG_STALE_SAVE_HOURS || 72);
 
 async function supabase(path, options = {}) {
-  const response = await fetch(`${SUPABASE_URL}${path}`, {
+  const response = await scheduledFetch(`${SUPABASE_URL}${path}`, {
     ...options,
     headers: {
       apikey: SUPABASE_SERVICE_ROLE_KEY,
