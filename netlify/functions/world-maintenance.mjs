@@ -1,3 +1,4 @@
+import { runScheduledJob } from './_lib/scheduled-job-guard.mjs';
 import {
   buildMonitoringAlert,
   buildWorldBackupRecord,
@@ -56,7 +57,7 @@ async function recordMonitor(stored, inspection, latestBackup, now, status = nul
   }, 'operation_id');
 }
 
-export default async () => {
+async function runScheduledWork() {
   const now = new Date().toISOString();
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     return new Response(JSON.stringify({ error: 'Scheduled maintenance is not configured' }), { status: 503 });
@@ -129,3 +130,6 @@ export default async () => {
     return new Response(JSON.stringify({ error: error.message, checked_at: now }), { status: 503, headers: { 'content-type': 'application/json' } });
   }
 };
+
+
+export default () => runScheduledJob('world-maintenance', runScheduledWork);
