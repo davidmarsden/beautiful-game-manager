@@ -63,7 +63,8 @@ test('settlement runs independently of matchday turns and opportunistically on t
     read('netlify/functions/transfer-deals.mjs'),
     read('netlify.toml')
   ]);
-  assert.match(scheduled, /schedule: '\*\/5 \* \* \* \*'/);
+  assert.match(scheduled, /runScheduledJob\('settle-transfers'/);
+  assert.match(schedulerRegistry, /settle-transfers\s+\*\/5 \* \* \* \*/);
   assert.match(scheduled, /settleDueTransfers/);
   assert.match(gateway, /settleDueTransfers\(\{ worldId: current\.appointment\.world_id, limit: 5 \}\)/);
   assert.match(gateway, /get_manager_transfer_lifecycle_for_user/);
