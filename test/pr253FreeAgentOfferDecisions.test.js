@@ -58,7 +58,8 @@ test('due player decisions settle on the existing CAS-safe acquisition path and 
   assert.match(resolver, /status: 'accepted'/);
   assert.match(resolver, /status: 'rejected'/);
   assert.match(scheduler, /resolveScheduledFreeAgentOffers/);
-  assert.match(scheduler, /schedule: '\*\/5 \* \* \* \*'/);
+  assert.match(scheduler, /runScheduledJob\('settle-transfers'/);
+  assert.match(schedulerRegistry, /settle-transfers\s+\*\/5 \* \* \* \*/);
 });
 
 test('scheduled decisions choose distinct due worlds before applying the world limit', async () => {
