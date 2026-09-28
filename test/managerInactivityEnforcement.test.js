@@ -41,7 +41,8 @@ test('scheduled enforcement sends stage-specific operational email with bounded 
   assert.match(worker, /finish_manager_inactivity_escalation/);
   assert.match(worker, /RESEND_API_KEY/);
   assert.match(worker, /manager_inactivity_\$\{item\.stage\}/);
-  assert.match(worker, /schedule: '30 \* \* \* \*'/);
+  assert.match(worker, /runScheduledJob\('manager-inactivity-enforcement'/);
+  assert.match(schedulerRegistry, /manager-inactivity-enforcement-scheduled 30 \* \* \* \*/);
   assert.match(migration, /attempts < 3/);
   assert.match(migration, /interval '15 minutes'/);
 });
