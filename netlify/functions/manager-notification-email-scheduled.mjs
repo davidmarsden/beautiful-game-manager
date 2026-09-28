@@ -1,3 +1,4 @@
+import { runScheduledJob } from './_lib/scheduled-job-guard.mjs';
 import { randomUUID } from 'node:crypto';
 
 const runtimeEnv = (key) => globalThis.Netlify?.env?.get?.(key) || process.env[key] || '';
@@ -78,7 +79,7 @@ function deliveryGroups(rows) {
   return groups;
 }
 
-export default async () => {
+async function runScheduledWork() {
   const claimToken = randomUUID();
   const claimed = await rpc('claim_manager_notification_email_deliveries', { p_claim_token: claimToken, p_limit: 100 });
   for (const items of deliveryGroups(claimed)) {
@@ -106,6 +107,6 @@ export default async () => {
   }
 };
 
-export const config = {
-  schedule: '*/5 * * * *'
-};
+
+
+export default () => runScheduledJob('manager-notification-email', runScheduledWork);
