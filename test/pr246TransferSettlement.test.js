@@ -58,9 +58,10 @@ test('settlement runner applies governed transfer on the canonical world clock a
 });
 
 test('settlement runs independently of matchday turns and opportunistically on transfer reads', async () => {
-  const [scheduled, gateway] = await Promise.all([
+  const [scheduled, gateway, schedulerRegistry] = await Promise.all([
     read('netlify/functions/settle-transfers.mjs'),
-    read('netlify/functions/transfer-deals.mjs')
+    read('netlify/functions/transfer-deals.mjs'),
+    read('netlify.toml')
   ]);
   assert.match(scheduled, /schedule: '\*\/5 \* \* \* \*'/);
   assert.match(scheduled, /settleDueTransfers/);
