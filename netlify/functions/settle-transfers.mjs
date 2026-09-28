@@ -1,4 +1,4 @@
-import { runScheduledJob } from './_lib/scheduled-job-guard.mjs';
+import { runScheduledJob, scheduledFetch } from './_lib/scheduled-job-guard.mjs';
 import { settleDueTransfers } from './_lib/transfer-settlement.mjs';
 import { settleDueExternalTransfers } from './_lib/external-transfer-settlement.mjs';
 import { generateScheduledExternalOffers } from './_lib/external-transfer-offers.mjs';
