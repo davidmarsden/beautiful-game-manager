@@ -25,7 +25,8 @@ test('internal executor wraps the preserved scheduler with checkpoint reconcilia
   assert.match(executor, /createCheckpointReconciliationFetch/);
   assert.match(executor, /scheduledWorldTurnWorker/);
   assert.match(worker, /replace_canonical_world_checkpoint/);
-  assert.match(worker, /export default async/);
+  assert.match(worker, /runScheduledJob\('scheduled-world-turn'/);
+  assert.match(worker, /async function runScheduledWork/);
 });
 
 test('administrator status exposes reconciliation-required runs', () => {
