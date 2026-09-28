@@ -79,9 +79,10 @@ test('scheduled settlement uses full release history and checksum-protected atom
   // intentionally absent. Keep protecting both the normal schedule contract
   // and the explicit, documented recovery state so a silent deletion fails.
   const normallyScheduled = /\\[functions\\."player-release-settlement"\\][\\s\\S]*schedule = "7 \\* \\* \\* \\*"/.test(config);
-  const recoveryPaused = /RECOVERY PAUSE — 2026-09-28/.test(config)
-    && /player-release-settlement  7 \\* \\* \\* \\*/.test(config)
-    && /automatic cron triggers are paused/.test(config);
+  const recoveryPaused = config.includes('# RECOVERY PAUSE — 2026-09-28')
+    && config.includes('# player-release-settlement  7 * * * *')
+    && config.includes("# only Netlify's automatic cron triggers are paused.")
+    && !config.includes('[functions."player-release-settlement"]');
   assert.ok(normallyScheduled || recoveryPaused, 'settlement cron must be scheduled or explicitly recovery-paused');
 });
 
