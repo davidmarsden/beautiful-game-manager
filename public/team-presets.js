@@ -292,7 +292,7 @@ async function initialise({ refresh = false } = {}) {
 }
 
 window.addEventListener('tbg:portal-state-ready', (event) => {
-  if (!event.detail?.state?.club || bootstrapState === event.detail.state) return;
+  if (!bootstrapState || !event.detail?.state?.club || bootstrapState === event.detail.state) return;
   bootstrapState = event.detail.state;
   installControls();
   Promise.all([loadPresets(), carryForward()]).catch(console.error);
