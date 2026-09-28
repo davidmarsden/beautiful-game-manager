@@ -72,7 +72,7 @@ export async function runScheduledJob(name, handler, { timeoutMs = DEFAULT_JOB_T
     return json({ ok: true, skipped: 'database_circuit_open', job: name, retry_after_ms: state.circuitOpenUntil - Date.now() });
   }
 
-  state.running.add(name);
+  state.running.set(name, true);
   try {
     if (healthcheck) {
       const health = await databaseHealthy();
@@ -114,8 +114,9 @@ export async function runScheduledJob(name, handler, { timeoutMs = DEFAULT_JOB_T
     if (/Supabase|database|timed out|timeout|fetch failed|522|525/i.test(String(error?.message || ''))) noteDatabaseFailure();
     throw error;
   } finally {
-    if (!(state.running.get(name) instanceof Promise)) state.running.delete(name);
-    else if (state.running.get(name) === undefined) state.running.delete(name);
+    const running = state.running.get(name);
+    if (running === true) state.running.delete(name);
+    else if (!timedOut && running === handlerPromise) state.running.delete(name);
   }
 }
 
