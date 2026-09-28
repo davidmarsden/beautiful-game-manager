@@ -37,4 +37,6 @@ export default async (request) => {
   return json({ accepted: true, dispatched: true }, 202);
 };
 
-export const config = { schedule: '*/15 * * * *' };
+// RECOVERY PAUSE 2026-09-28: automatic schedule disabled while Supabase recovers.
+// Previous schedule: */15 * * * *
+export const config = {};
