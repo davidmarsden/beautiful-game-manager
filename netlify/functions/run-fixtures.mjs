@@ -1,3 +1,4 @@
+import { runScheduledJob } from './_lib/scheduled-job-guard.mjs';
 import { buildEngineMatchContract } from '../../src/engineBridge.js';
 import { simulateMatch, DEFAULT_MATCH_ENGINE_MODE } from '../../src/matchSimulation.js';
 import {
@@ -264,7 +265,7 @@ async function markRunError(fixtureId, message) {
   await finishFixture(fixtureId, 'error', message).catch(() => null);
 }
 
-export default async () => {
+async function runScheduledWork() {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     return json({ error: 'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required' }, 503);
   }
@@ -316,3 +317,5 @@ export default async () => {
     return json({ error: error.message }, 500);
   }
 };
+
+export default () => runScheduledJob('run-fixtures', runScheduledWork);
