@@ -30,3 +30,11 @@ test('independent login controls own exactly one login form submit path without 
   assert.match(loginSource, /persistSession:\s*true/);
   assert.match(loginSource, /autoRefreshToken:\s*false/);
 });
+
+test('login diagnostics expose stages and bound password-auth waits', () => {
+  assert.match(loginSource, /AUTH_TIMEOUT_MS\s*=\s*12000/);
+  assert.match(loginSource, /Connecting to TBG…/);
+  assert.match(loginSource, /Checking credentials…/);
+  assert.match(loginSource, /Supabase password sign-in/);
+  assert.match(loginSource, /Promise\.race/);
+});
