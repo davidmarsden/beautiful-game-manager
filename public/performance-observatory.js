@@ -1,5 +1,6 @@
 (() => {
-  const startedAt = performance.now();
+  const navigationEntry = performance.getEntriesByType('navigation')[0];
+  const navigationStartedAt = navigationEntry?.startTime ?? 0;
   const nativeFetch = window.fetch.bind(window);
   const requests = [];
   const marks = { navigation_start: 0 };
@@ -19,7 +20,7 @@
   };
 
   const recordMark = (name) => {
-    marks[name] = Math.round((performance.now() - startedAt) * 10) / 10;
+    marks[name] = Math.round((performance.now() - navigationStartedAt) * 10) / 10;
   };
 
   window.tbgPerformance = Object.freeze({
@@ -57,7 +58,7 @@
       id,
       endpoint,
       method,
-      started_ms: Math.round((requestStarted - startedAt) * 10) / 10,
+      started_ms: Math.round((requestStarted - navigationStartedAt) * 10) / 10,
       request_bytes: byteLength(init.body),
       status: null,
       duration_ms: null,
@@ -68,9 +69,14 @@
     try {
       const response = await nativeFetch(...args);
       request.status = response.status;
-      request.duration_ms = Math.round((performance.now() - requestStarted) * 10) / 10;
+      request.headers_ms = Math.round((performance.now() - requestStarted) * 10) / 10;
       request.server_timing = response.headers.get('server-timing') || '';
-      response.clone().text().then((body) => { request.response_bytes = byteLength(body); }).catch(() => {});
+      response.clone().text().then((body) => {
+        request.response_bytes = byteLength(body);
+        request.duration_ms = Math.round((performance.now() - requestStarted) * 10) / 10;
+      }).catch(() => {
+        request.duration_ms = request.headers_ms;
+      });
       return response;
     } catch (error) {
       request.status = 'network-error';
