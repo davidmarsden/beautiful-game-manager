@@ -1,3 +1,4 @@
+import { runScheduledJob } from './_lib/scheduled-job-guard.mjs';
 import { randomUUID } from 'node:crypto';
 
 const runtimeEnv = (key) => globalThis.Netlify?.env?.get?.(key) || process.env[key] || '';
@@ -101,7 +102,7 @@ async function sendEmail(item) {
   return result.id;
 }
 
-export default async () => {
+async function runScheduledWork() {
   const claimToken = randomUUID();
   const rows = await rpc('claim_manager_inactivity_escalations', { p_claim_token: claimToken, p_limit: 100 });
   for (const item of Array.isArray(rows) ? rows : []) {
@@ -124,6 +125,6 @@ export default async () => {
   }
 };
 
-export const config = {
-  schedule: '30 * * * *'
-};
+
+
+export default () => runScheduledJob('manager-inactivity-enforcement', runScheduledWork);
