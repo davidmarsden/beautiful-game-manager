@@ -22,3 +22,8 @@ test('team presets consume shared portal state and contain no independent bootst
   assert.doesNotMatch(source, /setTimeout\(\(\) => initialise/);
   assert.doesNotMatch(source, /1400|900/);
 });
+
+test('preset ready-event hydration ignores the initial store publication', async () => {
+  const source = await read('public/team-presets.js');
+  assert.match(source, /if \(!bootstrapState \|\| !event\.detail\?\.state\?\.club \|\| bootstrapState === event\.detail\.state\) return/);
+});
