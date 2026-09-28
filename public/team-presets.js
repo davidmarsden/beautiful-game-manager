@@ -281,16 +281,29 @@ async function carryForward() {
   tryApply();
 }
 
-async function initialise() {
-  const bearer = await authorization();
-  const response = await fetch('/api/bootstrap', { headers: { authorization: bearer }, cache: 'no-store' });
-  bootstrapState = await response.json();
-  if (!response.ok || !bootstrapState?.club) return;
+async function initialise({ refresh = false } = {}) {
+  if (!window.tbgPortalState?.get) throw new Error('Portal state service is unavailable');
+  bootstrapState = refresh
+    ? await window.tbgPortalState.refresh()
+    : await window.tbgPortalState.get();
+  if (!bootstrapState?.club) return;
   installControls();
   await Promise.all([loadPresets(), carryForward()]);
 }
 
-window.addEventListener('load', () => setTimeout(() => initialise().catch(console.error), 900));
+window.addEventListener('tbg:portal-state-ready', (event) => {
+  if (!event.detail?.state?.club || bootstrapState === event.detail.state) return;
+  bootstrapState = event.detail.state;
+  installControls();
+  Promise.all([loadPresets(), carryForward()]).catch(console.error);
+});
+
+window.addEventListener('load', () => initialise().catch(console.error));
 document.addEventListener('submit', (event) => {
-  if (event.target?.id === 'decisionForm') setTimeout(() => initialise().catch(console.error), 1400);
+  if (event.target?.id !== 'decisionForm') return;
+  // The decision mutation invalidates shared portal state. Reconcile only after
+  // that submission settles rather than waiting an arbitrary fixed delay.
+  queueMicrotask(() => window.tbgPortalState?.get().then((state) => {
+    bootstrapState = state;
+  }).catch(console.error));
 });
