@@ -9,6 +9,7 @@ const accountSource = await readFile(new URL('../public/password-account.js', im
 test('login screen offers password sign-in without removing magic-link access', () => {
   assert.match(indexSource, /id="loginPassword"/);
   assert.match(indexSource, /id="magicLinkButton"/);
+  assert.match(indexSource, /src="\.\/login-controls\.js"/);
   assert.match(loginSource, /signInWithPassword\(\{ email, password \}\)/);
   assert.match(loginSource, /\/api\/request-login-link/);
   assert.doesNotMatch(indexSource, /login-proxy\.js/);
@@ -22,8 +23,10 @@ test('signed-in managers can set a password on their existing Supabase user', ()
   assert.doesNotMatch(accountSource, /signUp\(/);
 });
 
-test('primary portal auth owns exactly one login form submit path', () => {
+test('independent login controls own exactly one login form submit path without owning token refresh', () => {
   const handlers = loginSource.match(/\$\("loginForm"\)\?\.addEventListener\("submit"/g) || [];
   assert.equal(handlers.length, 1);
-  assert.match(loginSource, /\$\("magicLinkButton"\)\?\.addEventListener\("click"/);\n  assert.match(loginSource, /persistSession:\s*true/);\n  assert.match(loginSource, /autoRefreshToken:\s*false/);
+  assert.match(loginSource, /\$\("magicLinkButton"\)\?\.addEventListener\("click"/);
+  assert.match(loginSource, /persistSession:\s*true/);
+  assert.match(loginSource, /autoRefreshToken:\s*false/);
 });
