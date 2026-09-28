@@ -75,7 +75,14 @@ test('scheduled settlement uses full release history and checksum-protected atom
   assert.match(migration, /and save_checksum = p_expected_checksum/);
   assert.match(migration, /and turn_status = 'open'/);
   assert.match(migration, /world_read_model_cache/);
-  assert.match(config, /\[functions\."player-release-settlement"\][\s\S]*schedule = "7 \* \* \* \*"/);
+  // During the 2026-09-28 Supabase recovery pause the automatic cron is
+  // intentionally absent. Keep protecting both the normal schedule contract
+  // and the explicit, documented recovery state so a silent deletion fails.
+  const normallyScheduled = /\\[functions\\."player-release-settlement"\\][\\s\\S]*schedule = "7 \\* \\* \\* \\*"/.test(config);
+  const recoveryPaused = /RECOVERY PAUSE — 2026-09-28/.test(config)
+    && /player-release-settlement  7 \\* \\* \\* \\*/.test(config)
+    && /automatic cron triggers are paused/.test(config);
+  assert.ok(normallyScheduled || recoveryPaused, 'settlement cron must be scheduled or explicitly recovery-paused');
 });
 
 test('Player Updates names use the existing internal player profile link contract', async () => {
