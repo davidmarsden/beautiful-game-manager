@@ -5,7 +5,7 @@ const CIRCUIT_COOLDOWN_MS = 10 * 60_000;
 
 const runtimeEnv = (key) => globalThis.Netlify?.env?.get?.(key) || process.env[key] || '';
 const state = globalThis.__tbgScheduledJobGuard ||= {
-  running: new Set(),
+  running: new Map(),
   consecutiveDatabaseFailures: 0,
   circuitOpenUntil: 0
 };
@@ -83,29 +83,45 @@ export async function runScheduledJob(name, handler, { timeoutMs = DEFAULT_JOB_T
     }
 
     let timer;
+    let timedOut = false;
+    const handlerPromise = Promise.resolve().then(handler);
+    state.running.set(name, handlerPromise);
     try {
       const result = await Promise.race([
-        Promise.resolve().then(handler),
-        new Promise((_, reject) => {
-          timer = setTimeout(() => reject(new Error(`${name} exceeded ${timeoutMs}ms job budget`)), timeoutMs);
+        handlerPromise,
+        new Promise((resolve) => {
+          timer = setTimeout(() => {
+            timedOut = true;
+            noteDatabaseFailure();
+            resolve(json({ ok: false, error: `${name} exceeded ${timeoutMs}ms job budget` }, 503));
+          }, timeoutMs);
         })
       ]);
-      noteDatabaseSuccess();
+      if (!timedOut) {
+        if (result instanceof Response && result.status >= 500) noteDatabaseFailure();
+        else noteDatabaseSuccess();
+      }
       return result;
     } finally {
       clearTimeout(timer);
+      if (timedOut) {
+        handlerPromise.catch(() => null).finally(() => {
+          if (state.running.get(name) === handlerPromise) state.running.delete(name);
+        });
+      }
     }
   } catch (error) {
     if (/Supabase|database|timed out|timeout|fetch failed|522|525/i.test(String(error?.message || ''))) noteDatabaseFailure();
     throw error;
   } finally {
-    state.running.delete(name);
+    if (!(state.running.get(name) instanceof Promise)) state.running.delete(name);
+    else if (state.running.get(name) === undefined) state.running.delete(name);
   }
 }
 
 export function schedulerGuardSnapshot() {
   return {
-    running: [...state.running],
+    running: [...state.running.keys()],
     consecutive_database_failures: state.consecutiveDatabaseFailures,
     circuit_open_until: state.circuitOpenUntil || null
   };
