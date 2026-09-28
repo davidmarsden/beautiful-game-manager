@@ -1,3 +1,4 @@
+import { scheduledFetch } from './scheduled-job-guard.mjs';
 import { resolveDueFreeAgentOffers } from './free-agent-offers.mjs';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
@@ -6,7 +7,7 @@ const isJwt = (value) => String(value || '').split('.').length === 3;
 
 async function dueWorldIds(limit = 20) {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return [];
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_due_free_agent_world_ids`, {
+  const response = await scheduledFetch(`${SUPABASE_URL}/rest/v1/rpc/get_due_free_agent_world_ids`, {
     method: 'POST',
     headers: {
       apikey: SUPABASE_SERVICE_ROLE_KEY,
