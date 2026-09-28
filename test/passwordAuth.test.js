@@ -23,7 +23,7 @@ test('signed-in managers can set a password on their existing Supabase user', ()
 });
 
 test('primary portal auth owns exactly one login form submit path', () => {
-  const handlers = loginSource.match(/\$\("loginForm"\)\.addEventListener\("submit"/g) || [];
+  const handlers = loginSource.match(/\$\("loginForm"\)\?\.addEventListener\("submit"/g) || [];
   assert.equal(handlers.length, 1);
-  assert.match(loginSource, /\$\("magicLinkButton"\)\?\.addEventListener\("click"/);
+  assert.match(loginSource, /\$\("magicLinkButton"\)\?\.addEventListener\("click"/);\n  assert.match(loginSource, /persistSession:\s*true/);\n  assert.match(loginSource, /autoRefreshToken:\s*false/);
 });
