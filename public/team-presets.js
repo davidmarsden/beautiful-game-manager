@@ -299,11 +299,13 @@ window.addEventListener('tbg:portal-state-ready', (event) => {
 });
 
 window.addEventListener('load', () => initialise().catch(console.error));
-document.addEventListener('submit', (event) => {
-  if (event.target?.id !== 'decisionForm') return;
-  // The decision mutation invalidates shared portal state. Reconcile only after
-  // that submission settles rather than waiting an arbitrary fixed delay.
-  queueMicrotask(() => window.tbgPortalStateStore?.get().then((state) => {
+window.addEventListener('tbg:team-submission-saved', (event) => {
+  const state = event.detail?.state;
+  if (state?.club) {
     bootstrapState = state;
-  }).catch(console.error));
+    return;
+  }
+  window.tbgPortalStateStore?.get().then((nextState) => {
+    bootstrapState = nextState;
+  }).catch(console.error);
 });
