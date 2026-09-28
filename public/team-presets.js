@@ -282,10 +282,10 @@ async function carryForward() {
 }
 
 async function initialise({ refresh = false } = {}) {
-  if (!window.tbgPortalState?.get) throw new Error('Portal state service is unavailable');
+  if (!window.tbgPortalStateStore?.get) throw new Error('Portal state service is unavailable');
   bootstrapState = refresh
-    ? await window.tbgPortalState.refresh()
-    : await window.tbgPortalState.get();
+    ? await window.tbgPortalStateStore.refresh()
+    : await window.tbgPortalStateStore.get();
   if (!bootstrapState?.club) return;
   installControls();
   await Promise.all([loadPresets(), carryForward()]);
@@ -303,7 +303,7 @@ document.addEventListener('submit', (event) => {
   if (event.target?.id !== 'decisionForm') return;
   // The decision mutation invalidates shared portal state. Reconcile only after
   // that submission settles rather than waiting an arbitrary fixed delay.
-  queueMicrotask(() => window.tbgPortalState?.get().then((state) => {
+  queueMicrotask(() => window.tbgPortalStateStore?.get().then((state) => {
     bootstrapState = state;
   }).catch(console.error));
 });
