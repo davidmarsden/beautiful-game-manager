@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const migration = read('supabase/migrations/20260908_manager_inactivity_checkins.sql');
 const scheduled = read('netlify/functions/manager-inactivity-checkin-scheduled.mjs');
+const schedulerRegistry = read('netlify.toml');
 
 test('inactivity check-ins wait three days and only target active human appointments', () => {
   assert.match(migration, /appointment\.status = 'active'/);
