@@ -1,4 +1,4 @@
-import { runScheduledJob } from './_lib/scheduled-job-guard.mjs';
+import { runScheduledJob, scheduledFetch } from './_lib/scheduled-job-guard.mjs';
 import { buildEngineMatchContract } from '../../src/engineBridge.js';
 import { simulateMatch, DEFAULT_MATCH_ENGINE_MODE } from '../../src/matchSimulation.js';
 import {
@@ -24,7 +24,7 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
 });
 
 async function rest(path, options = {}) {
-  const response = await fetch(`${SUPABASE_URL}${path}`, {
+  const response = await scheduledFetch(`${SUPABASE_URL}${path}`, {
     ...options,
     headers: {
       apikey: SUPABASE_SERVICE_ROLE_KEY,
@@ -157,7 +157,7 @@ async function recordRunAttempt(fixtureId, run) {
 }
 
 async function remoteResult(contract) {
-  const response = await fetch(ENGINE_RUNNER_URL, {
+  const response = await scheduledFetch(ENGINE_RUNNER_URL, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -271,7 +271,7 @@ async function runScheduledWork() {
   }
 
   try {
-    const worldResponse = await fetch(WORLD_URL, { headers: { accept: 'application/json' } });
+    const worldResponse = await scheduledFetch(WORLD_URL, { headers: { accept: 'application/json' } });
     if (!worldResponse.ok) throw new Error(`World source returned ${worldResponse.status}`);
     const world = await worldResponse.json();
     const fixtures = await rest('/rest/v1/rpc/claim_fixtures_for_engine', {
