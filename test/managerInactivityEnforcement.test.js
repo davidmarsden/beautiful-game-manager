@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const migration = read('supabase/migrations/20260922_manager_inactivity_enforcement.sql');
 const worker = read('netlify/functions/manager-inactivity-enforcement-scheduled.mjs');
+const schedulerRegistry = read('netlify.toml');
 
 test('hard participation enforcement uses the published controlled-alpha 3/7/10 thresholds', () => {
   assert.match(migration, /interval '7 days'/);
