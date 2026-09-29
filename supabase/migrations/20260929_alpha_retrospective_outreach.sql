@@ -59,6 +59,8 @@ begin
       and mp.profile_completed = true
       and mp.email is not null
       and mp.email <> ''
+      -- Internal non-admin test profile used before the genuine Alpha 1 cohort.
+      and mp.id <> '652be53f-fd8b-4630-b07a-f99fe755a57d'::uuid
     group by mp.id, mp.display_name, mp.email
   ) x;
 
