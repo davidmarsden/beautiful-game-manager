@@ -122,7 +122,7 @@ test('transfer history and recovery are first-class and agreement is guarded bef
   assert.match(ui, /Transfer history/);
   assert.match(ui, /Application failed/);
   assert.match(ui, /Completed/);
-  assert.match(schedulerRegistry, /refresh-world-read-model\\s+RETIRED/);
+  assert.match(schedulerRegistry, /refresh-world-read-model\s+RETIRED/);
   assert.match(archiveRepair, /readModelRowForCanonicalWorld/);
   assert.match(archiveRepair, /refresh_world_read_model_if_current/);
   assert.match(worldTurn, /projectCommittedCheckpoint/);
