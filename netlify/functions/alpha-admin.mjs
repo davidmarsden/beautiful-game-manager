@@ -107,11 +107,13 @@ async function recordRetrospectiveDelivery(userId, managerId, messageId = null, 
   });
 }
 
-async function sendRetrospectiveEmail({ email }) {
+async function sendRetrospectiveEmail({ email, displayName }) {
   const apiKey = runtimeEnv('RESEND_API_KEY');
   if (!apiKey) throw new Error('Resend is not configured');
   const from = runtimeEnv('ALPHA_INVITE_FROM') || 'The Beautiful Game <login@auth.thebeautifulgame.online>';
-  const text = `Thanks again for taking part in the first controlled alpha of The Beautiful Game.
+  const replyTo = runtimeEnv('ALPHA_RETROSPECTIVE_REPLY_TO') || 'admin@smtop100.blog';
+  const firstName = String(displayName || '').trim().split(/\\s+/)[0] || 'there';
+  const text = `Hi ${firstName},\n\nThanks again for taking part in the first controlled alpha of The Beautiful Game.
 
 I'm closing this alpha as an experiment and doing a proper post-mortem before deciding what a fresh version should look like. I'd really value your experience — including if you only played briefly, stopped checking it, or found parts frustrating. There are no right answers and criticism is genuinely useful.
 
@@ -143,6 +145,7 @@ David`;
       to: [email],
       subject: 'The Beautiful Game Alpha 1 — what should we learn?',
       text,
+      reply_to: replyTo,
       tags: [{ name: 'type', value: 'alpha_retrospective' }]
     })
   });
@@ -194,7 +197,7 @@ export default async (request) => {
           continue;
         }
         try {
-          const messageId = await sendRetrospectiveEmail({ email: manager.email });
+          const messageId = await sendRetrospectiveEmail({ email: manager.email, displayName: manager.display_name });
           await recordRetrospectiveDelivery(user.id, manager.manager_id, messageId, null);
           results.push({ manager_id: manager.manager_id, status: 'sent', message_id: messageId });
         } catch (error) {
