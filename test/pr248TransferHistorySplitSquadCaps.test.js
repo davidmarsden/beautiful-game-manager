@@ -122,9 +122,10 @@ test('transfer history and recovery are first-class and agreement is guarded bef
   assert.match(ui, /Transfer history/);
   assert.match(ui, /Application failed/);
   assert.match(ui, /Completed/);
-  assert.match(refresh, /schedule: '\*\/15 \* \* \* \*'/);
-  assert.match(refresh, /buildWorldReadModel/);
-  assert.match(refresh, /refresh_world_read_model_if_current/);
+  assert.match(schedulerRegistry, /refresh-world-read-model\\s+RETIRED/);
+  assert.match(archiveRepair, /readModelRowForCanonicalWorld/);
+  assert.match(archiveRepair, /refresh_world_read_model_if_current/);
+  assert.match(worldTurn, /projectCommittedCheckpoint/);
   assert.match(settlement, /first-team squad limit reached/);
   assert.match(settlement, /youth squad limit reached/);
 });
