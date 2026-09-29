@@ -112,7 +112,7 @@ async function sendRetrospectiveEmail({ email, displayName }) {
   if (!apiKey) throw new Error('Resend is not configured');
   const from = runtimeEnv('ALPHA_INVITE_FROM') || 'The Beautiful Game <login@auth.thebeautifulgame.online>';
   const replyTo = runtimeEnv('ALPHA_RETROSPECTIVE_REPLY_TO') || 'admin@smtop100.blog';
-  const firstName = String(displayName || '').trim().split(/\\s+/)[0] || 'there';
+  const firstName = String(displayName || '').trim().split(/\s+/)[0] || 'there';
   const text = `Hi ${firstName},\n\nThanks again for taking part in the first controlled alpha of The Beautiful Game.
 
 I'm closing this alpha as an experiment and doing a proper post-mortem before deciding what a fresh version should look like. I'd really value your experience — including if you only played briefly, stopped checking it, or found parts frustrating. There are no right answers and criticism is genuinely useful.
