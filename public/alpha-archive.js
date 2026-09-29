@@ -21,7 +21,8 @@ function applyArchiveMode(detail = window.tbgPortalState || null) {
     banner.hidden = false;
     const date = archive.archived_at ? new Date(archive.archived_at).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }) : '';
     const text = banner.querySelector('span');
-    if (text) text.textContent = `Alpha 1 ended${date ? ` on ${date}` : ''}. This world is preserved for reference: you can browse it, but game actions are read-only.`;
+    const message = `Alpha 1 ended${date ? ` on ${date}` : ''}. This world is preserved for reference: you can browse it, but game actions are read-only.`;
+    if (text && text.textContent !== message) text.textContent = message;
   }
 
   document.querySelectorAll(MUTATION_SELECTORS.join(',')).forEach((control) => {
@@ -45,4 +46,9 @@ function blockArchivedSubmit(event) {
 window.addEventListener('tbg:portal-rendered', (event) => applyArchiveMode(event.detail));
 window.addEventListener('tbg:portal-state', (event) => applyArchiveMode(event.detail));
 document.addEventListener('DOMContentLoaded', () => applyArchiveMode());
-new MutationObserver(() => applyArchiveMode()).observe(document.documentElement, { childList: true, subtree: true });
+const archiveObserver = new MutationObserver((mutations) => {
+  if (document.documentElement.dataset.tbgArchive !== 'alpha1') return;
+  if (!mutations.some((mutation) => [...mutation.addedNodes].some((node) => node.nodeType === Node.ELEMENT_NODE))) return;
+  applyArchiveMode();
+});
+archiveObserver.observe(document.documentElement, { childList: true, subtree: true });
