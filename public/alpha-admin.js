@@ -212,10 +212,16 @@ $('retrospectiveSend').addEventListener('click', async () => {
   $('retrospectiveStatus').textContent = 'Sending retrospective emails…';
   try {
     const result = await api({ method: 'POST', body: JSON.stringify({ action: 'retrospective_send', confirm: typed }) });
-    $('retrospectiveStatus').textContent = `Finished: ${result.sent} sent, ${result.skipped} already sent, ${result.failed} failed.`;
-    const refreshed = await api({ method: 'POST', body: JSON.stringify({ action: 'retrospective_dry_run' }) });
-    renderRetrospectiveCohort(refreshed);
-    $('retrospectiveStatus').textContent = `Finished: ${result.sent} sent, ${result.skipped} already sent, ${result.failed} failed. Delivery attempts are recorded server-side.`;
+    const completedMessage = `Finished: ${result.sent} sent, ${result.skipped} already sent, ${result.failed} failed. Delivery attempts are recorded server-side.`;
+    $('retrospectiveStatus').textContent = completedMessage;
+    try {
+      const refreshed = await api({ method: 'POST', body: JSON.stringify({ action: 'retrospective_dry_run' }) });
+      renderRetrospectiveCohort(refreshed);
+      $('retrospectiveStatus').textContent = completedMessage;
+    } catch (refreshError) {
+      $('retrospectiveStatus').textContent = `${completedMessage} Cohort refresh failed: ${refreshError.message}. Reload or review the cohort before attempting any further send.`;
+      $('retrospectiveSend').disabled = true;
+    }
   } catch (error) {
     $('retrospectiveStatus').textContent = error.message;
     button.disabled = false;
