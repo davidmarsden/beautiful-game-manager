@@ -89,6 +89,68 @@ async function sendAndTrackInvite({ request, userId, inviteId, email }) {
   }
 }
 
+
+async function getRetrospectiveCohort(userId) {
+  return rpc('admin_get_alpha_retrospective_cohort', {
+    p_admin_user_id: userId,
+    p_world_id: WORLD_ID
+  });
+}
+
+async function recordRetrospectiveDelivery(userId, managerId, messageId = null, error = null) {
+  return rpc('admin_record_alpha_retrospective_delivery', {
+    p_admin_user_id: userId,
+    p_world_id: WORLD_ID,
+    p_manager_id: managerId,
+    p_message_id: messageId,
+    p_error: error
+  });
+}
+
+async function sendRetrospectiveEmail({ email }) {
+  const apiKey = runtimeEnv('RESEND_API_KEY');
+  if (!apiKey) throw new Error('Resend is not configured');
+  const from = runtimeEnv('ALPHA_INVITE_FROM') || 'The Beautiful Game <login@auth.thebeautifulgame.online>';
+  const text = `Thanks again for taking part in the first controlled alpha of The Beautiful Game.
+
+I'm closing this alpha as an experiment and doing a proper post-mortem before deciding what a fresh version should look like. I'd really value your experience — including if you only played briefly, stopped checking it, or found parts frustrating. There are no right answers and criticism is genuinely useful.
+
+You can just reply to this email. Short answers are absolutely fine.
+
+1. What made you interested in trying TBG?
+2. What did you most enjoy or find promising?
+3. What was confusing, frustrating, slow or felt like work?
+4. How much did you care about your matches and results? What made you care more or less?
+5. Was there a point when you stopped checking or playing regularly? What happened?
+6. Compared with Soccer Manager Worlds / Top 100, what was TBG missing that mattered to you?
+7. Is there anything TBG did that you would genuinely miss if it disappeared?
+8. If we rebuilt it around a much simpler core — squad, transfers, team selection, tactics, match and league table — what would it absolutely need to make you want to keep playing?
+9. Would you be willing to test a fresh version later?
+10. Anything else you think we should learn from this alpha?
+
+Don't feel you need to answer every question. Even a few lines about why you kept playing or stopped playing would be really useful.
+
+I'll use the responses to identify themes in the Alpha 1 post-mortem. I won't publish your email address or attribute private comments to you publicly without permission.
+
+Thanks,
+David`;
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      from,
+      to: [email],
+      subject: 'The Beautiful Game Alpha 1 — what should we learn?',
+      text,
+      tags: [{ name: 'type', value: 'alpha_retrospective' }]
+    })
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.id) throw new Error(result.message || result.error || `Resend returned ${response.status}`);
+  return result.id;
+}
+
 export default async (request) => {
   try {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) return json({ error: 'Supabase is not configured' }, 503);
@@ -106,6 +168,49 @@ export default async (request) => {
     const payload = await request.json().catch(() => ({}));
     const action = String(payload.action || '').trim();
     let result;
+
+    if (action === 'retrospective_dry_run' || action === 'retrospective_send') {
+      const cohort = await getRetrospectiveCohort(user.id);
+      if (!cohort?.ok) return json({ error: cohort?.code || 'Admin access required', ...cohort }, 403);
+      const managers = Array.isArray(cohort.managers) ? cohort.managers : [];
+      if (action === 'retrospective_dry_run') {
+        return json({
+          ok: true,
+          count: managers.length,
+          managers: managers.map(({ manager_id, display_name, appointment_count, first_appointed_at, last_ended_at, already_sent }) => ({
+            manager_id, display_name, appointment_count, first_appointed_at, last_ended_at, already_sent
+          }))
+        });
+      }
+
+      if (String(payload.confirm || '') !== 'SEND_ALPHA_1_RETROSPECTIVE') {
+        return json({ error: 'confirmation_required', code: 'confirmation_required', count: managers.length }, 409);
+      }
+
+      const results = [];
+      for (const manager of managers) {
+        if (manager.already_sent) {
+          results.push({ manager_id: manager.manager_id, status: 'already_sent' });
+          continue;
+        }
+        try {
+          const messageId = await sendRetrospectiveEmail({ email: manager.email });
+          await recordRetrospectiveDelivery(user.id, manager.manager_id, messageId, null);
+          results.push({ manager_id: manager.manager_id, status: 'sent', message_id: messageId });
+        } catch (error) {
+          await recordRetrospectiveDelivery(user.id, manager.manager_id, null, error.message).catch(() => {});
+          results.push({ manager_id: manager.manager_id, status: 'failed', error: error.message });
+        }
+      }
+      return json({
+        ok: true,
+        count: managers.length,
+        sent: results.filter((item) => item.status === 'sent').length,
+        skipped: results.filter((item) => item.status === 'already_sent').length,
+        failed: results.filter((item) => item.status === 'failed').length,
+        results
+      });
+    }
 
     if (action === 'invite') {
       const email = String(payload.email || '').trim().toLowerCase();
