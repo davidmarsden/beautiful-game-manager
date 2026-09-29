@@ -154,6 +154,7 @@ function renderUnassigned(data) {
 function render(data) {
   if (data.no_assignment) return renderUnassigned(data);
   state = data;
+  window.tbgPortalState = data;
   $("unassignedState").hidden = true;
   $("clubPortal").hidden = false;
   renderNav(data.navigation);
@@ -184,7 +185,7 @@ function render(data) {
   $("bench").innerHTML = ordered.map((player, index) => pick(player, "bench", index)).join("");
   document.querySelectorAll('input[data-zone="xi"]').forEach((input) => input.addEventListener("change", refreshCaptain));
   refreshCaptain();
-  $("decisionForm").querySelector('button[type="submit"]').disabled = !fixture;
+  $("decisionForm").querySelector('button[type="submit"]').disabled = !fixture || Boolean(data.archive?.read_only);\n  window.dispatchEvent(new CustomEvent('tbg:portal-rendered', { detail: data }));
 }
 
 async function loadPortal() {
