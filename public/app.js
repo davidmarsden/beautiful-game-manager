@@ -185,7 +185,8 @@ function render(data) {
   $("bench").innerHTML = ordered.map((player, index) => pick(player, "bench", index)).join("");
   document.querySelectorAll('input[data-zone="xi"]').forEach((input) => input.addEventListener("change", refreshCaptain));
   refreshCaptain();
-  $("decisionForm").querySelector('button[type="submit"]').disabled = !fixture || Boolean(data.archive?.read_only);\n  window.dispatchEvent(new CustomEvent('tbg:portal-rendered', { detail: data }));
+  $("decisionForm").querySelector('button[type="submit"]').disabled = !fixture || Boolean(data.archive?.read_only);
+  window.dispatchEvent(new CustomEvent('tbg:portal-rendered', { detail: data }));
 }
 
 async function loadPortal() {
