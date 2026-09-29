@@ -15,6 +15,16 @@
     <p id="adminStatus" class="status" aria-live="polite">Checking admin access…</p>
     <section id="adminContent" hidden>
       <section class="alpha-panel"><h2>Invite tester</h2><p class="muted">Leave the club list empty to allow any currently vacant club, or select a restricted set.</p><form id="inviteForm"><div class="alpha-grid"><label>Email<input id="inviteEmail" type="email" required placeholder="tester@example.com"></label><label>Eligible clubs<select id="inviteClubs" multiple></select></label></div><button class="submit" type="submit">Save invitation</button></form><p id="inviteStatus" class="status" aria-live="polite"></p></section>
+      <section class="alpha-panel">
+        <h2>Alpha 1 retrospective</h2>
+        <p class="muted">Build the historic participant cohort without exposing email addresses in the browser. Review the cohort first; sending requires a separate confirmation.</p>
+        <div class="alpha-actions">
+          <button id="retrospectiveDryRun" type="button">Review cohort</button>
+          <button id="retrospectiveSend" type="button" class="danger" disabled>Send retrospective emails</button>
+        </div>
+        <p id="retrospectiveStatus" class="status" aria-live="polite"></p>
+        <div id="retrospectiveList" class="alpha-list"></div>
+      </section>
       <section class="alpha-panel"><h2>Invitations</h2><div id="inviteList" class="alpha-list"></div></section>
       <section class="alpha-panel"><h2>Active human appointments</h2><p class="muted">Ending an appointment preserves its history. Reassignment ends the old appointment and creates a new authoritative one atomically.</p><div id="appointmentList" class="alpha-list"></div></section>
     </section>

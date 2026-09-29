@@ -174,6 +174,60 @@ $('inviteForm').addEventListener('submit', async (event) => {
   }
 });
 
+
+function renderRetrospectiveCohort(result) {
+  const rows = result.managers || [];
+  $('retrospectiveList').innerHTML = rows.length ? rows.map((manager) => `
+    <article class="alpha-row">
+      <strong>${text(manager.display_name || 'Unnamed manager')}</strong>
+      <small>${text(manager.appointment_count)} appointment${manager.appointment_count === 1 ? '' : 's'} · first appointed ${new Date(manager.first_appointed_at).toLocaleDateString()}${manager.already_sent ? ' · retrospective already sent' : ''}</small>
+    </article>`).join('') : '<p class="muted">No eligible Alpha 1 participants found.</p>';
+  $('retrospectiveStatus').textContent = `${result.count} eligible Alpha 1 participant${result.count === 1 ? '' : 's'}. Email addresses remain server-side.`;
+  $('retrospectiveSend').disabled = rows.length === 0 || rows.every((manager) => manager.already_sent);
+}
+
+$('retrospectiveDryRun').addEventListener('click', async () => {
+  const button = $('retrospectiveDryRun');
+  button.disabled = true;
+  $('retrospectiveStatus').textContent = 'Building cohort…';
+  try {
+    const result = await api({ method: 'POST', body: JSON.stringify({ action: 'retrospective_dry_run' }) });
+    renderRetrospectiveCohort(result);
+  } catch (error) {
+    $('retrospectiveStatus').textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('retrospectiveSend').addEventListener('click', async () => {
+  if (!confirm('Send the Alpha 1 retrospective email to every eligible participant not already recorded as sent? This sends real email.')) return;
+  const typed = prompt('Type SEND_ALPHA_1_RETROSPECTIVE to confirm.');
+  if (typed !== 'SEND_ALPHA_1_RETROSPECTIVE') {
+    $('retrospectiveStatus').textContent = 'Send cancelled.';
+    return;
+  }
+  const button = $('retrospectiveSend');
+  button.disabled = true;
+  $('retrospectiveStatus').textContent = 'Sending retrospective emails…';
+  try {
+    const result = await api({ method: 'POST', body: JSON.stringify({ action: 'retrospective_send', confirm: typed }) });
+    const completedMessage = `Finished: ${result.sent} sent, ${result.skipped} already sent, ${result.failed} failed. Delivery attempts are recorded server-side.`;
+    $('retrospectiveStatus').textContent = completedMessage;
+    try {
+      const refreshed = await api({ method: 'POST', body: JSON.stringify({ action: 'retrospective_dry_run' }) });
+      renderRetrospectiveCohort(refreshed);
+      $('retrospectiveStatus').textContent = completedMessage;
+    } catch (refreshError) {
+      $('retrospectiveStatus').textContent = `${completedMessage} Cohort refresh failed: ${refreshError.message}. Reload or review the cohort before attempting any further send.`;
+      $('retrospectiveSend').disabled = true;
+    }
+  } catch (error) {
+    $('retrospectiveStatus').textContent = error.message;
+    button.disabled = false;
+  }
+});
+
 load().catch((error) => {
   $('adminStatus').textContent = error.message;
 });
