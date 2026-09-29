@@ -23,7 +23,7 @@
   <link rel="stylesheet" href="./player-profile.css">
   <link rel="stylesheet" href="./targeted-component-polish.css">
   <link rel="stylesheet" href="./design-1982.css">
-  <link rel="stylesheet" href="./brand.css">
+  <link rel="stylesheet" href="./brand.css">\n  <link rel="stylesheet" href="./alpha-archive.css">
   <script src="./safe-response-json.js"></script>
   <script src="./portal-boot-recovery.js"></script>
   <script src="./portal-auth-bridge.js"></script>
@@ -34,7 +34,7 @@
   <div id="portal" hidden>
     <header class="topbar"><a class="brand tbg-brand-lockup" href="./" aria-label="The Beautiful Game — One world. Real players. Human managers."><img src="./tbg-mark.svg" alt=""><span class="tbg-brand-copy"><span>THE BEAUTIFUL<br>GAME</span><small>One world. Real players. Human managers.</small></span></a><div class="world-pill">ONE WORLD · SEASON 1</div><button class="manager-chip" id="managerChip" type="button">Manager</button><span id="inboxBadge" class="inbox-badge" hidden>0</span><button class="logout-button password-button" id="passwordButton" type="button">Password</button><button class="logout-button" id="logoutButton" type="button">Sign out</button></header>
     <main class="shell">
-      <nav class="club-nav" id="clubNav"></nav>
+      <div id="archiveBanner" class="archive-banner" hidden><strong>Alpha 1 Archive</strong><span>This world is frozen in its final Alpha 1 state. You can look around, but game actions are read-only.</span></div><nav class="club-nav" id="clubNav"></nav>
       <section id="onboardingState" class="onboarding-state" hidden><span class="status-label">FIRST SIGN-IN</span><h1>Welcome to The Beautiful Game</h1><p>Confirm your manager profile before entering the world.</p><form id="onboardingForm"><label>Manager name<input id="onboardingName" maxlength="80" required></label><label>Nationality or country<input id="onboardingCountry" maxlength="80"></label><label>Time zone<input id="onboardingTimezone" value="Europe/London" required></label><label>Favourite club <small>(optional)</small><input id="onboardingFavouriteClub" maxlength="100"></label><button class="submit" type="submit">Complete profile</button><p id="onboardingStatus" aria-live="polite"></p></form></section>
       <section id="unassignedState" class="unassigned-state" hidden><span class="status-label">ACCOUNT ACTIVE</span><h1>No club assigned yet</h1><p>Your manager account is ready, but an administrator has not appointed you to a TBG club.</p><div id="unassignedManager"></div></section>
       <div id="clubPortal" hidden>
@@ -79,6 +79,6 @@
   <script type="module" src="./portal-navigation.js"></script>
   <script type="module" src="./stable-player-links.js"></script>
   <script type="module" src="./stable-club-links.js"></script>
-  <script type="module" src="./internal-profile-links.js"></script>
+  <script type="module" src="./internal-profile-links.js"></script>\n  <script type="module" src="./alpha-archive.js"></script>
 </body>
 </html>

@@ -86,6 +86,9 @@ export default async (request) => {
     const appointment = appointments[0];
     if (!appointment || appointment.manager_id !== manager.id) return response({ error: 'You are not appointed to this club' }, 403);
 
+    const worldRows = await serverRest(`/rest/v1/worlds?id=eq.${encodeURIComponent(appointment.world_id)}&select=id,archive_mode&limit=1`, {}, 'Could not load world archive state');
+    if (worldRows[0]?.archive_mode) return response({ error: 'Alpha 1 is archived and read-only', code: 'world_archived_read_only' }, 409);
+
     const context = await serverRest('/rest/v1/rpc/get_manager_portal_world_fragment', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

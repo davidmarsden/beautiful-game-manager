@@ -1,0 +1,8 @@
+.archive-banner{margin:0 0 18px;padding:14px 18px;border:2px solid currentColor;border-radius:10px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.archive-banner[hidden]{display:none}
+.archive-banner strong{text-transform:uppercase;letter-spacing:.08em}
+html[data-tbg-archive="alpha1"] button:disabled,
+html[data-tbg-archive="alpha1"] input:disabled,
+html[data-tbg-archive="alpha1"] select:disabled{cursor:not-allowed;opacity:.58}
+html[data-tbg-archive="alpha1"] #deadlineCountdown{display:none}
+html[data-tbg-archive="alpha1"] .next-fixture #deadlineText{display:none}
