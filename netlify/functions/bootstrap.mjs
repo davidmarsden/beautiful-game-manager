@@ -111,6 +111,9 @@ export default async (request) => {
       navigation: navigation()
     });
 
+    const worldRows = await serverSupabase(`/rest/v1/worlds?id=eq.${encodeURIComponent(appointment.world_id)}&select=id,status,archive_mode,archived_at,archive_reason&limit=1`, {}, 'Could not load world archive state');
+    const archive = worldRows[0] || { id: appointment.world_id, status: 'unknown', archive_mode: false };
+
     const context = await serverSupabase('/rest/v1/rpc/get_manager_portal_world_fragment', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -145,6 +148,12 @@ export default async (request) => {
       onboarding_required: !manager.profile_completed,
       appointment,
       canonical_source: { world_id: context.world_id, checksum: context.save_checksum, updated_at: context.updated_at, next_turn_at: context.next_turn_at },
+      archive: {
+        read_only: Boolean(archive.archive_mode),
+        status: archive.status,
+        archived_at: archive.archived_at || null,
+        reason: archive.archive_reason || null
+      },
       ...projection,
       squad_rules: {
         first_team_capacity: firstTeamCapacity,
