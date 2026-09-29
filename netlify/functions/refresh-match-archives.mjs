@@ -1,3 +1,4 @@
+import { runScheduledJob, scheduledFetch } from './_lib/scheduled-job-guard.mjs';
 import { buildWorldReadModel } from '../../src/world/worldReadModel.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
@@ -9,7 +10,7 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
 });
 
 async function service(path, options = {}) {
-  const response = await fetch(`${SUPABASE_URL}${path}`, {
+  const response = await scheduledFetch(`${SUPABASE_URL}${path}`, {
     ...options,
     headers: {
       apikey: SERVICE_ROLE_KEY,
@@ -94,7 +95,7 @@ export function readModelRowForCanonicalWorld(row) {
   };
 }
 
-export default async () => {
+async function runScheduledWork() {
   try {
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return json({ error: 'Match archive projection is not configured' }, 503);
 
@@ -161,4 +162,6 @@ export default async () => {
   }
 };
 
-export const config = { schedule: '*/5 * * * *' };
+
+
+export default () => runScheduledJob('refresh-match-archives', runScheduledWork);

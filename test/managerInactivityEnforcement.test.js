@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const migration = read('supabase/migrations/20260922_manager_inactivity_enforcement.sql');
 const worker = read('netlify/functions/manager-inactivity-enforcement-scheduled.mjs');
+const schedulerRegistry = read('netlify.toml');
 
 test('hard participation enforcement uses the published controlled-alpha 3/7/10 thresholds', () => {
   assert.match(migration, /interval '7 days'/);
@@ -40,7 +41,8 @@ test('scheduled enforcement sends stage-specific operational email with bounded 
   assert.match(worker, /finish_manager_inactivity_escalation/);
   assert.match(worker, /RESEND_API_KEY/);
   assert.match(worker, /manager_inactivity_\$\{item\.stage\}/);
-  assert.match(worker, /schedule: '30 \* \* \* \*'/);
+  assert.match(worker, /runScheduledJob\('manager-inactivity-enforcement'/);
+  assert.match(schedulerRegistry, /manager-inactivity-enforcement-scheduled 30 \* \* \* \*/);
   assert.match(migration, /attempts < 3/);
   assert.match(migration, /interval '15 minutes'/);
 });

@@ -51,13 +51,15 @@ test('player expectation makes implausibly low offers rejectable while strong of
 test('due player decisions settle on the existing CAS-safe acquisition path and reject losing offers', async () => {
   const resolver = await read('netlify/functions/_lib/free-agent-offers.mjs');
   const scheduler = await read('netlify/functions/settle-transfers.mjs');
+  const schedulerRegistry = await read('netlify.toml');
   assert.match(resolver, /signFreeAgent\(/);
   assert.match(resolver, /player_chose_other_club/);
   assert.match(resolver, /terms_below_expectation/);
   assert.match(resolver, /status: 'accepted'/);
   assert.match(resolver, /status: 'rejected'/);
   assert.match(scheduler, /resolveScheduledFreeAgentOffers/);
-  assert.match(scheduler, /schedule: '\*\/5 \* \* \* \*'/);
+  assert.match(scheduler, /runScheduledJob\('settle-transfers'/);
+  assert.match(schedulerRegistry, /settle-transfers\s+\*\/5 \* \* \* \*/);
 });
 
 test('scheduled decisions choose distinct due worlds before applying the world limit', async () => {

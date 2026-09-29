@@ -1,3 +1,4 @@
+import { scheduledFetch } from './scheduled-job-guard.mjs';
 import { loadPersistentWorld, savePersistentWorld } from '../../../src/world/persistentSeasonLoop.js';
 import { activeTransferWindow, unregisterPlayer } from '../../../src/squadCycle/squadCycle.js';
 import { ensureClubFinanceState } from '../../../src/squadCycle/clubFinance.js';
@@ -8,7 +9,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const isJwt = (value) => String(value || '').split('.').length === 3;
 
 async function service(path, options = {}) {
-  const response = await fetch(`${SUPABASE_URL}${path}`, {
+  const response = await scheduledFetch(`${SUPABASE_URL}${path}`, {
     ...options,
     headers: {
       apikey: SUPABASE_SERVICE_ROLE_KEY,

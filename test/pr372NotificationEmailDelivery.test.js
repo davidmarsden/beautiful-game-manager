@@ -6,6 +6,7 @@ const migration = fs.readFileSync(new URL('../supabase/migrations/20260828d_mana
 const endpoint = fs.readFileSync(new URL('../netlify/functions/manager-notifications.mjs', import.meta.url), 'utf8');
 const scheduled = fs.readFileSync(new URL('../netlify/functions/manager-notification-email-scheduled.mjs', import.meta.url), 'utf8');
 const client = fs.readFileSync(new URL('../public/manager-notifications.js', import.meta.url), 'utf8');
+const schedulerRegistry = fs.readFileSync(new URL('../netlify.toml', import.meta.url), 'utf8');
 
 test('email delivery is explicit opt-in and scoped by manager plus world', () => {
   assert.match(migration, /email_frequency text not null default 'off'/);
@@ -41,7 +42,8 @@ test('scheduled email worker claims deliveries and uses Resend', () => {
   assert.match(scheduled, /finish_manager_notification_email_deliveries/);
   assert.match(scheduled, /https:\/\/api\.resend\.com\/emails/);
   assert.match(scheduled, /RESEND_API_KEY/);
-  assert.match(scheduled, /schedule: '\*\/5 \* \* \* \*'/);
+  assert.match(scheduled, /runScheduledJob\('manager-notification-email'/);
+  assert.match(schedulerRegistry, /manager-notification-email-scheduled\s+\*\/5 \* \* \* \*/);
 });
 
 test('daily delivery groups manager notifications into a digest even for one item', () => {

@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const migration = read('supabase/migrations/20260908_manager_inactivity_checkins.sql');
 const scheduled = read('netlify/functions/manager-inactivity-checkin-scheduled.mjs');
+const schedulerRegistry = read('netlify.toml');
 
 test('inactivity check-ins wait three days and only target active human appointments', () => {
   assert.match(migration, /appointment\.status = 'active'/);
@@ -44,7 +45,8 @@ test('scheduled worker sends operational email with bounded retries', () => {
   assert.match(scheduled, /finish_manager_inactivity_checkin/);
   assert.match(scheduled, /RESEND_API_KEY/);
   assert.match(scheduled, /manager_inactivity_checkin/);
-  assert.match(scheduled, /schedule: '15 \* \* \* \*'/);
+  assert.match(scheduled, /runScheduledJob\('manager-inactivity-checkin'/);
+  assert.match(schedulerRegistry, /manager-inactivity-checkin-scheduled\s+15 \* \* \* \*/);
   assert.match(migration, /attempts < 3/);
   assert.match(migration, /interval '15 minutes'/);
 });

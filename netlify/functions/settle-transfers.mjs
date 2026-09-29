@@ -1,16 +1,15 @@
+import { runScheduledJob, scheduledFetch } from './_lib/scheduled-job-guard.mjs';
 import { settleDueTransfers } from './_lib/transfer-settlement.mjs';
 import { settleDueExternalTransfers } from './_lib/external-transfer-settlement.mjs';
 import { generateScheduledExternalOffers } from './_lib/external-transfer-offers.mjs';
 import { resolveScheduledFreeAgentOffers } from './_lib/free-agent-offer-scheduler.mjs';
-
-export const config = { schedule: '*/5 * * * *' };
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
   headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
 });
 
-export default async () => {
+async function runScheduledWork() {
   try {
     // External sales have their own settlement path because external TPF clubs are
     // real market counterparties, not simulated squad-cycle clubs. Settle those first,
@@ -32,3 +31,6 @@ export default async () => {
     return json({ ok: false, error: error.message }, 503);
   }
 };
+
+
+export default () => runScheduledJob('settle-transfers', runScheduledWork);

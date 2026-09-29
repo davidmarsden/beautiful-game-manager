@@ -7,19 +7,36 @@
   # The service-role key must never be excluded from Netlify secret scanning.
   SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL,SUPABASE_ANON_KEY"
 
-# RECOVERY PAUSE — 2026-09-28
-# Automatic database-facing jobs are temporarily unscheduled while the TBG
-# Supabase project is returning widespread HTTP 522 origin timeouts.
+# CENTRAL SCHEDULER REGISTRY — RECOVERY PAUSE 2026-09-28
 #
-# Previous schedules (restore only after the database is demonstrably healthy):
-# lock-fixtures              */5 * * * *
-# run-fixtures               */5 * * * *
-# player-release-settlement  7 * * * *
-# world-maintenance          17 * * * *
-# scheduled-world-turn       */15 * * * *
+# This is the sole authoritative location for automatic Netlify schedules.
+# Function modules MUST NOT export config.schedule; test/schedulerTopology.test.js
+# enforces that invariant.
 #
-# The function files remain deployed and may still be invoked deliberately;
-# only Netlify's automatic cron triggers are paused.
+# All triggers remain paused while the guarded scheduler architecture is deployed
+# and a quiet post-outage baseline is observed. Previous production cadences:
+#
+# GAME-CRITICAL (restore without casual timing changes)
+# lock-fixtures                         */5 * * * *
+# run-fixtures                          */5 * * * *
+# scheduled-world-turn                  */15 * * * *
+#
+# CHECKPOINT WRITER
+# player-release-settlement             7 * * * *
+#
+# DERIVED REPAIR
+# refresh-match-archives                */5 * * * *
+# refresh-world-read-model              RETIRED — redundant
+#
+# BACKGROUND / SAFE TO STAGGER
+# settle-transfers                      */5 * * * *
+# manager-notification-email-scheduled  */5 * * * *
+# manager-inactivity-checkin-scheduled  15 * * * *
+# manager-inactivity-enforcement-scheduled 30 * * * *
+# world-maintenance                     17 * * * *
+#
+# Restoration must add [functions."<name>"] schedule blocks HERE only.
+# Restore low-cost/background jobs first and scheduled-world-turn last.
 
 # The Pink Final now has its own canonical public origin. Preserve the old
 # /pink-final namespace as a permanent route-preserving redirect so bookmarks
