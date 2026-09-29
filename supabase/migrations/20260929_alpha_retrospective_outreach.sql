@@ -27,7 +27,7 @@ declare
 begin
   if not exists (
     select 1 from manager_profiles
-    where id = p_admin_user_id and is_admin = true
+    where user_id = p_admin_user_id and is_admin = true
   ) then
     return jsonb_build_object('ok', false, 'code', 'admin_required');
   end if;
@@ -81,7 +81,7 @@ as $$
 begin
   if not exists (
     select 1 from manager_profiles
-    where id = p_admin_user_id and is_admin = true
+    where user_id = p_admin_user_id and is_admin = true
   ) then
     return jsonb_build_object('ok', false, 'code', 'admin_required');
   end if;
