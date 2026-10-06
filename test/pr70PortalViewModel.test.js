@@ -109,7 +109,7 @@ test('shows played count without inventing a percentage when schedule total is u
     { tbg_player_id: 'depth-1', display_name: 'Depth Midfielder', position: 'CM', registered: true, injury_status: 'Available' },
     { tbg_player_id: 'depth-2', display_name: 'Depth Forward', position: 'CF', registered: true, injury_status: 'Available' }
   ];
-  const model = buildPortalViewModel(data);
+  const model = buildPortalViewModel(data, { now: new Date('2026-08-01T00:00:00.000Z') });
   assert.equal(model.summary.played, 2);
   assert.equal(model.summary.total, 0);
   assert.equal(model.summary.progress_known, false);
