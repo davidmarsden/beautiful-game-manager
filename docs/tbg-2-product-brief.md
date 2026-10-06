@@ -139,16 +139,7 @@ The following remain valuable horizons but must not outrank the vertical slice:
 
 Before a new synthetic world generator becomes a priority, TBG 2 should define a **Top 100 World Importer**.
 
-The importer specification should establish what Soccer Manager Sync / Manager Lab can provide for:
-
-- clubs and competition membership;
-- manager ↔ club relationships;
-- squads and player identity;
-- ratings and positions;
-- fixtures/results/tables;
-- tactics and team-selection snapshots where captured;
-- transfers and player changes;
-- historical state and provenance.
+The completed **[Top 100 Import Specification](tbg-2-top100-import-spec.md)** defines the fidelity contract, historical migration tiers, transformation registry, rehearsal imports, reconciliation/ambiguity policy and eventual Soccer Manager freeze/cutover procedure. It is grounded in the working Soccer Manager Sync / Manager Lab source surfaces and stable identity model.
 
 TBG's own data/rating pipeline should supplement or replace imported fields where it is the authoritative TBG source. Provenance must remain explicit: reconstruction should never silently invent historical facts.
 
@@ -220,14 +211,14 @@ The existing repositories remain the project history and working homes unless th
 
 `alpha1-final` is the preserved Alpha 1 implementation marker. Alpha-era roadmaps and implementation issues are historical evidence, not the TBG 2 backlog.
 
-TBG 2 implementation architecture is **not yet decided**. The completed capability map and an explicit architecture decision come first.
+TBG 2 implementation architecture is **not yet decided**. The completed capability map and import specification constrain the explicit architecture decision that comes next.
 
 ## 13. Delivery sequence
 
 1. **Alpha 1 post-mortem** — complete.
 2. **TBG 2 Product Brief** — this document.
 3. **Soccer Manager → TBG Capability Map** — complete; maps real Top 100/SM workflows, Sync evidence, Alpha assets and TBG 2 gaps.
-4. **Top 100 Import Specification** — define reconstructable state, authoritative sources and provenance.
+4. **Top 100 Import Specification** — complete; defines current-state fidelity, historical tiers, transformations, rehearsals, reconciliation, ambiguity and eventual cutover.
 5. **Architecture Decision** — decide what to keep, extract, rewrite or retire and confirm repository/application structure.
 6. **Core information/interaction prototype** — Player + Squad + Team & Tactics, grounded in imported Top 100 data.
 7. **First vertical slice** — Home → Squad → Player → Transfers → Team & Tactics → Match → Table.
