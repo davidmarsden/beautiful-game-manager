@@ -164,7 +164,7 @@ For each core workflow we should ask:
 4. How can TBG preserve recognition while making the task materially better?
 5. What TBG-specific depth belongs underneath or after the familiar action?
 
-The forthcoming **Soccer Manager → TBG Capability Map** is the evidence base for these decisions.
+The completed **[Soccer Manager → TBG Capability Map](tbg-2-sm-capability-map.md)** is the evidence base for these decisions.
 
 ## 10. Acceptance test for the first vertical slice
 
@@ -220,13 +220,13 @@ The existing repositories remain the project history and working homes unless th
 
 `alpha1-final` is the preserved Alpha 1 implementation marker. Alpha-era roadmaps and implementation issues are historical evidence, not the TBG 2 backlog.
 
-TBG 2 implementation architecture is **not yet decided**. The capability map and an explicit architecture decision come first.
+TBG 2 implementation architecture is **not yet decided**. The completed capability map and an explicit architecture decision come first.
 
 ## 13. Delivery sequence
 
 1. **Alpha 1 post-mortem** — complete.
 2. **TBG 2 Product Brief** — this document.
-3. **Soccer Manager → TBG Capability Map** — map real Top 100/SM workflows, Sync evidence, Alpha assets and TBG 2 gaps.
+3. **Soccer Manager → TBG Capability Map** — complete; maps real Top 100/SM workflows, Sync evidence, Alpha assets and TBG 2 gaps.
 4. **Top 100 Import Specification** — define reconstructable state, authoritative sources and provenance.
 5. **Architecture Decision** — decide what to keep, extract, rewrite or retire and confirm repository/application structure.
 6. **Core information/interaction prototype** — Player + Squad + Team & Tactics, grounded in imported Top 100 data.
