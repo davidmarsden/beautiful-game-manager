@@ -22,13 +22,12 @@ The north star is:
 
 > **Alpha 1 proved feasibility. TBG 2 must prove preference.**
 
-The current product definition is [`docs/tbg-2-product-brief.md`](docs/tbg-2-product-brief.md).
+The current product definition is [`docs/tbg-2-product-brief.md`](docs/tbg-2-product-brief.md), supported by the completed [`docs/tbg-2-sm-capability-map.md`](docs/tbg-2-sm-capability-map.md).
 
 No Alpha-era roadmap should be treated as the active TBG 2 implementation backlog. The next design artefacts are:
 
-1. Soccer Manager → TBG Capability Map;
-2. Top 100 Import Specification;
-3. Architecture Decision;
-4. a deliberately narrow core vertical slice: **Home → Squad → Player → Transfers → Team & Tactics → Match → Table**.
+1. Top 100 Import Specification;
+2. Architecture Decision;
+3. a deliberately narrow core vertical slice: **Home → Squad → Player → Transfers → Team & Tactics → Match → Table**.
 
 Implementation architecture and repository changes should follow those decisions rather than precede them.
