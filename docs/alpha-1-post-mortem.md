@@ -13,7 +13,7 @@ The experiment demonstrated that The Beautiful Game could operate as a real pers
 
 But participation declined and the world did not retain those managers without reminders and intervention. Alpha 1 was ultimately archived rather than extended through another cycle of patches and feature development.
 
-The strongest direct retrospective signal is not that managers rejected TBG's football simulation. The limited feedback received instead concentrated on the experience of using the product: bugs and things not working, slowness/clunkiness, and UI/UX that one manager described as feeling like a game from the 1990s. Four of nine members of the Alpha WhatsApp group answered the single-choice issue poll; two selected bugs/things not working, one selected slow/clunky, and one selected Other and subsequently identified UI/UX. Sixteen retrospective emails were successfully delivered, but no substantive email responses were received by the time this post-mortem was written.
+The strongest direct retrospective signal is not that managers rejected TBG's football simulation. The limited feedback received instead concentrated on the experience of using the product: bugs and things not working, slowness/clunkiness, and UI/UX that one manager described as feeling like a game from the 1990s. Four of nine members of the Alpha WhatsApp group answered the single-choice issue poll; two selected bugs/things not working, one selected slow/clunky, and one selected Other and subsequently identified UI/UX. Sixteen retrospective emails were successfully sent and accepted by the email provider, but no substantive email responses were received by the time this post-mortem was written.
 
 That evidence is too small to rank causes confidently, and non-response cannot tell us why individual managers disengaged. It is nevertheless consistent with the operational experience of Alpha 1: reliability, performance and interaction friction repeatedly got between managers and the underlying game.
 
@@ -60,7 +60,7 @@ The precise timing of disengagement is therefore not a useful retrospective ques
 
 ### 3.2 Retrospective outreach
 
-A retrospective email was successfully delivered to all 16 genuine Alpha participants. It asked what they enjoyed, what annoyed them, when they lost interest, what was missing compared with Soccer Manager / Top 100, and what TBG should keep.
+A retrospective email was successfully sent to all 16 genuine Alpha participants and accepted by the email provider. The delivery ledger records provider message IDs, but does not independently establish downstream delivery or bounce status. The email asked what they enjoyed, what annoyed them, when they lost interest, what was missing compared with Soccer Manager / Top 100, and what TBG should keep.
 
 No substantive email responses had been received when this post-mortem was finalised.
 
