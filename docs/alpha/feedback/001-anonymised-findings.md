@@ -7,9 +7,9 @@
 ## Findings relevant to the reboot
 
 - **Text and navigation friction:** One respondent reported that the Alpha felt too text-heavy, complicated and difficult to navigate, and identified this as a reason for disengaging.
-- **Expectation of simplicity:** The respondent had hoped for a comparatively simple football-management experience and cited Championship Manager 01/02 as a positive reference point.
+- **Expectation of simplicity:** The respondent had hoped for a comparatively simple football-management experience with familiar, straightforward interactions.
 - **Presentation:** The respondent wanted some form of graphical presentation.
-- **Acquisition opportunity:** Frustration with Soccer Manager reliability and its mobile/iOS experience helped motivate the respondent to try TBG.
+- **Acquisition opportunity:** Frustration with an existing game's reliability helped motivate interest in an alternative.
 - **Match attachment:** The respondent reported limited emotional investment in match results while stressing that outcomes should feel fair.
 - **Retention:** The respondent did not yet identify a TBG feature they would miss and was only conditionally open to testing a reboot.
 - **Reboot needs:** Reliability, believable/realistic gameplay (including transfers), simplicity and usability emerged as stated priorities.
